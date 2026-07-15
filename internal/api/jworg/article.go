@@ -5,6 +5,7 @@ package jworg
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -59,7 +60,9 @@ func parse(doc *goquery.Document, base string) model.Article {
 	if cls, ok := container.Attr("class"); ok {
 		for _, tok := range strings.Fields(cls) {
 			if strings.HasPrefix(tok, "docId-") {
-				_, _ = fmt.Sscanf(strings.TrimPrefix(tok, "docId-"), "%d", &art.DocID)
+				if id, err := strconv.Atoi(strings.TrimPrefix(tok, "docId-")); err == nil {
+					art.DocID = id
+				}
 			}
 		}
 	}
