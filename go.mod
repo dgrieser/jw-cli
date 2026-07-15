@@ -11,6 +11,8 @@ require (
 )
 
 require (
+	github.com/JohannesKaufmann/dom v0.3.1 // indirect
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2 // indirect
 	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db // indirect

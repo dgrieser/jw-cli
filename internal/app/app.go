@@ -10,9 +10,11 @@ import (
 	"os"
 	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/api/jworg"
 	"github.com/dgrieser/jw-cli/internal/api/mediator"
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/search"
+	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/lang"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -45,6 +47,8 @@ type App struct {
 	mediator *mediator.Client
 	pubmedia *pubmedia.Client
 	search   *search.Client
+	wol      *wol.Client
+	jworg    *jworg.Client
 	resolver *lang.Resolver
 
 	langOnce sync.Once
@@ -83,6 +87,8 @@ func (a *App) init() {
 		a.mediator = mediator.New(a.http)
 		a.pubmedia = pubmedia.New(a.http)
 		a.search = search.New(a.http)
+		a.wol = wol.New(a.http, a.cache)
+		a.jworg = jworg.New(a.http)
 		a.resolver = &lang.Resolver{Source: a.mediator, Cache: a.cache}
 	})
 }
@@ -110,6 +116,25 @@ func (a *App) PubMedia() *pubmedia.Client {
 func (a *App) Search() *search.Client {
 	a.init()
 	return a.search
+}
+
+func (a *App) WOL() *wol.Client {
+	a.init()
+	return a.wol
+}
+
+func (a *App) JWOrg() *jworg.Client {
+	a.init()
+	return a.jworg
+}
+
+// WOLConfig resolves the language then discovers the wol library config.
+func (a *App) WOLConfig(ctx context.Context) (wol.Config, error) {
+	lng, err := a.Lang(ctx)
+	if err != nil {
+		return wol.Config{}, err
+	}
+	return a.wol.ConfigFor(ctx, lng.Locale)
 }
 
 func (a *App) Resolver() *lang.Resolver {
