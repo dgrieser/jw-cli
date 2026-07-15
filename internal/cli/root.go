@@ -57,6 +57,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 		newOpenCmd(a),
 		newShowCmd(a),
 		newArticleCmd(a),
+		newBibleCmd(a),
 	)
 	return root
 }
