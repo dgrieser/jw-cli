@@ -51,7 +51,8 @@ Examples:
 				if err != nil {
 					return err
 				}
-				return downloadResult(ctx, a, item, quality, subtitles, dir)
+				qualitySet := cmd.Flags().Changed("quality")
+				return downloadResult(ctx, a, item, quality, qualitySet, subtitles, dir)
 			}
 			if looksLikeLANK(target) {
 				return downloadLANK(ctx, a, target, quality, subtitles, dir)
@@ -100,8 +101,17 @@ func looksLikeLANK(s string) bool {
 }
 
 // downloadResult dispatches a cached listing item to the right downloader.
-func downloadResult(ctx context.Context, a *app.App, item model.Result, quality string, subtitles bool, dir string) error {
+// Rows from `jw media info` carry both a LANK and the exact rendition URL;
+// the row's URL wins unless the user explicitly asked for a quality.
+func downloadResult(ctx context.Context, a *app.App, item model.Result, quality string, qualitySet, subtitles bool, dir string) error {
 	switch {
+	case item.FileURL != "" && (!qualitySet || item.LANK == ""):
+		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, dir, "")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
+		return nil
 	case item.LANK != "" && (item.Kind == "video" || item.Kind == "audio"):
 		return downloadLANK(ctx, a, item.LANK, quality, subtitles, dir)
 	case item.FileURL != "":

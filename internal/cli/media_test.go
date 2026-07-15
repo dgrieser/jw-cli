@@ -31,17 +31,47 @@ func mediaMux(t *testing.T) *http.ServeMux {
 	})
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-abc_1_VIDEO", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"media": [{
+		fmt.Fprintf(w, `{"media": [{
 			"languageAgnosticNaturalKey": "pub-abc_1_VIDEO", "type": "video",
 			"title": "A New Video", "description": "About something.",
 			"durationFormattedMinSec": "5:00", "availableLanguages": ["E","X"],
 			"files": [
-				{"progressiveDownloadURL": "https://dl.example/v_r240P.mp4", "label": "240p", "frameHeight": 240, "mimetype": "video/mp4", "filesize": 1000},
-				{"progressiveDownloadURL": "https://dl.example/v_r720P.mp4", "label": "720p", "frameHeight": 720, "mimetype": "video/mp4", "filesize": 5000}
+				{"progressiveDownloadURL": "http://%[1]s/files/v_r240P.mp4", "label": "240p", "frameHeight": 240, "mimetype": "video/mp4", "filesize": 5},
+				{"progressiveDownloadURL": "http://%[1]s/files/v_r720P.mp4", "label": "720p", "frameHeight": 720, "mimetype": "video/mp4", "filesize": 5}
 			]
-		}]}`)
+		}]}`, r.Host)
+	})
+	mux.HandleFunc("/files/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.URL.Path[len("/files/"):]))
 	})
 	return mux
+}
+
+// Selecting a specific rendition row from `jw media info` must download that
+// exact file; an explicit --quality flag switches to quality selection.
+func TestDownloadMediaInfoRendition(t *testing.T) {
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "info", "pub-abc_1_VIDEO", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+
+	dlDir := t.TempDir()
+	out, err := runCmdWithCache(t, mux, cacheDir, "download", "1", "-l", "en", "-d", dlDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "v_r240P.mp4") {
+		t.Fatalf("row 1 (240p) should download the 240p file:\n%s", out)
+	}
+
+	out, err = runCmdWithCache(t, mux, cacheDir, "download", "1", "-l", "en", "-d", t.TempDir(), "-q", "720p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "v_r720P.mp4") {
+		t.Fatalf("explicit -q 720p should override the row's rendition:\n%s", out)
+	}
 }
 
 func TestMediaBrowseRoot(t *testing.T) {

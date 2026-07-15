@@ -13,6 +13,11 @@ import (
 // writeListing prints a numbered result list (or JSON with -o json) and saves
 // it to the results cache so `jw show|open|download <index>` can act on it.
 func writeListing(a *app.App, rs results.ResultSet, header string) error {
+	// number before rendering; don't rely on Save's numbering reaching this
+	// copy (it is skipped entirely when the cache dir is unavailable)
+	for i := range rs.Items {
+		rs.Items[i].Index = i + 1
+	}
 	if err := results.Save(a.Cache().Dir(), rs); err != nil {
 		return err
 	}
