@@ -1,0 +1,14 @@
+{
+  "category": {
+    "key": "VideoOnDemand",
+    "name": "Videos",
+    "type": "container",
+    "description": "",
+    "subcategories": [
+      {"key": "LatestVideos", "name": "Latest Videos", "type": "ondemand", "subcategories": [], "media": []},
+      {"key": "VODStudio", "name": "JW Broadcasting", "type": "container", "subcategories": [], "media": []}
+    ],
+    "media": []
+  },
+  "language": {"languageCode": "E", "locale": "en", "direction": "ltr", "isSignLanguage": false, "script": "ROMAN"}
+}

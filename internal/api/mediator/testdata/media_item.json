@@ -1,0 +1,45 @@
+{
+  "media": [
+    {
+      "guid": "abc-123",
+      "languageAgnosticNaturalKey": "pub-jwb_202401_1_VIDEO",
+      "naturalKey": "pub-jwb_E_202401_1_VIDEO",
+      "type": "video",
+      "primaryCategory": "StudioMonthlyPrograms",
+      "title": "JW Broadcasting—January 2024",
+      "description": "A monthly program.",
+      "firstPublished": "2024-01-01T14:00:00.000Z",
+      "duration": 3722.5,
+      "durationFormattedHHMM": "1:02",
+      "durationFormattedMinSec": "62:02",
+      "availableLanguages": ["E", "X", "F"],
+      "images": {
+        "sqr": {"xs": "https://cdn.example/img_sqr_xs.jpg", "lg": "https://cdn.example/img_sqr_lg.jpg"},
+        "lss": {"lg": "https://cdn.example/img_lss_lg.jpg"}
+      },
+      "files": [
+        {
+          "progressiveDownloadURL": "https://download.example/jwb_E_202401_r240P.mp4",
+          "checksum": "aaa", "filesize": 100000, "mimetype": "video/mp4",
+          "label": "240p", "frameHeight": 240, "frameWidth": 426, "frameRate": 30,
+          "duration": 3722.5, "subtitled": false,
+          "subtitles": {"url": "https://download.example/jwb_E_202401.vtt", "checksum": "ccc"}
+        },
+        {
+          "progressiveDownloadURL": "https://download.example/jwb_E_202401_r480P.mp4",
+          "checksum": "bbb", "filesize": 300000, "mimetype": "video/mp4",
+          "label": "480p", "frameHeight": 480, "frameWidth": 854, "frameRate": 30,
+          "duration": 3722.5, "subtitled": false,
+          "subtitles": {"url": "https://download.example/jwb_E_202401.vtt", "checksum": "ccc"}
+        },
+        {
+          "progressiveDownloadURL": "https://download.example/jwb_E_202401_r720P.mp4",
+          "checksum": "ddd", "filesize": 700000, "mimetype": "video/mp4",
+          "label": "720p", "frameHeight": 720, "frameWidth": 1280, "frameRate": 30,
+          "duration": 3722.5, "subtitled": false,
+          "subtitles": {"url": "https://download.example/jwb_E_202401.vtt", "checksum": "ccc"}
+        }
+      ]
+    }
+  ]
+}
