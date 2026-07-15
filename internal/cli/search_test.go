@@ -17,7 +17,7 @@ func searchMux(t *testing.T) *http.ServeMux {
 	})
 	mux.HandleFunc("/apis/search/results/X/videos", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
-			http.Error(w, "no token", 401)
+			http.Error(w, "no token", http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
