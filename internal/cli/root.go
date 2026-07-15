@@ -50,6 +50,8 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 
 	root.AddCommand(
 		newLanguagesCmd(a),
+		newPubCmd(a),
+		newDownloadCmd(a),
 	)
 	return root
 }

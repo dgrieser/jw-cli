@@ -38,6 +38,8 @@ type Result struct {
 	JWLink   string  `json:"jwLink,omitempty"`
 	WOLLink  string  `json:"wolLink,omitempty"`
 	FileURL  string  `json:"fileUrl,omitempty"` // direct download URL when known
+	Checksum string  `json:"checksum,omitempty"`
+	Filesize int64   `json:"filesize,omitempty"`
 	Duration string  `json:"duration,omitempty"`
 	ImageURL string  `json:"imageUrl,omitempty"`
 	Pub      *PubKey `json:"pub,omitempty"`

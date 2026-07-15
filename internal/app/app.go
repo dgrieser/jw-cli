@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/mediator"
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/lang"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -41,6 +42,7 @@ type App struct {
 	http     *httpx.Client
 	cache    *httpx.Cache
 	mediator *mediator.Client
+	pubmedia *pubmedia.Client
 	resolver *lang.Resolver
 
 	langOnce sync.Once
@@ -77,6 +79,7 @@ func (a *App) init() {
 			a.cache = httpx.OpenCache()
 		}
 		a.mediator = mediator.New(a.http)
+		a.pubmedia = pubmedia.New(a.http)
 		a.resolver = &lang.Resolver{Source: a.mediator, Cache: a.cache}
 	})
 }
@@ -94,6 +97,11 @@ func (a *App) Cache() *httpx.Cache {
 func (a *App) Mediator() *mediator.Client {
 	a.init()
 	return a.mediator
+}
+
+func (a *App) PubMedia() *pubmedia.Client {
+	a.init()
+	return a.pubmedia
 }
 
 func (a *App) Resolver() *lang.Resolver {

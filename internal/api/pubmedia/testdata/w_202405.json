@@ -1,0 +1,53 @@
+{
+  "pubName": "The Watchtower Announcing Jehovah's Kingdom (Study)—2024",
+  "parentPubName": "The Watchtower",
+  "booknum": null,
+  "pub": "w",
+  "issue": "202405",
+  "formattedDate": "May 2024",
+  "fileformat": ["PDF", "EPUB"],
+  "track": null,
+  "specialty": "",
+  "pubImage": {"url": "https://cdn.example/w_cover.jpg", "checksum": "xyz"},
+  "languages": {
+    "E": {"name": "English", "direction": "ltr", "locale": "en", "script": "ROMAN"}
+  },
+  "files": {
+    "E": {
+      "PDF": [
+        {
+          "title": "The Watchtower, May 2024",
+          "file": {"url": "https://download.example/w_E_202405.pdf", "stream": "", "modifiedDatetime": "2024-04-01 00:00:00", "checksum": "d41d8cd98f00b204e9800998ecf8427e"},
+          "filesize": 2048000,
+          "trackImage": {"url": "", "checksum": null},
+          "markers": "",
+          "label": "",
+          "track": 0,
+          "hasTrack": false,
+          "pub": "w",
+          "docid": 2024360,
+          "booknum": 0,
+          "mimetype": "application/pdf",
+          "edition": "", "editionDescr": "", "format": "", "formatDescr": "",
+          "specialty": "", "specialtyDescr": "", "subtitled": false,
+          "frameWidth": 0, "frameHeight": 0, "frameRate": 0, "duration": 0, "bitRate": 0
+        }
+      ],
+      "EPUB": [
+        {
+          "title": "The Watchtower, May 2024",
+          "file": {"url": "https://download.example/w_E_202405.epub", "stream": "", "modifiedDatetime": "2024-04-01 00:00:00", "checksum": "aabbcc"},
+          "filesize": 1024000,
+          "label": "",
+          "track": 0,
+          "hasTrack": false,
+          "pub": "w",
+          "docid": 2024360,
+          "booknum": 0,
+          "mimetype": "application/epub+zip",
+          "subtitled": false
+        }
+      ]
+    }
+  }
+}
