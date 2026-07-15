@@ -45,7 +45,7 @@ Examples:
 				return err
 			}
 			if interactive {
-				return runBrowseTUI(a, lng, argOrEmpty(args))
+				return runBrowseTUI(cmd.Context(), a, lng, argOrEmpty(args))
 			}
 			key := argOrEmpty(args)
 			var items []model.Result
