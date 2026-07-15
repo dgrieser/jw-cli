@@ -169,7 +169,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pageMsg:
 		if msg.err != nil {
-			if len(m.stack) == 1 && m.list.Items() == nil {
+			if len(m.stack) == 1 && len(m.list.Items()) == 0 {
 				m.fatal = msg.err
 				return m, tea.Quit
 			}

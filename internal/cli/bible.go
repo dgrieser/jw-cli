@@ -181,13 +181,14 @@ func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func
 		from, to := ref.VerseStart, ref.VerseEnd
 		if from == 0 {
 			from, to = 1, 999
+			// bound the scan to the chapter's real last verse
+			if verses, err := doc.Verses(0, 0); err == nil && len(verses) > 0 {
+				to = verses[len(verses)-1].ID % 1000
+			}
 		}
 		for v := from; v <= to; v++ {
 			sec, ok := doc.StudySection(v)
 			if !ok {
-				if ref.VerseStart != 0 && v > from && to == 999 {
-					break
-				}
 				continue
 			}
 			label := sec.Verse

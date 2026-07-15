@@ -50,11 +50,16 @@ func TestRunChecksumMismatch(t *testing.T) {
 		w.Write([]byte("data"))
 	}))
 	t.Cleanup(srv.Close)
+	dir := t.TempDir()
 	_, err := Run(context.Background(), httpx.New(), Job{
-		URL: srv.URL + "/f.bin", Dir: t.TempDir(), Checksum: "00000000000000000000000000000000",
+		URL: srv.URL + "/f.bin", Dir: dir, Checksum: "00000000000000000000000000000000",
 	}, nil)
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("want checksum error, got %v", err)
+	}
+	// the corrupted partial must not survive to poison a resume
+	if _, err := os.Stat(filepath.Join(dir, "f.bin.part")); !os.IsNotExist(err) {
+		t.Errorf("corrupted .part file left on disk (stat err: %v)", err)
 	}
 }
 

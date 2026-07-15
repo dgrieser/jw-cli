@@ -68,6 +68,16 @@ func TestBibleNotes(t *testing.T) {
 	}
 }
 
+func TestBibleNotesWholeChapter(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "notes", "-l", "en", "John 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "**loved:**") {
+		t.Fatalf("whole-chapter notes output:\n%s", out)
+	}
+}
+
 func TestBibleXrefs(t *testing.T) {
 	out, err := runCmd(t, bibleMux(t), "bible", "xrefs", "-l", "en", "John 3:16")
 	if err != nil {

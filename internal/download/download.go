@@ -126,6 +126,9 @@ func Run(ctx context.Context, hc *httpx.Client, j Job, p Progress) (string, erro
 
 	if j.Checksum != "" {
 		if err := verifyMD5(partPath, j.Checksum); err != nil {
+			// drop the corrupted partial so the next attempt starts clean
+			// instead of resuming from bad bytes
+			_ = os.Remove(partPath)
 			return "", err
 		}
 	}
