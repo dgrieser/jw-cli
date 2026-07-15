@@ -19,6 +19,14 @@ builds:
     goarch:
       - amd64
       - arm64
+      - arm
+    goarm:
+      - "7"
+    ignore:
+      - goos: darwin
+        goarch: arm
+      - goos: windows
+        goarch: arm
     ldflags:
       - -s -w
       - -X github.com/dgrieser/jw-cli/internal/version.Version=v{{ .Version }}
@@ -28,7 +36,7 @@ archives:
   - ids:
       - jw
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
     formats:
       - tar.gz
     format_overrides:
