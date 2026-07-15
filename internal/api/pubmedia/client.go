@@ -46,12 +46,12 @@ type wireFile struct {
 		URL      string `json:"url"`
 		Checksum string `json:"checksum"`
 	} `json:"file"`
-	Filesize int64           `json:"filesize"`
-	Label    string          `json:"label"`
-	Track    json.Number     `json:"track"`
-	DocID    json.Number     `json:"docid"`
-	BookNum  json.Number     `json:"booknum"`
-	MimeType string          `json:"mimetype"`
+	Filesize int64       `json:"filesize"`
+	Label    string      `json:"label"`
+	Track    json.Number `json:"track"`
+	DocID    json.Number `json:"docid"`
+	BookNum  json.Number `json:"booknum"`
+	MimeType string      `json:"mimetype"`
 }
 
 // Links queries GETPUBMEDIALINKS and returns the available files grouped by
@@ -95,9 +95,9 @@ func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
 	u := c.hc.Base.CDN + "/apis/pub-media/GETPUBMEDIALINKS?" + v.Encode()
 
 	var resp struct {
-		PubName       string `json:"pubName"`
-		ParentPubName string `json:"parentPubName"`
-		Pub           string `json:"pub"`
+		PubName       string      `json:"pubName"`
+		ParentPubName string      `json:"parentPubName"`
+		Pub           string      `json:"pub"`
 		Issue         json.Number `json:"issue"`
 		BookNum       json.Number `json:"booknum"`
 		Languages     map[string]struct {

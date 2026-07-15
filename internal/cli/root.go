@@ -25,8 +25,8 @@ func Execute() int {
 // The app's flag values are bound to the persistent flags.
 func NewRootCmd(a *app.App) *cobra.Command {
 	root := &cobra.Command{
-		Use:     "jw",
-		Short:   "Access jw.org and wol.jw.org content from the command line",
+		Use:   "jw",
+		Short: "Access jw.org and wol.jw.org content from the command line",
 		Long: `jw is a CLI for the public content of jw.org and wol.jw.org:
 search, articles, Bible reading with study material, and downloads of
 videos, audio, and publications (PDF, EPUB, ...).`,

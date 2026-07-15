@@ -28,17 +28,17 @@ type ChapterDoc struct {
 }
 
 const (
-	selVerse         = "span.v"                       // verse text segments, id=v{b}-{c}-{v}-{seg}
-	selStudySection  = "#studyDiscover div.section"   // per-verse study material, data-key={b}-{c}-{v}
-	selStudyNote     = ".studyNoteGroup li.item p"    // one study note paragraph
-	selMarginalItem  = ".group.marginal li.item"      // one cross-reference group
-	selMarginalCite  = ".marginal.title"              // inline citation list
-	selMediaItem     = ".group.media li.item"         // one media entry
-	selMediaImg      = "img.studyItemMedia"           // its thumbnail
-	selMediaLink     = "a.directLinkItem"             // finder deep link
-	selResearchItem  = ".group.index li.item"         // research guide entry
-	selFootnoteItem  = ".group.footnote li.item" // footnotes (best effort)
-	selSectionTitle  = "h3.title"
+	selVerse        = "span.v"                     // verse text segments, id=v{b}-{c}-{v}-{seg}
+	selStudySection = "#studyDiscover div.section" // per-verse study material, data-key={b}-{c}-{v}
+	selStudyNote    = ".studyNoteGroup li.item p"  // one study note paragraph
+	selMarginalItem = ".group.marginal li.item"    // one cross-reference group
+	selMarginalCite = ".marginal.title"            // inline citation list
+	selMediaItem    = ".group.media li.item"       // one media entry
+	selMediaImg     = "img.studyItemMedia"         // its thumbnail
+	selMediaLink    = "a.directLinkItem"           // finder deep link
+	selResearchItem = ".group.index li.item"       // research guide entry
+	selFootnoteItem = ".group.footnote li.item"    // footnotes (best effort)
+	selSectionTitle = "h3.title"
 )
 
 // Chapter fetches one bible chapter page (with the study pane inlined).

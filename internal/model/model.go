@@ -28,22 +28,22 @@ type PubKey struct {
 // lists). It is self-contained so follow-up commands (show/open/download) can
 // act on it from the results cache without re-querying.
 type Result struct {
-	Index    int     `json:"index"`
-	Kind     string  `json:"kind"` // article|video|audio|publication|bible|category|file|image
-	Title    string  `json:"title"`
-	Snippet  string  `json:"snippet,omitempty"`
-	Context  string  `json:"context,omitempty"`
-	LANK        string `json:"lank,omitempty"`
-	CategoryKey string `json:"categoryKey,omitempty"` // mediator category to browse into
-	DocID       int    `json:"docid,omitempty"`
-	JWLink   string  `json:"jwLink,omitempty"`
-	WOLLink  string  `json:"wolLink,omitempty"`
-	FileURL  string  `json:"fileUrl,omitempty"` // direct download URL when known
-	Checksum string  `json:"checksum,omitempty"`
-	Filesize int64   `json:"filesize,omitempty"`
-	Duration string  `json:"duration,omitempty"`
-	ImageURL string  `json:"imageUrl,omitempty"`
-	Pub      *PubKey `json:"pub,omitempty"`
+	Index       int     `json:"index"`
+	Kind        string  `json:"kind"` // article|video|audio|publication|bible|category|file|image
+	Title       string  `json:"title"`
+	Snippet     string  `json:"snippet,omitempty"`
+	Context     string  `json:"context,omitempty"`
+	LANK        string  `json:"lank,omitempty"`
+	CategoryKey string  `json:"categoryKey,omitempty"` // mediator category to browse into
+	DocID       int     `json:"docid,omitempty"`
+	JWLink      string  `json:"jwLink,omitempty"`
+	WOLLink     string  `json:"wolLink,omitempty"`
+	FileURL     string  `json:"fileUrl,omitempty"` // direct download URL when known
+	Checksum    string  `json:"checksum,omitempty"`
+	Filesize    int64   `json:"filesize,omitempty"`
+	Duration    string  `json:"duration,omitempty"`
+	ImageURL    string  `json:"imageUrl,omitempty"`
+	Pub         *PubKey `json:"pub,omitempty"`
 }
 
 // SearchPage is one page of search or browse results.

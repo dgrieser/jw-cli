@@ -42,13 +42,13 @@ type Params struct {
 }
 
 type wireResult struct {
-	Type     string `json:"type"`
-	Subtype  string `json:"subtype"`
-	Title    string `json:"title"`
-	Snippet  string `json:"snippet"`
-	Context  string `json:"context"`
-	LANK     string `json:"lank"`
-	Duration string `json:"duration"`
+	Type     string            `json:"type"`
+	Subtype  string            `json:"subtype"`
+	Title    string            `json:"title"`
+	Snippet  string            `json:"snippet"`
+	Context  string            `json:"context"`
+	LANK     string            `json:"lank"`
+	Duration string            `json:"duration"`
 	Links    map[string]string `json:"links"`
 	Image    *struct {
 		URL     string `json:"url"`
