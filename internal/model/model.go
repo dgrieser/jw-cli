@@ -33,8 +33,9 @@ type Result struct {
 	Title    string  `json:"title"`
 	Snippet  string  `json:"snippet,omitempty"`
 	Context  string  `json:"context,omitempty"`
-	LANK     string  `json:"lank,omitempty"`
-	DocID    int     `json:"docid,omitempty"`
+	LANK        string `json:"lank,omitempty"`
+	CategoryKey string `json:"categoryKey,omitempty"` // mediator category to browse into
+	DocID       int    `json:"docid,omitempty"`
 	JWLink   string  `json:"jwLink,omitempty"`
 	WOLLink  string  `json:"wolLink,omitempty"`
 	FileURL  string  `json:"fileUrl,omitempty"` // direct download URL when known
