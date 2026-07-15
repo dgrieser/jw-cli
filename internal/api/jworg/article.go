@@ -59,7 +59,7 @@ func parse(doc *goquery.Document, base string) model.Article {
 	if cls, ok := container.Attr("class"); ok {
 		for _, tok := range strings.Fields(cls) {
 			if strings.HasPrefix(tok, "docId-") {
-				fmt.Sscanf(strings.TrimPrefix(tok, "docId-"), "%d", &art.DocID)
+				_, _ = fmt.Sscanf(strings.TrimPrefix(tok, "docId-"), "%d", &art.DocID)
 			}
 		}
 	}

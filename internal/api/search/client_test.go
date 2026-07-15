@@ -126,7 +126,7 @@ func TestTokenCaching(t *testing.T) {
 		t.Errorf("token should be cached: fetches=%d", fetches.Load())
 	}
 	ts.Invalidate()
-	ts.Token(context.Background())
+	_, _ = ts.Token(context.Background())
 	if fetches.Load() != 2 {
 		t.Errorf("invalidate should force refetch: fetches=%d", fetches.Load())
 	}
