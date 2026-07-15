@@ -1,0 +1,9 @@
+{
+  "languages": [
+    {"code": "E", "locale": "en", "name": "English", "vernacular": "English", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "X", "locale": "de", "name": "German", "vernacular": "Deutsch", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "F", "locale": "fr", "name": "French", "vernacular": "Français", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "S", "locale": "es", "name": "Spanish", "vernacular": "español", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "ASL", "locale": "ase", "name": "American Sign Language", "vernacular": "American Sign Language", "script": "ROMAN", "isRTL": false, "isSignLanguage": true}
+  ]
+}
