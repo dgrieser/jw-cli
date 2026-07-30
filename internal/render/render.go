@@ -23,7 +23,7 @@ func Render(fragment string, f Format, o Options) (string, error) {
 	switch f {
 	case HTML:
 		return clean, nil
-	case Markdown:
+	case Markdown, Raw:
 		md, err := htmltomarkdown.ConvertString(clean)
 		if err != nil {
 			return "", fmt.Errorf("convert to markdown: %w", err)

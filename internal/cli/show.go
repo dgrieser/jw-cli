@@ -40,7 +40,7 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(mi)
 				}
-				return a.Write(mediaInfoText(mi))
+				return a.WriteMarkdown(mediaInfoText(mi))
 			case "category":
 				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
 			case "file", "image":

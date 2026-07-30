@@ -161,7 +161,7 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 				})
 			}
 			_ = results.Save(a.Cache().Dir(), results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
-			return a.Write(mediaInfoText(item))
+			return a.WriteMarkdown(mediaInfoText(item))
 		},
 	}
 	return cmd
@@ -192,19 +192,20 @@ func mediaInfoText(m model.MediaItem) string {
 		fmt.Fprintf(&b, "- Languages: %d (%s%s)\n", n, strings.Join(sample, ", "), map[bool]string{true: ", ...", false: ""}[n > 12])
 	}
 	if len(m.Files) > 0 {
-		b.WriteString("\nFiles:\n")
+		// an ordered list: the numbers are the indexes `jw download <n>` takes
+		b.WriteString("\n## Files\n\n")
 		for i, f := range m.Files {
 			label := f.Label
 			if label == "" {
 				label = f.MimeType
 			}
-			fmt.Fprintf(&b, "%3d. %s (%s)", i+1, label, humanSize(f.Filesize))
+			fmt.Fprintf(&b, "%d. **%s** (%s)", i+1, label, humanSize(f.Filesize))
 			if f.SubtitlesURL != "" {
-				b.WriteString(" [subtitles]")
+				b.WriteString(" — subtitles")
 			}
-			fmt.Fprintf(&b, "\n     %s\n", f.URL)
+			fmt.Fprintf(&b, "\n   <%s>\n", f.URL)
 		}
-		b.WriteString("\nDownload with: jw download <n>  or  jw download " + m.LANK + " -q 720p\n")
+		b.WriteString("\nDownload with: `jw download <n>`  or  `jw download " + m.LANK + " -q 720p`\n")
 	}
 	return b.String()
 }

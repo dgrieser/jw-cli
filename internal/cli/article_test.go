@@ -2,6 +2,7 @@ package cli
 
 import (
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -53,6 +54,30 @@ func TestArticleImagesListing(t *testing.T) {
 	}
 	if !strings.Contains(out, "[image] Caleb in Hebron") || !strings.Contains(out, "caleb_lg.jpg") {
 		t.Errorf("images output:\n%s", out)
+	}
+}
+
+// TestArticleRawOutput pins -o raw to the same body as -o markdown to a pipe:
+// the markdown is never styled, so scripts and files keep the exact source.
+func TestArticleRawOutput(t *testing.T) {
+	raw, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "-o", "raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	md, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "-o", "markdown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// each run gets its own mock server port, so compare host-independently
+	port := regexp.MustCompile(`127\.0\.0\.1:\d+`)
+	if port.ReplaceAllString(raw, "host") != port.ReplaceAllString(md, "host") {
+		t.Errorf("-o raw differs from -o markdown on a pipe:\n%q\n%q", raw, md)
+	}
+	if !strings.Contains(raw, "# Caleb—He Fought Loyally") || !strings.Contains(raw, "[Num. 14:24](") {
+		t.Errorf("raw markdown not verbatim:\n%s", raw)
+	}
+	if strings.Contains(raw, "\x1b[") {
+		t.Errorf("raw output must not contain ANSI escapes:\n%q", raw)
 	}
 }
 

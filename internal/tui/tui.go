@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 )
 
@@ -22,10 +23,17 @@ import (
 // human header.
 type Fetcher func(page int) (results.ResultSet, string, error)
 
+// Content is what the detail pane displays for one item.
+type Content struct {
+	Text string
+	// Markdown styles Text for the pane width instead of showing it verbatim.
+	Markdown bool
+}
+
 // Actions supplies the behavior behind the key bindings.
 type Actions struct {
-	// Show returns rendered content for the detail pane.
-	Show func(item model.Result) (string, error)
+	// Show returns the content for the detail pane.
+	Show func(item model.Result) (Content, error)
 	// Download fetches the item and returns the saved path.
 	Download func(item model.Result) (string, error)
 	// Open opens the item's link externally (optional).
@@ -100,7 +108,7 @@ type uiModel struct {
 	width   int
 	height  int
 	fatal   error
-	content string
+	content Content
 }
 
 type pageMsg struct {
@@ -110,8 +118,8 @@ type pageMsg struct {
 	err    error
 }
 type contentMsg struct {
-	text string
-	err  error
+	content Content
+	err     error
 }
 type downloadMsg struct {
 	path string
@@ -139,6 +147,18 @@ func newModel(header string, fetch Fetcher, actions Actions) uiModel {
 
 func (m uiModel) top() *level { return &m.stack[len(m.stack)-1] }
 
+// paneContent styles the detail pane content for the current pane width.
+func (m uiModel) paneContent() string {
+	if !m.content.Markdown {
+		return m.content.Text
+	}
+	width := 0 // let the renderer detect it while the pane is still unsized
+	if m.width > 0 {
+		width = render.ClampWidth(m.width)
+	}
+	return render.ToTerminal(m.content.Text, render.TerminalOptions{Width: width})
+}
+
 func (m uiModel) Init() tea.Cmd {
 	return tea.Batch(m.spin.Tick, m.loadPage(1))
 }
@@ -164,7 +184,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.list.SetSize(msg.Width, msg.Height-1)
 		m.viewport = viewport.New(msg.Width, msg.Height-2)
-		m.viewport.SetContent(m.content)
+		m.viewport.SetContent(m.paneContent())
 		return m, nil
 
 	case pageMsg:
@@ -197,11 +217,11 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.status = "error: " + msg.err.Error()
 			return m, nil
 		}
-		m.content = msg.text
+		m.content = msg.content
 		if m.width > 0 {
 			m.viewport = viewport.New(m.width, m.height-2)
 		}
-		m.viewport.SetContent(msg.text)
+		m.viewport.SetContent(m.paneContent())
 		m.mode = "detail"
 		m.status = ""
 		return m, nil
@@ -258,8 +278,8 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = "busy"
 				m.status = "loading…"
 				return m, tea.Batch(m.spin.Tick, func() tea.Msg {
-					text, err := m.actions.Show(r)
-					return contentMsg{text: text, err: err}
+					c, err := m.actions.Show(r)
+					return contentMsg{content: c, err: err}
 				})
 			case key.Matches(msg, keys.Download):
 				r, ok := m.selected()

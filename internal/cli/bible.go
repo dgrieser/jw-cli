@@ -134,7 +134,7 @@ Examples:
 					return err
 				}
 				switch format {
-				case render.Markdown:
+				case render.Markdown, render.Raw:
 					fmt.Fprintf(&b, "## %s\n\n%s\n", p.Ref, body)
 				case render.HTML:
 					fmt.Fprintf(&b, "<h2>%s</h2>\n%s\n", p.Ref, body)
@@ -142,7 +142,7 @@ Examples:
 					fmt.Fprintf(&b, "%s\n\n%s\n", p.Ref, body)
 				}
 			}
-			return a.Write(b.String())
+			return a.WriteMarkdown(b.String())
 		},
 	}
 	cmd.Flags().StringVarP(&edition, "bible", "b", "nwtsty", "bible edition: "+strings.Join(wol.BibleEditions, ", "))
@@ -242,7 +242,7 @@ func newBibleNotesCmd(a *app.App) *cobra.Command {
 					fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(body))
 				}
 			}
-			return a.Write(b.String())
+			return a.WriteMarkdown(b.String())
 		},
 	}
 	return cmd
@@ -310,7 +310,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 				}
 				b.WriteString("\n")
 			}
-			return a.Write(b.String())
+			return a.WriteMarkdown(b.String())
 		},
 	}
 	cmd.Flags().BoolVarP(&resolve, "resolve", "r", false, "fetch the full text of the referenced verses")
@@ -436,7 +436,7 @@ publication is fetched and shown, including a link to the full article.`,
 					b.WriteString("\n")
 				}
 			}
-			return a.Write(b.String())
+			return a.WriteMarkdown(b.String())
 		},
 	}
 	cmd.Flags().BoolVarP(&excerpts, "excerpts", "x", false, "fetch the referenced excerpt of each publication")
@@ -477,7 +477,7 @@ func newBibleBooksCmd(a *app.App) *cobra.Command {
 
 func writeHeading(b *strings.Builder, f render.Format, text string) {
 	switch f {
-	case render.Markdown:
+	case render.Markdown, render.Raw:
 		fmt.Fprintf(b, "## %s\n\n", text)
 	case render.HTML:
 		fmt.Fprintf(b, "<h2>%s</h2>\n", text)

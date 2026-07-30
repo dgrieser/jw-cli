@@ -156,6 +156,31 @@ func (a *App) Format() (render.Format, error) {
 	return render.ParseFormat(a.Flags.Output)
 }
 
+// WriteMarkdown writes content whose body is markdown, styling it for the
+// terminal under -o markdown. The markdown is written unchanged for -o raw and
+// the non-markdown formats, when the target is a file, and when stdout is not a
+// terminal — so pipes and redirects stay machine-readable.
+func (a *App) WriteMarkdown(content string) error {
+	if !a.styleMarkdown() {
+		return a.Write(content)
+	}
+	return a.Write(render.ToTerminal(content, render.TerminalOptions{
+		Width:   render.TerminalWidth(os.Stdout),
+		NoColor: a.Flags.NoColor,
+	}))
+}
+
+// styleMarkdown reports whether markdown output should be styled for a terminal.
+func (a *App) styleMarkdown() bool {
+	if a.Flags.File != "" {
+		return false
+	}
+	if f, err := a.Format(); err != nil || f != render.Markdown {
+		return false
+	}
+	return render.IsTerminal(a.Stdout)
+}
+
 // Write sends content to stdout or, with -f|--file, to a file.
 func (a *App) Write(content string) error {
 	if len(content) > 0 && content[len(content)-1] != '\n' {

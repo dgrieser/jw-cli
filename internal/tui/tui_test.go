@@ -89,7 +89,7 @@ func applyPage(t *testing.T, m uiModel, cmd tea.Cmd) uiModel {
 func TestShowAndBack(t *testing.T) {
 	fetch := fakeFetcher(map[int][]model.Result{1: {{Title: "Doc", Kind: "article", DocID: 1}}})
 	m := newTestModel(t, fetch, Actions{
-		Show: func(r model.Result) (string, error) { return "CONTENT of " + r.Title, nil },
+		Show: func(r model.Result) (Content, error) { return Content{Text: "CONTENT of " + r.Title}, nil },
 	})
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = next.(uiModel)
@@ -103,6 +103,27 @@ func TestShowAndBack(t *testing.T) {
 	m = next.(uiModel)
 	if m.mode != "list" {
 		t.Fatalf("esc should return to list, mode=%s", m.mode)
+	}
+}
+
+// TestShowStylesMarkdown checks the detail pane renders markdown content
+// instead of showing its syntax, and leaves plain content untouched.
+func TestShowStylesMarkdown(t *testing.T) {
+	const md = "# Heading\n\n- bullet one\n"
+	fetch := fakeFetcher(map[int][]model.Result{1: {{Title: "Doc", Kind: "article", DocID: 1}}})
+	m := newTestModel(t, fetch, Actions{
+		Show: func(model.Result) (Content, error) { return Content{Text: md, Markdown: true}, nil },
+	})
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = next.(uiModel)
+	msg := findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(contentMsg); return ok })
+	next, _ = m.Update(msg)
+	view := next.(uiModel).viewport.View()
+	if !strings.Contains(view, "Heading") || !strings.Contains(view, "bullet one") {
+		t.Fatalf("content missing from pane:\n%s", view)
+	}
+	if strings.Contains(view, "- bullet one") {
+		t.Errorf("markdown list syntax not rendered:\n%s", view)
 	}
 }
 

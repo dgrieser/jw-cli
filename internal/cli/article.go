@@ -102,7 +102,7 @@ func writeArticle(a *app.App, art model.Article) error {
 		return err
 	}
 	switch format {
-	case render.Markdown:
+	case render.Markdown, render.Raw:
 		if art.Title != "" && !strings.HasPrefix(body, "# ") {
 			body = "# " + art.Title + "\n\n" + body
 		}
@@ -111,7 +111,7 @@ func writeArticle(a *app.App, art model.Article) error {
 			body = art.Title + "\n\n" + body
 		}
 	}
-	return a.Write(body)
+	return a.WriteMarkdown(body)
 }
 
 func imagesToResults(art model.Article) []model.Result {
@@ -152,5 +152,5 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 		b.WriteString("\n")
 	}
 	b.WriteString("\nRead one with: jw bible read \"<reference>\"\n")
-	return a.Write(b.String())
+	return a.WriteMarkdown(b.String())
 }

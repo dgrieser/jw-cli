@@ -36,7 +36,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	}
 	pf := root.PersistentFlags()
 	pf.StringVarP(&a.Flags.Lang, "lang", "l", "", "content language: JW symbol (X), ISO code (de), or BCP-47 (de-AT); default: system locale")
-	pf.StringVarP(&a.Flags.Output, "output", "o", "markdown", "output format: html, markdown, text, or json")
+	pf.StringVarP(&a.Flags.Output, "output", "o", "markdown", "output format: markdown (styled for the terminal), raw (unstyled markdown), html, text, or json")
 	pf.StringVarP(&a.Flags.File, "file", "f", "", "write output to file instead of stdout")
 	pf.BoolVar(&a.Flags.NoColor, "no-color", false, "disable colored output")
 	pf.BoolVarP(&a.Flags.Verbose, "verbose", "v", false, "log HTTP requests to stderr")

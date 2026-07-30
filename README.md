@@ -46,9 +46,25 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 | Flag | Meaning |
 |---|---|
 | `-l, --lang` | Content language: JW symbol (`X`), ISO code (`de`), or BCP-47 (`de-AT`). Defaults to the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`), mapped to the closest available content language. |
-| `-o, --output` | Output format: `markdown` (default), `html`, `text`, or `json`. `json` emits the underlying data model of any command. |
+| `-o, --output` | Output format: `markdown` (default), `raw`, `html`, `text`, or `json`. `json` emits the underlying data model of any command. |
 | `-f, --file` | Write output to a file instead of stdout. |
+| `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
 | `-v, --verbose` | Log HTTP requests to stderr. |
+
+### Markdown on the terminal
+
+With the default `-o markdown`, article, Bible, and media output is styled for
+the terminal — headings, lists, emphasis, and quotes get colors, and paragraphs
+are wrapped to the terminal width. Link targets are shown next to their text.
+
+The markdown is written verbatim whenever styling would get in the way:
+
+```sh
+jw article 1102025912 -o raw                 # never styled, even on a terminal
+jw article 1102025912 -f out.md              # -f|--file always writes raw markdown
+jw article 1102025912 | pandoc -f markdown   # a pipe is not a terminal: raw
+jw article 1102025912 --no-color             # styled layout, no colors
+```
 
 ## Commands
 

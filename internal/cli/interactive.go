@@ -16,27 +16,28 @@ import (
 // listings.
 func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions {
 	return tui.Actions{
-		Show: func(item model.Result) (string, error) {
+		Show: func(item model.Result) (tui.Content, error) {
 			switch item.Kind {
 			case "video", "audio":
 				mi, err := a.Mediator().MediaItem(ctx, lng.Symbol, item.LANK)
 				if err != nil {
-					return "", err
+					return tui.Content{}, err
 				}
-				return mediaInfoText(mi), nil
+				return tui.Content{Text: mediaInfoText(mi)}, nil
 			case "file", "image":
-				return fmt.Sprintf("%s\n\n%s\n\nPress d to download.", item.Title, item.FileURL), nil
+				text := fmt.Sprintf("%s\n\n%s\n\nPress d to download.", item.Title, item.FileURL)
+				return tui.Content{Text: text}, nil
 			}
 			target := firstNonEmpty(item.WOLLink, item.JWLink)
 			if target == "" && item.DocID != 0 {
 				target = fmt.Sprint(item.DocID)
 			}
 			if target == "" {
-				return "", fmt.Errorf("%s has no readable content", item.Title)
+				return tui.Content{}, fmt.Errorf("%s has no readable content", item.Title)
 			}
 			art, err := fetchArticle(ctx, a, target)
 			if err != nil {
-				return "", err
+				return tui.Content{}, err
 			}
 			format, err := a.Format()
 			if err != nil || format == render.JSON {
@@ -45,12 +46,17 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 			base := a.HTTP().Base.WOL
 			body, err := render.Render(art.HTML, format, render.Options{BaseURL: base})
 			if err != nil {
-				return "", err
+				return tui.Content{}, err
 			}
-			if art.Title != "" {
+			switch {
+			case art.Title == "":
+			case format.IsMarkdown():
+				body = "# " + art.Title + "\n\n" + body
+			default:
 				body = art.Title + "\n\n" + body
 			}
-			return body, nil
+			// -o raw asks for the markdown verbatim, in the pane too
+			return tui.Content{Text: body, Markdown: format == render.Markdown}, nil
 		},
 		Download: func(item model.Result) (string, error) {
 			return tuiDownload(ctx, a, lng, item)
