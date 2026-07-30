@@ -1,4 +1,4 @@
-# Development tasks for jw-cli. Run `make` or `make help` for an overview.
+# Development tasks for jw-cli. Bare `make` builds; `make help` lists targets.
 
 MODULE     := github.com/dgrieser/jw-cli
 BINARY     := jw
@@ -26,7 +26,7 @@ GOLANGCI   := $(shell command -v golangci-lint 2>/dev/null || echo "$(GO) run gi
 GORELEASER := $(shell command -v goreleaser 2>/dev/null || echo "$(GO) run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)")
 MODERNIZE  := $(GO) run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@$(MODERNIZE_VERSION)
 
-.DEFAULT_GOAL := help
+.DEFAULT_GOAL := build
 
 .PHONY: help
 help: ## Show this help
