@@ -7,6 +7,8 @@ package wol
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"regexp"
 	"time"
 
@@ -30,27 +32,60 @@ type Config struct {
 	Lp     string `json:"lp"`     // "lp-e", "lp-x", ...
 }
 
-var cfgPattern = regexp.MustCompile(`/wol/[a-z]+/(r\d+)/(lp-[a-z0-9-]+)`)
+var cfgPathPattern = regexp.MustCompile(`^/([^/]+)/wol/[a-z]+/(r\d+)/(lp-[a-z0-9-]+)`)
 
-// ConfigFor discovers the rsconf/lp pair for a locale by loading the wol
-// homepage for that locale and reading any content link. Cached for a week.
+// cfgPatternFor matches links belonging to the requested locale only. Used as
+// a fallback when the homepage does not redirect.
+func cfgPatternFor(locale string) *regexp.Regexp {
+	return regexp.MustCompile(`/` + regexp.QuoteMeta(locale) + `/wol/[a-z]+/(r\d+)/(lp-[a-z0-9-]+)`)
+}
+
+// ConfigFor discovers the rsconf/lp pair for a locale. /{locale} redirects to
+// that language's home document (/de -> /de/wol/h/r10/lp-x), so the final URL
+// is authoritative. Scraping the body is not: the page opens with a
+// <link rel="alternate"> block for every other language, and those hreflang
+// locales are not unique (/en/wol/h/r969/lp-mnn is listed as hreflang="en"),
+// so even a locale-anchored body match can pick up a foreign pair.
+// Cached for a week.
 func (c *Client) ConfigFor(ctx context.Context, locale string) (Config, error) {
-	key := "wolcfg-" + locale
+	// v2: v1 entries may hold a foreign rsconf/lp pair.
+	key := "wolcfg2-" + locale
 	var cfg Config
 	if c.cache.Get(key, 7*24*time.Hour, &cfg) && cfg.Rsconf != "" {
 		return cfg, nil
 	}
-	page, err := c.hc.GetText(ctx, c.hc.Base.WOL+"/"+locale, nil)
+	home := c.hc.Base.WOL + "/" + locale
+	resp, err := c.hc.Get(ctx, home, nil)
 	if err != nil {
 		return Config{}, fmt.Errorf("discover wol config for %q: %w", locale, err)
 	}
-	m := cfgPattern.FindStringSubmatch(page)
-	if m == nil {
-		return Config{}, fmt.Errorf("could not find wol library config on %s/%s (page layout changed?)", c.hc.Base.WOL, locale)
+	defer resp.Body.Close()
+
+	if m := cfgPathPattern.FindStringSubmatch(finalPath(resp)); m != nil {
+		cfg = Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}
+		c.cache.Put(key, cfg)
+		return cfg, nil
 	}
-	cfg = Config{Locale: locale, Rsconf: m[1], Lp: m[2]}
+	// no redirect (or an unexpected target): fall back to a body scan
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return Config{}, fmt.Errorf("discover wol config for %q: %w", locale, err)
+	}
+	m := cfgPatternFor(locale).FindSubmatch(body)
+	if m == nil {
+		return Config{}, fmt.Errorf("could not find wol library config for %q on %s (page layout changed?)", locale, home)
+	}
+	cfg = Config{Locale: locale, Rsconf: string(m[1]), Lp: string(m[2])}
 	c.cache.Put(key, cfg)
 	return cfg, nil
+}
+
+// finalPath is the request path after redirects.
+func finalPath(resp *http.Response) string {
+	if resp.Request == nil || resp.Request.URL == nil {
+		return ""
+	}
+	return resp.Request.URL.Path
 }
 
 // url builds /{locale}/wol/{cmd}/{rsconf}/{lp}{rest}.

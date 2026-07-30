@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -243,7 +244,8 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 // LocalizedBookNames extracts the localized bible book names from the bible
 // navigation page (best effort; cached for 30 days).
 func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]string, error) {
-	key := "books-" + cfg.Locale
+	// v2: v1 entries hold run-together names ("JohannesJoh.Joh").
+	key := "books2-" + cfg.Locale
 	var cached map[int][]string
 	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached) > 0 {
 		return cached, nil
@@ -267,15 +269,11 @@ func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]
 		if num < 1 || num > 66 {
 			return
 		}
-		name := cleanSpace(a.AttrOr("title", ""))
-		if name == "" {
-			name = cleanSpace(a.Text())
-		}
-		if name == "" || len(name) > 40 {
+		if len(names[num]) > 0 {
 			return
 		}
-		if len(names[num]) == 0 {
-			names[num] = []string{name}
+		if v := bookNameVariants(a); len(v) > 0 {
+			names[num] = v
 		}
 	})
 	if len(names) < 60 {
@@ -283,6 +281,31 @@ func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]
 	}
 	c.cache.Put(key, names)
 	return names, nil
+}
+
+// bookNameVariants pulls the name forms out of one bible-navigation link.
+// Each link holds them in separate adjacent spans with no whitespace between
+// the tags, so a.Text() would run them together ("JohannesJoh.Joh"). The
+// full name comes first: callers use variants[0] as the display name and the
+// rest as lookup aliases.
+func bookNameVariants(a *goquery.Selection) []string {
+	var variants []string
+	add := func(s string) {
+		s = cleanSpace(s)
+		if s == "" || len(s) > 40 || slices.Contains(variants, s) {
+			return
+		}
+		variants = append(variants, s)
+	}
+	for _, sel := range []string{".name", ".abbreviation", ".official"} {
+		a.Find(sel).Each(func(_ int, s *goquery.Selection) { add(s.Text()) })
+	}
+	if len(variants) == 0 {
+		// unstructured link: the whole text is the only name we get
+		add(a.AttrOr("title", ""))
+		add(a.Text())
+	}
+	return variants
 }
 
 func xhrHeaders() map[string][]string {

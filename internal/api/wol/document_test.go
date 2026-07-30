@@ -31,13 +31,19 @@ func serveFile(t *testing.T, path string) http.HandlerFunc {
 	}
 }
 
+// The real homepage lists every other language via <link rel="alternate">
+// before the first same-locale link, and those hreflang locales collide with
+// real ones — so the body must never win over the redirect target.
+const altLangHead = `<link rel="alternate" hreflang="mio" href="/mio/wol/h/r996/lp-mxc" />
+	<link rel="alternate" hreflang="de" href="/de/wol/h/r969/lp-mnn" />`
+
 func TestConfigFor(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/de", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html><body>
-			<a href="/de/wol/h/r10/lp-x">Startseite</a>
-			<a href="/de/wol/d/r10/lp-x/2024360">Artikel</a>
-		</body></html>`))
+		http.Redirect(w, r, "/de/wol/h/r10/lp-x", http.StatusFound)
+	})
+	mux.HandleFunc("/de/wol/h/r10/lp-x", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><head>` + altLangHead + `</head><body>Startseite</body></html>`))
 	})
 	c := testClient(t, mux)
 	cfg, err := c.ConfigFor(context.Background(), "de")
@@ -52,6 +58,26 @@ func TestConfigFor(t *testing.T) {
 	c.hc = httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{WOL: httptest.NewServer(mux2).URL}))
 	if _, err := c.ConfigFor(context.Background(), "de"); err != nil {
 		t.Errorf("cached lookup failed: %v", err)
+	}
+}
+
+// Without a redirect, the body scan must still stay on the requested locale.
+func TestConfigForNoRedirect(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><head>
+			<link rel="alternate" hreflang="mio" href="/mio/wol/h/r996/lp-mxc" />
+		</head><body>
+			<a href="/de/wol/h/r10/lp-x">Startseite</a>
+		</body></html>`))
+	})
+	c := testClient(t, mux)
+	cfg, err := c.ConfigFor(context.Background(), "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Rsconf != "r10" || cfg.Lp != "lp-x" || cfg.Locale != "de" {
+		t.Errorf("cfg = %+v", cfg)
 	}
 }
 

@@ -2,9 +2,13 @@ package wol
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 func chapterClient(t *testing.T) *Client {
@@ -145,5 +149,52 @@ func TestMarginalReferenceAndTooltip(t *testing.T) {
 	}
 	if !strings.HasPrefix(tip.URL, c.hc.Base.WOL) {
 		t.Errorf("tooltip url not absolutized: %s", tip.URL)
+	}
+}
+
+// Each bible-navigation link holds the full name, the abbreviation and the
+// official abbreviation in adjacent spans with no whitespace between the
+// tags, so they must be read per span, not via a.Text().
+func TestLocalizedBookNames(t *testing.T) {
+	cfgDE := Config{Locale: "de", Rsconf: "r10", Lp: "lp-x"}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/binav/r10/lp-x", func(w http.ResponseWriter, r *http.Request) {
+		var b strings.Builder
+		b.WriteString("<html><body>")
+		for i := 1; i <= 66; i++ {
+			name, abbr, official := fmt.Sprintf("Buch%d", i), fmt.Sprintf("Bu%d.", i), fmt.Sprintf("B%d", i)
+			if i == 43 {
+				name, abbr, official = "Johannes", "Joh.", "Joh"
+			}
+			fmt.Fprintf(&b, `<a class="bookLink" href="/de/wol/binav/r10/lp-x/nwtsty/%d">`+
+				`<div class="navIcons"><span class="icon"></span></div>`+
+				`<span class="title ellipsized name">%s</span>`+
+				`<span class="title ellipsized abbreviation">%s</span>`+
+				`<span class="title ellipsized official">%s</span></a>`, i, name, abbr, official)
+		}
+		b.WriteString("</body></html>")
+		w.Write([]byte(b.String()))
+	})
+	c := testClient(t, mux)
+	names, err := c.LocalizedBookNames(context.Background(), cfgDE)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Johannes", "Joh.", "Joh"}
+	if !slices.Equal(names[43], want) {
+		t.Errorf("names[43] = %q, want %q", names[43], want)
+	}
+}
+
+// A link without the per-form spans still yields its text as a single name.
+func TestBookNameVariantsUnstructured(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<a title="Johannes">John</a>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := bookNameVariants(doc.Find("a").First())
+	want := []string{"Johannes", "John"}
+	if !slices.Equal(got, want) {
+		t.Errorf("variants = %q, want %q", got, want)
 	}
 }

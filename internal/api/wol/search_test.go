@@ -66,6 +66,26 @@ func TestDailyText(t *testing.T) {
 	}
 }
 
+// A language without a daily text for the date serves an #article container
+// holding only navigation chrome; that must be an error, not content.
+func TestDailyTextNavOnly(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/en/wol/dt/r1/lp-e/2026/7/15", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><article id="article" class="article today">
+		<div id="todayNav" class="forwardBackNavControls"><nav><ul>
+		  <li class="todayNav"><a href="/en/wol/dt/r1/lp-e"><span>Today</span></a></li>
+		</ul></nav></div></article></body></html>`))
+	})
+	c := testClient(t, mux)
+	_, err := c.DailyText(context.Background(), cfgEN, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("want error for nav-only page, got nil")
+	}
+	if !strings.Contains(err.Error(), "no daily text found") {
+		t.Errorf("err = %v", err)
+	}
+}
+
 func TestMeetings(t *testing.T) {
 	mux := http.NewServeMux()
 	// 2026-07-15 is in ISO week 29 of 2026

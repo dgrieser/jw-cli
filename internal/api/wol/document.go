@@ -62,7 +62,7 @@ func parseDocument(doc *goquery.Document, base string) model.Article {
 
 	// drop non-content chrome inside the article container
 	pruned := content.Clone()
-	pruned.Find("#regionMain nav, .resultsNavigationSelected, #docSubMedia, .groupTOC, #contentColumnControl").Remove()
+	pruned.Find("#regionMain nav, .resultsNavigationSelected, #docSubMedia, .groupTOC, #contentColumnControl, " + todayChrome).Remove()
 	html, err := goquery.OuterHtml(pruned)
 	if err == nil {
 		art.HTML = html
