@@ -105,7 +105,7 @@ func (c *Client) Search(ctx context.Context, cfg Config, query string, opts Sear
 	}
 
 	if txt := cleanSpace(doc.Find(selResultsCount).First().Text()); txt != "" {
-		for _, f := range strings.Fields(strings.ReplaceAll(txt, ",", "")) {
+		for f := range strings.FieldsSeq(strings.ReplaceAll(txt, ",", "")) {
 			if n, err := strconv.Atoi(f); err == nil {
 				page.Total = n
 				break

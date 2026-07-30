@@ -1,6 +1,9 @@
 version: "2"
 
 linters:
+  enable:
+    # Suggest modern language and library features (gopls modernize suite).
+    - modernize
   settings:
     errcheck:
       # Idiomatic patterns where the error is intentionally ignored.
@@ -12,3 +15,12 @@ linters:
         - fmt.Fprint
         - fmt.Fprintf
         - fmt.Fprintln
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/dgrieser/jw-cli

@@ -84,7 +84,7 @@ Examples:
 func splitFormats(in []string) []string {
 	var out []string
 	for _, f := range in {
-		for _, part := range strings.Split(f, ",") {
+		for part := range strings.SplitSeq(f, ",") {
 			if part = strings.TrimSpace(part); part != "" {
 				out = append(out, strings.ToUpper(part))
 			}

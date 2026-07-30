@@ -58,9 +58,9 @@ func parse(doc *goquery.Document, base string) model.Article {
 	}
 	// docid from the article element class list: "... docId-1102025912 ..."
 	if cls, ok := container.Attr("class"); ok {
-		for _, tok := range strings.Fields(cls) {
-			if strings.HasPrefix(tok, "docId-") {
-				if id, err := strconv.Atoi(strings.TrimPrefix(tok, "docId-")); err == nil {
+		for tok := range strings.FieldsSeq(cls) {
+			if idStr, found := strings.CutPrefix(tok, "docId-"); found {
+				if id, err := strconv.Atoi(idStr); err == nil {
 					art.DocID = id
 				}
 			}

@@ -20,23 +20,17 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check formatting
-        run: |
-          out=$(gofmt -l .)
-          if [ -n "$out" ]; then
-            echo "The following files are not gofmt-formatted:"
-            echo "$out"
-            exit 1
-          fi
-
       - name: Vet
-        run: go vet ./...
+        run: make vet
 
       - name: Build
-        run: go build ./...
+        run: make build-all
 
       - name: Test
-        run: go test -race ./...
+        run: make test-race
+
+      - name: Check go.mod tidiness
+        run: make tidy-check
 
   lint:
     name: Lint
@@ -48,7 +42,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Keep in sync with GOLANGCI_VERSION in the Makefile.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          version: v2.12.2
+
+      # Uses the golangci-lint binary installed by the step above.
+      - name: Check formatting
+        run: make fmt-check

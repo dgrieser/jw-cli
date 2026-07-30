@@ -124,11 +124,12 @@ Examples:
 				if i > 0 {
 					b.WriteString("\n")
 				}
-				html := ""
+				var html strings.Builder
 				for _, v := range p.Verses {
-					html += v.HTML + " "
+					html.WriteString(v.HTML)
+					html.WriteString(" ")
 				}
-				body, err := render.Render(html, format, render.Options{BaseURL: a.HTTP().Base.WOL})
+				body, err := render.Render(html.String(), format, render.Options{BaseURL: a.HTTP().Base.WOL})
 				if err != nil {
 					return err
 				}

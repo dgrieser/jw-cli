@@ -12,7 +12,7 @@ import (
 func searchMux(t *testing.T) *http.ServeMux {
 	mux := languagesMux(t)
 	mux.HandleFunc("/tokens/jworg.jwt", func(w http.ResponseWriter, r *http.Request) {
-		payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"exp":%d}`, time.Now().Add(time.Hour).Unix())))
+		payload := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
 		fmt.Fprint(w, "h."+payload+".s")
 	})
 	mux.HandleFunc("/apis/search/results/X/videos", func(w http.ResponseWriter, r *http.Request) {

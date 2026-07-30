@@ -1,3 +1,5 @@
 /jw
 /dist/
 *.test
+/coverage.out
+/coverage.html

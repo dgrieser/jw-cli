@@ -148,7 +148,7 @@ func normalizeName(s string) string {
 // separated by ';'. Verse lists with ',' expand into separate Refs.
 func Parse(input string, t *Table) ([]Ref, error) {
 	var refs []Ref
-	for _, part := range strings.Split(input, ";") {
+	for part := range strings.SplitSeq(input, ";") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -185,7 +185,7 @@ func parseOne(s string, t *Table) ([]Ref, error) {
 		return []Ref{{Book: book, Chapter: chapter}}, nil
 	}
 	var refs []Ref
-	for _, span := range strings.Split(versePart, ",") {
+	for span := range strings.SplitSeq(versePart, ",") {
 		span = strings.TrimSpace(span)
 		lo, hi, found := strings.Cut(span, "-")
 		start, err := strconv.Atoi(strings.TrimSpace(lo))

@@ -19,11 +19,27 @@
 ## Build
 
 ```sh
-go build -o jw ./cmd/jw
+make build          # ./jw, version stamped from git describe
+make install        # into $GOBIN
 ```
 
-Requires Go 1.24+. Run the tests with `go test ./...` (they use recorded
-fixtures, no network access needed).
+Requires Go 1.25+. Tests use recorded fixtures, so no network access is needed.
+
+Development targets (`make help` lists them all):
+
+```sh
+make test           # go test ./...
+make test-race      # with the race detector
+make cover          # coverage.out + coverage.html
+make fmt            # gofmt + goimports
+make lint           # golangci-lint, includes the modernize suite
+make modernize-fix  # apply modern-Go rewrites in place
+make check          # fmt-check + vet + lint + test-race (what CI runs)
+make snapshot       # local goreleaser build of all release artifacts
+```
+
+golangci-lint and goreleaser are used from `$PATH` when present, otherwise
+fetched at pinned versions via `go run`; `make tools` installs them.
 
 ## Global flags
 
