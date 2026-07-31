@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -20,6 +22,28 @@ func resolveIndexArg(a *app.App, arg string) (model.Result, error) {
 		return model.Result{}, fmt.Errorf("expected a result index (a number from the last listing), got %q", arg)
 	}
 	return results.Resolve(a.Cache().Dir(), idx)
+}
+
+// mdLinked renders text as a markdown link to url, or as plain text when there
+// is no url. Either way the result is safe as the first thing in a list item:
+// bible citations like "1. Kor. 8:4" would otherwise start an ordered list.
+func mdLinked(text, url string) string {
+	text = strings.TrimSpace(text)
+	if url == "" {
+		return escapeListMarker(text)
+	}
+	return "[" + linkTextEscaper.Replace(text) + "](" + url + ")"
+}
+
+// linkTextEscaper escapes the brackets that would end the link text early.
+var linkTextEscaper = strings.NewReplacer("[", `\[`, "]", `\]`)
+
+// listMarker matches a leading enumerator ("1." / "1)") that markdown would read
+// as the start of an ordered list.
+var listMarker = regexp.MustCompile(`^(\d+)([.)])`)
+
+func escapeListMarker(text string) string {
+	return listMarker.ReplaceAllString(text, `$1\$2`)
 }
 
 func openInBrowser(url string) error {

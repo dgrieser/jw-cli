@@ -145,11 +145,7 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Bible references in %q:\n\n", art.Title)
 	for _, r := range art.ScriptureRefs {
-		fmt.Fprintf(&b, "- %s", r.Text)
-		if r.BCPath != "" {
-			fmt.Fprintf(&b, " <%s>", r.BCPath)
-		}
-		b.WriteString("\n")
+		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, r.BCPath))
 	}
 	b.WriteString("\nRead one with: jw bible read \"<reference>\"\n")
 	return a.WriteMarkdown(b.String())

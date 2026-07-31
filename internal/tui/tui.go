@@ -40,10 +40,16 @@ type Actions struct {
 	Open func(item model.Result) error
 	// Browse returns a new Fetcher when the item is a container (optional).
 	Browse func(item model.Result) (Fetcher, string, bool)
+	// NoColor styles markdown in the detail pane without colors.
+	NoColor bool
 }
 
 // Run starts the TUI over the given fetcher.
 func Run(header string, fetch Fetcher, actions Actions) error {
+	// Resolve the markdown style while we still own the terminal: detecting it
+	// queries the background color, and that reply would land in the TUI's own
+	// input stream once the program is reading keys.
+	render.DetectStyle()
 	m := newModel(header, fetch, actions)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
@@ -59,7 +65,7 @@ func Run(header string, fetch Fetcher, actions Actions) error {
 type item struct{ r model.Result }
 
 func (i item) Title() string {
-	t := fmt.Sprintf("[%s] %s", i.r.Kind, i.r.Title)
+	t := fmt.Sprintf("[%s] %s", i.r.Kind, plain(i.r.Title))
 	if i.r.Duration != "" {
 		t += " (" + i.r.Duration + ")"
 	}
@@ -68,12 +74,18 @@ func (i item) Title() string {
 
 func (i item) Description() string {
 	if i.r.Snippet != "" {
-		return i.r.Snippet
+		return plain(i.r.Snippet)
 	}
-	return i.r.Context
+	return plain(i.r.Context)
 }
 
-func (i item) FilterValue() string { return i.r.Title + " " + i.r.Snippet }
+func (i item) FilterValue() string { return plain(i.r.Title) + " " + plain(i.r.Snippet) }
+
+// plain strips the inline HTML the search APIs put in titles and snippets. The
+// list delegate applies its own colors, so no emphasis is added here.
+func plain(fragment string) string {
+	return render.Inline(fragment, render.InlineOptions{})
+}
 
 type level struct {
 	fetch  Fetcher
@@ -156,7 +168,10 @@ func (m uiModel) paneContent() string {
 	if m.width > 0 {
 		width = render.ClampWidth(m.width)
 	}
-	return render.ToTerminal(m.content.Text, render.TerminalOptions{Width: width})
+	return render.ToTerminal(m.content.Text, render.TerminalOptions{
+		Width:   width,
+		NoColor: m.actions.NoColor,
+	})
 }
 
 func (m uiModel) Init() tea.Cmd {

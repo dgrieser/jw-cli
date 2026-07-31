@@ -299,7 +299,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
 				for _, x := range e.XRefs {
-					fmt.Fprintf(&b, "- %s\n", x.Citation)
+					fmt.Fprintf(&b, "- %s\n", escapeListMarker(x.Citation))
 					if x.ResolvedHTML != "" {
 						body, err := render.Render(x.ResolvedHTML, format, render.Options{BaseURL: a.HTTP().Base.WOL})
 						if err != nil {
@@ -419,7 +419,7 @@ publication is fetched and shown, including a link to the full article.`,
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
 				for _, it := range e.Items {
-					fmt.Fprintf(&b, "- %s", it.Title)
+					fmt.Fprintf(&b, "- %s", mdLinked(it.Title, firstNonEmpty(it.ArticleURL, it.PCPath)))
 					if it.Source != "" {
 						fmt.Fprintf(&b, " (%s)", it.Source)
 					}
@@ -429,9 +429,6 @@ publication is fetched and shown, including a link to the full article.`,
 						if err == nil {
 							fmt.Fprintf(&b, "\n%s\n", indent(strings.TrimSpace(body), "  "))
 						}
-					}
-					if link := firstNonEmpty(it.ArticleURL, it.PCPath); link != "" {
-						fmt.Fprintf(&b, "  <%s>\n", link)
 					}
 					b.WriteString("\n")
 				}

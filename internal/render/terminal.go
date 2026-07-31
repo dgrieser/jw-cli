@@ -2,10 +2,14 @@ package render
 
 import (
 	"os"
+	"regexp"
 	"strings"
+	"sync"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
+	"charm.land/glamour/v2"
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
+	lipgloss "charm.land/lipgloss/v2"
 	"golang.org/x/term"
 )
 
@@ -28,38 +32,128 @@ type TerminalOptions struct {
 
 // ToTerminal renders markdown for display in a terminal: headings, lists,
 // emphasis, block quotes, and code blocks get ANSI styling and the text is
-// wrapped at the terminal width. Rendering never fails the caller — on any
-// error the markdown is returned unchanged.
+// wrapped at the terminal width. Link and image targets become OSC 8 hyperlinks
+// on the text itself instead of being spelled out. Rendering never fails the
+// caller — on any error the markdown is returned unchanged.
 func ToTerminal(md string, o TerminalOptions) string {
 	width := o.Width
 	if width <= 0 {
 		width = TerminalWidth(os.Stdout)
 	}
-	// AutoStyle picks dark or light from the terminal background, and falls back
-	// to the unstyled layout on its own when stdout is not a terminal.
-	style := styles.AutoStyle
-	if o.NoColor || noColorEnv() {
-		style = styles.NoTTYStyle
+	style := styles.NoTTYStyle
+	if !o.NoColor && !noColorEnv() {
+		style = DetectStyle()
 	}
 	return toTerminal(md, style, width)
 }
 
+// DetectStyle picks the glamour style matching the terminal: the unstyled layout
+// when stdout is not a terminal, otherwise dark or light by background color.
+// GLAMOUR_STYLE overrides the choice by name (dark, light, ascii, notty, ...).
+//
+// Detecting asks the terminal for its background color and briefly switches
+// stdin to raw mode, so the answer is resolved once per process. Call this
+// before handing the terminal to something else that reads keys.
+func DetectStyle() string { return detectStyle() }
+
+var detectStyle = sync.OnceValue(func() string {
+	if name := os.Getenv("GLAMOUR_STYLE"); name != "" {
+		if _, ok := styles.DefaultStyles[name]; ok {
+			return name
+		}
+	}
+	if !term.IsTerminal(int(os.Stdout.Fd())) {
+		return styles.NoTTYStyle
+	}
+	// Lip Gloss pairs the background-color request with a device-attributes
+	// request, so a terminal that ignores the former still answers the latter
+	// and the query returns at once; it falls back to dark on error or timeout.
+	if lipgloss.HasDarkBackground(os.Stdin, os.Stdout) {
+		return styles.DarkStyle
+	}
+	return styles.LightStyle
+})
+
 func toTerminal(md, style string, width int) string {
+	cfg, ok := styles.DefaultStyles[style]
+	if !ok || cfg == nil {
+		return md
+	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
+		glamour.WithStyles(hideLinkTargets(*cfg)),
 		glamour.WithWordWrap(width),
 		glamour.WithEmoji(),
 	)
 	if err != nil {
 		return md
 	}
-	out, err := r.Render(md)
+	out, err := r.Render(expandBareLinks(md))
 	if err != nil {
 		return md
 	}
 	// Glamour pads the document with blank lines; the writer adds its own.
-	return strings.Trim(out, "\n")
+	return strings.Trim(dropHiddenTargetSpace(out), "\n")
 }
+
+// hiddenTargetSpace matches the separator glamour writes between a link's text
+// and its target: an end-of-hyperlink, optional color codes, then one space.
+var hiddenTargetSpace = regexp.MustCompile("(\x1b\\]8;;\x07)((?:\x1b\\[[0-9;]*m)*) ")
+
+// dropHiddenTargetSpace removes that separator. The target renders to nothing
+// here, so the space is left dangling: it doubles up before the next word and,
+// worse, detaches the link text from punctuation ("Matt 17:20 ." for
+// "[Matt 17:20](url)."). Glamour hardcodes it, so it goes after the fact.
+func dropHiddenTargetSpace(s string) string {
+	return hiddenTargetSpace.ReplaceAllString(s, "$1$2")
+}
+
+// blankFormat is a template that renders to nothing. Glamour always writes a
+// link's target next to its text and offers no switch for it, but it runs the
+// target through this format template first — so blanking the template drops
+// the spelled-out URL while keeping the OSC 8 hyperlink on the text.
+const blankFormat = `{{""}}`
+
+// hideLinkTargets returns cfg with link and image targets suppressed. Only the
+// target is dropped; the text stays styled and stays a clickable hyperlink.
+func hideLinkTargets(cfg ansi.StyleConfig) ansi.StyleConfig {
+	cfg.Link.Format = blankFormat
+	cfg.Image.Format = blankFormat
+	return cfg
+}
+
+// mdLink matches, in one left-to-right pass, every markdown construct that can
+// hold a URL. Earlier alternatives win, so a link's own target can never be
+// re-matched by the bare-URL alternative that follows.
+var mdLink = regexp.MustCompile(
+	"`[^`\n]*`" + // code span: never rewritten
+		`|!?\[[^\]]*\]\([^)\s]*\)` + // inline link or image
+		`|\]\([^)\s]*\)` + // target of a link whose text has nested brackets
+		`|<https?://[^\s>]+>` + // autolink
+		`|https?://[^\s<>()\[\]]+`) // bare URL
+
+// trailingPunct is punctuation a bare URL must not swallow; GFM's linkify drops
+// it too, so the two agree on where the URL ends.
+const trailingPunct = ".,;:!?'\""
+
+// expandBareLinks rewrites autolinks and bare URLs into the inline [text](url)
+// form. Autolinks and bare URLs are rendered target-only, and the terminal
+// renderer hides targets — without this they would come out empty. As inline
+// links they keep their URL as visible, clickable text.
+func expandBareLinks(md string) string {
+	return mdLink.ReplaceAllStringFunc(md, func(m string) string {
+		switch {
+		case strings.HasPrefix(m, "`"), strings.HasPrefix(m, "["),
+			strings.HasPrefix(m, "!["), strings.HasPrefix(m, "]("):
+			return m // already carries its own text, or must not be touched
+		case strings.HasPrefix(m, "<"):
+			return inlineLink(m[1 : len(m)-1])
+		}
+		url := strings.TrimRight(m, trailingPunct)
+		return inlineLink(url) + m[len(url):]
+	})
+}
+
+func inlineLink(url string) string { return "[" + url + "](" + url + ")" }
 
 // TerminalWidth returns the clamped column count of the terminal backing f, or
 // the default width when f is nil, not a terminal, or its size is unavailable.

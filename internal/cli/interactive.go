@@ -16,6 +16,7 @@ import (
 // listings.
 func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions {
 	return tui.Actions{
+		NoColor: a.Flags.NoColor,
 		Show: func(item model.Result) (tui.Content, error) {
 			switch item.Kind {
 			case "video", "audio":

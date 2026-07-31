@@ -161,7 +161,7 @@ func (a *App) Format() (render.Format, error) {
 // the non-markdown formats, when the target is a file, and when stdout is not a
 // terminal — so pipes and redirects stay machine-readable.
 func (a *App) WriteMarkdown(content string) error {
-	if !a.styleMarkdown() {
+	if !a.Styled() {
 		return a.Write(content)
 	}
 	return a.Write(render.ToTerminal(content, render.TerminalOptions{
@@ -170,8 +170,10 @@ func (a *App) WriteMarkdown(content string) error {
 	}))
 }
 
-// styleMarkdown reports whether markdown output should be styled for a terminal.
-func (a *App) styleMarkdown() bool {
+// Styled reports whether output may carry terminal styling: -o markdown is in
+// effect (-o raw and the other formats want exact bytes), the target is stdout,
+// and stdout is a terminal.
+func (a *App) Styled() bool {
 	if a.Flags.File != "" {
 		return false
 	}

@@ -127,6 +127,25 @@ func TestShowStylesMarkdown(t *testing.T) {
 	}
 }
 
+// TestListItemStripsSourceMarkup checks the search APIs' inline HTML never
+// reaches the list: the delegate would print the tags verbatim.
+func TestListItemStripsSourceMarkup(t *testing.T) {
+	it := item{r: model.Result{
+		Kind:    "verse",
+		Title:   "Daniel&nbsp;7:27",
+		Snippet: "vom <strong>Königreich</strong>\nbekannt machen?",
+	}}
+	if got := it.Title(); got != "[verse] Daniel 7:27" {
+		t.Errorf("title: %q", got)
+	}
+	if got := it.Description(); got != "vom Königreich bekannt machen?" {
+		t.Errorf("description: %q", got)
+	}
+	if got := it.FilterValue(); strings.ContainsAny(got, "<&") {
+		t.Errorf("filter value still has markup: %q", got)
+	}
+}
+
 func TestDownloadStatus(t *testing.T) {
 	fetch := fakeFetcher(map[int][]model.Result{1: {{Title: "Video", Kind: "video", LANK: "x"}}})
 	m := newTestModel(t, fetch, Actions{

@@ -55,7 +55,19 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 
 With the default `-o markdown`, article, Bible, and media output is styled for
 the terminal — headings, lists, emphasis, and quotes get colors, and paragraphs
-are wrapped to the terminal width. Link targets are shown next to their text.
+are wrapped to the terminal width.
+
+Links are rendered as OSC 8 hyperlinks on their own text, so a Bible text reads
+as prose instead of being broken up by URLs: the verse numbers and footnote
+markers in `jw bible read` are clickable, the target stays out of the way. A URL
+that is its own text (`jw media info` file lists) still shows in full. In a
+terminal without hyperlink support the text simply is not clickable — use
+`-o raw` there if you need the targets.
+
+Result listings are plain reports, not markdown, so they are never restyled —
+but the search APIs return titles and snippets as HTML fragments, and those are
+rendered too: the tags and entities are resolved, and on a terminal the matched
+words keep the API's highlight as bold.
 
 The markdown is written verbatim whenever styling would get in the way:
 
@@ -64,6 +76,14 @@ jw article 1102025912 -o raw                 # never styled, even on a terminal
 jw article 1102025912 -f out.md              # -f|--file always writes raw markdown
 jw article 1102025912 | pandoc -f markdown   # a pipe is not a terminal: raw
 jw article 1102025912 --no-color             # styled layout, no colors
+```
+
+The color scheme follows the terminal background. Override it with
+`GLAMOUR_STYLE` (`dark`, `light`, `ascii`, `notty`, `dracula`, `tokyo-night`,
+`pink`), which also skips the background-color query:
+
+```sh
+GLAMOUR_STYLE=light jw dailytext
 ```
 
 ## Commands

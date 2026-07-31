@@ -32,8 +32,10 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 	if header != "" {
 		b.WriteString(header + "\n\n")
 	}
+	// titles and snippets arrive as HTML fragments from the search APIs
+	inline := render.InlineOptions{Emphasis: a.Styled()}
 	for _, r := range rs.Items {
-		b.WriteString(formatResult(r))
+		b.WriteString(formatResult(r, inline))
 	}
 	if len(rs.Items) == 0 {
 		b.WriteString("No results.\n")
@@ -41,7 +43,7 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 	return a.Write(b.String())
 }
 
-func formatResult(r model.Result) string {
+func formatResult(r model.Result, inline render.InlineOptions) string {
 	var b strings.Builder
 	meta := []string{}
 	if r.Duration != "" {
@@ -50,16 +52,16 @@ func formatResult(r model.Result) string {
 	if r.Filesize > 0 {
 		meta = append(meta, humanSize(r.Filesize))
 	}
-	title := r.Title
+	title := render.Inline(r.Title, inline)
 	if r.Context != "" {
-		title += " — " + r.Context
+		title += " — " + render.Inline(r.Context, inline)
 	}
 	if len(meta) > 0 {
 		title += " (" + strings.Join(meta, ", ") + ")"
 	}
 	fmt.Fprintf(&b, "%3d. [%s] %s\n", r.Index, r.Kind, title)
-	if r.Snippet != "" {
-		fmt.Fprintf(&b, "     %s\n", r.Snippet)
+	if snippet := render.Inline(r.Snippet, inline); snippet != "" {
+		fmt.Fprintf(&b, "     %s\n", snippet)
 	}
 	if link := preferredLink(r); link != "" {
 		fmt.Fprintf(&b, "     %s\n", link)

@@ -2,10 +2,11 @@ package render
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/glamour/styles"
+	"charm.land/glamour/v2/styles"
 )
 
 const sample = `
@@ -125,6 +126,81 @@ func TestRenderRaw(t *testing.T) {
 
 const markdownDoc = "# Title\n\nSome *emphasis* and a [link](https://example.com/a).\n\n- one\n- two\n"
 
+func TestExpandBareLinks(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"autolink", "see <https://a.example/x> here",
+			"see [https://a.example/x](https://a.example/x) here"},
+		{"bare url", "see https://a.example/x here",
+			"see [https://a.example/x](https://a.example/x) here"},
+		{"bare url keeps trailing period", "see https://a.example/x.",
+			"see [https://a.example/x](https://a.example/x)."},
+		{"inline link untouched", "see [text](https://a.example/x) here",
+			"see [text](https://a.example/x) here"},
+		{"image untouched", "![alt](https://a.example/i.jpg)",
+			"![alt](https://a.example/i.jpg)"},
+		{"nested brackets in link text", "[a [b] c](https://a.example/x)",
+			"[a [b] c](https://a.example/x)"},
+		{"code span untouched", "run `curl https://a.example/x` now",
+			"run `curl https://a.example/x` now"},
+		{"non-url angle brackets untouched", "run `jw download <n>` now",
+			"run `jw download <n>` now"},
+		{"mixed", "[v](https://a.example/1) and <https://b.example/2>",
+			"[v](https://a.example/1) and [https://b.example/2](https://b.example/2)"},
+	} {
+		if got := expandBareLinks(tc.in); got != tc.want {
+			t.Errorf("%s:\n got %q\nwant %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestToTerminalHidesLinkTargets pins the reading experience: an inline link
+// shows only its text, hyperlinked with OSC 8, while a URL that is its own text
+// stays visible. A spelled-out target next to its text is the glamour default
+// this deliberately suppresses.
+func TestToTerminalHidesLinkTargets(t *testing.T) {
+	const url = "https://wol.jw.org/de/wol/bc/r10/lp-x/1001070144/839"
+	md := "Verse [14](" + url + ") of the chapter.\n\nSource: <" + url + ">\n"
+	out := toTerminal(md, styles.DarkStyle, 200)
+
+	// both links are hyperlinked: two OSC 8 opening sequences carrying the URL
+	if got := strings.Count(out, "\x1b]8;id="); got != 2 {
+		t.Errorf("expected 2 OSC 8 hyperlinks, got %d:\n%q", got, out)
+	}
+	if !strings.Contains(out, ";"+url+"\x07") {
+		t.Errorf("hyperlink does not carry the URL:\n%q", out)
+	}
+
+	// spacing is exact: no gap left where the target was, and none inserted
+	// between the link text and the punctuation that follows it
+	if raw := ansiSeq.ReplaceAllString(out, ""); !strings.Contains(raw, "Verse 14 of the chapter.") {
+		t.Errorf("spacing around the hidden target is wrong:\n%q", raw)
+	}
+	visible := visibleText(out)
+	if strings.Count(visible, url) != 1 {
+		t.Errorf("URL should appear once (the autolink), not next to the anchor:\n%q", visible)
+	}
+	// the former autolink keeps the URL as its visible, clickable text
+	if !strings.Contains(visible, "Source: "+url) {
+		t.Errorf("autolink target lost:\n%q", visible)
+	}
+
+	// a link followed directly by punctuation must not gain a space
+	punct := toTerminal("See [Matt 17:20]("+url+"), then stop.", styles.DarkStyle, 200)
+	if got := visibleText(punct); !strings.Contains(got, "See Matt 17:20, then stop.") {
+		t.Errorf("space inserted before punctuation:\n%q", got)
+	}
+}
+
+// ansiSeq matches SGR sequences and OSC 8 hyperlink sequences (BEL-terminated,
+// which is what glamour emits).
+var ansiSeq = regexp.MustCompile("\x1b\\[[0-9;]*m|\x1b\\]8;[^\x07]*\x07")
+
+// visibleText reduces rendered output to what a reader sees: escapes removed and
+// runs of whitespace collapsed, since glamour pads lines out to the wrap width.
+func visibleText(s string) string {
+	return strings.Join(strings.Fields(ansiSeq.ReplaceAllString(s, "")), " ")
+}
+
 // TestToTerminalStyles exercises the styled path with a fixed style: glamour's
 // auto style degrades to the unstyled layout when stdout is not a terminal, so
 // a test process would never see ANSI otherwise.
@@ -133,14 +209,17 @@ func TestToTerminalStyles(t *testing.T) {
 	if !strings.Contains(out, "\x1b[") {
 		t.Errorf("expected ANSI styling:\n%q", out)
 	}
-	// the link markup is consumed, both text and target survive
-	if strings.Contains(out, "](") {
-		t.Errorf("link markup not rendered:\n%q", out)
+	visible := visibleText(out)
+	if strings.Contains(visible, "](") {
+		t.Errorf("link markup not rendered:\n%q", visible)
 	}
-	for _, want := range []string{"Title", "emphasis", "link", "https://example.com/a", "one", "two"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("styled output missing %q:\n%s", want, out)
+	for _, want := range []string{"Title", "emphasis", "link", "one", "two"} {
+		if !strings.Contains(visible, want) {
+			t.Errorf("styled output missing %q:\n%s", want, visible)
 		}
+	}
+	if strings.Contains(visible, "https://example.com/a") {
+		t.Errorf("inline link target should not be visible:\n%q", visible)
 	}
 	if strings.HasPrefix(out, "\n") || strings.HasSuffix(out, "\n") {
 		t.Errorf("output should be trimmed of blank lines:\n%q", out)
