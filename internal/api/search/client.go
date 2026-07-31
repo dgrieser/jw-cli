@@ -4,7 +4,9 @@
 package search
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -42,19 +44,41 @@ type Params struct {
 }
 
 type wireResult struct {
-	Type     string            `json:"type"`
-	Subtype  string            `json:"subtype"`
-	Title    string            `json:"title"`
-	Snippet  string            `json:"snippet"`
-	Context  string            `json:"context"`
-	LANK     string            `json:"lank"`
-	Duration string            `json:"duration"`
-	Links    map[string]string `json:"links"`
-	Image    *struct {
-		URL     string `json:"url"`
-		AltText string `json:"altText"`
-	} `json:"image"`
-	Results []wireResult `json:"results"` // for type=group
+	Type     string       `json:"type"`
+	Subtype  string       `json:"subtype"`
+	Title    string       `json:"title"`
+	Snippet  string       `json:"snippet"`
+	Context  string       `json:"context"`
+	LANK     string       `json:"lank"`
+	Duration string       `json:"duration"`
+	Links    wireLinks    `json:"links"`
+	Image    *wireImage   `json:"image"`
+	Results  []wireResult `json:"results"` // for type=group
+}
+
+type wireImage struct {
+	URL     string `json:"url"`
+	AltText string `json:"altText"`
+}
+
+// wireLinks is the "links" field. On a result item it is an object of
+// name -> URL ("jw.org", "wol"). On the groups that wrap the items — the shape
+// the "all" facet returns — it is instead an array of navigation entries
+// ("see all" and friends). Groups are flattened away, so the array form is
+// decoded to nothing rather than being an error.
+type wireLinks map[string]string
+
+func (l *wireLinks) UnmarshalJSON(b []byte) error {
+	if bytes.HasPrefix(bytes.TrimLeft(b, " \t\r\n"), []byte("[")) {
+		*l = nil
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal(b, &m); err != nil {
+		return fmt.Errorf("search result links: %w", err)
+	}
+	*l = m
+	return nil
 }
 
 // Search performs one search request, refreshing the token once on 401.

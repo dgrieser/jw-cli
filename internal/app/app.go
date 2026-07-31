@@ -165,10 +165,13 @@ func (a *App) WriteMarkdown(content string) error {
 		return a.Write(content)
 	}
 	return a.Write(render.ToTerminal(content, render.TerminalOptions{
-		Width:   render.TerminalWidth(os.Stdout),
+		Width:   a.Width(),
 		NoColor: a.Flags.NoColor,
 	}))
 }
+
+// Width is the column budget for output, taken from the terminal behind stdout.
+func (a *App) Width() int { return render.TerminalWidth(a.Stdout) }
 
 // Styled reports whether output may carry terminal styling: -o markdown is in
 // effect (-o raw and the other formats want exact bytes), the target is stdout,

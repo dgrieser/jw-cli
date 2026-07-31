@@ -253,6 +253,50 @@ func TestToTerminalNoColorEnv(t *testing.T) {
 	}
 }
 
+func TestWrapIndent(t *testing.T) {
+	const indent = "     " // 5 columns, as the result listings use
+	// width 25 leaves a 20-column budget per line
+	got := WrapIndent("one two three four five six", indent, 25)
+	want := "one two three four\n     five six"
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// every line, indent included, has to fit the width
+	for line := range strings.SplitSeq(indent+got, "\n") {
+		if StringWidth(line) > 25 {
+			t.Errorf("line exceeds width: %q (%d)", line, StringWidth(line))
+		}
+	}
+}
+
+func TestWrapIndentCountsColumnsNotBytes(t *testing.T) {
+	const indent = "  "
+	// the bold escapes and the multi-byte umlauts must not shift the wrap point
+	styled := WrapIndent("Das \x1b[1mKönigreich\x1b[0m und die Herrschaft", indent, 22)
+	plain := WrapIndent("Das Koenigreich und die Herrschaft", indent, 22)
+	if strings.Count(styled, "\n") != strings.Count(plain, "\n") {
+		t.Errorf("escape codes changed the wrapping:\nstyled %q\nplain  %q", styled, plain)
+	}
+	if !strings.Contains(styled, "\x1b[1mKönigreich\x1b[0m") {
+		t.Errorf("escape sequence broken by wrapping: %q", styled)
+	}
+}
+
+func TestWrapIndentDisabled(t *testing.T) {
+	const s = "a long line that would otherwise be wrapped into several lines"
+	// width 0 is how callers turn wrapping off for pipes and files
+	if got := WrapIndent(s, "     ", 0); got != s {
+		t.Errorf("width 0 must not wrap: %q", got)
+	}
+	// too narrow to be worth wrapping
+	if got := WrapIndent(s, "     ", 20); got != s {
+		t.Errorf("narrow width must not wrap: %q", got)
+	}
+	if got := WrapIndent("", "     ", 80); got != "" {
+		t.Errorf("empty input: %q", got)
+	}
+}
+
 func TestClampWidth(t *testing.T) {
 	for in, want := range map[int]int{0: minWidth, 10: minWidth, 72: 72, 500: maxWidth} {
 		if got := ClampWidth(in); got != want {

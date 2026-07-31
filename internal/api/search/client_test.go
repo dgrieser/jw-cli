@@ -3,6 +3,7 @@ package search
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,7 @@ const searchBody = `{
     },
     {
       "type": "group", "title": "Videos",
+      "links": [{"type": "more", "label": "See all", "link": "/results/E/videos?q=Caleb"}],
       "results": [
         {"type": "item", "subtype": "video", "title": "A Video", "lank": "pub-abc_1_VIDEO",
          "duration": "5:00", "links": {"jw.org": "https://www.jw.org/finder?lank=pub-abc_1_VIDEO"}}
@@ -95,6 +97,42 @@ func TestSearchWithTokenRefresh(t *testing.T) {
 	vid := page.Results[1]
 	if vid.Kind != "video" || vid.LANK != "pub-abc_1_VIDEO" || vid.Duration != "5:00" {
 		t.Errorf("video result: %+v", vid)
+	}
+}
+
+// TestWireLinksShapes covers the "links" field changing type with the result
+// type: an object on items, an array of navigation entries on the groups the
+// "all" facet wraps them in. Decoding used to fail outright on the array.
+func TestWireLinksShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name, in string
+		want     map[string]string
+	}{
+		{"object", `{"jw.org":"https://x","wol":"https://y"}`, map[string]string{"jw.org": "https://x", "wol": "https://y"}},
+		{"empty array", `[]`, nil},
+		{"navigation array", `[{"type":"more","label":"See all","link":"/results"}]`, nil},
+		{"null", `null`, nil},
+		{"empty object", `{}`, map[string]string{}},
+	} {
+		var got wireLinks
+		if err := json.Unmarshal([]byte(tc.in), &got); err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if len(got) != len(tc.want) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+			continue
+		}
+		for k, v := range tc.want {
+			if got[k] != v {
+				t.Errorf("%s: %q = %q, want %q", tc.name, k, got[k], v)
+			}
+		}
+	}
+	// a shape that is neither still has to be reported
+	var bad wireLinks
+	if err := json.Unmarshal([]byte(`"nope"`), &bad); err == nil {
+		t.Error("want an error for a string links field")
 	}
 }
 

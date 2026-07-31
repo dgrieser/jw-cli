@@ -7,9 +7,10 @@ import (
 	"sync"
 
 	"charm.land/glamour/v2"
-	"charm.land/glamour/v2/ansi"
+	glamourstyle "charm.land/glamour/v2/ansi"
 	"charm.land/glamour/v2/styles"
 	lipgloss "charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 )
 
@@ -115,7 +116,7 @@ const blankFormat = `{{""}}`
 
 // hideLinkTargets returns cfg with link and image targets suppressed. Only the
 // target is dropped; the text stays styled and stays a clickable hyperlink.
-func hideLinkTargets(cfg ansi.StyleConfig) ansi.StyleConfig {
+func hideLinkTargets(cfg glamourstyle.StyleConfig) glamourstyle.StyleConfig {
 	cfg.Link.Format = blankFormat
 	cfg.Image.Format = blankFormat
 	return cfg
@@ -155,18 +156,39 @@ func expandBareLinks(md string) string {
 
 func inlineLink(url string) string { return "[" + url + "](" + url + ")" }
 
-// TerminalWidth returns the clamped column count of the terminal backing f, or
-// the default width when f is nil, not a terminal, or its size is unavailable.
-func TerminalWidth(f *os.File) int {
-	if f == nil {
+// TerminalWidth returns the clamped column count of the terminal backing w, or
+// the default width when w is not a terminal or its size is unavailable.
+func TerminalWidth(w any) int {
+	f, ok := w.(*os.File)
+	if !ok || f == nil {
 		return defaultWidth
 	}
-	w, _, err := term.GetSize(int(f.Fd()))
-	if err != nil || w <= 0 {
+	cols, _, err := term.GetSize(int(f.Fd()))
+	if err != nil || cols <= 0 {
 		return defaultWidth
 	}
-	return ClampWidth(w)
+	return ClampWidth(cols)
 }
+
+// minWrapWidth is the narrowest column budget worth wrapping into; below it an
+// indented block would be shredded into single words.
+const minWrapWidth = 20
+
+// WrapIndent wraps s to width columns and indents every line after the first
+// with indent, counting the indent against the width. ANSI escapes and wide
+// characters do not distort the column count. The caller writes the indent for
+// the first line. s is returned unwrapped when width leaves no useful room,
+// which is how callers disable wrapping for pipes and files.
+func WrapIndent(s, indent string, width int) string {
+	limit := width - StringWidth(indent)
+	if s == "" || limit < minWrapWidth {
+		return s
+	}
+	return strings.ReplaceAll(ansi.Wrap(s, limit, ""), "\n", "\n"+indent)
+}
+
+// StringWidth is the printable column width of s, ignoring ANSI escapes.
+func StringWidth(s string) int { return ansi.StringWidth(s) }
 
 // ClampWidth clamps a raw terminal column count to the rendering bounds.
 func ClampWidth(w int) int {

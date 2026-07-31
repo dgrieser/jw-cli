@@ -67,7 +67,9 @@ terminal without hyperlink support the text simply is not clickable — use
 Result listings are plain reports, not markdown, so they are never restyled —
 but the search APIs return titles and snippets as HTML fragments, and those are
 rendered too: the tags and entities are resolved, and on a terminal the matched
-words keep the API's highlight as bold.
+words keep the API's highlight as bold. Long titles and snippets are wrapped to
+the listing's indent; links are left whole so they stay clickable. Redirect or
+pipe a listing and each result stays on its own line, ready to grep.
 
 The markdown is written verbatim whenever styling would get in the way:
 
