@@ -81,7 +81,7 @@ func toTerminal(md, style string, width int) string {
 		return md
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStyles(hideLinkTargets(*cfg)),
+		glamour.WithStyles(styleOverrides(*cfg)),
 		glamour.WithWordWrap(width),
 		glamour.WithEmoji(),
 	)
@@ -114,11 +114,16 @@ func dropHiddenTargetSpace(s string) string {
 // the spelled-out URL while keeping the OSC 8 hyperlink on the text.
 const blankFormat = `{{""}}`
 
-// hideLinkTargets returns cfg with link and image targets suppressed. Only the
-// target is dropped; the text stays styled and stays a clickable hyperlink.
-func hideLinkTargets(cfg glamourstyle.StyleConfig) glamourstyle.StyleConfig {
+// styleOverrides returns cfg with this project's two departures from the stock
+// glamour styles applied.
+func styleOverrides(cfg glamourstyle.StyleConfig) glamourstyle.StyleConfig {
+	// link and image targets are suppressed: only the target is dropped, the
+	// text stays styled and stays a clickable hyperlink
 	cfg.Link.Format = blankFormat
 	cfg.Image.Format = blankFormat
+	// glamour draws a thematic break as eight hyphens; keep the three the
+	// markdown source uses, so the styled output and -o raw agree
+	cfg.HorizontalRule.Format = "\n" + horizontalRule + "\n"
 	return cfg
 }
 

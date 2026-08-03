@@ -25,7 +25,9 @@ func bibleMux(t *testing.T) *http.ServeMux {
 	mux.HandleFunc("/en/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<ul><li>For God so loved... (Ge 22:2)</li></ul>`))
 	})
-	mux.HandleFunc("/en/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
+	// the citation JSON lives at the locale-less path; /en/wol/pc/... is a
+	// navigation redirect to the target page
+	mux.HandleFunc("/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"items": [{"content": "<p>Jehovah loved the world of redeemable mankind.</p>",
 			"title": "God So Loved the World", "url": "/en/wol/d/r1/lp-e/2014486"}]}`))

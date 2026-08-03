@@ -17,7 +17,9 @@ func chapterClient(t *testing.T) *Client {
 	mux.HandleFunc("/en/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<ul><li><span class="v">For God so loved... (Ge 22:2)</span></li></ul>`))
 	})
-	mux.HandleFunc("/en/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
+	// the citation JSON lives at the locale-less path; /en/wol/pc/... is a
+	// navigation redirect to the target page
+	mux.HandleFunc("/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-Requested-With") != "XMLHttpRequest" {
 			http.Error(w, "expected XHR", 400)
 			return

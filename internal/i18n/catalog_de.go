@@ -46,6 +46,12 @@ var de = Messages{
 	DownloadingLabel: "lade herunter",
 	DownloadFailed:   "Herunterladen fehlgeschlagen: %s",
 
+	UnfoldHeading:  "Referenzen",
+	UnfoldConfirm:  "Ebene %d braucht %d weitere Abfragen an wol.jw.org. Fortfahren? [j/N] ",
+	UnfoldProgress: "Ebene %d wird aufgeklappt: %d/%d",
+	UnfoldStopped:  "Hier abgebrochen: %d weitere Referenzen wurden nicht aufgeklappt.",
+	UnfoldFailed:   "konnte nicht aufgeklappt werden: %s",
+
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",
 

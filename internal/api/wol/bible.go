@@ -224,6 +224,9 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 			PublicationTitle string `json:"publicationTitle"`
 		} `json:"items"`
 	}
+	// citation paths taken straight out of a document are relative, and carry a
+	// locale segment that has to come off first
+	tcURL = absURL(c.hc.Base.WOL, citationAPI(tcURL))
 	if err := c.hc.GetJSON(ctx, tcURL, xhrHeaders(), &resp); err != nil {
 		return model.Tooltip{}, err
 	}
@@ -313,6 +316,22 @@ func xhrHeaders() map[string][]string {
 		"X-Requested-With": {"XMLHttpRequest"},
 		"Accept":           {"application/json, text/javascript, */*; q=0.01"},
 	}
+}
+
+// citationLocale matches the locale segment wol puts in the citation links of a
+// document, as in "/de/wol/pc/r10/lp-x/1204408/577/0".
+var citationLocale = regexp.MustCompile(`/[\w-]+/wol/`)
+
+// citationAPI turns a citation link into its JSON endpoint by dropping the
+// locale segment: /de/wol/pc/... answers with a 307 to the target page, while
+// /wol/pc/... answers with the passage itself. This is what wol's own tooltip
+// code does, and it is what makes a citation resolvable at all. Only the first
+// segment is replaced, and a path that already lacks one is left alone.
+func citationAPI(path string) string {
+	if loc := citationLocale.FindStringIndex(path); loc != nil {
+		return path[:loc[0]] + "/wol/" + path[loc[1]:]
+	}
+	return path
 }
 
 func absURL(base, path string) string {

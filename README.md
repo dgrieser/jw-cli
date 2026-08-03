@@ -199,12 +199,43 @@ the two meeting parts — takes the same flags for what to do with it:
 | `--refs` | List the bible verses the document cites, each linked to the verse. |
 | `--images` | List its illustrations with captions, downloadable by index. |
 | `--download-images` | Download all of them, with `-d, --dir` for the target. |
+| `--unfold N` | Print the text behind every citation, following references `N` levels deep. |
 
 ```sh
 jw meetings midweek --refs           # the verses that week's part cites
 jw meetings weekend --images         # the study article's illustrations
 jw dailytext --refs                  # today's cited verses
 ```
+
+### Unfolding citations
+
+wol writes a bible verse or a passage of another publication as a link. `--unfold`
+follows those links and brings the text itself into the output, so a document can
+be read without leaving it:
+
+```sh
+jw dailytext --unfold 1               # today's text plus every verse it cites
+jw meetings midweek --unfold 1        # the workbook part with its passages
+jw dailytext --unfold 2 --yes         # and the cross references inside those verses
+```
+
+Each reference becomes a heading under `References`, and at depth two and beyond
+what *those* passages cite nests one level deeper. Every reference is expanded at
+most once across the whole document, which removes repeats and stops two passages
+that cite each other from looping.
+
+Depth costs requests: one per reference, against a site limited to about two a
+second. References are followed breadth first, so the count for the next level is
+known exactly before it is spent — above 50 it is quoted and confirmed:
+
+```
+Unfolding level 2 needs 604 more requests to wol.jw.org. Continue? [y/N]
+```
+
+`-y, --yes` answers in advance, and is required when stdin is not a terminal,
+since a script has nobody to ask. Declining stops there and the output says how
+many references were left unfolded, so a partial expansion never reads as the
+whole picture.
 
 ## How it talks to the sites
 

@@ -410,3 +410,26 @@ func TestRenderStripsSoftHyphens(t *testing.T) {
 		}
 	}
 }
+
+// TestHorizontalRule pins the thematic break to three hyphens in both the
+// markdown source and the styled output. The converter's default is "* * *" and
+// glamour draws eight hyphens; neither is what a markdown document looks like,
+// and the two disagreeing is worse than either.
+func TestHorizontalRule(t *testing.T) {
+	md, err := Render("<p>a</p><hr/><p>b</p>", Markdown, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(md, "\n---\n") {
+		t.Errorf("markdown rule: %q", md)
+	}
+	for _, unwanted := range []string{"* * *", "--------"} {
+		if strings.Contains(md, unwanted) {
+			t.Errorf("markdown still contains %q: %q", unwanted, md)
+		}
+	}
+	styled := visibleText(toTerminal(md, styles.DarkStyle, 60))
+	if !strings.Contains(styled, "---") || strings.Contains(styled, "--------") {
+		t.Errorf("styled rule: %q", styled)
+	}
+}

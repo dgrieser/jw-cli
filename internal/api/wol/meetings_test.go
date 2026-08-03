@@ -99,3 +99,49 @@ func TestMeetingPartsNoneFound(t *testing.T) {
 		t.Error("want an error when the page lists no meeting documents")
 	}
 }
+
+// TestCitationAPI covers the transformation that makes a citation resolvable.
+// A document's citation links carry a locale segment and answer with a 307 to
+// the target page; the same path without it answers with the passage itself.
+func TestCitationAPI(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"relative with locale", "/de/wol/pc/r10/lp-x/1204408/577/0", "/wol/pc/r10/lp-x/1204408/577/0"},
+		{"bible citation", "/en/wol/bc/r1/lp-e/1102026207/11/0", "/wol/bc/r1/lp-e/1102026207/11/0"},
+		{"absolute", "https://wol.jw.org/de/wol/bc/r10/lp-x/1/2", "https://wol.jw.org/wol/bc/r10/lp-x/1/2"},
+		// the content wol returns already uses the locale-less form
+		{"already stripped", "/wol/pc/r10/lp-x/1/2", "/wol/pc/r10/lp-x/1/2"},
+		{"absolute already stripped", "https://wol.jw.org/wol/pc/r10/lp-x/1/2", "https://wol.jw.org/wol/pc/r10/lp-x/1/2"},
+		// only the first segment goes, so a path that repeats the word survives
+		{"leaves later segments", "/de/wol/pc/r10/lp-x/wol/1", "/wol/pc/r10/lp-x/wol/1"},
+		{"empty", "", ""},
+	} {
+		if got := citationAPI(tc.in); got != tc.want {
+			t.Errorf("%s: citationAPI(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestTooltipStripsLocale pins the request the client actually makes: the
+// locale-prefixed path is a navigation redirect, not content.
+func TestTooltipStripsLocale(t *testing.T) {
+	var asked string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wol/pc/r10/lp-x/1204408/577/0", func(w http.ResponseWriter, r *http.Request) {
+		asked = r.URL.Path
+		fmt.Fprint(w, `{"items":[{"title":"Betteln","content":"<p>Das mosaische Gesetz</p>","url":"/wol/d/r10/lp-x/1200000617"}]}`)
+	})
+	c := testClient(t, mux)
+	tip, err := c.Tooltip(context.Background(), "/de/wol/pc/r10/lp-x/1204408/577/0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != "/wol/pc/r10/lp-x/1204408/577/0" {
+		t.Errorf("requested %q", asked)
+	}
+	if tip.Title != "Betteln" || !strings.Contains(tip.ContentHTML, "mosaische") {
+		t.Errorf("tooltip = %+v", tip)
+	}
+	if !strings.HasPrefix(tip.URL, "http") {
+		t.Errorf("url not absolutized: %q", tip.URL)
+	}
+}

@@ -98,6 +98,19 @@ type Messages struct {
 	KeyQuit       string
 	DetailHelp    string
 
+	// --- unfolding citations ------------------------------------------------
+	UnfoldHeading string
+	// UnfoldConfirm takes the level and the number of requests it needs.
+	UnfoldConfirm string
+	// UnfoldProgress takes the level, the requests done and the total.
+	UnfoldProgress string
+	// UnfoldStopped takes the number of references left unexpanded after the
+	// expansion was cut short. Reaching the requested depth is not that: it is
+	// the normal end of an expansion and goes unremarked.
+	UnfoldStopped string
+	// UnfoldFailed takes the reason a reference could not be resolved.
+	UnfoldFailed string
+
 	// --- dates ------------------------------------------------------------
 	// Weekdays is indexed by time.Weekday, Months by time.Month minus one.
 	Weekdays [7]string

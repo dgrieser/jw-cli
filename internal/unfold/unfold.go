@@ -1,0 +1,184 @@
+// Package unfold expands the citations in a document. wol writes a bible verse
+// or a passage of another publication as a link to a tooltip endpoint; unfolding
+// follows those links and brings the text itself into the output, optionally
+// recursing into whatever the expanded text cites in turn.
+package unfold
+
+import (
+	"context"
+	"strings"
+
+	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/model"
+)
+
+// Ref is one citation in a document: the text as it appears there and the wol
+// path that resolves it.
+type Ref struct {
+	Text string
+	Path string
+}
+
+// Resolver fetches the content behind a citation path. wol answers its verse
+// (/bc/) and publication (/pc/) endpoints with the same shape, so one resolver
+// covers both.
+type Resolver interface {
+	Resolve(ctx context.Context, path string) (model.Tooltip, error)
+}
+
+// Node is one expanded citation together with what its own content cites.
+type Node struct {
+	Ref Ref
+	// Title and HTML are the resolved content. Err is set instead when the
+	// reference could not be resolved; the reference is still reported, so a
+	// gap in the output is never silent.
+	Title    string
+	HTML     string
+	Err      error
+	Children []Node
+}
+
+// Options controls one expansion.
+type Options struct {
+	// Depth is how many levels of citations to follow. Zero expands nothing.
+	Depth int
+	// Threshold is the number of requests a level may need before Confirm is
+	// consulted. Zero consults it for every level.
+	Threshold int
+	// Confirm is asked before a level that needs more than Threshold requests,
+	// with the exact count. Returning false stops the expansion there and keeps
+	// what was already gathered. Nil proceeds without asking.
+	Confirm func(level, requests int) (bool, error)
+	// Progress reports each completed request within a level. Nil is silent.
+	Progress func(level, done, total int)
+}
+
+// Result is an expansion and how far it got.
+type Result struct {
+	Nodes []Node
+	// Requests is how many citations were resolved.
+	Requests int
+	// Pending is how many references were left unexpanded because a level was
+	// declined or the depth ran out at a level that still had references.
+	Pending int
+	// Stopped records that Confirm declined a level, so the caller can say the
+	// output is incomplete rather than let it read as the whole picture.
+	Stopped bool
+}
+
+// Run expands the citations in an HTML fragment. References are followed breadth
+// first, so the request count for the next level is known exactly before it is
+// spent — that is what Confirm is told. Every path is expanded at most once
+// across the whole tree, which both removes repeats and keeps a citation cycle
+// from running forever.
+func Run(ctx context.Context, r Resolver, fragment string, o Options) (Result, error) {
+	var res Result
+	if o.Depth <= 0 {
+		return res, nil
+	}
+	seen := map[string]bool{}
+	res.Nodes = plan(Refs(fragment), seen)
+	frontier := pointersTo(res.Nodes)
+
+	for level := 1; len(frontier) > 0; level++ {
+		if o.Confirm != nil && len(frontier) > o.Threshold {
+			ok, err := o.Confirm(level, len(frontier))
+			if err != nil {
+				return res, err
+			}
+			if !ok {
+				res.Pending += len(frontier)
+				res.Stopped = true
+				return res, nil
+			}
+		}
+		for i, n := range frontier {
+			if err := ctx.Err(); err != nil {
+				res.Pending += len(frontier) - i
+				return res, err
+			}
+			tip, err := r.Resolve(ctx, n.Ref.Path)
+			if err != nil {
+				n.Err = err
+			} else {
+				n.Title, n.HTML = tip.Title, tip.ContentHTML
+			}
+			res.Requests++
+			if o.Progress != nil {
+				o.Progress(level, i+1, len(frontier))
+			}
+		}
+		var next []*Node
+		for _, n := range frontier {
+			refs := plan(Refs(n.HTML), seen)
+			if level == o.Depth {
+				// the depth is used up: report what was left rather than
+				// letting the output look complete
+				res.Pending += len(refs)
+				continue
+			}
+			n.Children = refs
+			next = append(next, pointersTo(n.Children)...)
+		}
+		if level == o.Depth {
+			break
+		}
+		frontier = next
+	}
+	return res, nil
+}
+
+// plan turns refs into unresolved nodes, skipping paths already accounted for
+// anywhere in the tree.
+func plan(refs []Ref, seen map[string]bool) []Node {
+	var out []Node
+	for _, ref := range refs {
+		if seen[ref.Path] {
+			continue
+		}
+		seen[ref.Path] = true
+		out = append(out, Node{Ref: ref})
+	}
+	return out
+}
+
+func pointersTo(nodes []Node) []*Node {
+	out := make([]*Node, len(nodes))
+	for i := range nodes {
+		out[i] = &nodes[i]
+	}
+	return out
+}
+
+// citationLinks matches the two endpoints wol resolves citations through.
+const citationLinks = `a[href*="/bc/"], a[href*="/pc/"]`
+
+// Refs finds the citations in an HTML fragment, in document order and without
+// repeats within the fragment.
+func Refs(fragment string) []Ref {
+	if fragment == "" {
+		return nil
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return nil
+	}
+	var out []Ref
+	seen := map[string]bool{}
+	doc.Find(citationLinks).Each(func(_ int, s *goquery.Selection) {
+		href, _ := s.Attr("href")
+		if href == "" || seen[href] {
+			return
+		}
+		seen[href] = true
+		out = append(out, Ref{Text: collapseSpace(s.Text()), Path: href})
+	})
+	return out
+}
+
+// Count is how many citations a fragment holds, for sizing an expansion before
+// starting one.
+func Count(fragment string) int { return len(Refs(fragment)) }
+
+func collapseSpace(s string) string { return strings.Join(strings.Fields(s), " ") }

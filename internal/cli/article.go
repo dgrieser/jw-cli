@@ -20,10 +20,12 @@ import (
 // meetings and the two meeting parts — binds the same flags and shares the same
 // behavior.
 type articleView struct {
-	refs     bool
-	images   bool
-	dlImages bool
-	dir      string
+	refs      bool
+	images    bool
+	dlImages  bool
+	dir       string
+	unfold    int
+	assumeYes bool
 }
 
 // bind registers the view's flags on cmd. The wording names the document rather
@@ -35,6 +37,8 @@ func (v *articleView) bind(cmd *cobra.Command) {
 	fl.BoolVar(&v.images, "images", false, "list the images of the document (downloadable by index)")
 	fl.BoolVar(&v.dlImages, "download-images", false, "download all images of the document")
 	fl.StringVarP(&v.dir, "dir", "d", "", "download directory for --download-images")
+	fl.IntVar(&v.unfold, "unfold", 0, "print the text behind every citation, following references this many levels deep")
+	fl.BoolVarP(&v.assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
 }
 
 // write renders art the way the flags ask for. The default is the document
@@ -52,6 +56,13 @@ func (v *articleView) write(ctx context.Context, a *app.App, art model.Article) 
 		return writeListing(a, rs, fmt.Sprintf(a.Text().ImagesIn, art.Title))
 	case v.refs:
 		return writeScriptureRefs(a, art)
+	}
+	if v.unfold > 0 {
+		body, err := unfoldArticle(ctx, a, art, v.unfold, v.assumeYes)
+		if err != nil {
+			return err
+		}
+		art.HTML = body
 	}
 	return writeArticle(a, art)
 }

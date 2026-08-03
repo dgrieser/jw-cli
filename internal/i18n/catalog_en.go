@@ -46,6 +46,12 @@ var en = Messages{
 	DownloadingLabel: "downloading",
 	DownloadFailed:   "download failed: %s",
 
+	UnfoldHeading:  "References",
+	UnfoldConfirm:  "Unfolding level %d needs %d more requests to wol.jw.org. Continue? [y/N] ",
+	UnfoldProgress: "unfolding level %d: %d/%d",
+	UnfoldStopped:  "Stopped here: %d more references were not unfolded.",
+	UnfoldFailed:   "could not be unfolded: %s",
+
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
 
