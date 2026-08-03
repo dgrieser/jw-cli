@@ -15,7 +15,7 @@ func searchMux(t *testing.T) *http.ServeMux {
 		payload := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
 		fmt.Fprint(w, "h."+payload+".s")
 	})
-	mux.HandleFunc("/apis/search/results/X/videos", func(w http.ResponseWriter, r *http.Request) {
+	videos := func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
 			http.Error(w, "no token", http.StatusUnauthorized)
 			return
@@ -28,7 +28,11 @@ func searchMux(t *testing.T) *http.ServeMux {
 			             "duration": "3:10", "links": {"jw.org": "https://www.jw.org/finder?lank=pub-xyz_1_VIDEO"}}],
 			"insight": {"total": {"value": 1}}
 		}`)
-	})
+	}
+	// the same results in every language of the fixture, so a test can vary -l
+	for _, symbol := range []string{"E", "X", "F"} {
+		mux.HandleFunc("/apis/search/results/"+symbol+"/videos", videos)
+	}
 	return mux
 }
 
@@ -37,10 +41,10 @@ func TestSearchCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// tags and entities are rendered away, and the snippet's newline is
-	// collapsed so it cannot break the indented listing
+	// the header follows -l de; tags and entities are rendered away, and the
+	// snippet's newline is collapsed so it cannot break the indented listing
 	for _, want := range []string{
-		"1 results",
+		`1 Ergebnis für "Schöpfung"`,
 		"[video] Daniel 7:27 Schöpfung (3:10)",
 		"     vom Königreich bekannt machen?\n",
 	} {
@@ -89,5 +93,23 @@ func TestSearchJSON(t *testing.T) {
 	}
 	if !strings.Contains(out, `"lank": "pub-xyz_1_VIDEO"`) || !strings.Contains(out, `"index": 1`) {
 		t.Errorf("json output:\n%s", out)
+	}
+}
+
+// TestSearchHeaderLanguage pins the header to the requested language, with
+// English for a language that has no translation.
+func TestSearchHeaderLanguage(t *testing.T) {
+	for _, tc := range []struct{ lang, want string }{
+		{"de", `1 Ergebnis für "Schöpfung"`},
+		{"en", `1 result for "Schöpfung"`},
+		{"fr", `1 result for "Schöpfung"`}, // no French catalog: fall back
+	} {
+		out, err := runCmd(t, searchMux(t), "search", "-l", tc.lang, "-t", "videos", "Schöpfung")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, tc.want) {
+			t.Errorf("-l %s: missing %q in:\n%s", tc.lang, tc.want, out)
+		}
 	}
 }

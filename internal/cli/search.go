@@ -50,7 +50,7 @@ Examples:
 			}
 			if interactive {
 				fetch := searchFetcher(ctx, a, lng, engine, query, facet, sortBy, scope, limit)
-				return runSearchTUI(ctx, a, lng, fetch, fmt.Sprintf("Search: %s", query))
+				return runSearchTUI(ctx, a, lng, fetch, fmt.Sprintf(a.Text().SearchHeader, query))
 			}
 			rs, header, err := runSearch(ctx, a, lng, engine, query, facet, sortBy, scope, limit, page)
 			if err != nil {

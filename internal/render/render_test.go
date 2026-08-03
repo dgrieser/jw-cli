@@ -322,3 +322,91 @@ func TestIsTerminal(t *testing.T) {
 		t.Errorf("TerminalWidth(file) = %d, want %d", got, defaultWidth)
 	}
 }
+
+// linkCard is wol's publication link, as it appears on the daily text and
+// meetings pages: a cover thumbnail with no alt text, then one <div> per line,
+// all inside the anchor.
+const linkCard = `
+<div class="linkCard">
+  <a class="jwac chrome
+    cardContainer
+    noTooltips lnk" href="/de/wol/d/r10/lp-x/202026245">
+    <div class="cardThumbnail ">
+      <img class="cardThumbnailImage thumbnail publication" data-pub-symbol="mwb26"
+           src="https://wol.jw.org/de/wol/d/r10/lp-x/202026245/thumbnail"/>
+    </div>
+    <div class="cardTitleBlock">
+      <div class="    cardLine1
+    ellipsized"><span class="sectionIcon"></span>
+        3.-9. August
+      </div>
+      <div class="    cardLine2
+    ellipsized">
+        Leben und Dienst: Arbeitsheft (2026) | Juli
+      </div>
+    </div>
+    <div class="cardTitleDetail"></div>
+    <div class="cardChevron"><div class="icon"></div></div>
+  </a>
+</div>`
+
+// TestRenderFlattensLinkCards pins the card down to a single markdown link.
+// Converted verbatim it becomes an empty image plus hard line breaks inside the
+// link text, which reads as five ragged lines for one link.
+func TestRenderFlattensLinkCards(t *testing.T) {
+	out, err := Render(linkCard, Markdown, Options{BaseURL: "https://wol.jw.org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "[3.-9. August — Leben und Dienst: Arbeitsheft (2026) | Juli]" +
+		"(https://wol.jw.org/de/wol/d/r10/lp-x/202026245)"
+	if got := strings.TrimSpace(out); got != want {
+		t.Errorf("card not flattened:\n got %q\nwant %q", got, want)
+	}
+}
+
+func TestRenderFlattensLinkCardsToText(t *testing.T) {
+	out, err := Render(linkCard, Text, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.TrimSpace(out), "3.-9. August — Leben und Dienst: Arbeitsheft (2026) | Juli"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestRenderKeepsCaptionedImages guards the flattening from over-reaching: a
+// normal body image is not a card decoration and has to survive.
+func TestRenderKeepsCaptionedImages(t *testing.T) {
+	out, err := Render(sample, Markdown, Options{BaseURL: "https://wol.jw.org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "![A mountain](https://cdn.example/img_xl.jpg)") {
+		t.Errorf("body image dropped:\n%s", out)
+	}
+}
+
+// TestRenderStripsSoftHyphens covers wol's hyphenation hints. A browser hides
+// U+00AD unless it breaks the word there; every other renderer shows a gap
+// mid-word, which is not in the text at all.
+func TestRenderStripsSoftHyphens(t *testing.T) {
+	// soft hyphen inside the compound, no-break spaces around a number and a date
+	const frag = "<p>während der Tausendjahr\u00adherrschaft Jesu, 144\u00a0000 ab 3.\u00a0August</p>"
+	for _, f := range []Format{Markdown, Raw, Text, HTML} {
+		out, err := Render(frag, f, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(out, "\u00ad") {
+			t.Errorf("%v: soft hyphen survived: %q", f, out)
+		}
+		if !strings.Contains(out, "Tausendjahrherrschaft") {
+			t.Errorf("%v: compound not rejoined: %q", f, out)
+		}
+		// the no-break spaces are meaningful typography, not artifacts
+		if n := strings.Count(out, "\u00a0"); n != 2 {
+			t.Errorf("%v: want 2 no-break spaces, got %d: %q", f, n, out)
+		}
+	}
+}

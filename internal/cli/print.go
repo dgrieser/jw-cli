@@ -37,7 +37,7 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 		b.WriteString(formatResult(r, style))
 	}
 	if len(rs.Items) == 0 {
-		b.WriteString("No results.\n")
+		b.WriteString(a.Text().NoResults + "\n")
 	}
 	return a.Write(b.String())
 }

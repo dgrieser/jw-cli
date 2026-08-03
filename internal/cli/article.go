@@ -51,7 +51,7 @@ Examples:
 			case images:
 				items := imagesToResults(art)
 				rs := results.ResultSet{Kind: "article-images", Query: art.Title, Items: items}
-				return writeListing(a, rs, fmt.Sprintf("Images in %q", art.Title))
+				return writeListing(a, rs, fmt.Sprintf(a.Text().ImagesIn, art.Title))
 			case refs:
 				return writeScriptureRefs(a, art)
 			}
@@ -140,13 +140,13 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 		return a.WriteJSON(art.ScriptureRefs)
 	}
 	if len(art.ScriptureRefs) == 0 {
-		return a.Write(fmt.Sprintf("No bible references found in %q.", art.Title))
+		return a.Write(fmt.Sprintf(a.Text().NoBibleRefs, art.Title))
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Bible references in %q:\n\n", art.Title)
+	fmt.Fprintf(&b, a.Text().BibleRefsIn+"\n\n", art.Title)
 	for _, r := range art.ScriptureRefs {
 		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, r.BCPath))
 	}
-	b.WriteString("\nRead one with: jw bible read \"<reference>\"\n")
+	b.WriteString("\n" + a.Text().ReadOneHint + "\n")
 	return a.WriteMarkdown(b.String())
 }

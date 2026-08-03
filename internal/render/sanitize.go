@@ -1,10 +1,12 @@
 package render
 
 import (
+	"html"
 	"net/url"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	xhtml "golang.org/x/net/html"
 )
 
 // sanitize normalizes a site HTML fragment before conversion:
@@ -12,6 +14,8 @@ import (
 //   - materializes responsive images (span.jsRespImg data attributes) into
 //     plain <img> tags with the largest available source
 //   - prefers data-img-size-* attributes on <img> tags
+//   - flattens wol's multi-line publication link cards into one line each
+//   - drops soft hyphens, which only a browser knows how to hide
 //   - absolutizes href/src attributes against baseURL
 func sanitize(fragment string, baseURL string) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
@@ -43,6 +47,10 @@ func sanitize(fragment string, baseURL string) (string, error) {
 	})
 
 	body.Find("script, style, noscript").Remove()
+	flattenLinkCards(body)
+	for _, n := range body.Nodes {
+		stripSoftHyphens(n)
+	}
 
 	// prefer larger image renditions on plain <img>
 	body.Find("img").Each(func(_ int, s *goquery.Selection) {
@@ -66,6 +74,58 @@ func sanitize(fragment string, baseURL string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(html), nil
+}
+
+// cardDecoration is the parts of a wol link card that carry no text: the
+// publication cover thumbnail, the section icon and the chevron. They have no
+// alt text, so they convert to an empty image or nothing at all.
+const cardDecoration = ".cardThumbnail, .cardChevron, .sectionIcon, .cardTitleDetail"
+
+// cardSeparator joins the lines of a flattened card.
+const cardSeparator = " — "
+
+// flattenLinkCards rewrites wol's publication links. wol builds them as cards —
+// a cover thumbnail, then one <div> per line of text, all nested inside the <a>
+// — which converts to an empty image followed by hard line breaks inside the
+// link text, so a single link comes out spread over five ragged lines. The
+// cards are the content of `jw meetings`, so they are flattened to one line
+// each instead of being dropped.
+func flattenLinkCards(body *goquery.Selection) {
+	body.Find("a.cardContainer").Each(func(_ int, card *goquery.Selection) {
+		card.Find(cardDecoration).Remove()
+		var lines []string
+		// one <div> per line, whatever wol names its classes
+		card.Find(".cardTitleBlock").First().Children().Each(func(_ int, line *goquery.Selection) {
+			if t := collapseSpace(line.Text()); t != "" {
+				lines = append(lines, t)
+			}
+		})
+		if len(lines) == 0 {
+			if t := collapseSpace(card.Text()); t != "" {
+				lines = []string{t}
+			}
+		}
+		card.SetHtml(html.EscapeString(strings.Join(lines, cardSeparator)))
+	})
+}
+
+// softHyphen is U+00AD, a conditional hyphen: it marks where a word may be
+// broken and is shown only if the break happens there.
+const softHyphen = "\u00ad"
+
+// stripSoftHyphens removes them from every text node. wol peppers long German
+// compounds with soft hyphens for the browser's line breaking; nothing outside a
+// browser hides them, so a terminal shows a stray gap mid-word
+// ("Tausendjahr herrschaft"). The no-break spaces around numbers and dates are
+// left alone — those hold text together on purpose.
+func stripSoftHyphens(n *xhtml.Node) {
+	if n.Type == xhtml.TextNode {
+		n.Data = strings.ReplaceAll(n.Data, softHyphen, "")
+		return
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		stripSoftHyphens(c)
+	}
 }
 
 func absolutize(body *goquery.Selection, tag, attr string, base *url.URL) {

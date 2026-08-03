@@ -57,7 +57,7 @@ func TestPubListAndDownloadByIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "Downloaded") {
+	if !strings.Contains(out, "Heruntergeladen") { // -l de
 		t.Fatalf("download output unexpected:\n%s", out)
 	}
 	b, err := os.ReadFile(filepath.Join(dlDir, "w_X_202405.pdf"))

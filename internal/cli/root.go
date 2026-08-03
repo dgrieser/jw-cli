@@ -13,8 +13,13 @@ import (
 
 // Execute runs the root command and returns the process exit code.
 func Execute() int {
-	root := NewRootCmd(app.New(app.Flags{}))
-	if err := root.Execute(); err != nil {
+	a := app.New(app.Flags{})
+	root := NewRootCmd(a)
+	err := root.Execute()
+	// close the blank-line frame even on failure, so a partially written listing
+	// does not run straight into the error line
+	_ = a.Flush()
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		return 1
 	}

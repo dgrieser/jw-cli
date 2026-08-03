@@ -148,7 +148,9 @@ func downloadAll(ctx context.Context, a *app.App, items []model.Result, dir stri
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
+		if err := a.Writef(a.Text().Downloaded+"\n", path); err != nil {
+			return err
+		}
 	}
 	return nil
 }

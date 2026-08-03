@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
@@ -17,6 +18,7 @@ import (
 func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions {
 	return tui.Actions{
 		NoColor: a.Flags.NoColor,
+		Text:    a.Text(),
 		Show: func(item model.Result) (tui.Content, error) {
 			switch item.Kind {
 			case "video", "audio":
@@ -24,9 +26,9 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 				if err != nil {
 					return tui.Content{}, err
 				}
-				return tui.Content{Text: mediaInfoText(mi)}, nil
+				return tui.Content{Text: mediaInfoText(mi, a.Text())}, nil
 			case "file", "image":
-				text := fmt.Sprintf("%s\n\n%s\n\nPress d to download.", item.Title, item.FileURL)
+				text := fmt.Sprintf("%s\n\n%s\n\n%s", item.Title, item.FileURL, a.Text().PressToDownload)
 				return tui.Content{Text: text}, nil
 			}
 			target := firstNonEmpty(item.WOLLink, item.JWLink)
@@ -120,7 +122,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			}
 			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: categoriesToResults(cats)}
 			_ = results.Save(a.Cache().Dir(), rs)
-			return rs, "Media categories", nil
+			return rs, a.Text().MediaCategories, nil
 		}
 		cat, err := a.Mediator().Category(ctx, lng.Symbol, key, pageSize, (page-1)*pageSize)
 		if err != nil {
@@ -128,13 +130,13 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 		}
 		items := append(categoriesToResults(cat.Subcategories), mediaToResults(cat.Media)...)
 		if len(items) == 0 && page > 1 {
-			return results.ResultSet{}, "", fmt.Errorf("no more items")
+			return results.ResultSet{}, "", errors.New(a.Text().NoMoreItems)
 		}
 		rs := results.ResultSet{Kind: "media-browse", Query: key, Lang: lng.Symbol, Page: page, Items: items}
 		_ = results.Save(a.Cache().Dir(), rs)
 		header := fmt.Sprintf("%s (%s)", cat.Name, cat.Key)
 		if page > 1 {
-			header += fmt.Sprintf(" — page %d", page)
+			header += fmt.Sprintf(a.Text().PageSuffixShort, page)
 		}
 		return rs, header, nil
 	}
@@ -148,7 +150,7 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, engine, 
 			return results.ResultSet{}, "", err
 		}
 		if len(rs.Items) == 0 && page > 1 {
-			return results.ResultSet{}, "", fmt.Errorf("no more results")
+			return results.ResultSet{}, "", errors.New(a.Text().NoMoreResults)
 		}
 		_ = results.Save(a.Cache().Dir(), rs)
 		return rs, header, nil
@@ -166,9 +168,9 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, engine, quer
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
-		header := fmt.Sprintf("%d results for %q", sp.Total, query)
+		header := a.Text().Results(sp.Total, query)
 		if sp.Total > limit {
-			header += fmt.Sprintf(" (page %d, %d per page)", page, limit)
+			header += fmt.Sprintf(a.Text().PageSuffix, page, limit)
 		}
 		rs := results.ResultSet{Kind: "search", Query: query, Lang: lng.Symbol, Page: page, Items: sp.Results}
 		return rs, header, nil

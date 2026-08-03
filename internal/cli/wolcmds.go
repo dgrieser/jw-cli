@@ -26,10 +26,7 @@ func searchWOL(ctx context.Context, a *app.App, lng model.Language, query, scope
 	if err != nil {
 		return results.ResultSet{}, "", err
 	}
-	header := fmt.Sprintf("wol results for %q (page %d)", query, sp.Page)
-	if sp.Total > 0 {
-		header = fmt.Sprintf("%d wol results for %q (page %d)", sp.Total, query, sp.Page)
-	}
+	header := a.Text().WolResults(sp.Total, query, sp.Page)
 	rs := results.ResultSet{Kind: "wol-search", Query: query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}
 	return rs, header, nil
 }

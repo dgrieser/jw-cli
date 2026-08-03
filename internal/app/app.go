@@ -16,6 +16,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/lang"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -54,6 +55,9 @@ type App struct {
 	langOnce sync.Once
 	language model.Language
 	langErr  error
+
+	// framed records that the blank line above terminal output was written.
+	framed bool
 }
 
 func New(f Flags) *App {
@@ -173,6 +177,22 @@ func (a *App) WriteMarkdown(content string) error {
 // Width is the column budget for output, taken from the terminal behind stdout.
 func (a *App) Width() int { return render.TerminalWidth(a.Stdout) }
 
+// Text is the catalog for the CLI's own headings, labels and dates. It follows
+// the resolved content language, so the frame around an article is in the same
+// language as the article. Before (or without) a successful language lookup it
+// falls back to the -l|--lang value and then the system locale, which keeps
+// output translated even when the language list cannot be fetched.
+func (a *App) Text() *i18n.Messages {
+	a.init()
+	if a.langErr == nil && a.language.Locale != "" {
+		return i18n.TextFor(a.language.Locale)
+	}
+	if a.Flags.Lang != "" {
+		return i18n.TextFor(a.Flags.Lang)
+	}
+	return i18n.TextFor(lang.DetectBCP47())
+}
+
 // Styled reports whether output may carry terminal styling: -o markdown is in
 // effect (-o raw and the other formats want exact bytes), the target is stdout,
 // and stdout is a terminal.
@@ -194,7 +214,50 @@ func (a *App) Write(content string) error {
 	if a.Flags.File != "" {
 		return os.WriteFile(a.Flags.File, []byte(content), 0o644)
 	}
+	return a.writeStdout(content)
+}
+
+// Writef formats a line onto stdout inside the same blank-line frame as Write,
+// for commands that report progressively instead of in one block.
+func (a *App) Writef(format string, args ...any) error {
+	return a.writeStdout(fmt.Sprintf(format, args...))
+}
+
+// writeStdout writes to stdout, opening the blank-line frame on the first write.
+// Framing a terminal's output makes it stand off from the shell prompt; a pipe,
+// a redirect and -f|--file get the bytes unchanged.
+func (a *App) writeStdout(content string) error {
+	if content == "" {
+		return nil
+	}
+	if !a.framed && a.Flags.File == "" && a.frameable() && render.IsTerminal(a.Stdout) {
+		a.framed = true
+		if _, err := io.WriteString(a.Stdout, "\n"); err != nil {
+			return err
+		}
+	}
 	_, err := io.WriteString(a.Stdout, content)
+	return err
+}
+
+// frameable reports whether the selected format may be framed by blank lines.
+// -o raw is exempt: it exists to hand the markdown over byte for byte, and a
+// frame is exactly the kind of decoration it opts out of.
+func (a *App) frameable() bool {
+	f, err := a.Format()
+	return err == nil && f != render.Raw
+}
+
+// Flush closes the blank-line frame around terminal output. Commands never call
+// it: the root command does, once, after the whole run. A run that printed
+// nothing to the terminal — because it wrote a file, or opened the interactive
+// browser instead — leaves no stray blank line behind.
+func (a *App) Flush() error {
+	if !a.framed {
+		return nil
+	}
+	a.framed = false
+	_, err := io.WriteString(a.Stdout, "\n")
 	return err
 }
 

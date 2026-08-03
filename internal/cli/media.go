@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
@@ -55,7 +56,7 @@ Examples:
 				if err != nil {
 					return err
 				}
-				header = "Media categories"
+				header = a.Text().MediaCategories
 				items = categoriesToResults(cats)
 			} else {
 				cat, err := a.Mediator().Category(cmd.Context(), lng.Symbol, key, limit, offset)
@@ -161,39 +162,39 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 				})
 			}
 			_ = results.Save(a.Cache().Dir(), results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
-			return a.WriteMarkdown(mediaInfoText(item))
+			return a.WriteMarkdown(mediaInfoText(item, a.Text()))
 		},
 	}
 	return cmd
 }
 
-func mediaInfoText(m model.MediaItem) string {
+func mediaInfoText(m model.MediaItem, txt *i18n.Messages) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", m.Title)
 	if m.Description != "" {
 		fmt.Fprintf(&b, "%s\n\n", m.Description)
 	}
-	fmt.Fprintf(&b, "- LANK: %s\n- Type: %s\n", m.LANK, m.Type)
+	fmt.Fprintf(&b, "- %s: %s\n- %s: %s\n", txt.LabelLANK, m.LANK, txt.LabelType, m.Type)
 	if m.DurationFormatted != "" {
-		fmt.Fprintf(&b, "- Duration: %s\n", m.DurationFormatted)
+		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelDuration, m.DurationFormatted)
 	}
 	if m.FirstPublished != "" {
-		fmt.Fprintf(&b, "- Published: %s\n", m.FirstPublished)
+		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelPublished, m.FirstPublished)
 	}
 	if m.PrimaryCategory != "" {
-		fmt.Fprintf(&b, "- Category: %s\n", m.PrimaryCategory)
+		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelCategory, m.PrimaryCategory)
 	}
-	if len(m.AvailableLanguages) > 0 {
-		n := len(m.AvailableLanguages)
+	if n := len(m.AvailableLanguages); n > 0 {
 		sample := m.AvailableLanguages
+		more := ""
 		if n > 12 {
-			sample = sample[:12]
+			sample, more = sample[:12], ", ..."
 		}
-		fmt.Fprintf(&b, "- Languages: %d (%s%s)\n", n, strings.Join(sample, ", "), map[bool]string{true: ", ...", false: ""}[n > 12])
+		fmt.Fprintf(&b, "- "+txt.LabelLanguages+"\n", n, strings.Join(sample, ", ")+more)
 	}
 	if len(m.Files) > 0 {
 		// an ordered list: the numbers are the indexes `jw download <n>` takes
-		b.WriteString("\n## Files\n\n")
+		fmt.Fprintf(&b, "\n## %s\n\n", txt.FilesHeading)
 		for i, f := range m.Files {
 			label := f.Label
 			if label == "" {
@@ -201,11 +202,11 @@ func mediaInfoText(m model.MediaItem) string {
 			}
 			fmt.Fprintf(&b, "%d. **%s** (%s)", i+1, label, humanSize(f.Filesize))
 			if f.SubtitlesURL != "" {
-				b.WriteString(" — subtitles")
+				b.WriteString(" — " + txt.Subtitles)
 			}
 			fmt.Fprintf(&b, "\n   <%s>\n", f.URL)
 		}
-		b.WriteString("\nDownload with: `jw download <n>`  or  `jw download " + m.LANK + " -q 720p`\n")
+		fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
 	}
 	return b.String()
 }

@@ -45,11 +45,28 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 
 | Flag | Meaning |
 |---|---|
-| `-l, --lang` | Content language: JW symbol (`X`), ISO code (`de`), or BCP-47 (`de-AT`). Defaults to the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`), mapped to the closest available content language. |
+| `-l, --lang` | Content language: JW symbol (`X`), ISO code (`de`), or BCP-47 (`de-AT`). Defaults to the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`), mapped to the closest available content language. Also selects the language of jw-cli's own labels and dates — see below. |
 | `-o, --output` | Output format: `markdown` (default), `raw`, `html`, `text`, or `json`. `json` emits the underlying data model of any command. |
 | `-f, --file` | Write output to a file instead of stdout. |
 | `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
 | `-v, --verbose` | Log HTTP requests to stderr. |
+
+### Output language
+
+The headings, labels, hints and dates jw-cli prints follow `-l|--lang`, so an
+article is not framed in English. German and English are translated; every other
+language keeps its own content inside an English frame.
+
+```sh
+jw dailytext -l de     # "# Tagestext, Montag, 3. August 2026"
+jw dailytext -l E      # "# Daily text, Monday, August 3, 2026"
+jw dailytext -l F      # French content, English frame
+```
+
+Translations live in `internal/i18n`: one `Messages` struct, one catalog file per
+language. Adding a message is a compile error until every language carries it,
+and a test rejects an empty translation or one whose format verbs drifted from
+English. `GLAMOUR_STYLE` and the command help (`--help`) stay English.
 
 ### Markdown on the terminal
 
@@ -63,6 +80,10 @@ markers in `jw bible read` are clickable, the target stays out of the way. A URL
 that is its own text (`jw media info` file lists) still shows in full. In a
 terminal without hyperlink support the text simply is not clickable — use
 `-o raw` there if you need the targets.
+
+On a terminal, a command's output is framed by one blank line above and below so
+it stands off from the shell prompt. The frame is opened once per run, not per
+line, and a pipe, a redirect, `-f|--file` and `-o raw` get the bytes unchanged.
 
 Result listings are plain reports, not markdown, so they are never restyled —
 but the search APIs return titles and snippets as HTML fragments, and those are

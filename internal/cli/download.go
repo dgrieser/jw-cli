@@ -62,8 +62,7 @@ Examples:
 				if err != nil {
 					return err
 				}
-				fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
-				return nil
+				return a.Writef(a.Text().Downloaded+"\n", path)
 			}
 			// publication symbol
 			lng, err := a.Lang(ctx)
@@ -110,8 +109,7 @@ func downloadResult(ctx context.Context, a *app.App, item model.Result, quality 
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
-		return nil
+		return a.Writef(a.Text().Downloaded+"\n", path)
 	case item.LANK != "" && (item.Kind == "video" || item.Kind == "audio"):
 		return downloadLANK(ctx, a, item.LANK, quality, subtitles, dir)
 	case item.FileURL != "":
@@ -119,8 +117,7 @@ func downloadResult(ctx context.Context, a *app.App, item model.Result, quality 
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
-		return nil
+		return a.Writef(a.Text().Downloaded+"\n", path)
 	case item.LANK != "":
 		return downloadLANK(ctx, a, item.LANK, quality, subtitles, dir)
 	case item.Pub != nil:
@@ -168,13 +165,15 @@ func downloadLANK(ctx context.Context, a *app.App, lank, quality string, subtitl
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.Stdout, "Downloaded %s\n", path)
+	if err := a.Writef(a.Text().Downloaded+"\n", path); err != nil {
+		return err
+	}
 	if subtitles && file.SubtitlesURL != "" {
 		sp, err := downloadURL(ctx, a, file.SubtitlesURL, "", 0, dir, "")
 		if err != nil {
 			return fmt.Errorf("subtitles: %w", err)
 		}
-		fmt.Fprintf(a.Stdout, "Downloaded %s\n", sp)
+		return a.Writef(a.Text().Downloaded+"\n", sp)
 	}
 	return nil
 }
@@ -182,12 +181,12 @@ func downloadLANK(ctx context.Context, a *app.App, lank, quality string, subtitl
 // downloadURL runs one download job with a progress bar on stderr.
 func downloadURL(ctx context.Context, a *app.App, url, checksum string, size int64, dir, name string) (string, error) {
 	job := download.Job{URL: url, Dir: dir, Filename: name, Checksum: checksum, Size: size}
-	return download.Run(ctx, a.HTTP(), job, cliProgress(a.Stderr, name))
+	return download.Run(ctx, a.HTTP(), job, cliProgress(a.Stderr, name, a.Text().DownloadingLabel))
 }
 
-func cliProgress(w io.Writer, desc string) download.Progress {
+func cliProgress(w io.Writer, desc, fallback string) download.Progress {
 	if desc == "" {
-		desc = "downloading"
+		desc = fallback
 	}
 	var bar *progressbar.ProgressBar
 	return func(written, total int64) {

@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
@@ -42,6 +43,8 @@ type Actions struct {
 	Browse func(item model.Result) (Fetcher, string, bool)
 	// NoColor styles markdown in the detail pane without colors.
 	NoColor bool
+	// Text localizes the browser's own labels. Nil means English.
+	Text *i18n.Messages
 }
 
 // Run starts the TUI over the given fetcher.
@@ -97,18 +100,24 @@ type keyMap struct {
 	Show, Download, Open, Next, Prev, Back, Quit key.Binding
 }
 
-var keys = keyMap{
-	Show:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "view")),
-	Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "download")),
-	Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open link")),
-	Next:     key.NewBinding(key.WithKeys("n", "right"), key.WithHelp("n", "next page")),
-	Prev:     key.NewBinding(key.WithKeys("p", "left"), key.WithHelp("p", "prev page")),
-	Back:     key.NewBinding(key.WithKeys("esc", "backspace"), key.WithHelp("esc", "back")),
-	Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", "quit")),
+// newKeyMap builds the bindings with help labels in the caller's language. The
+// keys themselves stay as typed, only their descriptions are translated.
+func newKeyMap(txt *i18n.Messages) keyMap {
+	return keyMap{
+		Show:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", txt.KeyView)),
+		Download: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", txt.KeyDownload)),
+		Open:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", txt.KeyOpenLink)),
+		Next:     key.NewBinding(key.WithKeys("n", "right"), key.WithHelp("n", txt.KeyNextPage)),
+		Prev:     key.NewBinding(key.WithKeys("p", "left"), key.WithHelp("p", txt.KeyPrevPage)),
+		Back:     key.NewBinding(key.WithKeys("esc", "backspace"), key.WithHelp("esc", txt.KeyBack)),
+		Quit:     key.NewBinding(key.WithKeys("q", "ctrl+c"), key.WithHelp("q", txt.KeyQuit)),
+	}
 }
 
 type uiModel struct {
 	actions Actions
+	txt     *i18n.Messages
+	keys    keyMap
 	stack   []level
 
 	list     list.Model
@@ -139,6 +148,11 @@ type downloadMsg struct {
 }
 
 func newModel(header string, fetch Fetcher, actions Actions) uiModel {
+	txt := actions.Text
+	if txt == nil {
+		txt = i18n.EN.Text()
+	}
+	keys := newKeyMap(txt)
 	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
 	l.Title = header
 	l.SetShowStatusBar(false)
@@ -149,11 +163,13 @@ func newModel(header string, fetch Fetcher, actions Actions) uiModel {
 	sp.Spinner = spinner.Dot
 	return uiModel{
 		actions: actions,
+		txt:     txt,
+		keys:    keys,
 		stack:   []level{{fetch: fetch, header: header, page: 1}},
 		list:    l,
 		spin:    sp,
 		mode:    "busy",
-		status:  "loading…",
+		status:  txt.Loading,
 	}
 }
 
@@ -209,7 +225,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 			m.mode = "list"
-			m.status = "error: " + msg.err.Error()
+			m.status = fmt.Sprintf(m.txt.ErrorStatus, msg.err)
 			return m, nil
 		}
 		items := make([]list.Item, 0, len(msg.rs.Items))
@@ -229,7 +245,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case contentMsg:
 		if msg.err != nil {
 			m.mode = "list"
-			m.status = "error: " + msg.err.Error()
+			m.status = fmt.Sprintf(m.txt.ErrorStatus, msg.err)
 			return m, nil
 		}
 		m.content = msg.content
@@ -244,9 +260,9 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case downloadMsg:
 		m.mode = "list"
 		if msg.err != nil {
-			m.status = "download failed: " + msg.err.Error()
+			m.status = fmt.Sprintf(m.txt.DownloadFailed, msg.err)
 		} else {
-			m.status = "downloaded " + msg.path
+			m.status = fmt.Sprintf(m.txt.Downloaded, msg.path)
 		}
 		return m, nil
 
@@ -256,12 +272,12 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case tea.KeyMsg:
-		if key.Matches(msg, keys.Quit) && m.mode != "detail" {
+		if key.Matches(msg, m.keys.Quit) && m.mode != "detail" {
 			return m, tea.Quit
 		}
 		switch m.mode {
 		case "detail":
-			if key.Matches(msg, keys.Back) || key.Matches(msg, keys.Quit) {
+			if key.Matches(msg, m.keys.Back) || key.Matches(msg, m.keys.Quit) {
 				m.mode = "list"
 				return m, nil
 			}
@@ -274,7 +290,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			switch {
-			case key.Matches(msg, keys.Show):
+			case key.Matches(msg, m.keys.Show):
 				r, ok := m.selected()
 				if !ok {
 					return m, nil
@@ -283,7 +299,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if fetch, header, isContainer := m.actions.Browse(r); isContainer {
 						m.stack = append(m.stack, level{fetch: fetch, header: header, page: 1})
 						m.mode = "busy"
-						m.status = "loading…"
+						m.status = m.txt.Loading
 						return m, tea.Batch(m.spin.Tick, m.loadPage(1))
 					}
 				}
@@ -291,23 +307,23 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.mode = "busy"
-				m.status = "loading…"
+				m.status = m.txt.Loading
 				return m, tea.Batch(m.spin.Tick, func() tea.Msg {
 					c, err := m.actions.Show(r)
 					return contentMsg{content: c, err: err}
 				})
-			case key.Matches(msg, keys.Download):
+			case key.Matches(msg, m.keys.Download):
 				r, ok := m.selected()
 				if !ok || m.actions.Download == nil {
 					return m, nil
 				}
 				m.mode = "busy"
-				m.status = "downloading " + r.Title + "…"
+				m.status = fmt.Sprintf(m.txt.Downloading, r.Title)
 				return m, tea.Batch(m.spin.Tick, func() tea.Msg {
 					path, err := m.actions.Download(r)
 					return downloadMsg{path: path, err: err}
 				})
-			case key.Matches(msg, keys.Open):
+			case key.Matches(msg, m.keys.Open):
 				if r, ok := m.selected(); ok && m.actions.Open != nil {
 					if err := m.actions.Open(r); err != nil {
 						m.status = "open failed: " + err.Error()
@@ -316,22 +332,22 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
-			case key.Matches(msg, keys.Next):
+			case key.Matches(msg, m.keys.Next):
 				m.mode = "busy"
-				m.status = "loading…"
+				m.status = m.txt.Loading
 				return m, tea.Batch(m.spin.Tick, m.loadPage(m.top().page+1))
-			case key.Matches(msg, keys.Prev):
+			case key.Matches(msg, m.keys.Prev):
 				if m.top().page > 1 {
 					m.mode = "busy"
-					m.status = "loading…"
+					m.status = m.txt.Loading
 					return m, tea.Batch(m.spin.Tick, m.loadPage(m.top().page-1))
 				}
 				return m, nil
-			case key.Matches(msg, keys.Back):
+			case key.Matches(msg, m.keys.Back):
 				if len(m.stack) > 1 {
 					m.stack = m.stack[:len(m.stack)-1]
 					m.mode = "busy"
-					m.status = "loading…"
+					m.status = m.txt.Loading
 					return m, tea.Batch(m.spin.Tick, m.loadPage(m.top().page))
 				}
 				return m, tea.Quit
@@ -351,7 +367,7 @@ func (m uiModel) View() string {
 	case "busy":
 		return fmt.Sprintf("\n %s %s\n", m.spin.View(), m.status)
 	case "detail":
-		help := statusStyle.Render("↑/↓ scroll · esc back · q quit")
+		help := statusStyle.Render(m.txt.DetailHelp)
 		return m.viewport.View() + "\n" + help
 	default:
 		s := m.list.View()

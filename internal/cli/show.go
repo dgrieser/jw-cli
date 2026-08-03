@@ -40,7 +40,7 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(mi)
 				}
-				return a.WriteMarkdown(mediaInfoText(mi))
+				return a.WriteMarkdown(mediaInfoText(mi, a.Text()))
 			case "category":
 				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
 			case "file", "image":
@@ -51,7 +51,8 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(item)
 				}
-				return a.Write(fmt.Sprintf("%s\n%s\nDownload with: jw download %d", item.Title, item.FileURL, item.Index))
+				return a.Write(fmt.Sprintf("%s\n%s\n%s", item.Title, item.FileURL,
+					fmt.Sprintf(a.Text().DownloadHintIndex, item.Index)))
 			}
 			// articles, publications, bible hits, indexes
 			target := item.WOLLink

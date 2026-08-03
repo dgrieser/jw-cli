@@ -8,6 +8,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -19,7 +20,9 @@ func (c *Client) DailyText(ctx context.Context, cfg Config, date time.Time) (mod
 	if err != nil {
 		return model.Article{}, err
 	}
-	art := model.Article{URL: u, Title: "Daily text, " + date.Format("Monday, January 2, 2006")}
+	// the page carries no title of its own; write one in the library's language
+	txt := i18n.TextFor(cfg.Locale)
+	art := model.Article{URL: u, Title: fmt.Sprintf(txt.DailyTextTitle, txt.Date(date))}
 	// The dt page bundles today's material: the daily text (pub-es) plus the
 	// meeting publications, which `jw meetings` already covers. Prefer pub-es.
 	items := doc.Find(".todayItem.pub-es")
@@ -64,7 +67,7 @@ func (c *Client) Meetings(ctx context.Context, cfg Config, date time.Time) (mode
 	art := parseDocument(doc, c.hc.Base.WOL)
 	art.URL = u
 	if art.Title == "" {
-		art.Title = fmt.Sprintf("Meetings, week %d/%d", week, year)
+		art.Title = fmt.Sprintf(i18n.TextFor(cfg.Locale).MeetingsTitle, week, year)
 	}
 	if art.HTML == "" {
 		return art, fmt.Errorf("no meeting content found at %s", u)

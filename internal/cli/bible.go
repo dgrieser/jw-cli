@@ -229,7 +229,7 @@ func newBibleNotesCmd(a *app.App) *cobra.Command {
 				return a.WriteJSON(entries)
 			}
 			if len(entries) == 0 {
-				return a.Write("No study notes found (study notes are available in the study edition, nwtsty).")
+				return a.Write(a.Text().NoStudyNotes)
 			}
 			var b strings.Builder
 			for _, e := range entries {
@@ -293,7 +293,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 				return a.WriteJSON(entries)
 			}
 			if len(entries) == 0 {
-				return a.Write("No cross references found.")
+				return a.Write(a.Text().NoCrossRefs)
 			}
 			var b strings.Builder
 			for _, e := range entries {
@@ -353,7 +353,7 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 				return downloadAll(cmd.Context(), a, items, dir)
 			}
 			rs := results.ResultSet{Kind: "bible-media", Query: strings.Join(args, " "), Items: items}
-			return writeListing(a, rs, "Media on "+strings.Join(args, " "))
+			return writeListing(a, rs, fmt.Sprintf(a.Text().MediaOn, strings.Join(args, " ")))
 		},
 	}
 	cmd.Flags().BoolVar(&doDL, "download", false, "download the media files")
@@ -413,7 +413,7 @@ publication is fetched and shown, including a link to the full article.`,
 				return a.WriteJSON(entries)
 			}
 			if len(entries) == 0 {
-				return a.Write("No research guide entries found.")
+				return a.Write(a.Text().NoResearch)
 			}
 			var b strings.Builder
 			for _, e := range entries {
