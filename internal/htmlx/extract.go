@@ -11,8 +11,14 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
+// cardThumbnail holds the publication cover on a wol link card. It is
+// navigation decoration, not an illustration: no caption, no alt text, and the
+// same cover repeats for every link to that publication. The body renderer drops
+// it too (see render.cardDecoration).
+const cardThumbnail = ".cardThumbnail"
+
 // Images collects figure/inline images with captions from sel. Relative
-// sources are absolutized against base.
+// sources are absolutized against base. Link-card thumbnails are skipped.
 func Images(sel *goquery.Selection, base string) []model.MediaAsset {
 	var out []model.MediaAsset
 	seen := map[string]bool{}
@@ -26,6 +32,9 @@ func Images(sel *goquery.Selection, base string) []model.MediaAsset {
 	}
 	// responsive spans first: they carry the largest renditions
 	sel.Find("span.jsRespImg").Each(func(_ int, s *goquery.Selection) {
+		if s.Closest(cardThumbnail).Length() > 0 {
+			return
+		}
 		src := ""
 		for _, attr := range []string{"data-zoom", "data-img-size-xl", "data-img-size-lg", "data-img-size-md", "data-img-size-sm", "data-img-size-xs"} {
 			if v, ok := s.Attr(attr); ok && v != "" {
@@ -39,6 +48,9 @@ func Images(sel *goquery.Selection, base string) []model.MediaAsset {
 	sel.Find("img").Each(func(_ int, s *goquery.Selection) {
 		if s.Closest("noscript").Length() > 0 && s.Closest("span.jsRespImg").Length() > 0 {
 			return // fallback of a span we already handled
+		}
+		if s.Closest(cardThumbnail).Length() > 0 {
+			return
 		}
 		src := ""
 		for _, attr := range []string{"data-zoom", "data-img-size-xl", "data-img-size-lg", "src"} {

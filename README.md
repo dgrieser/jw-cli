@@ -179,9 +179,31 @@ jw download w --issue 202405 -F PDF
 
 ```sh
 jw dailytext                                 # today's text (or a date)
-jw meetings --date 2026-07-20                # meeting material of that week
+jw meetings                                  # this week's meeting material
+jw meetings midweek                          # the Life and Ministry workbook part
+jw meetings weekend --date 2026-07-20        # that week's Watchtower study article
 jw languages -s german                       # language codes
 jw completion bash|zsh|fish
+```
+
+`jw meetings` lists what each meeting covers and which publications it uses;
+`midweek` (`mid`, `mw`) and `weekend` (`we`, `wt`) read the material itself. The
+two meetings are recognized by the publication symbol wol tags them with
+(`pub-mwb`, `pub-w`), not by the section headings, so it works in any language.
+
+Every command that ends in a document — `article`, `dailytext`, `meetings` and
+the two meeting parts — takes the same flags for what to do with it:
+
+| Flag | Meaning |
+|---|---|
+| `--refs` | List the bible verses the document cites, each linked to the verse. |
+| `--images` | List its illustrations with captions, downloadable by index. |
+| `--download-images` | Download all of them, with `-d, --dir` for the target. |
+
+```sh
+jw meetings midweek --refs           # the verses that week's part cites
+jw meetings weekend --images         # the study article's illustrations
+jw dailytext --refs                  # today's cited verses
 ```
 
 ## How it talks to the sites

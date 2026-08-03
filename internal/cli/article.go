@@ -14,13 +14,50 @@ import (
 	"github.com/dgrieser/jw-cli/internal/results"
 )
 
+// articleView is the set of things a command can do with an article once it has
+// been fetched: print it, list the bible verses it cites, or list and download
+// its images. Every command that ends in an article — article, dailytext,
+// meetings and the two meeting parts — binds the same flags and shares the same
+// behavior.
+type articleView struct {
+	refs     bool
+	images   bool
+	dlImages bool
+	dir      string
+}
+
+// bind registers the view's flags on cmd. The wording names the document rather
+// than "the article", since the same flags serve the daily text and the meeting
+// material.
+func (v *articleView) bind(cmd *cobra.Command) {
+	fl := cmd.Flags()
+	fl.BoolVar(&v.refs, "refs", false, "list the bible verses referenced in the document")
+	fl.BoolVar(&v.images, "images", false, "list the images of the document (downloadable by index)")
+	fl.BoolVar(&v.dlImages, "download-images", false, "download all images of the document")
+	fl.StringVarP(&v.dir, "dir", "d", "", "download directory for --download-images")
+}
+
+// write renders art the way the flags ask for. The default is the document
+// itself.
+func (v *articleView) write(ctx context.Context, a *app.App, art model.Article) error {
+	switch {
+	case v.dlImages:
+		if len(art.Images) == 0 {
+			return fmt.Errorf("no images found in %q", art.Title)
+		}
+		return downloadAll(ctx, a, imagesToResults(art), v.dir)
+	case v.images:
+		items := imagesToResults(art)
+		rs := results.ResultSet{Kind: "article-images", Query: art.Title, Items: items}
+		return writeListing(a, rs, fmt.Sprintf(a.Text().ImagesIn, art.Title))
+	case v.refs:
+		return writeScriptureRefs(a, art)
+	}
+	return writeArticle(a, art)
+}
+
 func newArticleCmd(a *app.App) *cobra.Command {
-	var (
-		refs     bool
-		images   bool
-		dlImages bool
-		dir      string
-	)
+	var view articleView
 	cmd := &cobra.Command{
 		Use:   "article <url|docid>",
 		Short: "Read an article from wol.jw.org or www.jw.org",
@@ -42,27 +79,10 @@ Examples:
 			if err != nil {
 				return err
 			}
-			switch {
-			case dlImages:
-				if len(art.Images) == 0 {
-					return fmt.Errorf("no images found in %q", art.Title)
-				}
-				return downloadAll(cmd.Context(), a, imagesToResults(art), dir)
-			case images:
-				items := imagesToResults(art)
-				rs := results.ResultSet{Kind: "article-images", Query: art.Title, Items: items}
-				return writeListing(a, rs, fmt.Sprintf(a.Text().ImagesIn, art.Title))
-			case refs:
-				return writeScriptureRefs(a, art)
-			}
-			return writeArticle(a, art)
+			return view.write(cmd.Context(), a, art)
 		},
 	}
-	fl := cmd.Flags()
-	fl.BoolVar(&refs, "refs", false, "list the bible verses referenced in the article")
-	fl.BoolVar(&images, "images", false, "list the images referenced in the article")
-	fl.BoolVar(&dlImages, "download-images", false, "download all images of the article")
-	fl.StringVarP(&dir, "dir", "d", "", "download directory for --download-images")
+	view.bind(cmd)
 	return cmd
 }
 
