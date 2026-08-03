@@ -157,21 +157,88 @@ func verifyMD5(path, want string) error {
 
 var unsafeName = regexp.MustCompile(`[^\w.\- ()\[\]]+`)
 
-// filenameFor derives a safe filename from Content-Disposition or the URL.
+// filenameFor derives a safe filename from Content-Disposition or the URL, with
+// the extension filled in from the content type when the name carries none.
 func filenameFor(resp *http.Response, rawURL string) string {
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
 		if _, params, err := mime.ParseMediaType(cd); err == nil {
 			if fn := params["filename"]; fn != "" {
-				return sanitizeName(fn)
+				return withExtension(sanitizeName(fn), resp)
 			}
 		}
 	}
 	if u, err := url.Parse(rawURL); err == nil {
 		if base := path.Base(u.Path); base != "." && base != "/" {
-			return sanitizeName(base)
+			return withExtension(sanitizeName(base), resp)
 		}
 	}
-	return "download"
+	return withExtension("download", resp)
+}
+
+// withExtension appends the content type's extension to a name that has none.
+// wol serves illustrations from extensionless paths — an article image lives at
+// /mp/r10/lp-x/w26/2026/296 — so the file would otherwise land as "296" and no
+// image viewer would touch it.
+func withExtension(name string, resp *http.Response) string {
+	if path.Ext(name) != "" {
+		return name
+	}
+	return name + extensionFor(resp)
+}
+
+// extByType maps the content types the sites serve to the extension a reader
+// expects. mime.ExtensionsByType is not enough on its own: it reads the system
+// mime table, which may be missing entirely, and where it does answer it returns
+// every registered extension in alphabetical order — ".jfif" before ".jpg" for a
+// plain JPEG.
+var extByType = map[string]string{
+	"image/jpeg":           ".jpg",
+	"image/png":            ".png",
+	"image/gif":            ".gif",
+	"image/webp":           ".webp",
+	"image/svg+xml":        ".svg",
+	"video/mp4":            ".mp4",
+	"video/quicktime":      ".mov",
+	"audio/mpeg":           ".mp3",
+	"audio/mp4":            ".m4a",
+	"audio/aac":            ".aac",
+	"audio/ogg":            ".ogg",
+	"application/pdf":      ".pdf",
+	"application/epub+zip": ".epub",
+	"application/zip":      ".zip",
+	"text/vtt":             ".vtt",
+}
+
+// genericTypes say nothing about the format, so they must not pick an extension.
+var genericTypes = map[string]bool{
+	"application/octet-stream": true,
+	"binary/octet-stream":      true,
+	"text/plain":               true,
+	"text/html":                true,
+}
+
+// extensionFor returns the extension for the response's content type, or "" when
+// it is missing, unparseable or too generic to draw a conclusion from.
+func extensionFor(resp *http.Response) string {
+	ct := resp.Header.Get("Content-Type")
+	if ct == "" {
+		return ""
+	}
+	mt, _, err := mime.ParseMediaType(ct)
+	if err != nil {
+		return ""
+	}
+	mt = strings.ToLower(mt)
+	if ext, ok := extByType[mt]; ok {
+		return ext
+	}
+	if genericTypes[mt] {
+		return ""
+	}
+	if exts, err := mime.ExtensionsByType(mt); err == nil && len(exts) > 0 {
+		return exts[0]
+	}
+	return ""
 }
 
 func sanitizeName(s string) string {

@@ -138,3 +138,57 @@ func TestPickVideo(t *testing.T) {
 		t.Error("want error for empty file list")
 	}
 }
+
+// TestFilenameExtensionFromContentType covers wol's extensionless media paths:
+// an article illustration lives at /mp/r10/lp-x/w26/2026/296, so the extension
+// has to come from the content type or the file lands as "296".
+func TestFilenameExtensionFromContentType(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		path        string
+		contentType string
+		disposition string
+		want        string
+	}{
+		{"extensionless image path", "/mp/r10/lp-x/w26/2026/296", "image/jpeg", "", "296.jpg"},
+		{"png", "/mp/r10/lp-x/w26/2026/298", "image/png", "", "298.png"},
+		{"charset parameter", "/mp/1", "image/jpeg; charset=binary", "", "1.jpg"},
+		{"uppercase type", "/mp/2", "IMAGE/JPEG", "", "2.jpg"},
+		// a name that already says what it is must not gain a second extension
+		{"url extension wins", "/o/lffv_X_336_r240P.mp4", "video/mp4", "", "lffv_X_336_r240P.mp4"},
+		{"mismatched type ignored", "/o/file.pdf", "image/jpeg", "", "file.pdf"},
+		// nothing to conclude: leave the name alone rather than guess
+		{"octet-stream", "/mp/3", "application/octet-stream", "", "3"},
+		{"no content type", "/mp/4", "", "", "4"},
+		{"unparseable type", "/mp/5", "not a type", "", "5"},
+		// the server's own name is used, and completed the same way
+		{"disposition", "/mp/6", "application/pdf", `attachment; filename="w_X_202405"`, "w_X_202405.pdf"},
+		{"disposition with extension", "/mp/7", "image/jpeg", `attachment; filename="cover.png"`, "cover.png"},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if tc.contentType != "" {
+				w.Header().Set("Content-Type", tc.contentType)
+			}
+			if tc.disposition != "" {
+				w.Header().Set("Content-Disposition", tc.disposition)
+			}
+			w.Write([]byte("body"))
+		}))
+		dir := t.TempDir()
+		got, err := Run(context.Background(), httpx.New(), Job{URL: srv.URL + tc.path, Dir: dir}, nil)
+		srv.Close()
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if filepath.Base(got) != tc.want {
+			t.Errorf("%s: filename = %q, want %q", tc.name, filepath.Base(got), tc.want)
+		}
+		// the .part file must not be left behind under either name
+		for _, leftover := range []string{tc.want + ".part", filepath.Base(got) + ".part"} {
+			if _, err := os.Stat(filepath.Join(dir, leftover)); err == nil {
+				t.Errorf("%s: %s left behind", tc.name, leftover)
+			}
+		}
+	}
+}
