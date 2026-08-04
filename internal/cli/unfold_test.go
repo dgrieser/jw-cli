@@ -30,7 +30,7 @@ func TestUnfoldHeading(t *testing.T) {
 		// a publication passage: the citation points, the title says what it is
 		{"publication citation and title",
 			unfold.Node{Ref: unfold.Ref{Text: "6 Abs. 15", Path: "/wol/pc/1/2"}, Title: "Vertraue dem Richter"},
-			"6 Abs. 15: Vertraue dem Richter"},
+			"6 Abs. 15 → Vertraue dem Richter"},
 		// a verse: wol titles it with the same reference spelled out, so the
 		// title would only say it twice
 		{"verse title dropped",
@@ -42,24 +42,44 @@ func TestUnfoldHeading(t *testing.T) {
 		{"no title", unfold.Node{Ref: unfold.Ref{Text: "Joh. 5:29;", Path: "/wol/pc/1/2"}}, "Joh. 5:29"},
 		{"title equal to the citation is not repeated",
 			unfold.Node{Ref: unfold.Ref{Text: "Matt 24:14", Path: "/wol/pc/1/2"}, Title: "Matt 24:14"}, "Matt 24:14"},
-		// a cross reference inside a verse is written as a bare marker, so only
-		// the resolved content says which passage it was
-		// a marker inside a verse names nothing, so the passage it points at
-		// stands in for it, labelled with wol's own word for the feature
-		{"verse marker becomes a labelled reference",
+		// a marker inside a verse names nothing, so both ends are named: the
+		// passage it sits in and the one it points at
+		{"verse marker names both ends",
 			unfold.Node{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/9/9"}, Title: "Isaiah 2:2"},
-			"Marginal reference Isaiah 2:2"},
+			"Marginal reference Acts 24:15 → Isaiah 2:2"},
 		{"asterisk marker", unfold.Node{Ref: unfold.Ref{Text: "*", Path: "/wol/bc/1/2"}, Title: "Daniel 12:13"},
-			"Marginal reference Daniel 12:13"},
+			"Marginal reference Acts 24:15 → Daniel 12:13"},
 		// not a verse: no marginal reference to speak of, just the title
 		{"publication marker keeps the title alone",
 			unfold.Node{Ref: unfold.Ref{Text: "*", Path: "/wol/pc/1/2"}, Title: "Insight, page 390"}, "Insight, page 390"},
 		{"empty falls back to title", unfold.Node{Title: "Acts 24:15"}, "Acts 24:15"},
 		{"marker with no title stays", unfold.Node{Ref: unfold.Ref{Text: "+"}}, "+"},
 	} {
-		if got := unfoldHeading(tc.node, i18n.EN.Text()); got != tc.want {
+		if got := unfoldHeading(tc.node, "Acts 24:15", i18n.EN.Text()); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestUnfoldHeadingMarkerWithoutSource covers a marker among the document's own
+// citations: there is no enclosing passage to name, so the label carries the
+// target alone rather than a dangling separator.
+func TestUnfoldHeadingMarkerWithoutSource(t *testing.T) {
+	n := unfold.Node{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/9/9"}, Title: "Isaiah 2:2"}
+	if got, want := unfoldHeading(n, "", i18n.EN.Text()), "Marginal reference Isaiah 2:2"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestUnfoldSource pins how a passage is named when it is cited as the origin of
+// a reference found inside it: the resolved title, so both ends of the reference
+// are spelled out the same way.
+func TestUnfoldSource(t *testing.T) {
+	if got := unfoldSource(unfold.Node{Title: "Acts 24:15"}, "Apg. 24:15"); got != "Acts 24:15" {
+		t.Errorf("title should win, got %q", got)
+	}
+	if got := unfoldSource(unfold.Node{}, "Apg. 24:15"); got != "Apg. 24:15" {
+		t.Errorf("without a title the label stands in, got %q", got)
 	}
 }
 
@@ -82,7 +102,7 @@ func TestUnfoldHTML(t *testing.T) {
 		"<h2>References</h2>",
 		"<h3>Matt 24:14</h3>",
 		"<p>this good news</p>",
-		"<h4>Marginal reference Isaiah 2:2</h4>",
+		"<h4>Marginal reference Matthew 24:14 → Isaiah 2:2</h4>",
 		"<p>the mountain</p>",
 	} {
 		if !strings.Contains(out, want) {

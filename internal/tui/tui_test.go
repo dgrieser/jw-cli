@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/results"
@@ -47,7 +47,7 @@ func TestListLoadsAndPaginates(t *testing.T) {
 	}
 
 	// next page
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	m = next.(uiModel)
 	if m.mode != "busy" {
 		t.Fatalf("expected busy while paging, got %s", m.mode)
@@ -58,7 +58,7 @@ func TestListLoadsAndPaginates(t *testing.T) {
 	}
 
 	// page 3 fails -> stays usable with an error status
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	next, cmd = m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	m = applyPage(t, next.(uiModel), cmd)
 	if m.mode != "list" || !strings.Contains(m.status, "error") {
 		t.Fatalf("mode=%s status=%q", m.mode, m.status)
@@ -91,7 +91,7 @@ func TestShowAndBack(t *testing.T) {
 	m := newTestModel(t, fetch, Actions{
 		Show: func(r model.Result) (Content, error) { return Content{Text: "CONTENT of " + r.Title}, nil },
 	})
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(uiModel)
 	msg := findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(contentMsg); return ok })
 	next, _ = m.Update(msg)
@@ -99,7 +99,7 @@ func TestShowAndBack(t *testing.T) {
 	if m.mode != "detail" || !strings.Contains(m.viewport.View(), "CONTENT of Doc") {
 		t.Fatalf("mode=%s view=%q", m.mode, m.viewport.View())
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = next.(uiModel)
 	if m.mode != "list" {
 		t.Fatalf("esc should return to list, mode=%s", m.mode)
@@ -114,7 +114,7 @@ func TestShowStylesMarkdown(t *testing.T) {
 	m := newTestModel(t, fetch, Actions{
 		Show: func(model.Result) (Content, error) { return Content{Text: md, Markdown: true}, nil },
 	})
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(uiModel)
 	msg := findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(contentMsg); return ok })
 	next, _ = m.Update(msg)
@@ -151,7 +151,7 @@ func TestDownloadStatus(t *testing.T) {
 	m := newTestModel(t, fetch, Actions{
 		Download: func(r model.Result) (string, error) { return "/tmp/file.mp4", nil },
 	})
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
 	m = next.(uiModel)
 	msg := findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(downloadMsg); return ok })
 	next, _ = m.Update(msg)
@@ -172,7 +172,7 @@ func TestBrowseIntoCategory(t *testing.T) {
 			return nil, "", false
 		},
 	})
-	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	next, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = next.(uiModel)
 	msg := findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(pageMsg); return ok })
 	next, _ = m.Update(msg)
@@ -181,7 +181,7 @@ func TestBrowseIntoCategory(t *testing.T) {
 		t.Fatalf("stack=%d first=%v", len(m.stack), m.list.Items()[0])
 	}
 	// back pops the stack
-	next, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	next, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = next.(uiModel)
 	msg = findMsg(t, cmd, func(msg tea.Msg) bool { _, ok := msg.(pageMsg); return ok })
 	next, _ = m.Update(msg)

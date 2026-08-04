@@ -57,6 +57,12 @@ func ToTerminal(md string, o TerminalOptions) string {
 // before handing the terminal to something else that reads keys.
 func DetectStyle() string { return detectStyle() }
 
+// DarkBackground reports whether the detected style is meant for a dark
+// terminal. Widgets that pick their own colors need the same answer as the
+// markdown renderer, and it reuses the resolved detection instead of asking the
+// terminal a second time. A terminal that gives no answer counts as dark.
+func DarkBackground() bool { return detectStyle() != styles.LightStyle }
+
 var detectStyle = sync.OnceValue(func() string {
 	if name := os.Getenv("GLAMOUR_STYLE"); name != "" {
 		if _, ok := styles.DefaultStyles[name]; ok {

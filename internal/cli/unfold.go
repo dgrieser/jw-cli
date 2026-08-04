@@ -116,7 +116,7 @@ func unfoldHTML(res unfold.Result, txt *i18n.Messages) string {
 	}
 	var b strings.Builder
 	b.WriteString("<hr/><h2>" + html.EscapeString(txt.UnfoldHeading) + "</h2>")
-	writeUnfoldNodes(&b, res.Nodes, 3, txt)
+	writeUnfoldNodes(&b, res.Nodes, 3, "", txt)
 	if note := unfoldNote(res, txt); note != "" {
 		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(note))
 	}
@@ -165,19 +165,25 @@ func demoteHeadings(fragment string, below int) string {
 	return out
 }
 
+// refSeparator joins the two halves of a reference heading. An arrow rather than
+// a colon: every one of these headings is a pointer from one thing to another,
+// and a colon reads as "label: value" instead.
+const refSeparator = " → "
+
 // unfoldHeading is the one-line label for an expanded reference: the citation as
 // the document wrote it, then what the passage turned out to be —
-// "6 Abs. 15: Vertraue dem barmherzigen „Richter der ganzen Erde“".
+// "6 Abs. 15 → Vertraue dem barmherzigen „Richter der ganzen Erde“".
 //
 // A verse is the exception. wol titles a verse citation with the same reference
 // spelled out, so "Apg. 24:15: Apostelgeschichte 24:15" says one thing twice and
 // only the citation is kept.
 //
 // A cross reference inside a verse is the other way round: the document writes it
-// as a bare marker ("+") that names nothing at all, so the resolved passage
-// stands in for it, labelled with what kind of pointer it was —
-// "Querverweis Jesaja 26:19".
-func unfoldHeading(n unfold.Node, txt *i18n.Messages) string {
+// as a bare marker ("+") that names nothing at all. Neither end of it is in the
+// text, so both are named — the passage the marker sits in and the one it points
+// at: "Querverweis Apostelgeschichte 24:15 → Jesaja 26:19". At the top level
+// there is no enclosing passage to name, and the label carries the target alone.
+func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
 	ref := strings.TrimRight(n.Ref.Text, ",;. ")
@@ -185,15 +191,28 @@ func unfoldHeading(n unfold.Node, txt *i18n.Messages) string {
 		switch {
 		case n.Title == "":
 			return ref
-		case n.Ref.IsVerse():
+		case !n.Ref.IsVerse():
+			return n.Title
+		case source == "":
 			return txt.MarginalReference + " " + n.Title
 		}
-		return n.Title
+		return fmt.Sprintf(txt.MarginalReferenceWithSource, source, n.Title)
 	}
 	if n.Ref.IsVerse() || n.Title == "" || n.Title == ref {
 		return ref
 	}
-	return ref + ": " + n.Title
+	return ref + refSeparator + n.Title
+}
+
+// unfoldSource names a passage well enough to be cited as the origin of a cross
+// reference found inside it. The resolved title is preferred over the citation
+// text, so both ends of the reference are spelled out the same way rather than
+// pairing an abbreviation with a full name.
+func unfoldSource(n unfold.Node, label string) string {
+	if n.Title != "" {
+		return n.Title
+	}
+	return label
 }
 
 // isMarker reports whether s is only punctuation, and so says nothing about
@@ -207,9 +226,13 @@ func isMarker(s string) bool {
 	return true
 }
 
-func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, txt *i18n.Messages) {
+// writeUnfoldNodes renders one tier of an expansion. source names the passage
+// these references were found in, so a bare marker can say where it came from;
+// it is empty for the references of the document itself.
+func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source string, txt *i18n.Messages) {
 	for _, n := range nodes {
-		b.WriteString(headingHTML(level, html.EscapeString(unfoldHeading(n, txt))))
+		label := unfoldHeading(n, source, txt)
+		b.WriteString(headingHTML(level, html.EscapeString(label)))
 		switch {
 		case n.Err != nil:
 			fmt.Fprintf(b, "<p><em>%s</em></p>",
@@ -217,6 +240,6 @@ func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, txt *i
 		case strings.TrimSpace(n.HTML) != "":
 			b.WriteString(demoteHeadings(n.HTML, level))
 		}
-		writeUnfoldNodes(b, n.Children, level+1, txt)
+		writeUnfoldNodes(b, n.Children, level+1, unfoldSource(n, label), txt)
 	}
 }

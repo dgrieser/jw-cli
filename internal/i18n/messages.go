@@ -101,6 +101,10 @@ type Messages struct {
 	// MarginalReference labels a cross reference inside a verse, which the
 	// document writes as a bare "+". wol's own name for the feature.
 	MarginalReference string
+	// MarginalReferenceWithSource labels the same thing when the passage it sits
+	// in is known, and takes that passage and the one it points at. The two are
+	// joined by an arrow, matching the separator the unfold headings use.
+	MarginalReferenceWithSource string
 
 	// --- unfolding citations ------------------------------------------------
 	UnfoldHeading string

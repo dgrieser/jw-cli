@@ -46,7 +46,8 @@ var en = Messages{
 	DownloadingLabel: "downloading",
 	DownloadFailed:   "download failed: %s",
 
-	MarginalReference: "Marginal reference",
+	MarginalReference:           "Marginal reference",
+	MarginalReferenceWithSource: "Marginal reference %s → %s",
 
 	UnfoldHeading:  "References",
 	UnfoldConfirm:  "Unfolding level %d needs %d more requests to wol.jw.org. Continue? [y/N] ",

@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	lipgloss "charm.land/lipgloss/v2"
 
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -54,7 +54,7 @@ func Run(header string, fetch Fetcher, actions Actions) error {
 	// input stream once the program is reading keys.
 	render.DetectStyle()
 	m := newModel(header, fetch, actions)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	final, err := p.Run()
 	if err != nil {
 		return err
@@ -153,7 +153,14 @@ func newModel(header string, fetch Fetcher, actions Actions) uiModel {
 		txt = i18n.EN.Text()
 	}
 	keys := newKeyMap(txt)
-	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
+	// Bubbles v2 hardcodes the dark palette in its constructors, so the list's
+	// colors are set from the same background detection the markdown renderer
+	// uses; without it a light terminal gets dark-on-dark text.
+	dark := render.DarkBackground()
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles = list.NewDefaultItemStyles(dark)
+	l := list.New(nil, delegate, 0, 0)
+	l.Styles = list.DefaultStyles(dark)
 	l.Title = header
 	l.SetShowStatusBar(false)
 	l.AdditionalShortHelpKeys = func() []key.Binding {
@@ -174,6 +181,11 @@ func newModel(header string, fetch Fetcher, actions Actions) uiModel {
 }
 
 func (m uiModel) top() *level { return &m.stack[len(m.stack)-1] }
+
+// newViewport builds the detail pane at the given size.
+func newViewport(width, height int) viewport.Model {
+	return viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))
+}
 
 // paneContent styles the detail pane content for the current pane width.
 func (m uiModel) paneContent() string {
@@ -214,7 +226,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.list.SetSize(msg.Width, msg.Height-1)
-		m.viewport = viewport.New(msg.Width, msg.Height-2)
+		m.viewport = newViewport(msg.Width, msg.Height-2)
 		m.viewport.SetContent(m.paneContent())
 		return m, nil
 
@@ -250,7 +262,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.content = msg.content
 		if m.width > 0 {
-			m.viewport = viewport.New(m.width, m.height-2)
+			m.viewport = newViewport(m.width, m.height-2)
 		}
 		m.viewport.SetContent(m.paneContent())
 		m.mode = "detail"
@@ -271,7 +283,7 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spin, cmd = m.spin.Update(msg)
 		return m, cmd
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if key.Matches(msg, m.keys.Quit) && m.mode != "detail" {
 			return m, tea.Quit
 		}
@@ -362,7 +374,16 @@ func (m uiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 var statusStyle = lipgloss.NewStyle().Faint(true)
 
-func (m uiModel) View() string {
+// View renders the current mode. The browser owns the whole window, so every
+// view asks for the alternate screen: in Bubble Tea v2 that is a property of
+// the view rather than a program option.
+func (m uiModel) View() tea.View {
+	v := tea.NewView(m.body())
+	v.AltScreen = true
+	return v
+}
+
+func (m uiModel) body() string {
 	switch m.mode {
 	case "busy":
 		return fmt.Sprintf("\n %s %s\n", m.spin.View(), m.status)
