@@ -259,3 +259,21 @@ func TestRunProgressReportsEachLevel(t *testing.T) {
 		t.Errorf("progress = %v, want %v", seen, want)
 	}
 }
+
+// TestRefIsVerse covers the distinction the two wol endpoints make: /bc/ resolves
+// to bible text, /pc/ to a passage of another publication.
+func TestRefIsVerse(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want bool
+	}{
+		{"/wol/bc/r10/lp-x/1102026207/8/0", true},
+		{"https://wol.jw.org/de/wol/bc/r10/lp-x/1/2", true},
+		{"/wol/pc/r10/lp-x/1204408/577/0", false},
+		{"", false},
+	} {
+		if got := (Ref{Path: tc.path}).IsVerse(); got != tc.want {
+			t.Errorf("Ref{%q}.IsVerse() = %v, want %v", tc.path, got, tc.want)
+		}
+	}
+}

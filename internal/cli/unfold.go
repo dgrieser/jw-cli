@@ -168,10 +168,11 @@ func demoteHeadings(fragment string, below int) string {
 // the document wrote it, then what the passage turned out to be —
 // "6 Abs. 15: Vertraue dem barmherzigen „Richter der ganzen Erde“".
 //
-// Both are kept because each is incomplete on its own. The citation is the
-// pointer the document gave, but a cross reference inside a verse is written as a
-// bare marker ("+", "*") that names nothing; the title says what was found, but
-// on its own it loses which citation led there.
+// A verse is the exception. wol titles a verse citation with the same reference
+// spelled out, so "Apg. 24:15: Apostelgeschichte 24:15" says one thing twice and
+// only the citation is kept. A cross reference inside a verse is the other way
+// round: it is written as a bare marker ("+", "*") that names nothing, so there
+// the title has to stand in for it.
 func unfoldHeading(n unfold.Node) string {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
@@ -182,10 +183,10 @@ func unfoldHeading(n unfold.Node) string {
 		}
 		return ref
 	}
-	if n.Title != "" && n.Title != ref {
-		return ref + ": " + n.Title
+	if n.Ref.IsVerse() || n.Title == "" || n.Title == ref {
+		return ref
 	}
-	return ref
+	return ref + ": " + n.Title
 }
 
 // isMarker reports whether s is only punctuation, and so says nothing about

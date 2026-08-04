@@ -27,17 +27,25 @@ func TestUnfoldHeading(t *testing.T) {
 		node unfold.Node
 		want string
 	}{
-		// the citation, then what it turned out to be, on one line
-		{"citation and title", unfold.Node{Ref: unfold.Ref{Text: "6 Abs. 15"}, Title: "Vertraue dem Richter"},
+		// a publication passage: the citation points, the title says what it is
+		{"publication citation and title",
+			unfold.Node{Ref: unfold.Ref{Text: "6 Abs. 15", Path: "/wol/pc/1/2"}, Title: "Vertraue dem Richter"},
 			"6 Abs. 15: Vertraue dem Richter"},
-		{"trailing punctuation trimmed", unfold.Node{Ref: unfold.Ref{Text: "Joh. 5:29;"}, Title: "Johannes 5:29"},
-			"Joh. 5:29: Johannes 5:29"},
-		{"no title", unfold.Node{Ref: unfold.Ref{Text: "Joh. 5:29;"}}, "Joh. 5:29"},
+		// a verse: wol titles it with the same reference spelled out, so the
+		// title would only say it twice
+		{"verse title dropped",
+			unfold.Node{Ref: unfold.Ref{Text: "Apg. 24:15", Path: "/wol/bc/1/2"}, Title: "Apostelgeschichte 24:15"},
+			"Apg. 24:15"},
+		{"trailing punctuation trimmed",
+			unfold.Node{Ref: unfold.Ref{Text: "Joh. 5:29;", Path: "/wol/bc/1/2"}, Title: "Johannes 5:29"},
+			"Joh. 5:29"},
+		{"no title", unfold.Node{Ref: unfold.Ref{Text: "Joh. 5:29;", Path: "/wol/pc/1/2"}}, "Joh. 5:29"},
 		{"title equal to the citation is not repeated",
-			unfold.Node{Ref: unfold.Ref{Text: "Matt 24:14"}, Title: "Matt 24:14"}, "Matt 24:14"},
+			unfold.Node{Ref: unfold.Ref{Text: "Matt 24:14", Path: "/wol/pc/1/2"}, Title: "Matt 24:14"}, "Matt 24:14"},
 		// a cross reference inside a verse is written as a bare marker, so only
 		// the resolved content says which passage it was
-		{"marker falls back to title", unfold.Node{Ref: unfold.Ref{Text: "+"}, Title: "Isaiah 2:2"}, "Isaiah 2:2"},
+		{"marker falls back to title even for a verse",
+			unfold.Node{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/9/9"}, Title: "Isaiah 2:2"}, "Isaiah 2:2"},
 		{"asterisk marker", unfold.Node{Ref: unfold.Ref{Text: "*"}, Title: "Daniel 12:13"}, "Daniel 12:13"},
 		{"empty falls back to title", unfold.Node{Title: "Acts 24:15"}, "Acts 24:15"},
 		{"marker with no title stays", unfold.Node{Ref: unfold.Ref{Text: "+"}}, "+"},
@@ -65,7 +73,7 @@ func TestUnfoldHTML(t *testing.T) {
 	// passage cited nests one level deeper
 	for _, want := range []string{
 		"<h2>References</h2>",
-		"<h3>Matt 24:14: Matthew 24:14</h3>",
+		"<h3>Matt 24:14</h3>",
 		"<p>this good news</p>",
 		"<h4>Isaiah 2:2</h4>",
 		"<p>the mountain</p>",

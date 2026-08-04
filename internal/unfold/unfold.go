@@ -6,6 +6,7 @@ package unfold
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -19,6 +20,10 @@ type Ref struct {
 	Text string
 	Path string
 }
+
+// IsVerse reports whether the citation resolves to bible text rather than to a
+// passage of another publication. wol tells the two apart by endpoint.
+func (r Ref) IsVerse() bool { return strings.Contains(r.Path, versePath) }
 
 // Resolver fetches the content behind a citation path. wol answers its verse
 // (/bc/) and publication (/pc/) endpoints with the same shape, so one resolver
@@ -151,8 +156,14 @@ func pointersTo(nodes []Node) []*Node {
 	return out
 }
 
-// citationLinks matches the two endpoints wol resolves citations through.
-const citationLinks = `a[href*="/bc/"], a[href*="/pc/"]`
+// The two endpoints wol resolves a citation through.
+const (
+	versePath       = "/bc/" // bible text
+	publicationPath = "/pc/" // a passage of another publication
+)
+
+// citationLinks matches a citation of either kind.
+var citationLinks = fmt.Sprintf("a[href*=%q], a[href*=%q]", versePath, publicationPath)
 
 // Refs finds the citations in an HTML fragment, in document order and without
 // repeats within the fragment.
