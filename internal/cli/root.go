@@ -35,7 +35,7 @@ func NewRootCmd(a *app.App) *cobra.Command {
 		Long: `jw is a CLI for the public content of jw.org and wol.jw.org:
 search, articles, Bible reading with study material, and downloads of
 videos, audio, and publications (PDF, EPUB, ...).`,
-		Version:       version.Version,
+		Version:       version.Full(),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

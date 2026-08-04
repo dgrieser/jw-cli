@@ -8,8 +8,11 @@ COVER_FILE := coverage.out
 COVER_HTML := coverage.html
 
 GO       ?= go
-VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS  := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
+# Left empty on purpose: the binary then derives "dev+<commit>[-dirty]" from the
+# VCS stamp the toolchain embeds. Releases are versioned by GoReleaser; override
+# manually with `make build VERSION=v1.2.3`.
+VERSION  ?=
+LDFLAGS  := -s -w $(if $(VERSION),-X $(MODULE)/internal/version.Version=$(VERSION))
 
 # Extra flags for `go test` (e.g. make test TESTFLAGS="-run TestFoo -v").
 TESTFLAGS ?=

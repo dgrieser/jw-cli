@@ -19,7 +19,7 @@
 ## Build
 
 ```sh
-make build          # ./jw, version stamped from git describe
+make build          # ./jw, reports dev+<commit>[-dirty]; VERSION=v1.2.3 to override
 make install        # into $GOBIN
 ```
 
@@ -50,6 +50,7 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 | `-f, --file` | Write output to a file instead of stdout. |
 | `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
 | `-v, --verbose` | Log HTTP requests to stderr. |
+| `--version` | Print the version, commit, build date, Go version, and platform. Released binaries report their tag (`v1.2.3`); local builds report `dev+<commit>` plus `-dirty` for an uncommitted tree. |
 
 ### Output language
 
