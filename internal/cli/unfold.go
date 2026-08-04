@@ -20,9 +20,10 @@ import (
 )
 
 // unfoldThreshold is how many requests one level may need before the user is
-// asked. wol is rate limited to about two requests a second, so fifty is a few
-// seconds — past that a level is worth confirming.
-const unfoldThreshold = 50
+// asked. wol is rate limited to about two requests a second, so this is roughly a
+// minute and a half of waiting — long enough to be worth confirming, while the
+// levels that finish in well under a minute go through unremarked.
+const unfoldThreshold = 200
 
 // tooltipResolver adapts the wol client to unfold.Resolver.
 type tooltipResolver struct{ a *app.App }
@@ -170,18 +171,24 @@ func demoteHeadings(fragment string, below int) string {
 //
 // A verse is the exception. wol titles a verse citation with the same reference
 // spelled out, so "Apg. 24:15: Apostelgeschichte 24:15" says one thing twice and
-// only the citation is kept. A cross reference inside a verse is the other way
-// round: it is written as a bare marker ("+", "*") that names nothing, so there
-// the title has to stand in for it.
-func unfoldHeading(n unfold.Node) string {
+// only the citation is kept.
+//
+// A cross reference inside a verse is the other way round: the document writes it
+// as a bare marker ("+") that names nothing at all, so the resolved passage
+// stands in for it, labelled with what kind of pointer it was —
+// "Querverweis Jesaja 26:19".
+func unfoldHeading(n unfold.Node, txt *i18n.Messages) string {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
 	ref := strings.TrimRight(n.Ref.Text, ",;. ")
 	if ref == "" || isMarker(ref) {
-		if n.Title != "" {
-			return n.Title
+		switch {
+		case n.Title == "":
+			return ref
+		case n.Ref.IsVerse():
+			return txt.MarginalReference + " " + n.Title
 		}
-		return ref
+		return n.Title
 	}
 	if n.Ref.IsVerse() || n.Title == "" || n.Title == ref {
 		return ref
@@ -202,7 +209,7 @@ func isMarker(s string) bool {
 
 func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, txt *i18n.Messages) {
 	for _, n := range nodes {
-		b.WriteString(headingHTML(level, html.EscapeString(unfoldHeading(n))))
+		b.WriteString(headingHTML(level, html.EscapeString(unfoldHeading(n, txt))))
 		switch {
 		case n.Err != nil:
 			fmt.Fprintf(b, "<p><em>%s</em></p>",

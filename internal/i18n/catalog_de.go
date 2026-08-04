@@ -20,7 +20,7 @@ var de = Messages{
 	NoBibleRefs:  "Keine Bibelstellen in %q gefunden.",
 	ReadOneHint:  `Eine davon lesen mit: jw bible read "<Bibelstelle>"`,
 	NoStudyNotes: "Keine Studienanmerkungen gefunden (Studienanmerkungen gibt es in der Studienausgabe, nwtsty).",
-	NoCrossRefs:  "Keine Randverweise gefunden.",
+	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
 
 	FilesHeading:      "Dateien",
@@ -45,6 +45,8 @@ var de = Messages{
 	Downloading:      "lade %s herunter…",
 	DownloadingLabel: "lade herunter",
 	DownloadFailed:   "Herunterladen fehlgeschlagen: %s",
+
+	MarginalReference: "Querverweis",
 
 	UnfoldHeading:  "Referenzen",
 	UnfoldConfirm:  "Ebene %d braucht %d weitere Abfragen an wol.jw.org. Fortfahren? [j/N] ",

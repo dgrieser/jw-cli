@@ -98,6 +98,10 @@ type Messages struct {
 	KeyQuit       string
 	DetailHelp    string
 
+	// MarginalReference labels a cross reference inside a verse, which the
+	// document writes as a bare "+". wol's own name for the feature.
+	MarginalReference string
+
 	// --- unfolding citations ------------------------------------------------
 	UnfoldHeading string
 	// UnfoldConfirm takes the level and the number of requests it needs.

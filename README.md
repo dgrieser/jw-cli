@@ -226,7 +226,7 @@ that cite each other from looping.
 
 Depth costs requests: one per reference, against a site limited to about two a
 second. References are followed breadth first, so the count for the next level is
-known exactly before it is spent — above 50 it is quoted and confirmed:
+known exactly before it is spent — above 200 it is quoted and confirmed:
 
 ```
 Unfolding level 2 needs 604 more requests to wol.jw.org. Continue? [y/N]

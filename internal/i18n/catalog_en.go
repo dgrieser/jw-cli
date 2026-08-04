@@ -20,7 +20,7 @@ var en = Messages{
 	NoBibleRefs:  "No bible references found in %q.",
 	ReadOneHint:  `Read one with: jw bible read "<reference>"`,
 	NoStudyNotes: "No study notes found (study notes are available in the study edition, nwtsty).",
-	NoCrossRefs:  "No cross references found.",
+	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",
 
 	FilesHeading:      "Files",
@@ -45,6 +45,8 @@ var en = Messages{
 	Downloading:      "downloading %s…",
 	DownloadingLabel: "downloading",
 	DownloadFailed:   "download failed: %s",
+
+	MarginalReference: "Marginal reference",
 
 	UnfoldHeading:  "References",
 	UnfoldConfirm:  "Unfolding level %d needs %d more requests to wol.jw.org. Continue? [y/N] ",
