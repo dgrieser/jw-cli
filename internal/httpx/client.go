@@ -74,10 +74,15 @@ func New(opts ...Option) *Client {
 	}
 	c.limiters = map[string]*rate.Limiter{}
 	if h := hostOf(c.Base.WOL); h != "" {
-		c.limiters[h] = rate.NewLimiter(2, 2) // be polite to wol.jw.org
+		c.limiters[h] = rate.NewLimiter(wolRequestsPerSecond, wolRequestsPerSecond)
 	}
 	return c
 }
+
+// wolRequestsPerSecond paces requests to wol.jw.org. The site sets no published
+// limit; this is what the client holds itself to, and doubles as the burst so a
+// pause is spent rather than saved up.
+const wolRequestsPerSecond = 20
 
 func hostOf(raw string) string {
 	u, err := url.Parse(raw)

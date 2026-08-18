@@ -22,10 +22,10 @@ import (
 )
 
 // unfoldThreshold is how many requests one level may need before the user is
-// asked. wol is rate limited to about two requests a second, so this is roughly a
-// minute and a half of waiting — long enough to be worth confirming, while the
-// levels that finish in well under a minute go through unremarked.
-const unfoldThreshold = 200
+// asked. At the rate the client paces wol.jw.org this is a couple of minutes of
+// waiting — long enough to be worth confirming, while everything that finishes
+// inside a minute goes through unremarked.
+const unfoldThreshold = 2000
 
 // studyEdition is the only edition that carries a study pane, matching what
 // jw bible notes, xrefs and research read.

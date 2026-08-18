@@ -245,13 +245,12 @@ jw bible read John 3:16 --unfold 1    # the verse, its study notes, its research
 jw bible read John 3:16 --unfold 2    # and the text behind each of those references
 ```
 
-Depth costs requests: one per reference plus one per chapter page, against a site
-limited to about two a second. References are followed breadth first, so the
-count for the next level is known before it is spent — above 200 it is quoted and
-confirmed:
+Depth costs requests: one per reference plus one per chapter page, paced at 20 a
+second. References are followed breadth first, so the count for the next level is
+known before it is spent — above 2000 it is quoted and confirmed:
 
 ```
-Unfolding level 2 needs up to 604 more requests to wol.jw.org. Continue? [y/N]
+Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 ```
 
 The count is an upper bound because verses of one chapter share its page.
@@ -271,9 +270,10 @@ whole picture.
 | `wol.jw.org` | articles, bible chapters + study pane, wol search, citations (`/bc/`, `/pc/` JSON via XHR headers), daily text, meetings |
 | `www.jw.org` | article pages reached by URL |
 
-The client sends a browser-like User-Agent, keeps a cookie jar, and rate
-limits wol.jw.org requests (~2/s). Slow-changing data (language list, wol
-library config, localized bible book names) is cached under the user cache
+The client sends a browser-like User-Agent, keeps a cookie jar, and paces
+wol.jw.org requests at 20 a second (`wolRequestsPerSecond` in
+`internal/httpx/client.go`, burst the same). Slow-changing data (language list,
+wol library config, localized bible book names) is cached under the user cache
 directory (`~/.cache/jw` on Linux).
 
 ## Live smoke-test checklist
