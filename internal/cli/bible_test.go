@@ -58,8 +58,8 @@ func TestBibleReadRangeText(t *testing.T) {
 	}
 }
 
-// TestBibleReadUnfold covers the study material of the verses being read: the
-// notes print under the passage, the research-guide passage it points at is
+// TestBibleReadUnfold covers the study material of the verse being read: the
+// notes print under the verse, the research-guide passage it points at is
 // unfolded, and the entry that names a whole article is listed instead.
 func TestBibleReadUnfold(t *testing.T) {
 	out, err := runCmd(t, bibleMux(t), "bible", "read", "-l", "en", "-o", "raw", "--unfold", "1", "John 3:16")
@@ -80,6 +80,31 @@ func TestBibleReadUnfold(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+// TestBibleReadUnfoldInlinePerVerse pins where the study material of a verse
+// goes: under that verse, not after the whole passage. The second verse follows
+// the expansion of the first, and brings its own.
+func TestBibleReadUnfoldInlinePerVerse(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "read", "-l", "en", "-o", "raw", "--unfold", "1", "joh 3:16-17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// every verse is headed, so its expansion reads as belonging to it
+	for _, want := range []string{"## John 3:16-17", "### John 3:16", "### John 3:17", "#### Study notes"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	// the fixture gives verse 16 study notes and a research-guide passage and
+	// verse 17 a marginal reference, so verse 16 brings the study material
+	first, second := strings.Index(out, "### John 3:16\n"), strings.Index(out, "### John 3:17")
+	note16 := strings.Index(out, "**loved:**")
+	text17 := strings.Index(out, "did not send his Son")
+	if !(first < note16 && note16 < second && second < text17) {
+		t.Errorf("verse 16 %d, its note %d, verse 17 %d, its text %d: the study material of a verse "+
+			"belongs between that verse and the next:\n%s", first, note16, second, text17, out)
 	}
 }
 

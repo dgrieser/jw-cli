@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	htmlpkg "html"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -81,9 +82,9 @@ func newBibleReadCmd(a *app.App) *cobra.Command {
 Library. References accept full names, abbreviations, and book numbers, in
 English or in the selected content language.
 
-With --unfold the study material of the verses is printed with them: the study
-notes, and the text behind every reference they carry — the marginal references
-and the research-guide passages — followed that many levels deep.
+With --unfold the study material of every verse is printed under that verse:
+its study notes, and the text behind every reference it carries — the marginal
+references and the research-guide passages — followed that many levels deep.
 
 Examples:
   jw bible read Matthew 24:14
@@ -103,12 +104,20 @@ Examples:
 			if err != nil {
 				return err
 			}
-			type passage struct {
-				Ref    string        `json:"ref"`
-				Verses []model.Verse `json:"verses"`
-				// Unfold is the expansion of everything the passage references,
-				// as an HTML appendix to its verses.
+			// verse is a verse with what it references expanded under it, so
+			// the study material of a verse is read where the verse is.
+			type verse struct {
+				model.Verse
+				// Unfold is the expansion of everything this verse references,
+				// as an HTML appendix to its text.
 				Unfold string `json:"unfold,omitempty"`
+			}
+			type passage struct {
+				Ref    string  `json:"ref"`
+				Verses []verse `json:"verses"`
+				// UnfoldNote says an expansion was cut short, which is about the
+				// passage rather than about one of its verses.
+				UnfoldNote string `json:"unfoldNote,omitempty"`
 			}
 			var passages []passage
 			chapters := map[string]*wol.ChapterDoc{}
@@ -132,12 +141,33 @@ Examples:
 				if err != nil {
 					return fmt.Errorf("%s: %w", refString(ref, table), err)
 				}
-				p := passage{Ref: refString(ref, table), Verses: verses}
+				p := passage{Ref: refString(ref, table)}
+				var unfolded []string
 				if depth > 0 {
-					p.Unfold, err = unfoldBiblePassage(ctx, a, expander, ref, verses, depth, assumeYes)
+					// several verses are headed one by one, so the expansion of a
+					// verse reads as belonging to that verse rather than to the
+					// passage; a single verse is already the passage heading
+					level := passageUnfoldLevel
+					if len(verses) > 1 {
+						level = verseUnfoldLevel
+					}
+					unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, a, expander, ref, verses, depth, level, assumeYes)
 					if err != nil {
 						return err
 					}
+				}
+				for i, v := range verses {
+					out := verse{Verse: v}
+					if i < len(unfolded) {
+						out.Unfold = unfolded[i]
+						if len(verses) > 1 {
+							num := v.ID % 1000
+							out.Citation = refString(bibleref.Ref{
+								Book: ref.Book, Chapter: ref.Chapter, VerseStart: num, VerseEnd: num,
+							}, table)
+						}
+					}
+					p.Verses = append(p.Verses, out)
 				}
 				passages = append(passages, p)
 			}
@@ -151,10 +181,14 @@ Examples:
 				}
 				var html strings.Builder
 				for _, v := range p.Verses {
+					if v.Citation != "" {
+						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(v.Citation)))
+					}
 					html.WriteString(v.HTML)
 					html.WriteString(" ")
+					html.WriteString(v.Unfold)
 				}
-				html.WriteString(p.Unfold)
+				html.WriteString(unfoldNoteHTML(p.UnfoldNote))
 				body, err := render.Render(html.String(), format, render.Options{BaseURL: a.HTTP().Base.WOL})
 				if err != nil {
 					return err

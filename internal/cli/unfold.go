@@ -164,10 +164,13 @@ func maxVerse(sections map[int]model.StudySection) int {
 
 // The heading level an expansion is appended at. A document carries its title as
 // the only h1, so its references are an h2 section; a bible passage is itself an
-// h2, and its references belong under it.
+// h2, and its references belong under it. A passage of several verses heads every
+// verse at that level instead, so what a verse references sits under the verse
+// and not under the passage.
 const (
 	documentUnfoldLevel = 2
 	passageUnfoldLevel  = 3
+	verseUnfoldLevel    = 4
 )
 
 // unfoldArticle expands the citations in art and returns the document body with
@@ -184,34 +187,50 @@ func unfoldArticle(ctx context.Context, a *app.App, art model.Article, depth int
 	return art.HTML + appendix, nil
 }
 
-// unfoldBiblePassage expands what a bible passage references. The passage is
-// nobody's citation, so its own study material is gathered up front: the notes
-// are printed under it, and its research-guide passages go into the expansion as
-// references of the passage itself, alongside the marginal references its verses
-// carry. Chapter pages the caller already read are borrowed, so the study pane
-// costs no second request for them.
-func unfoldBiblePassage(ctx context.Context, a *app.App, r *tooltipResolver, ref bibleref.Ref,
-	verses []model.Verse, depth int, assumeYes bool) (string, error) {
+// unfoldBibleVerses expands what every verse of a passage references and returns
+// the expansion of each, in the order of verses, so it can be printed under the
+// verse it belongs to rather than after the whole passage: the verse's study
+// notes, then the text behind the references it carries. A verse is nobody's
+// citation, so its own study material is gathered up front: the notes are printed
+// with it, and its research-guide passages go into the expansion as references of
+// the verse itself, alongside the marginal references in its text. Chapter pages
+// the caller already read are borrowed, so the study pane costs no second request
+// for them.
+//
+// The note closing an expansion that was cut short is returned separately: it is
+// about the run as a whole, not about one verse.
+// level is the heading level the expansion of a verse is written at, which
+// depends on whether the verses are headed one by one.
+func unfoldBibleVerses(ctx context.Context, a *app.App, r *tooltipResolver, ref bibleref.Ref,
+	verses []model.Verse, depth, level int, assumeYes bool) ([]string, string, error) {
 	txt := a.Text()
-	study, err := r.studyOf(ctx, ref)
-	if err != nil {
-		return "", err
+	studies := make([]unfold.Study, len(verses))
+	groups := make([]unfold.Group, len(verses))
+	for i, v := range verses {
+		num := v.ID % 1000
+		study, err := r.studyOf(ctx, bibleref.Ref{
+			Book: ref.Book, Chapter: ref.Chapter, VerseStart: num, VerseEnd: num,
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		studies[i] = study
+		groups[i] = unfold.Group{Fragment: v.HTML, RootRefs: study.Research}
 	}
-	var fragment strings.Builder
-	for _, v := range verses {
-		fragment.WriteString(v.HTML)
-		fragment.WriteString(" ")
-	}
-	var b strings.Builder
-	writeStudy(&b, unfold.Node{Notes: study.Notes, Links: study.Links}, passageUnfoldLevel, txt)
-	appendix, err := unfoldFragment(ctx, a, r, fragment.String(), unfoldRequest{
-		depth: depth, assumeYes: assumeYes, rootRefs: study.Research, level: passageUnfoldLevel,
+	parts, note, err := unfoldFragments(ctx, a, r, groups, unfoldRequest{
+		depth: depth, assumeYes: assumeYes, level: level,
 	})
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
-	b.WriteString(appendix)
-	return b.String(), nil
+	out := make([]string, len(verses))
+	for i := range verses {
+		var b strings.Builder
+		writeStudy(&b, unfold.Node{Notes: studies[i].Notes, Links: studies[i].Links}, level, txt)
+		b.WriteString(parts[i])
+		out[i] = b.String()
+	}
+	return out, note, nil
 }
 
 // unfoldRequest is what a command asks an expansion for.
@@ -221,8 +240,8 @@ type unfoldRequest struct {
 	// level is the heading level the appendix is written at.
 	level int
 	// rootRefs are references of the fragment itself rather than of a citation
-	// inside it: how jw bible read hands over what the verses it is reading
-	// reference.
+	// inside it, for a single fragment. Grouped expansions carry them per group
+	// instead.
 	rootRefs []unfold.Ref
 }
 
@@ -230,12 +249,41 @@ type unfoldRequest struct {
 // expansion as an HTML appendix, to be appended to the fragment before it is
 // rendered.
 func unfoldFragment(ctx context.Context, a *app.App, r unfold.Resolver, fragment string, req unfoldRequest) (string, error) {
+	o := unfoldOptions(a, req)
+	o.RootRefs = req.rootRefs
+	res, err := unfold.Run(ctx, r, fragment, o)
+	if err != nil {
+		return "", err
+	}
+	return unfoldHTMLAt(res, a.Text(), req.level), nil
+}
+
+// unfoldFragments expands several fragments in one run and returns the expansion
+// of each, to be appended to the fragment it belongs to. One run rather than one
+// per fragment: the request budget is confirmed once, and a passage cited by two
+// fragments is expanded once.
+func unfoldFragments(ctx context.Context, a *app.App, r unfold.Resolver, groups []unfold.Group,
+	req unfoldRequest) ([]string, string, error) {
 	txt := a.Text()
-	res, err := unfold.Run(ctx, r, fragment, unfold.Options{
+	res, err := unfold.RunGroups(ctx, r, groups, unfoldOptions(a, req))
+	if err != nil {
+		return nil, "", err
+	}
+	out := make([]string, len(groups))
+	for i, nodes := range res.Nodes {
+		out[i] = unfoldNodesHTML(nodes, txt, req.level)
+	}
+	return out, stoppedNote(res.Stopped, res.Pending, txt), nil
+}
+
+// unfoldOptions is what every expansion is run with: the confirmation of a level
+// that costs a lot of requests, and the progress of the level being spent.
+func unfoldOptions(a *app.App, req unfoldRequest) unfold.Options {
+	txt := a.Text()
+	return unfold.Options{
 		Depth:     req.depth,
 		Threshold: unfoldThreshold,
 		Confirm:   unfoldConfirmer(a, req.assumeYes),
-		RootRefs:  req.rootRefs,
 		Progress: func(level, done, total int) {
 			// stderr: the document itself belongs to stdout
 			fmt.Fprintf(a.Stderr, "\r%s", fmt.Sprintf(txt.UnfoldProgress, level, done, total))
@@ -243,11 +291,7 @@ func unfoldFragment(ctx context.Context, a *app.App, r unfold.Resolver, fragment
 				fmt.Fprintln(a.Stderr)
 			}
 		},
-	})
-	if err != nil {
-		return "", err
 	}
-	return unfoldHTMLAt(res, txt, req.level), nil
 }
 
 // unfoldConfirmer asks before a level that needs a lot of requests. There is
@@ -311,26 +355,41 @@ func unfoldHTML(res unfold.Result, txt *i18n.Messages) string {
 // level: one heading per reference carrying its own content, nested one level
 // deeper for what that content cited.
 func unfoldHTMLAt(res unfold.Result, txt *i18n.Messages, level int) string {
-	if len(res.Nodes) == 0 {
+	body := unfoldNodesHTML(res.Nodes, txt, level)
+	if body == "" {
+		return ""
+	}
+	return body + unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt))
+}
+
+// unfoldNodesHTML renders one tier of expanded references under its own heading.
+func unfoldNodesHTML(nodes []unfold.Node, txt *i18n.Messages, level int) string {
+	if len(nodes) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("<hr/>" + headingHTML(level, html.EscapeString(txt.UnfoldHeading)))
-	writeUnfoldNodes(&b, res.Nodes, level+1, "", txt)
-	if note := unfoldNote(res, txt); note != "" {
-		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(note))
-	}
+	writeUnfoldNodes(&b, nodes, level+1, "", txt)
 	return b.String()
 }
 
-// unfoldNote closes an expansion that did not do what was asked. Reaching the
+// stoppedNote closes an expansion that did not do what was asked. Reaching the
 // requested depth leaves references behind as well, but that is the expansion
 // working as asked, so it says nothing.
-func unfoldNote(res unfold.Result, txt *i18n.Messages) string {
-	if res.Stopped {
-		return fmt.Sprintf(txt.UnfoldStopped, res.Pending)
+func stoppedNote(stopped bool, pending int, txt *i18n.Messages) string {
+	if stopped {
+		return fmt.Sprintf(txt.UnfoldStopped, pending)
 	}
 	return ""
+}
+
+// unfoldNoteHTML is how such a note is printed: an aside under the expansion it
+// belongs to. An empty note prints nothing.
+func unfoldNoteHTML(note string) string {
+	if note == "" {
+		return ""
+	}
+	return fmt.Sprintf("<p><em>%s</em></p>", html.EscapeString(note))
 }
 
 // demoteHeadings pushes the headings inside an expanded passage below the

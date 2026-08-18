@@ -106,6 +106,28 @@ type Result struct {
 	Stopped bool
 }
 
+// Group is one fragment of an expansion that keeps its own expansion: how
+// jw bible read asks for the references of every verse it prints separately, so
+// each verse can be followed by what it cites.
+type Group struct {
+	Fragment string
+	// RootRefs are references belonging to the fragment itself rather than to a
+	// citation inside it, as Options.RootRefs is for a single fragment.
+	RootRefs []Ref
+}
+
+// Grouped is the expansion of several fragments in one run: one budget, one
+// confirmation and one set of already-expanded paths across all of them, with
+// the nodes of each fragment kept apart.
+type Grouped struct {
+	// Nodes holds the roots of every group, in the order the groups were given.
+	Nodes [][]Node
+	// Requests, Pending and Stopped count the whole run, as in Result.
+	Requests int
+	Pending  int
+	Stopped  bool
+}
+
 // Run expands the citations in an HTML fragment. References are followed breadth
 // first, so the request count for the next level is known before it is spent —
 // that is what Confirm is told. Every path is expanded at most once across the
@@ -114,14 +136,31 @@ type Result struct {
 // material: the notes are printed with it, the research-guide passages are
 // followed like the citations inside it.
 func Run(ctx context.Context, r Resolver, fragment string, o Options) (Result, error) {
-	var res Result
+	g, err := RunGroups(ctx, r, []Group{{Fragment: fragment, RootRefs: o.RootRefs}}, o)
+	res := Result{Requests: g.Requests, Pending: g.Pending, Stopped: g.Stopped}
+	if len(g.Nodes) > 0 {
+		res.Nodes = g.Nodes[0]
+	}
+	return res, err
+}
+
+// RunGroups expands several fragments as one run, as Run does for one. The
+// groups share the budget Confirm is asked about and the paths already expanded,
+// so a passage cited twice is still expanded once — the fragments are one
+// document as far as the expansion is concerned, only their output is kept
+// apart. Options.RootRefs is ignored; every group carries its own.
+func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grouped, error) {
+	res := Grouped{Nodes: make([][]Node, len(groups))}
 	if o.Depth <= 0 {
 		return res, nil
 	}
 	study, _ := r.(StudyResolver)
 	seen := map[string]bool{}
-	res.Nodes = plan(append(Refs(fragment), o.RootRefs...), seen)
-	frontier := pointersTo(res.Nodes)
+	var frontier []*Node
+	for i, g := range groups {
+		res.Nodes[i] = plan(append(Refs(g.Fragment), g.RootRefs...), seen)
+		frontier = append(frontier, pointersTo(res.Nodes[i])...)
+	}
 
 	for level := 1; len(frontier) > 0; level++ {
 		if o.Confirm != nil {
