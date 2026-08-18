@@ -190,8 +190,9 @@ func refString(r bibleref.Ref, t *bibleref.Table) string {
 	}
 }
 
-// forEachStudySection iterates the study sections of every verse in refs.
-func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func(ref string, sec model.StudySection)) error {
+// forEachStudySection iterates the study sections of every verse in refs,
+// together with the verse itself (zero value when its text is not on the page).
+func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func(ref string, verse model.Verse, sec model.StudySection)) error {
 	refs, table, err := parseRefsArg(ctx, a, args)
 	if err != nil {
 		return err
@@ -208,12 +209,19 @@ func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func
 			chapters[key] = doc
 		}
 		from, to := ref.VerseStart, ref.VerseEnd
+		// the verse text of the whole span, so every study section can be
+		// printed with the verse it belongs to
+		texts := map[int]model.Verse{}
+		verses, err := doc.Verses(from, to)
+		if err != nil {
+			return fmt.Errorf("%s: %w", refString(ref, table), err)
+		}
+		for _, v := range verses {
+			texts[v.ID%1000] = v
+		}
 		if from == 0 {
-			from, to = 1, 999
 			// bound the scan to the chapter's real last verse
-			if verses, err := doc.Verses(0, 0); err == nil && len(verses) > 0 {
-				to = verses[len(verses)-1].ID % 1000
-			}
+			from, to = 1, verses[len(verses)-1].ID%1000
 		}
 		for v := from; v <= to; v++ {
 			sec, ok := doc.StudySection(v)
@@ -224,7 +232,7 @@ func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func
 			if label == "" {
 				label = refString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter, VerseStart: v, VerseEnd: v}, table)
 			}
-			fn(label, sec)
+			fn(label, texts[v], sec)
 		}
 	}
 	return nil
@@ -234,7 +242,9 @@ func newBibleNotesCmd(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "notes <reference...>",
 		Short: "Show the study notes on a verse or verse range",
-		Args:  cobra.MinimumNArgs(1),
+		Long: `List the study notes attached to each verse, printed below the
+verse text they explain.`,
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			format, err := a.Format()
 			if err != nil {
@@ -242,12 +252,13 @@ func newBibleNotesCmd(a *app.App) *cobra.Command {
 			}
 			type entry struct {
 				Ref   string            `json:"ref"`
+				Verse model.Verse       `json:"verse"`
 				Notes []model.StudyNote `json:"notes"`
 			}
 			var entries []entry
-			err = forEachStudySection(cmd.Context(), a, args, func(ref string, sec model.StudySection) {
+			err = forEachStudySection(cmd.Context(), a, args, func(ref string, verse model.Verse, sec model.StudySection) {
 				if len(sec.Notes) > 0 {
-					entries = append(entries, entry{Ref: ref, Notes: sec.Notes})
+					entries = append(entries, entry{Ref: ref, Verse: verse, Notes: sec.Notes})
 				}
 			})
 			if err != nil {
@@ -262,6 +273,9 @@ func newBibleNotesCmd(a *app.App) *cobra.Command {
 			var b strings.Builder
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
+				if err := writeVerseText(&b, a, format, e.Verse); err != nil {
+					return err
+				}
 				for _, n := range e.Notes {
 					body, err := render.Render(n.HTML, format, render.Options{BaseURL: a.HTTP().Base.WOL})
 					if err != nil {
@@ -295,7 +309,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 				XRefs []model.CrossRef `json:"xrefs"`
 			}
 			var entries []entry
-			err = forEachStudySection(ctx, a, args, func(ref string, sec model.StudySection) {
+			err = forEachStudySection(ctx, a, args, func(ref string, _ model.Verse, sec model.StudySection) {
 				if len(sec.XRefs) > 0 {
 					entries = append(entries, entry{Ref: ref, XRefs: sec.XRefs})
 				}
@@ -356,7 +370,7 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var items []model.Result
-			err := forEachStudySection(cmd.Context(), a, args, func(ref string, sec model.StudySection) {
+			err := forEachStudySection(cmd.Context(), a, args, func(ref string, _ model.Verse, sec model.StudySection) {
 				for _, m := range sec.Media {
 					title := m.Caption
 					if title == "" {
@@ -395,8 +409,9 @@ func newBibleResearchCmd(a *app.App) *cobra.Command {
 		Use:   "research <reference...>",
 		Short: "Show research-guide references on a verse (publications discussing it)",
 		Long: `List the Research Guide entries attached to a verse: publications
-that discuss it. With -x|--excerpts the referenced passage of each
-publication is fetched and shown, including a link to the full article.`,
+that discuss it. Every listing is printed below the verse text it belongs to.
+With -x|--excerpts the referenced passage of each publication is fetched and
+shown, including a link to the full article.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -406,12 +421,13 @@ publication is fetched and shown, including a link to the full article.`,
 			}
 			type entry struct {
 				Ref   string               `json:"ref"`
+				Verse model.Verse          `json:"verse"`
 				Items []model.ResearchItem `json:"items"`
 			}
 			var entries []entry
-			err = forEachStudySection(ctx, a, args, func(ref string, sec model.StudySection) {
+			err = forEachStudySection(ctx, a, args, func(ref string, verse model.Verse, sec model.StudySection) {
 				if len(sec.Research) > 0 {
-					entries = append(entries, entry{Ref: ref, Items: sec.Research})
+					entries = append(entries, entry{Ref: ref, Verse: verse, Items: sec.Research})
 				}
 			})
 			if err != nil {
@@ -446,6 +462,9 @@ publication is fetched and shown, including a link to the full article.`,
 			var b strings.Builder
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
+				if err := writeVerseText(&b, a, format, e.Verse); err != nil {
+					return err
+				}
 				for _, it := range e.Items {
 					fmt.Fprintf(&b, "- %s", mdLinked(it.Title, firstNonEmpty(it.ArticleURL, it.PCPath)))
 					if it.Source != "" {
@@ -498,6 +517,22 @@ func newBibleBooksCmd(a *app.App) *cobra.Command {
 		},
 	}
 	return cmd
+}
+
+// writeVerseText renders the verse itself, printed above the study material
+// listed for it. A verse without text is skipped.
+func writeVerseText(b *strings.Builder, a *app.App, f render.Format, v model.Verse) error {
+	if strings.TrimSpace(v.HTML) == "" {
+		return nil
+	}
+	body, err := render.Render(v.HTML, f, render.Options{BaseURL: a.HTTP().Base.WOL})
+	if err != nil {
+		return err
+	}
+	if body = strings.TrimSpace(body); body != "" {
+		fmt.Fprintf(b, "%s\n\n", body)
+	}
+	return nil
 }
 
 func writeHeading(b *strings.Builder, f render.Format, text string) {
