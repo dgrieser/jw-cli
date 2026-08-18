@@ -32,15 +32,44 @@ type Resolver interface {
 	Resolve(ctx context.Context, path string) (model.Tooltip, error)
 }
 
+// Study is what the study bible attaches to a verse beyond its text.
+type Study struct {
+	// Notes are printed with the verse itself.
+	Notes []model.StudyNote
+	// Research are the research-guide passages, which resolve through the same
+	// citation endpoint as anything else and are followed like the verse's own
+	// citations.
+	Research []Ref
+	// Links are the research-guide entries pointing at a whole article rather
+	// than a passage. There is no citation endpoint behind those, so they are
+	// listed instead of unfolded.
+	Links []model.ResearchItem
+	// Requests is how many requests gathering this cost, reported even
+	// alongside an error, so the budget the user confirmed stays honest.
+	Requests int
+}
+
+// StudyResolver is an optional capability of a Resolver: given the title wol
+// answered a verse citation with, it returns the study material of that verse.
+// A Resolver without it leaves every verse at its bare text.
+type StudyResolver interface {
+	Study(ctx context.Context, verseTitle string) (Study, error)
+}
+
 // Node is one expanded citation together with what its own content cites.
 type Node struct {
 	Ref Ref
 	// Title and HTML are the resolved content. Err is set instead when the
 	// reference could not be resolved; the reference is still reported, so a
 	// gap in the output is never silent.
-	Title    string
-	HTML     string
-	Err      error
+	Title string
+	HTML  string
+	Err   error
+	// Notes and Links are the study material of a verse; StudyErr says the
+	// study pane could not be read, for the same reason Err is kept.
+	Notes    []model.StudyNote
+	Links    []model.ResearchItem
+	StudyErr error
 	Children []Node
 }
 
@@ -57,6 +86,11 @@ type Options struct {
 	Confirm func(level, requests int) (bool, error)
 	// Progress reports each completed request within a level. Nil is silent.
 	Progress func(level, done, total int)
+	// RootRefs are references belonging to the fragment itself rather than to a
+	// citation inside it — the research-guide passages of the verses a bible
+	// passage is made of. They are expanded alongside the fragment's own
+	// citations, at the same level.
+	RootRefs []Ref
 }
 
 // Result is an expansion and how far it got.
@@ -73,50 +107,68 @@ type Result struct {
 }
 
 // Run expands the citations in an HTML fragment. References are followed breadth
-// first, so the request count for the next level is known exactly before it is
-// spent — that is what Confirm is told. Every path is expanded at most once
-// across the whole tree, which both removes repeats and keeps a citation cycle
-// from running forever.
+// first, so the request count for the next level is known before it is spent —
+// that is what Confirm is told. Every path is expanded at most once across the
+// whole tree, which both removes repeats and keeps a citation cycle from running
+// forever. When r is a StudyResolver, every verse also brings its study
+// material: the notes are printed with it, the research-guide passages are
+// followed like the citations inside it.
 func Run(ctx context.Context, r Resolver, fragment string, o Options) (Result, error) {
 	var res Result
 	if o.Depth <= 0 {
 		return res, nil
 	}
+	study, _ := r.(StudyResolver)
 	seen := map[string]bool{}
-	res.Nodes = plan(Refs(fragment), seen)
+	res.Nodes = plan(append(Refs(fragment), o.RootRefs...), seen)
 	frontier := pointersTo(res.Nodes)
 
 	for level := 1; len(frontier) > 0; level++ {
-		if o.Confirm != nil && len(frontier) > o.Threshold {
-			ok, err := o.Confirm(level, len(frontier))
-			if err != nil {
-				return res, err
-			}
-			if !ok {
-				res.Pending += len(frontier)
-				res.Stopped = true
-				return res, nil
+		if o.Confirm != nil {
+			if cost := requestCost(frontier, study != nil); cost > o.Threshold {
+				ok, err := o.Confirm(level, cost)
+				if err != nil {
+					return res, err
+				}
+				if !ok {
+					res.Pending += len(frontier)
+					res.Stopped = true
+					return res, nil
+				}
 			}
 		}
+		// the research-guide passages each verse turned out to have, kept aside
+		// so they join the citations found in its text
+		research := map[*Node][]Ref{}
 		for i, n := range frontier {
 			if err := ctx.Err(); err != nil {
 				res.Pending += len(frontier) - i
 				return res, err
 			}
 			tip, err := r.Resolve(ctx, n.Ref.Path)
+			res.Requests++
 			if err != nil {
 				n.Err = err
 			} else {
 				n.Title, n.HTML = tip.Title, tip.ContentHTML
 			}
-			res.Requests++
+			if study != nil && n.Err == nil && n.Ref.IsVerse() {
+				s, err := study.Study(ctx, n.Title)
+				res.Requests += s.Requests
+				if err != nil {
+					n.StudyErr = err
+				} else {
+					n.Notes, n.Links = s.Notes, s.Links
+					research[n] = s.Research
+				}
+			}
 			if o.Progress != nil {
 				o.Progress(level, i+1, len(frontier))
 			}
 		}
 		var next []*Node
 		for _, n := range frontier {
-			refs := plan(Refs(n.HTML), seen)
+			refs := plan(append(Refs(n.HTML), research[n]...), seen)
 			if level == o.Depth {
 				// the depth is used up: report what was left rather than
 				// letting the output look complete
@@ -132,6 +184,24 @@ func Run(ctx context.Context, r Resolver, fragment string, o Options) (Result, e
 		frontier = next
 	}
 	return res, nil
+}
+
+// requestCost is how many requests a level needs. With study material a verse
+// costs one more than its own text: the chapter page the study pane lives on.
+// Chapter pages are shared by every verse in the chapter and fetched once, so
+// this is an upper bound — the right side to err on for a question that is
+// answered before the traffic is spent.
+func requestCost(frontier []*Node, withStudy bool) int {
+	cost := len(frontier)
+	if !withStudy {
+		return cost
+	}
+	for _, n := range frontier {
+		if n.Ref.IsVerse() {
+			cost++
+		}
+	}
+	return cost
 }
 
 // plan turns refs into unresolved nodes, skipping paths already accounted for

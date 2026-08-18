@@ -58,6 +58,55 @@ func TestBibleReadRangeText(t *testing.T) {
 	}
 }
 
+// TestBibleReadUnfold covers the study material of the verses being read: the
+// notes print under the passage, the research-guide passage it points at is
+// unfolded, and the entry that names a whole article is listed instead.
+func TestBibleReadUnfold(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "read", "-l", "en", "-o", "raw", "--unfold", "1", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"## John 3:16",
+		"God loved the world so much",
+		"### Study notes",
+		"**loved:**",
+		"**everlasting life:**",
+		"### Research guide",
+		"Insight, Volume 2, page 274",
+		"### References",
+		"Jehovah loved the world of redeemable mankind",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// TestBibleReadUnfoldJSON keeps the expansion in the data model, not only in the
+// rendered page.
+func TestBibleReadUnfoldJSON(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "read", "-l", "en", "-o", "json", "--unfold", "1", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `"unfold"`) || !strings.Contains(out, "Study notes") {
+		t.Errorf("json missing the expansion:\n%s", out)
+	}
+}
+
+// TestBibleReadWithoutUnfoldStaysBare pins that the study material is something
+// --unfold asks for: reading a verse still prints the verse.
+func TestBibleReadWithoutUnfoldStaysBare(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "read", "-l", "en", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Study notes") || strings.Contains(out, "References") {
+		t.Errorf("unasked-for study material:\n%s", out)
+	}
+}
+
 func TestBibleNotes(t *testing.T) {
 	out, err := runCmd(t, bibleMux(t), "bible", "notes", "-l", "en", "John 3:16")
 	if err != nil {

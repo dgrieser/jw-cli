@@ -34,6 +34,150 @@ func (f *fakeResolver) Resolve(_ context.Context, path string) (model.Tooltip, e
 	return tip, nil
 }
 
+// fakeStudyResolver is a resolver that also knows the study pane of a verse,
+// keyed by the title the citation resolved to.
+type fakeStudyResolver struct {
+	*fakeResolver
+	study    map[string]Study
+	fail     map[string]bool
+	askedFor []string
+}
+
+func (f *fakeStudyResolver) Study(_ context.Context, title string) (Study, error) {
+	f.askedFor = append(f.askedFor, title)
+	if f.fail[title] {
+		// a chapter page was still fetched before it went wrong
+		return Study{Requests: 1}, errors.New("study boom")
+	}
+	return f.study[title], nil
+}
+
+func TestRunStudyAttachesNotesAndFollowsResearch(t *testing.T) {
+	r := &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/1/1":  {Title: "John 3:16", ContentHTML: "<p>God loved the world</p>"},
+			"/wol/pc/it/2": {Title: "Love", ContentHTML: "<p>the Greek word</p>"},
+		}},
+		study: map[string]Study{"John 3:16": {
+			Notes:    []model.StudyNote{{Lemma: "loved", HTML: "<p><strong>loved:</strong> a·ga·pa'o</p>"}},
+			Research: []Ref{{Text: "it-2 528", Path: "/wol/pc/it/2"}},
+			Links:    []model.ResearchItem{{Title: "Insight, Volume 2", ArticleURL: "/en/wol/d/r1/lp-e/1102014204"}},
+			Requests: 1,
+		}},
+	}
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Joh 3:16"), Options{Depth: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 1 {
+		t.Fatalf("got %d nodes: %+v", len(res.Nodes), res.Nodes)
+	}
+	verse := res.Nodes[0]
+	if len(verse.Notes) != 1 || verse.Notes[0].Lemma != "loved" {
+		t.Errorf("study notes not attached: %+v", verse.Notes)
+	}
+	if len(verse.Links) != 1 || verse.Links[0].Title != "Insight, Volume 2" {
+		t.Errorf("article-only research entries not attached: %+v", verse.Links)
+	}
+	// the research passage is followed like a citation of the verse
+	if len(verse.Children) != 1 || verse.Children[0].Title != "Love" {
+		t.Fatalf("research passage not unfolded: %+v", verse.Children)
+	}
+	// the verse, its chapter page, and the research passage
+	if res.Requests != 3 {
+		t.Errorf("Requests = %d, want 3", res.Requests)
+	}
+	if len(r.askedFor) != 1 || r.askedFor[0] != "John 3:16" {
+		t.Errorf("study asked for %v, want the verse title once", r.askedFor)
+	}
+}
+
+// TestRunStudyOnlyForVerses keeps the study pane to what has one: a passage of
+// another publication is not a verse.
+func TestRunStudyOnlyForVerses(t *testing.T) {
+	r := &fakeStudyResolver{fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/pc/1/1": {Title: "Trust the Judge", ContentHTML: "<p>a paragraph</p>"},
+	}}}
+	if _, err := Run(context.Background(), r, link("/wol/pc/1/1", "6 ¶15"), Options{Depth: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.askedFor) != 0 {
+		t.Errorf("study asked for %v, want nothing", r.askedFor)
+	}
+}
+
+// TestRunStudyErrorKeepsTheVerse pins that a study pane that cannot be read
+// costs the verse nothing: its text stands, and the failure is recorded rather
+// than swallowed.
+func TestRunStudyErrorKeepsTheVerse(t *testing.T) {
+	r := &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/1/1": {Title: "John 3:16", ContentHTML: "<p>God loved the world</p>"},
+		}},
+		fail: map[string]bool{"John 3:16": true},
+	}
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Joh 3:16"), Options{Depth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := res.Nodes[0]
+	if n.StudyErr == nil || n.Err != nil {
+		t.Errorf("want a study error and an intact verse: StudyErr=%v Err=%v", n.StudyErr, n.Err)
+	}
+	if !strings.Contains(n.HTML, "God loved the world") {
+		t.Errorf("verse text lost: %+v", n)
+	}
+	// the failed attempt still spent its request
+	if res.Requests != 2 {
+		t.Errorf("Requests = %d, want 2", res.Requests)
+	}
+}
+
+// TestRunConfirmCountsChapterPages covers what the user is asked before the
+// traffic is spent: with study material a verse costs its own text plus the
+// chapter page the pane lives on.
+func TestRunConfirmCountsChapterPages(t *testing.T) {
+	r := &fakeStudyResolver{fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/bc/1": {Title: "A"}, "/wol/bc/2": {Title: "B"}, "/wol/pc/3": {Title: "C"},
+	}}}
+	var asked int
+	_, err := Run(context.Background(), r,
+		link("/wol/bc/1", "A")+link("/wol/bc/2", "B")+link("/wol/pc/3", "C"),
+		Options{
+			Depth:   1,
+			Confirm: func(_, requests int) (bool, error) { asked = requests; return true, nil },
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// three references, of which two are verses that may need a chapter page
+	if asked != 5 {
+		t.Errorf("confirm asked for %d requests, want 5", asked)
+	}
+}
+
+// TestRunRootRefs covers the references of the fragment itself, which jw bible
+// read hands over: they expand alongside the citations found inside it.
+func TestRunRootRefs(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/bc/1/1":  {Title: "John 3:16"},
+		"/wol/pc/it/2": {Title: "Love"},
+	}}
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Joh 3:16"), Options{
+		Depth:    1,
+		RootRefs: []Ref{{Text: "it-2 528", Path: "/wol/pc/it/2"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 2 {
+		t.Fatalf("got %d nodes, want the fragment's and the passage's: %+v", len(res.Nodes), res.Nodes)
+	}
+	if res.Nodes[1].Title != "Love" {
+		t.Errorf("root ref not expanded: %+v", res.Nodes[1])
+	}
+}
+
 func TestRefs(t *testing.T) {
 	body := `<p>` +
 		link("/wol/bc/1/1", "Matt 24:14") +

@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/i18n"
+	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/unfold"
 )
 
@@ -58,6 +62,25 @@ func TestUnfoldHeading(t *testing.T) {
 		if got := unfoldHeading(tc.node, "Acts 24:15", i18n.EN.Text()); got != tc.want {
 			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestUnfoldHeadingCitationAlreadySaysIt covers a research-guide entry, which
+// cites an article by its own headline; wol then answers with that headline
+// again, and the heading must not carry it twice.
+func TestUnfoldHeadingCitationAlreadySaysIt(t *testing.T) {
+	n := unfold.Node{
+		Ref:   unfold.Ref{Text: "“God So Loved the World”, The Watchtower, 7/1/2014", Path: "/wol/pc/1/2"},
+		Title: "God So Loved the World",
+	}
+	want := "“God So Loved the World”, The Watchtower, 7/1/2014"
+	if got := unfoldHeading(n, "", i18n.EN.Text()); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	// a title that says something else still completes the citation
+	other := unfold.Node{Ref: unfold.Ref{Text: "it-2 528", Path: "/wol/pc/1/2"}, Title: "Love"}
+	if got := unfoldHeading(other, "", i18n.EN.Text()); got != "it-2 528 → Love" {
+		t.Errorf("got %q", got)
 	}
 }
 
@@ -115,6 +138,124 @@ func TestUnfoldHTML(t *testing.T) {
 	}
 	if unfoldHTML(unfold.Result{}, txt) != "" {
 		t.Error("nothing expanded should append nothing")
+	}
+}
+
+// TestWriteStudy covers the study material under an unfolded verse: the notes,
+// then the research-guide entries that name a whole article and so have no
+// passage to unfold.
+func TestWriteStudy(t *testing.T) {
+	var b strings.Builder
+	writeStudy(&b, unfold.Node{
+		Notes: []model.StudyNote{{Lemma: "loved", HTML: "<p><strong>loved:</strong> a·ga·pa'o</p>"}},
+		Links: []model.ResearchItem{{
+			Title:      "Insight, Volume 2, page 274",
+			Source:     "Research Guide",
+			ArticleURL: "/en/wol/d/r1/lp-e/1102014204",
+		}},
+	}, 4, i18n.EN.Text())
+	out := b.String()
+	for _, want := range []string{
+		"<h4>Study notes</h4>",
+		"<strong>loved:</strong>",
+		"<h4>Research guide</h4>",
+		`<a href="/en/wol/d/r1/lp-e/1102014204">Insight, Volume 2, page 274</a> (Research Guide)`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	// a verse without study material adds nothing
+	var empty strings.Builder
+	writeStudy(&empty, unfold.Node{Title: "John 3:16"}, 4, i18n.EN.Text())
+	if empty.String() != "" {
+		t.Errorf("nothing to say should say nothing: %q", empty.String())
+	}
+}
+
+// TestWriteStudyReportsAnUnreadablePane pins that a study pane that could not be
+// read says so instead of leaving the verse looking like it has none.
+func TestWriteStudyReportsAnUnreadablePane(t *testing.T) {
+	var b strings.Builder
+	writeStudy(&b, unfold.Node{StudyErr: errTest}, 4, i18n.EN.Text())
+	if !strings.Contains(b.String(), "could not be read") || !strings.Contains(b.String(), "boom") {
+		t.Errorf("an unreadable study pane should say so:\n%s", b.String())
+	}
+}
+
+// studyUnfoldMux serves a document citing a verse, that verse's citation
+// endpoint, the chapter page its study pane lives on, and the research-guide
+// passage the pane points at — the whole chain an unfolded verse walks.
+func studyUnfoldMux(t *testing.T) *http.ServeMux {
+	mux := languagesMux(t)
+	mux.HandleFunc("/en", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<a href="/en/wol/h/r1/lp-e">home</a>`))
+	})
+	mux.HandleFunc("/en/wol/d/r1/lp-e/2024360", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><div id="article">
+		  <header><h1>God So Loved</h1></header>
+		  <div class="bodyTxt"><p>Consider what Jesus said.
+		    (<a href="/en/wol/bc/r1/lp-e/2024360/0/0" data-bid="1-1" class="b">Joh 3:16</a>)</p></div>
+		</div></body></html>`))
+	})
+	mux.HandleFunc("/wol/bc/r1/lp-e/2024360/0/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"title": "John 3:16",
+			"content": "<p>For God loved the world so much</p>", "url": "/en/wol/b/r1/lp-e/nwtsty/43/3"}]}`))
+	})
+	mux.HandleFunc("/en/wol/b/r1/lp-e/nwtsty/43/3", func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(filepath.Join("..", "api", "wol", "testdata", "chapter_john3.html"))
+		if err != nil {
+			t.Errorf("fixture: %v", err)
+			http.Error(w, "missing", 500)
+			return
+		}
+		w.Write(b)
+	})
+	mux.HandleFunc("/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"content": "<p>Jehovah loved the world of redeemable mankind.</p>",
+			"title": "God So Loved the World", "url": "/en/wol/d/r1/lp-e/2014486"}]}`))
+	})
+	return mux
+}
+
+// TestArticleUnfoldBringsVerseStudyMaterial covers the whole chain: the document
+// cites a verse, the verse brings its study notes, and the research-guide
+// passage of that verse is unfolded one level deeper.
+func TestArticleUnfoldBringsVerseStudyMaterial(t *testing.T) {
+	out, err := runCmd(t, studyUnfoldMux(t), "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"## References",
+		"Joh 3:16",
+		"For God loved the world so much",
+		"Study notes",
+		"loved:",            // the note's lemma
+		"Research guide",    // the entry that points at a whole article
+		"Insight, Volume 2", // and its title
+		"Jehovah loved the world of redeemable mankind", // the research passage, one level deeper
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// TestArticleUnfoldOneLevelKeepsResearchPending pins the request curve: the
+// notes come with the verse, the passages it references wait for level two.
+func TestArticleUnfoldOneLevelKeepsResearchPending(t *testing.T) {
+	out, err := runCmd(t, studyUnfoldMux(t), "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Study notes") {
+		t.Errorf("the notes come with the verse:\n%s", out)
+	}
+	if strings.Contains(out, "redeemable mankind") {
+		t.Errorf("the research passage belongs to level two:\n%s", out)
 	}
 }
 

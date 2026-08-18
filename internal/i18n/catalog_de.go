@@ -50,10 +50,14 @@ var de = Messages{
 	MarginalReferenceWithSource: "Querverweis %s → %s",
 
 	UnfoldHeading:  "Referenzen",
-	UnfoldConfirm:  "Ebene %d braucht %d weitere Abfragen an wol.jw.org. Fortfahren? [j/N] ",
+	UnfoldConfirm:  "Ebene %d braucht bis zu %d weitere Abfragen an wol.jw.org. Fortfahren? [j/N] ",
 	UnfoldProgress: "Ebene %d wird aufgeklappt: %d/%d",
 	UnfoldStopped:  "Hier abgebrochen: %d weitere Referenzen wurden nicht aufgeklappt.",
 	UnfoldFailed:   "konnte nicht aufgeklappt werden: %s",
+
+	StudyNotesHeading: "Studienanmerkungen",
+	ResearchHeading:   "Forschungsverzeichnis",
+	StudyFailed:       "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
 
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",

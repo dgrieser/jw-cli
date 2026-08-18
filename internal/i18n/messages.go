@@ -108,8 +108,18 @@ type Messages struct {
 
 	// --- unfolding citations ------------------------------------------------
 	UnfoldHeading string
-	// UnfoldConfirm takes the level and the number of requests it needs.
+	// UnfoldConfirm takes the level and the number of requests it needs. That
+	// number is an upper bound: verses of the same chapter share the chapter
+	// page their study pane comes from, and it is fetched once.
 	UnfoldConfirm string
+	// StudyNotesHeading labels the study notes printed with an unfolded verse.
+	StudyNotesHeading string
+	// ResearchHeading labels the research-guide entries of an unfolded verse
+	// that point at a whole article, which has no passage to unfold.
+	ResearchHeading string
+	// StudyFailed takes the reason the study pane of a verse could not be read.
+	// The verse itself is still printed.
+	StudyFailed string
 	// UnfoldProgress takes the level, the requests done and the total.
 	UnfoldProgress string
 	// UnfoldStopped takes the number of references left unexpanded after the

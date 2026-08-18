@@ -69,7 +69,11 @@ func chapterFor(ctx context.Context, a *app.App, edition string, ref bibleref.Re
 }
 
 func newBibleReadCmd(a *app.App) *cobra.Command {
-	var edition string
+	var (
+		edition   string
+		depth     int
+		assumeYes bool
+	)
 	cmd := &cobra.Command{
 		Use:   "read <reference...>",
 		Short: "Read verses, verse ranges, or whole chapters",
@@ -77,12 +81,17 @@ func newBibleReadCmd(a *app.App) *cobra.Command {
 Library. References accept full names, abbreviations, and book numbers, in
 English or in the selected content language.
 
+With --unfold the study material of the verses is printed with them: the study
+notes, and the text behind every reference they carry — the marginal references
+and the research-guide passages — followed that many levels deep.
+
 Examples:
   jw bible read Matthew 24:14
   jw bible read "mt 24:3-14"
   jw bible read "Joh 3:16; Ro 5:8" -o text
   jw bible read "Psalm 83" --bible nwt
-  jw bible read -l de "Matthäus 24:14"`,
+  jw bible read -l de "Matthäus 24:14"
+  jw bible read John 3:16 --unfold 1`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -97,9 +106,18 @@ Examples:
 			type passage struct {
 				Ref    string        `json:"ref"`
 				Verses []model.Verse `json:"verses"`
+				// Unfold is the expansion of everything the passage references,
+				// as an HTML appendix to its verses.
+				Unfold string `json:"unfold,omitempty"`
 			}
 			var passages []passage
 			chapters := map[string]*wol.ChapterDoc{}
+			// one expander for every passage read, so they share the chapter
+			// pages their study panes come from
+			var expander *tooltipResolver
+			if depth > 0 {
+				expander = newTooltipResolver(a, chapters)
+			}
 			for _, ref := range refs {
 				key := fmt.Sprintf("%s-%d-%d", edition, ref.Book, ref.Chapter)
 				doc, ok := chapters[key]
@@ -114,7 +132,14 @@ Examples:
 				if err != nil {
 					return fmt.Errorf("%s: %w", refString(ref, table), err)
 				}
-				passages = append(passages, passage{Ref: refString(ref, table), Verses: verses})
+				p := passage{Ref: refString(ref, table), Verses: verses}
+				if depth > 0 {
+					p.Unfold, err = unfoldBiblePassage(ctx, a, expander, ref, verses, depth, assumeYes)
+					if err != nil {
+						return err
+					}
+				}
+				passages = append(passages, p)
 			}
 			if format == render.JSON {
 				return a.WriteJSON(passages)
@@ -129,6 +154,7 @@ Examples:
 					html.WriteString(v.HTML)
 					html.WriteString(" ")
 				}
+				html.WriteString(p.Unfold)
 				body, err := render.Render(html.String(), format, render.Options{BaseURL: a.HTTP().Base.WOL})
 				if err != nil {
 					return err
@@ -146,6 +172,8 @@ Examples:
 		},
 	}
 	cmd.Flags().StringVarP(&edition, "bible", "b", "nwtsty", "bible edition: "+strings.Join(wol.BibleEditions, ", "))
+	cmd.Flags().IntVar(&depth, "unfold", 0, "print the study notes and the text behind every reference, following references this many levels deep")
+	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
 	return cmd
 }
 

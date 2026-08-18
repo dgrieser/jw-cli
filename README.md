@@ -138,6 +138,7 @@ jw bible read Matthew 24:14
 jw bible read "mt 24:3-14" -o text           # abbreviations, ranges
 jw bible read "Joh 3:16; Ro 5:8"             # multiple references
 jw bible read "Psalm 83" --bible nwt         # other editions: nwt, bi12, ...
+jw bible read John 3:16 --unfold 1           # verse + study notes + its references
 jw bible read -l de "Matthäus 24:14"         # localized book names
 jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text
@@ -200,7 +201,7 @@ the two meeting parts — takes the same flags for what to do with it:
 | `--refs` | List the bible verses the document cites, each linked to the verse. |
 | `--images` | List its illustrations with captions, downloadable by index. |
 | `--download-images` | Download all of them, with `-d, --dir` for the target. |
-| `--unfold N` | Print the text behind every citation, following references `N` levels deep. |
+| `--unfold N` | Print the text behind every citation, following references `N` levels deep. Verses also bring their study material. |
 
 ```sh
 jw meetings midweek --refs           # the verses that week's part cites
@@ -225,13 +226,35 @@ what *those* passages cite nests one level deeper. Every reference is expanded a
 most once across the whole document, which removes repeats and stops two passages
 that cite each other from looping.
 
-Depth costs requests: one per reference, against a site limited to about two a
-second. References are followed breadth first, so the count for the next level is
-known exactly before it is spent — above 200 it is quoted and confirmed:
+An unfolded verse brings the study bible's material on it as well, so a verse
+reads the way it does in the study pane:
+
+- its **study notes** print under the verse text,
+- its **marginal references** and its **research-guide passages** are references
+  of that verse, so their text arrives one level deeper — `--unfold 1` gives the
+  verses and their notes, `--unfold 2` also what those verses point at,
+- research-guide entries naming a whole article instead of a passage have no
+  passage to unfold and are listed with their link under `Research guide`.
+
+The study pane lives on the chapter page, so the first verse of a chapter pays
+for it and every other verse of that chapter comes free. `jw bible read` takes
+`--unfold` on the same terms, on the verses it is reading:
+
+```sh
+jw bible read John 3:16 --unfold 1    # the verse, its study notes, its research entries
+jw bible read John 3:16 --unfold 2    # and the text behind each of those references
+```
+
+Depth costs requests: one per reference plus one per chapter page, against a site
+limited to about two a second. References are followed breadth first, so the
+count for the next level is known before it is spent — above 200 it is quoted and
+confirmed:
 
 ```
-Unfolding level 2 needs 604 more requests to wol.jw.org. Continue? [y/N]
+Unfolding level 2 needs up to 604 more requests to wol.jw.org. Continue? [y/N]
 ```
+
+The count is an upper bound because verses of one chapter share its page.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
 since a script has nobody to ask. Declining stops there and the output says how
@@ -272,9 +295,12 @@ smoke-tested once on a normal network:
 5. `jw bible notes/xrefs/media/research John 3:16` — study-pane selectors in
    `internal/api/wol/bible.go` (grouped in one `sel*` constant block).
 6. `jw dailytext` — the `.todayItem` markup.
-7. A video download — confirm the pub-media/mediator `checksum` fields are
+7. `jw dailytext --unfold 1` — an unfolded verse finds its study pane through
+   the title wol answers the `/bc/` citation with ("John 3:16"), parsed as a
+   reference. A live title in another shape leaves the notes out silently.
+8. A video download — confirm the pub-media/mediator `checksum` fields are
    MD5 (that is what the downloader verifies).
-8. wol requests from data-center IPs may hit Akamai bot protection; if you
+9. wol requests from data-center IPs may hit Akamai bot protection; if you
    see 403s, try from a residential connection.
 
 Selectors and URL patterns most likely to drift are deliberately grouped in

@@ -12,7 +12,9 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -25,23 +27,215 @@ import (
 // levels that finish in well under a minute go through unremarked.
 const unfoldThreshold = 200
 
-// tooltipResolver adapts the wol client to unfold.Resolver.
-type tooltipResolver struct{ a *app.App }
+// studyEdition is the only edition that carries a study pane, matching what
+// jw bible notes, xrefs and research read.
+const studyEdition = "nwtsty"
 
-func (r tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
+// tooltipResolver adapts the wol client to unfold.Resolver, and reads the study
+// pane of every verse an expansion touches.
+type tooltipResolver struct {
+	a     *app.App
+	table *bibleref.Table
+	// sections holds the study pane of a chapter, keyed edition-book-chapter.
+	// Only the extracted sections are kept, not the chapter document they came
+	// from: an expansion can touch dozens of chapters, and their parsed pages
+	// would sit in memory for the whole run.
+	sections map[string]map[int]model.StudySection
+	// docs are chapter pages the caller already holds, borrowed rather than
+	// fetched again. Same key as sections.
+	docs map[string]*wol.ChapterDoc
+}
+
+func newTooltipResolver(a *app.App, docs map[string]*wol.ChapterDoc) *tooltipResolver {
+	return &tooltipResolver{a: a, sections: map[string]map[int]model.StudySection{}, docs: docs}
+}
+
+func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
 	return r.a.WOL().Tooltip(ctx, path)
 }
+
+// Study reads the study pane of the verse wol titled a citation with. wol titles
+// a verse citation with the reference spelled out ("Acts 24:15"), which is what
+// locates the chapter page the pane lives on; a title that is not a reference
+// belongs to something other than a verse and has no pane to look for.
+func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study, error) {
+	if r.table == nil {
+		r.table = bookTable(ctx, r.a)
+	}
+	refs, err := bibleref.Parse(title, r.table)
+	if err != nil {
+		return unfold.Study{}, nil
+	}
+	var out unfold.Study
+	for _, ref := range refs {
+		s, err := r.studyOf(ctx, ref)
+		out.Requests += s.Requests
+		if err != nil {
+			return out, err
+		}
+		out.Notes = append(out.Notes, s.Notes...)
+		out.Research = append(out.Research, s.Research...)
+		out.Links = append(out.Links, s.Links...)
+	}
+	return out, nil
+}
+
+// studyOf collects the study material of every verse ref covers.
+func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold.Study, error) {
+	key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+	sections, ok := r.sections[key]
+	var out unfold.Study
+	if !ok {
+		doc, borrowed := r.docs[key]
+		if !borrowed {
+			var err error
+			doc, err = chapterFor(ctx, r.a, studyEdition, ref)
+			out.Requests++
+			if err != nil {
+				return out, err
+			}
+		}
+		sections = studySections(doc)
+		r.sections[key] = sections
+	}
+	from, to := ref.VerseStart, ref.VerseEnd
+	if from == 0 {
+		// a whole chapter: every verse that has a pane at all
+		from, to = 1, maxVerse(sections)
+	}
+	to = max(to, from)
+	for v := from; v <= to; v++ {
+		sec, ok := sections[v]
+		if !ok {
+			continue
+		}
+		out.Notes = append(out.Notes, sec.Notes...)
+		for _, item := range sec.Research {
+			if item.PCPath == "" {
+				// a whole article rather than a passage: nothing to resolve
+				out.Links = append(out.Links, item)
+				continue
+			}
+			out.Research = append(out.Research, unfold.Ref{Text: researchLabel(item), Path: item.PCPath})
+		}
+	}
+	return out, nil
+}
+
+// researchLabel is how a research-guide passage is cited. The entry's own line
+// names the publication and where in it the passage sits, which is what a
+// citation inside a document would say; the group it came from ("Research
+// Guide") only stands in when there is no such line.
+func researchLabel(item model.ResearchItem) string {
+	if item.Title != "" {
+		return item.Title
+	}
+	return item.Source
+}
+
+// longestChapter is how far to look for study sections when the chapter's own
+// verses cannot be read: Psalm 119, the longest chapter there is.
+const longestChapter = 176
+
+// studySections extracts the study pane of every verse of a chapter at once, so
+// the parsed page can be dropped afterwards.
+func studySections(doc *wol.ChapterDoc) map[int]model.StudySection {
+	out := map[int]model.StudySection{}
+	last := longestChapter
+	if verses, err := doc.Verses(0, 0); err == nil && len(verses) > 0 {
+		last = verses[len(verses)-1].ID % 1000
+	}
+	for v := 1; v <= last; v++ {
+		if sec, ok := doc.StudySection(v); ok {
+			out[v] = sec
+		}
+	}
+	return out
+}
+
+// maxVerse is the highest verse a chapter's study pane covers.
+func maxVerse(sections map[int]model.StudySection) int {
+	high := 0
+	for v := range sections {
+		high = max(high, v)
+	}
+	return high
+}
+
+// The heading level an expansion is appended at. A document carries its title as
+// the only h1, so its references are an h2 section; a bible passage is itself an
+// h2, and its references belong under it.
+const (
+	documentUnfoldLevel = 2
+	passageUnfoldLevel  = 3
+)
 
 // unfoldArticle expands the citations in art and returns the document body with
 // the expansion appended as HTML, so the whole thing goes through the same
 // renderer — and gains the same hyperlinks, wrapping and styling — as the
 // article itself.
 func unfoldArticle(ctx context.Context, a *app.App, art model.Article, depth int, assumeYes bool) (string, error) {
+	appendix, err := unfoldFragment(ctx, a, newTooltipResolver(a, nil), art.HTML, unfoldRequest{
+		depth: depth, assumeYes: assumeYes, level: documentUnfoldLevel,
+	})
+	if err != nil {
+		return "", err
+	}
+	return art.HTML + appendix, nil
+}
+
+// unfoldBiblePassage expands what a bible passage references. The passage is
+// nobody's citation, so its own study material is gathered up front: the notes
+// are printed under it, and its research-guide passages go into the expansion as
+// references of the passage itself, alongside the marginal references its verses
+// carry. Chapter pages the caller already read are borrowed, so the study pane
+// costs no second request for them.
+func unfoldBiblePassage(ctx context.Context, a *app.App, r *tooltipResolver, ref bibleref.Ref,
+	verses []model.Verse, depth int, assumeYes bool) (string, error) {
 	txt := a.Text()
-	res, err := unfold.Run(ctx, tooltipResolver{a}, art.HTML, unfold.Options{
-		Depth:     depth,
+	study, err := r.studyOf(ctx, ref)
+	if err != nil {
+		return "", err
+	}
+	var fragment strings.Builder
+	for _, v := range verses {
+		fragment.WriteString(v.HTML)
+		fragment.WriteString(" ")
+	}
+	var b strings.Builder
+	writeStudy(&b, unfold.Node{Notes: study.Notes, Links: study.Links}, passageUnfoldLevel, txt)
+	appendix, err := unfoldFragment(ctx, a, r, fragment.String(), unfoldRequest{
+		depth: depth, assumeYes: assumeYes, rootRefs: study.Research, level: passageUnfoldLevel,
+	})
+	if err != nil {
+		return "", err
+	}
+	b.WriteString(appendix)
+	return b.String(), nil
+}
+
+// unfoldRequest is what a command asks an expansion for.
+type unfoldRequest struct {
+	depth     int
+	assumeYes bool
+	// level is the heading level the appendix is written at.
+	level int
+	// rootRefs are references of the fragment itself rather than of a citation
+	// inside it: how jw bible read hands over what the verses it is reading
+	// reference.
+	rootRefs []unfold.Ref
+}
+
+// unfoldFragment expands the citations in an HTML fragment and returns the
+// expansion as an HTML appendix, to be appended to the fragment before it is
+// rendered.
+func unfoldFragment(ctx context.Context, a *app.App, r unfold.Resolver, fragment string, req unfoldRequest) (string, error) {
+	txt := a.Text()
+	res, err := unfold.Run(ctx, r, fragment, unfold.Options{
+		Depth:     req.depth,
 		Threshold: unfoldThreshold,
-		Confirm:   unfoldConfirmer(a, assumeYes),
+		Confirm:   unfoldConfirmer(a, req.assumeYes),
+		RootRefs:  req.rootRefs,
 		Progress: func(level, done, total int) {
 			// stderr: the document itself belongs to stdout
 			fmt.Fprintf(a.Stderr, "\r%s", fmt.Sprintf(txt.UnfoldProgress, level, done, total))
@@ -53,7 +247,7 @@ func unfoldArticle(ctx context.Context, a *app.App, art model.Article, depth int
 	if err != nil {
 		return "", err
 	}
-	return art.HTML + unfoldHTML(res, txt), nil
+	return unfoldHTMLAt(res, txt, req.level), nil
 }
 
 // unfoldConfirmer asks before a level that needs a lot of requests. There is
@@ -108,15 +302,21 @@ func headingHTML(level int, inner string) string {
 	return fmt.Sprintf("<h%d>%s</h%d>", level, inner, level)
 }
 
-// unfoldHTML renders an expansion as an HTML appendix: one heading per reference
-// carrying its own content, nested one level deeper for what that content cited.
+// unfoldHTML renders an expansion as an HTML appendix under a document.
 func unfoldHTML(res unfold.Result, txt *i18n.Messages) string {
+	return unfoldHTMLAt(res, txt, documentUnfoldLevel)
+}
+
+// unfoldHTMLAt renders an expansion as an HTML appendix at the given heading
+// level: one heading per reference carrying its own content, nested one level
+// deeper for what that content cited.
+func unfoldHTMLAt(res unfold.Result, txt *i18n.Messages, level int) string {
 	if len(res.Nodes) == 0 {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("<hr/><h2>" + html.EscapeString(txt.UnfoldHeading) + "</h2>")
-	writeUnfoldNodes(&b, res.Nodes, 3, "", txt)
+	b.WriteString("<hr/>" + headingHTML(level, html.EscapeString(txt.UnfoldHeading)))
+	writeUnfoldNodes(&b, res.Nodes, level+1, "", txt)
 	if note := unfoldNote(res, txt); note != "" {
 		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(note))
 	}
@@ -198,10 +398,31 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 		}
 		return fmt.Sprintf(txt.MarginalReferenceWithSource, source, n.Title)
 	}
-	if n.Ref.IsVerse() || n.Title == "" || n.Title == ref {
+	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
 		return ref
 	}
 	return ref + refSeparator + n.Title
+}
+
+// saysIt reports whether the citation already names what the passage turned out
+// to be, so the heading would say it twice. A research-guide entry cites an
+// article by its own headline — “God So Loved the World”, The Watchtower,
+// 7/1/2014 — which wol then answers with that headline again, in straight
+// quotes or none.
+func saysIt(citation, title string) bool {
+	return strings.Contains(unquote(citation), unquote(title))
+}
+
+// unquote strips the typographic quotes and case a citation and a title can
+// spell differently.
+func unquote(s string) string {
+	return strings.ToLower(strings.Map(func(r rune) rune {
+		switch r {
+		case '"', '\'', '“', '”', '„', '‘', '’', '«', '»':
+			return -1
+		}
+		return r
+	}, s))
 }
 
 // unfoldSource names a passage well enough to be cited as the origin of a cross
@@ -226,6 +447,41 @@ func isMarker(s string) bool {
 	return true
 }
 
+// writeStudy renders the study material of an unfolded verse: the study notes,
+// then the research-guide entries that name a whole article and so have no
+// passage to unfold. Both belong to the verse above them and sit at the same
+// level as what the verse cites, which follows them.
+func writeStudy(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
+	if n.StudyErr != nil {
+		fmt.Fprintf(b, "<p><em>%s</em></p>",
+			html.EscapeString(fmt.Sprintf(txt.StudyFailed, n.StudyErr)))
+	}
+	if len(n.Notes) > 0 {
+		b.WriteString(headingHTML(level, html.EscapeString(txt.StudyNotesHeading)))
+		for _, note := range n.Notes {
+			// a note is the inside of its paragraph, so it needs one of its own:
+			// without it two notes run together into one
+			b.WriteString("<p>" + note.HTML + "</p>")
+		}
+	}
+	if len(n.Links) == 0 {
+		return
+	}
+	b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
+	b.WriteString("<ul>")
+	for _, item := range n.Links {
+		// the same shape jw bible research prints: the title carries the link,
+		// the publication line follows in parentheses
+		fmt.Fprintf(b, `<li><a href="%s">%s</a>`,
+			html.EscapeString(item.ArticleURL), html.EscapeString(item.Title))
+		if item.Source != "" {
+			fmt.Fprintf(b, " (%s)", html.EscapeString(item.Source))
+		}
+		b.WriteString("</li>")
+	}
+	b.WriteString("</ul>")
+}
+
 // writeUnfoldNodes renders one tier of an expansion. source names the passage
 // these references were found in, so a bare marker can say where it came from;
 // it is empty for the references of the document itself.
@@ -240,6 +496,7 @@ func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source
 		case strings.TrimSpace(n.HTML) != "":
 			b.WriteString(demoteHeadings(n.HTML, level))
 		}
+		writeStudy(b, n, level+1, txt)
 		writeUnfoldNodes(b, n.Children, level+1, unfoldSource(n, label), txt)
 	}
 }

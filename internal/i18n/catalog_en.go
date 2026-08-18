@@ -50,10 +50,14 @@ var en = Messages{
 	MarginalReferenceWithSource: "Marginal reference %s → %s",
 
 	UnfoldHeading:  "References",
-	UnfoldConfirm:  "Unfolding level %d needs %d more requests to wol.jw.org. Continue? [y/N] ",
+	UnfoldConfirm:  "Unfolding level %d needs up to %d more requests to wol.jw.org. Continue? [y/N] ",
 	UnfoldProgress: "unfolding level %d: %d/%d",
 	UnfoldStopped:  "Stopped here: %d more references were not unfolded.",
 	UnfoldFailed:   "could not be unfolded: %s",
+
+	StudyNotesHeading: "Study notes",
+	ResearchHeading:   "Research guide",
+	StudyFailed:       "the study notes on this verse could not be read: %s",
 
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
