@@ -44,6 +44,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	pf.StringVarP(&a.Flags.Output, "output", "o", "markdown", "output format: markdown (styled for the terminal), raw (unstyled markdown), html, text, or json")
 	pf.StringVarP(&a.Flags.File, "file", "f", "", "write output to file instead of stdout")
 	pf.BoolVar(&a.Flags.NoColor, "no-color", false, "disable colored output")
+	pf.BoolVar(&a.Flags.NoURLs, "no-urls", false, "omit links and URLs from the output; link and image text is kept")
 	pf.BoolVarP(&a.Flags.Verbose, "verbose", "v", false, "log HTTP requests to stderr")
 	pf.StringVar(&a.Flags.BaseCDN, "base-cdn", "", "override b.jw-cdn.org base URL")
 	pf.StringVar(&a.Flags.BaseJWOrg, "base-jworg", "", "override www.jw.org base URL")

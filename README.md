@@ -49,6 +49,7 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 | `-o, --output` | Output format: `markdown` (default), `raw`, `html`, `text`, or `json`. `json` emits the underlying data model of any command. |
 | `-f, --file` | Write output to a file instead of stdout. |
 | `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
+| `--no-urls` | Leave links and URLs out of the output. Link text stays in the sentence, an image becomes `[image: alt]`, and result listings drop their link line. `-o json` is unaffected. |
 | `-v, --verbose` | Log HTTP requests to stderr. |
 | `--version` | Print the version, commit, build date, Go version, and platform. Released binaries report their tag (`v1.2.3`); local builds report `dev+<commit>` plus `-dirty` for an uncommitted tree. |
 
@@ -108,6 +109,27 @@ The color scheme follows the terminal background. Override it with
 
 ```sh
 GLAMOUR_STYLE=light jw dailytext
+```
+
+### Output without URLs
+
+`--no-urls` strips every target from the rendered output while keeping the words
+that carried it. It applies to `markdown`, `raw`, `html`, and `text`:
+
+- a link becomes its own text, so a Bible citation still reads as a citation;
+- an image becomes `[image: alt]`, or is dropped when it has no alt text;
+- result listings print title and snippet without the link line — the result
+  index still drives `jw show|open|download <n>`;
+- `jw media info` lists the renditions without their file URLs.
+
+`-o json` is deliberately untouched: it is the data model the other commands
+read back, so `jw show`, `jw open` and `jw download` keep working off it. `jw
+open` also still prints the link it was asked for.
+
+```sh
+jw bible read "John 3:16" --no-urls          # prose, no footnote targets
+jw article 1102025912 --no-urls -o raw       # markdown without links or images
+jw search --no-urls Schöpfung                # listing without link lines
 ```
 
 ## Commands

@@ -51,7 +51,7 @@ func walkInline(n *html.Node, b *strings.Builder, emphasis bool) {
 			b.WriteString(" ")
 		case "img":
 			if alt := attrOf(n, "alt"); alt != "" {
-				b.WriteString("[image: " + alt + "]")
+				b.WriteString(imagePlaceholder(alt))
 			}
 		}
 		if emphasis {

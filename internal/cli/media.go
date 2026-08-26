@@ -162,13 +162,13 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 				})
 			}
 			_ = results.Save(a.Cache().Dir(), results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
-			return a.WriteMarkdown(mediaInfoText(item, a.Text()))
+			return a.WriteMarkdown(mediaInfoText(item, a.Text(), a.Flags.NoURLs))
 		},
 	}
 	return cmd
 }
 
-func mediaInfoText(m model.MediaItem, txt *i18n.Messages) string {
+func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", m.Title)
 	if m.Description != "" {
@@ -204,7 +204,10 @@ func mediaInfoText(m model.MediaItem, txt *i18n.Messages) string {
 			if f.SubtitlesURL != "" {
 				b.WriteString(" — " + txt.Subtitles)
 			}
-			fmt.Fprintf(&b, "\n   <%s>\n", f.URL)
+			b.WriteString("\n")
+			if !noURLs {
+				fmt.Fprintf(&b, "   <%s>\n", f.URL)
+			}
 		}
 		fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
 	}

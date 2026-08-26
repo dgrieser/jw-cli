@@ -24,6 +24,16 @@ func resolveIndexArg(a *app.App, arg string) (model.Result, error) {
 	return results.Resolve(a.Cache().Dir(), idx)
 }
 
+// linkTarget passes a URL through, or drops it under --no-urls. Callers hand
+// their target through it so a link degrades to its own text instead of
+// disappearing along with the words it carries.
+func linkTarget(a *app.App, url string) string {
+	if a.Flags.NoURLs {
+		return ""
+	}
+	return url
+}
+
 // mdLinked renders text as a markdown link to url, or as plain text when there
 // is no url. Either way the result is safe as the first thing in a list item:
 // bible citations like "1. Kor. 8:4" would otherwise start an ordered list.

@@ -52,10 +52,13 @@ type listStyle struct {
 	// width wraps long lines to the terminal; 0 leaves them on one line, which
 	// keeps piped and redirected listings greppable.
 	width int
+	// noURLs leaves the link line off every entry (--no-urls). The index still
+	// identifies the entry for jw show|open|download.
+	noURLs bool
 }
 
 func listStyleFor(a *app.App) listStyle {
-	s := listStyle{inline: render.InlineOptions{Emphasis: a.Styled()}}
+	s := listStyle{inline: render.InlineOptions{Emphasis: a.Styled()}, noURLs: a.Flags.NoURLs}
 	if a.Styled() {
 		s.width = a.Width()
 	}
@@ -90,7 +93,7 @@ func formatResult(r model.Result, style listStyle) string {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(snippet))
 	}
 	// links stay on one line: a wrapped URL cannot be clicked or copied
-	if link := preferredLink(r); link != "" {
+	if link := preferredLink(r); link != "" && !style.noURLs {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, link)
 	}
 	return b.String()

@@ -185,7 +185,7 @@ Examples:
 				}
 				html.WriteString(unfoldNoteHTML(p.UnfoldNote))
 				body, err := render.Render(collapseRules(html.String()), format,
-					render.Options{BaseURL: a.HTTP().Base.WOL})
+					a.RenderOptions(a.HTTP().Base.WOL))
 				if err != nil {
 					return err
 				}
@@ -380,7 +380,7 @@ verse text they explain.`,
 					return err
 				}
 				for _, n := range e.Notes {
-					body, err := render.Render(n.HTML, format, render.Options{BaseURL: a.HTTP().Base.WOL})
+					body, err := render.Render(n.HTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 					if err != nil {
 						return err
 					}
@@ -446,7 +446,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 				for _, x := range e.XRefs {
 					fmt.Fprintf(&b, "- %s\n", escapeListMarker(x.Citation))
 					if x.ResolvedHTML != "" {
-						body, err := render.Render(x.ResolvedHTML, format, render.Options{BaseURL: a.HTTP().Base.WOL})
+						body, err := render.Render(x.ResolvedHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 						if err != nil {
 							return err
 						}
@@ -569,13 +569,13 @@ shown, including a link to the full article.`,
 					return err
 				}
 				for _, it := range e.Items {
-					fmt.Fprintf(&b, "- %s", mdLinked(it.Title, firstNonEmpty(it.ArticleURL, it.PCPath)))
+					fmt.Fprintf(&b, "- %s", mdLinked(it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath))))
 					if it.Source != "" {
 						fmt.Fprintf(&b, " (%s)", it.Source)
 					}
 					b.WriteString("\n")
 					if it.ExcerptHTML != "" {
-						body, err := render.Render(it.ExcerptHTML, format, render.Options{BaseURL: a.HTTP().Base.WOL})
+						body, err := render.Render(it.ExcerptHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 						if err == nil {
 							fmt.Fprintf(&b, "\n%s\n", indent(strings.TrimSpace(body), "  "))
 						}
@@ -628,7 +628,7 @@ func writeVerseText(b *strings.Builder, a *app.App, f render.Format, v model.Ver
 	if strings.TrimSpace(v.HTML) == "" {
 		return nil
 	}
-	body, err := render.Render(v.HTML, f, render.Options{BaseURL: a.HTTP().Base.WOL})
+	body, err := render.Render(v.HTML, f, a.RenderOptions(a.HTTP().Base.WOL))
 	if err != nil {
 		return err
 	}

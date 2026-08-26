@@ -433,3 +433,53 @@ func TestHorizontalRule(t *testing.T) {
 		t.Errorf("styled rule: %q", styled)
 	}
 }
+
+// noURLSample carries the three shapes --no-urls has to deal with: a link, an
+// image with alt text, and an image without any.
+const noURLSample = `<p>Faith moves mountains. See
+<a href="/en/wol/bc/r1/lp-e/123/1/0">Matt 17:20</a>.</p>
+<figure><img src="/img/a.jpg" alt="A mountain"/><figcaption>A mountain range</figcaption></figure>
+<p><a href="/z"><img src="/img/b.jpg"/></a></p>`
+
+func TestRenderNoURLs(t *testing.T) {
+	for _, tc := range []struct {
+		format Format
+		want   []string
+	}{
+		{Markdown, []string{"Matt 17:20", "image: A mountain", "A mountain range"}},
+		{Raw, []string{"Matt 17:20", "image: A mountain", "A mountain range"}},
+		{HTML, []string{"Matt 17:20", "[image: A mountain]", "A mountain range"}},
+		{Text, []string{"Matt 17:20", "[image: A mountain]", "A mountain range"}},
+	} {
+		t.Run(tc.format.String(), func(t *testing.T) {
+			out, err := Render(noURLSample, tc.format, Options{BaseURL: "https://wol.jw.org", NoURLs: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %q:\n%s", want, out)
+				}
+			}
+			// no target survives in any spelling: absolutized, relative, or as
+			// the markdown/HTML syntax that would carry one
+			for _, unwanted := range []string{"wol.jw.org", "/img/a.jpg", "/img/b.jpg", "href=", "<img", "](", "!["} {
+				if strings.Contains(out, unwanted) {
+					t.Errorf("still contains %q:\n%s", unwanted, out)
+				}
+			}
+		})
+	}
+}
+
+// TestRenderNoURLsKeepsURLsOff pins that the flag is opt-in: without it the
+// targets are rendered as before.
+func TestRenderNoURLsKeepsURLsOff(t *testing.T) {
+	out, err := Render(noURLSample, Markdown, Options{BaseURL: "https://wol.jw.org"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "[Matt 17:20](https://wol.jw.org/en/wol/bc/r1/lp-e/123/1/0)") {
+		t.Errorf("link target dropped without NoURLs:\n%s", out)
+	}
+}

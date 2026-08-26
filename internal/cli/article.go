@@ -128,7 +128,7 @@ func writeArticle(a *app.App, art model.Article) error {
 	if strings.Contains(art.URL, a.HTTP().Base.JWOrg) {
 		base = a.HTTP().Base.JWOrg
 	}
-	body, err := render.Render(art.HTML, format, render.Options{BaseURL: base})
+	body, err := render.Render(art.HTML, format, a.RenderOptions(base))
 	if err != nil {
 		return err
 	}
@@ -176,7 +176,7 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, a.Text().BibleRefsIn+"\n\n", art.Title)
 	for _, r := range art.ScriptureRefs {
-		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, r.BCPath))
+		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, linkTarget(a, r.BCPath)))
 	}
 	b.WriteString("\n" + a.Text().ReadOneHint + "\n")
 	return a.WriteMarkdown(b.String())

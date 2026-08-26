@@ -13,6 +13,9 @@ type Options struct {
 	// BaseURL absolutizes relative links and image sources (e.g.
 	// "https://wol.jw.org" for wol documents).
 	BaseURL string
+	// NoURLs drops every link target and image source from the output: a link
+	// keeps its text, an image its alt text. Set by the global --no-urls flag.
+	NoURLs bool
 }
 
 // horizontalRule is the thematic break written for an <hr>. The converter's
@@ -34,7 +37,7 @@ var markdownConverter = converter.NewConverter(
 // Render converts a site HTML fragment into the requested output format.
 // JSON is not a rendering of HTML; callers handle it before calling Render.
 func Render(fragment string, f Format, o Options) (string, error) {
-	clean, err := sanitize(fragment, o.BaseURL)
+	clean, err := sanitize(fragment, o)
 	if err != nil {
 		return "", fmt.Errorf("sanitize HTML: %w", err)
 	}

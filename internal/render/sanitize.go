@@ -16,8 +16,9 @@ import (
 //   - prefers data-img-size-* attributes on <img> tags
 //   - flattens wol's multi-line publication link cards into one line each
 //   - drops soft hyphens, which only a browser knows how to hide
-//   - absolutizes href/src attributes against baseURL
-func sanitize(fragment string, baseURL string) (string, error) {
+//   - absolutizes href/src attributes against o.BaseURL, or strips link targets
+//     and image sources entirely under o.NoURLs
+func sanitize(fragment string, o Options) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
 	if err != nil {
 		return "", err
@@ -62,8 +63,11 @@ func sanitize(fragment string, baseURL string) (string, error) {
 		}
 	})
 
-	if baseURL != "" {
-		if base, err := url.Parse(baseURL); err == nil {
+	if o.NoURLs {
+		// nothing left to absolutize once the targets are gone
+		stripURLs(body)
+	} else if o.BaseURL != "" {
+		if base, err := url.Parse(o.BaseURL); err == nil {
 			absolutize(body, "a", "href", base)
 			absolutize(body, "img", "src", base)
 		}
@@ -127,6 +131,35 @@ func stripSoftHyphens(n *xhtml.Node) {
 		stripSoftHyphens(c)
 	}
 }
+
+// stripURLs takes every target out of the fragment for --no-urls, without
+// taking the words with it: a link is replaced by its own content, so the link
+// text stays part of the sentence, and an image by the same "[image: alt]"
+// placeholder the text renderer writes, so a picture still leaves a trace. An
+// image with no alt text says nothing once its source is gone and is dropped.
+// Images are handled first, so one wrapped in a link is already a placeholder
+// by the time the link is unwrapped.
+func stripURLs(body *goquery.Selection) {
+	body.Find("img").Each(func(_ int, s *goquery.Selection) {
+		alt := collapseSpace(s.AttrOr("alt", ""))
+		if alt == "" {
+			s.Remove()
+			return
+		}
+		s.ReplaceWithHtml(html.EscapeString(imagePlaceholder(alt)))
+	})
+	body.Find("a").Each(func(_ int, s *goquery.Selection) {
+		inner, err := s.Html()
+		if err != nil {
+			inner = html.EscapeString(s.Text())
+		}
+		s.ReplaceWithHtml(inner)
+	})
+}
+
+// imagePlaceholder is how an image is spelled where its source cannot be shown:
+// in plain text, and under --no-urls in every format.
+func imagePlaceholder(alt string) string { return "[image: " + alt + "]" }
 
 func absolutize(body *goquery.Selection, tag, attr string, base *url.URL) {
 	body.Find(tag).Each(func(_ int, s *goquery.Selection) {

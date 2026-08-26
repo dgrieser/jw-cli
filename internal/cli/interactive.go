@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/app"
@@ -26,10 +27,14 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 				if err != nil {
 					return tui.Content{}, err
 				}
-				return tui.Content{Text: mediaInfoText(mi, a.Text())}, nil
+				return tui.Content{Text: mediaInfoText(mi, a.Text(), a.Flags.NoURLs)}, nil
 			case "file", "image":
-				text := fmt.Sprintf("%s\n\n%s\n\n%s", item.Title, item.FileURL, a.Text().PressToDownload)
-				return tui.Content{Text: text}, nil
+				parts := []string{item.Title}
+				if !a.Flags.NoURLs && item.FileURL != "" {
+					parts = append(parts, item.FileURL)
+				}
+				parts = append(parts, a.Text().PressToDownload)
+				return tui.Content{Text: strings.Join(parts, "\n\n")}, nil
 			}
 			target := firstNonEmpty(item.WOLLink, item.JWLink)
 			if target == "" && item.DocID != 0 {
@@ -47,7 +52,7 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 				format = render.Markdown
 			}
 			base := a.HTTP().Base.WOL
-			body, err := render.Render(art.HTML, format, render.Options{BaseURL: base})
+			body, err := render.Render(art.HTML, format, a.RenderOptions(base))
 			if err != nil {
 				return tui.Content{}, err
 			}

@@ -41,7 +41,7 @@ func walkText(n *html.Node, b *strings.Builder) {
 			b.WriteString("\n- ")
 		case "img":
 			if alt := attrOf(n, "alt"); alt != "" {
-				b.WriteString("[image: " + alt + "]")
+				b.WriteString(imagePlaceholder(alt))
 			}
 		}
 		if blockTags[n.Data] {

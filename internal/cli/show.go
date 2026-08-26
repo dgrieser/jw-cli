@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -40,7 +41,7 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(mi)
 				}
-				return a.WriteMarkdown(mediaInfoText(mi, a.Text()))
+				return a.WriteMarkdown(mediaInfoText(mi, a.Text(), a.Flags.NoURLs))
 			case "category":
 				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
 			case "file", "image":
@@ -51,8 +52,12 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(item)
 				}
-				return a.Write(fmt.Sprintf("%s\n%s\n%s", item.Title, item.FileURL,
-					fmt.Sprintf(a.Text().DownloadHintIndex, item.Index)))
+				lines := []string{item.Title}
+				if !a.Flags.NoURLs && item.FileURL != "" {
+					lines = append(lines, item.FileURL)
+				}
+				lines = append(lines, fmt.Sprintf(a.Text().DownloadHintIndex, item.Index))
+				return a.Write(strings.Join(lines, "\n"))
 			}
 			// articles, publications, bible hits, indexes
 			target := item.WOLLink

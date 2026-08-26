@@ -28,6 +28,7 @@ type Flags struct {
 	Output  string // -o|--output: html|markdown|text|json
 	File    string // -f|--file: write output to file instead of stdout
 	NoColor bool
+	NoURLs  bool // --no-urls: leave links and URLs out of the output
 	Verbose bool
 
 	// hidden overrides for testing against mock servers
@@ -158,6 +159,12 @@ func (a *App) Lang(ctx context.Context) (model.Language, error) {
 // Format parses the -o|--output flag.
 func (a *App) Format() (render.Format, error) {
 	return render.ParseFormat(a.Flags.Output)
+}
+
+// RenderOptions builds the options for rendering a document body: the base URL
+// its relative links resolve against, plus the global --no-urls choice.
+func (a *App) RenderOptions(baseURL string) render.Options {
+	return render.Options{BaseURL: baseURL, NoURLs: a.Flags.NoURLs}
 }
 
 // WriteMarkdown writes content whose body is markdown, styling it for the
