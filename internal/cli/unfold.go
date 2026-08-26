@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -301,13 +302,42 @@ func unfoldOptions(a *app.App, req unfoldRequest) unfold.Options {
 		Depth:     req.depth,
 		Threshold: unfoldThreshold,
 		Confirm:   unfoldConfirmer(a, req.assumeYes),
-		Progress: func(level, done, total int) {
-			// stderr: the document itself belongs to stdout
-			fmt.Fprintf(a.Stderr, "\r%s", fmt.Sprintf(txt.UnfoldProgress, level, done, total))
-			if done == total {
-				fmt.Fprintln(a.Stderr)
-			}
-		},
+		Progress:  unfoldProgress(a, txt),
+	}
+}
+
+// unfoldProgress reports a level being spent on one line of stderr — the
+// document itself belongs to stdout — where every count overwrites the one
+// before it and the last one is erased again, so what is left above the rendered
+// output is nothing. Erased with spaces rather than an escape sequence, so a
+// terminal that takes no escapes, or was asked for none, is left as clean as any
+// other.
+//
+// A stderr that is not a terminal has nothing to overwrite, where the line would
+// pile up once per request, so progress goes unreported there.
+func unfoldProgress(a *app.App, txt *i18n.Messages) func(level, done, total int) {
+	if !render.IsTerminal(a.Stderr) {
+		return nil
+	}
+	return statusLine(a.Stderr, txt)
+}
+
+// statusLine is that line, on any writer.
+func statusLine(w io.Writer, txt *i18n.Messages) func(level, done, total int) {
+	written := 0
+	return func(level, done, total int) {
+		if done == total {
+			// the level is through: take its line back
+			fmt.Fprintf(w, "\r%s\r", strings.Repeat(" ", written))
+			written = 0
+			return
+		}
+		line := fmt.Sprintf(txt.UnfoldProgress, level, done, total)
+		width := render.StringWidth(line)
+		// a shorter count than the one before it would leave the tail of the
+		// longer line standing
+		fmt.Fprintf(w, "\r%s%s", line, strings.Repeat(" ", max(written-width, 0)))
+		written = max(written, width)
 	}
 }
 

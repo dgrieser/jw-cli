@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/unfold"
 )
 
@@ -22,6 +24,37 @@ func TestAffirmative(t *testing.T) {
 		if affirmative(no) {
 			t.Errorf("%q should not mean yes", no)
 		}
+	}
+}
+
+// TestStatusLineErasesItself covers the progress of an expansion: every count
+// overwrites the one before it and the level's last one is taken back, so the
+// rendered document is not printed under a leftover status line.
+func TestStatusLineErasesItself(t *testing.T) {
+	var b strings.Builder
+	txt := i18n.EN.Text()
+	progress := statusLine(&b, txt)
+	for done := 1; done <= 12; done++ {
+		progress(1, done, 12)
+	}
+	out := b.String()
+	if strings.Contains(out, "\n") {
+		t.Errorf("the status line must stay on its own line: %q", out)
+	}
+	if !strings.HasSuffix(out, "\r") {
+		t.Errorf("the last write must leave the cursor at the start of the line: %q", out)
+	}
+	// what the terminal is left showing: the last carriage return means only
+	// what follows it counts, and nothing does
+	if last := out[strings.LastIndex(out[:len(out)-1], "\r")+1:]; strings.TrimSpace(last) != "" {
+		t.Errorf("the line was not erased: %q", last)
+	}
+	// a shorter count must not leave the tail of a longer one behind
+	progress(2, 9, 100)
+	progress(2, 10, 100)
+	wide := render.StringWidth(fmt.Sprintf(txt.UnfoldProgress, 2, 9, 100))
+	if got := render.StringWidth(strings.TrimPrefix(b.String()[len(out):], "\r")); got < wide {
+		t.Errorf("write is %d columns wide, want at least %d", got, wide)
 	}
 }
 
