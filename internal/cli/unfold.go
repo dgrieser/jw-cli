@@ -100,9 +100,14 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		r.sections[key] = sections
 	}
 	from, to := ref.VerseStart, ref.VerseEnd
-	if from == 0 {
+	switch {
+	case from == 0:
 		// a whole chapter: every verse that has a pane at all
 		from, to = 1, maxVerse(sections)
+	case ref.RunsToChapterEnd():
+		// the reference runs past this chapter, so it takes the pane of every
+		// verse from its start on
+		to = maxVerse(sections)
 	}
 	to = max(to, from)
 	for v := from; v <= to; v++ {

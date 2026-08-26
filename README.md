@@ -136,6 +136,9 @@ jw download 3    # download it (video/audio/file)
 ```sh
 jw bible read Matthew 24:14
 jw bible read "mt 24:3-14" -o text           # abbreviations, ranges
+jw bible read "Pr 8:8, 9"                    # single verses
+jw bible read "Pr 8-9"                       # whole chapters
+jw bible read "Pr 8:30-9:6"                  # across a chapter boundary
 jw bible read "Joh 3:16; Ro 5:8"             # multiple references
 jw bible read "Psalm 83" --bible nwt         # other editions: nwt, bi12, ...
 jw bible read John 3:16 --unfold 1           # verse + study notes + its references

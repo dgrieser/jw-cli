@@ -77,10 +77,15 @@ func newBibleReadCmd(a *app.App) *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "read <reference...>",
-		Short: "Read verses, verse ranges, or whole chapters",
+		Short: "Read verses, verse ranges, chapters, or spans of chapters",
 		Long: `Read bible text in any edition available in the Watchtower Online
 Library. References accept full names, abbreviations, and book numbers, in
 English or in the selected content language.
+
+A reference reads a verse ("Pr 8:8"), a list of them ("Pr 8:8, 9"), a range
+("Pr 8:8-11"), a whole chapter ("Pr 8"), a range of chapters ("Pr 8-9"), or a
+span running from one chapter into another ("Pr 8:30-9:6"). A span is printed
+one chapter at a time, since that is how the library serves it.
 
 With --unfold the study material of every verse is printed under that verse:
 its study notes, and the text behind every reference it carries — the marginal
@@ -89,6 +94,8 @@ references and the research-guide passages — followed that many levels deep.
 Examples:
   jw bible read Matthew 24:14
   jw bible read "mt 24:3-14"
+  jw bible read "Pr 8-9"
+  jw bible read "Pr 8:30-9:6"
   jw bible read "Joh 3:16; Ro 5:8" -o text
   jw bible read "Psalm 83" --bible nwt
   jw bible read -l de "Matthäus 24:14"
@@ -141,6 +148,7 @@ Examples:
 				if err != nil {
 					return fmt.Errorf("%s: %w", refString(ref, table), err)
 				}
+				ref = resolveChapterEnd(ref, verses)
 				p := passage{Ref: refString(ref, table)}
 				var unfolded []string
 				if depth > 0 {
@@ -217,11 +225,25 @@ func refString(r bibleref.Ref, t *bibleref.Table) string {
 	switch {
 	case r.VerseStart == 0:
 		return fmt.Sprintf("%s %d", name, r.Chapter)
+	case r.RunsToChapterEnd():
+		// the chapter was not read here, so its last verse cannot be named
+		return fmt.Sprintf("%s %d:%dff.", name, r.Chapter, r.VerseStart)
 	case r.VerseEnd > r.VerseStart:
 		return fmt.Sprintf("%s %d:%d-%d", name, r.Chapter, r.VerseStart, r.VerseEnd)
 	default:
 		return fmt.Sprintf("%s %d:%d", name, r.Chapter, r.VerseStart)
 	}
+}
+
+// resolveChapterEnd names the last verse of a reference that was written as
+// running past its chapter — "Pr 8:5-9:10" takes chapter 8 to its end — now that
+// the chapter has been read and where it ends is known.
+func resolveChapterEnd(ref bibleref.Ref, verses []model.Verse) bibleref.Ref {
+	if !ref.RunsToChapterEnd() || len(verses) == 0 {
+		return ref
+	}
+	ref.VerseEnd = verses[len(verses)-1].ID % 1000
+	return ref
 }
 
 // forEachStudySection iterates the study sections of every verse in refs,
@@ -242,14 +264,15 @@ func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func
 			}
 			chapters[key] = doc
 		}
-		from, to := ref.VerseStart, ref.VerseEnd
 		// the verse text of the whole span, so every study section can be
 		// printed with the verse it belongs to
 		texts := map[int]model.Verse{}
-		verses, err := doc.Verses(from, to)
+		verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 		if err != nil {
 			return fmt.Errorf("%s: %w", refString(ref, table), err)
 		}
+		ref = resolveChapterEnd(ref, verses)
+		from, to := ref.VerseStart, ref.VerseEnd
 		for _, v := range verses {
 			texts[v.ID%1000] = v
 		}

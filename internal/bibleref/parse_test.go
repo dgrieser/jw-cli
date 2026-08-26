@@ -27,6 +27,25 @@ func TestParse(t *testing.T) {
 		{"Joh 3:16; Ro 5:8", []Ref{{43, 3, 16, 16}, {45, 5, 8, 8}}},
 		{"2 Kings 5:1", []Ref{{12, 5, 1, 1}}},
 		{"Revelation 21:3-4", []Ref{{66, 21, 3, 4}}},
+		// a chapter range: one whole chapter each
+		{"Proverbs 8-9", []Ref{{20, 8, 0, 0}, {20, 9, 0, 0}}},
+		{"Pr 8-10", []Ref{{20, 8, 0, 0}, {20, 9, 0, 0}, {20, 10, 0, 0}}},
+		// a bare number after a chapter is another chapter, after a verse
+		// another verse
+		{"Proverbs 8-9, 11", []Ref{{20, 8, 0, 0}, {20, 9, 0, 0}, {20, 11, 0, 0}}},
+		{"Proverbs 8:8, 9", []Ref{{20, 8, 8, 8}, {20, 8, 9, 9}}},
+		// a verse span running into the next chapter: to the end of the first
+		// chapter, from the first verse of the last
+		{"Proverbs 8:1-9:10", []Ref{{20, 8, 0, 0}, {20, 9, 1, 10}}},
+		{"Proverbs 8:32-9:6", []Ref{{20, 8, 32, LastVerse}, {20, 9, 1, 6}}},
+		// and through the chapters between the two
+		{"Proverbs 8:32-11:2", []Ref{
+			{20, 8, 32, LastVerse}, {20, 9, 0, 0}, {20, 10, 0, 0}, {20, 11, 1, 2},
+		}},
+		// a chapter start as the beginning of a verse span
+		{"Proverbs 8-9:10", []Ref{{20, 8, 0, 0}, {20, 9, 1, 10}}},
+		// a span carries its end chapter over to what follows it
+		{"Proverbs 8:32-9:6, 8", []Ref{{20, 8, 32, LastVerse}, {20, 9, 1, 6}, {20, 9, 8, 8}}},
 	}
 	for _, c := range cases {
 		got, err := Parse(c.in, tbl)
@@ -42,7 +61,9 @@ func TestParse(t *testing.T) {
 
 func TestParseErrors(t *testing.T) {
 	tbl := English()
-	for _, in := range []string{"", "Matthew", "Nowhere 3:16", "Matthew 0:1", "John 3:5-2", "John 3:0"} {
+	for _, in := range []string{"", "Matthew", "Nowhere 3:16", "Matthew 0:1", "John 3:5-2", "John 3:0",
+		// backwards ranges, and chapters no book has
+		"Proverbs 9-8", "Proverbs 9:2-8:1", "Proverbs 8:1-200:2", "Proverbs 8-200", "Proverbs 8:1-"} {
 		if _, err := Parse(in, tbl); err == nil {
 			t.Errorf("Parse(%q) should fail", in)
 		}
@@ -78,6 +99,8 @@ func TestRefString(t *testing.T) {
 		{40, 24, 14, 14}: "Matthew 24:14",
 		{40, 24, 3, 14}:  "Matthew 24:3-14",
 		{40, 24, 0, 0}:   "Matthew 24",
+		// the chapter's own end, which the reference cannot name
+		{20, 8, 32, LastVerse}: "Proverbs 8:32ff.",
 	} {
 		if got := ref.String(); got != want {
 			t.Errorf("%+v.String() = %q, want %q", ref, got, want)
