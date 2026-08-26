@@ -184,7 +184,8 @@ Examples:
 					}
 				}
 				html.WriteString(unfoldNoteHTML(p.UnfoldNote))
-				body, err := render.Render(html.String(), format, render.Options{BaseURL: a.HTTP().Base.WOL})
+				body, err := render.Render(collapseRules(html.String()), format,
+					render.Options{BaseURL: a.HTTP().Base.WOL})
 				if err != nil {
 					return err
 				}

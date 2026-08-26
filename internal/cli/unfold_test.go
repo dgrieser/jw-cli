@@ -250,6 +250,32 @@ func TestUnfoldNamesTheVerseAMarkerCameFrom(t *testing.T) {
 	}
 }
 
+// TestCollapseRules covers the doubled line a nested expansion leaves behind: it
+// closes itself with a rule, and the expansion holding it closes with one right
+// after. Only the markup of the document lies between the two, so one goes.
+func TestCollapseRules(t *testing.T) {
+	doubled := `<p>text</p><hr/>` + "\n</div>\n" + `<p id="p20" class="sb"></p>` + "\n<hr/>\n<p>more</p>"
+	got := collapseRules(doubled)
+	if strings.Count(got, "<hr") != 1 {
+		t.Errorf("want one rule, got %d in:\n%s", strings.Count(got, "<hr"), got)
+	}
+	for _, want := range []string{"text", "more"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("collapsing dropped %q:\n%s", want, got)
+		}
+	}
+	// two rules with something between them are two rules
+	kept := `<hr/><p>a passage</p><hr/>`
+	if n := strings.Count(collapseRules(kept), "<hr"); n != 2 {
+		t.Errorf("want both rules, got %d", n)
+	}
+	// an image is content of its own, with no text to show it
+	withImage := `<hr/><p><img src="x.png"/></p><hr/>`
+	if n := strings.Count(collapseRules(withImage), "<hr"); n != 2 {
+		t.Errorf("an image parts two rules, got %d", n)
+	}
+}
+
 // TestVerseSource covers the naming itself, including what is not bible text.
 func TestVerseSource(t *testing.T) {
 	for _, tc := range []struct {

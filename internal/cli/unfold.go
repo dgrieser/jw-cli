@@ -378,7 +378,7 @@ func unfoldInline(ctx context.Context, a *app.App, r unfold.Resolver, fragment s
 	if err != nil {
 		return "", err
 	}
-	return dropTrailingRule(out), nil
+	return dropTrailingRule(collapseRules(out)), nil
 }
 
 // refsOf is what a block cites, for an expansion that only needs the references.
@@ -388,6 +388,69 @@ func refsOf(cites []citation) []unfold.Ref {
 		out[i] = c.ref
 	}
 	return out
+}
+
+// collapseRules drops a rule that another rule has already drawn. A nested
+// expansion closes itself with one, and the expansion holding it closes with one
+// of its own right after; with only the document's own markup between them, the
+// two read as a doubled line.
+func collapseRules(fragment string) string {
+	if strings.Count(fragment, "<hr") < 2 {
+		return fragment
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	var last *nethtml.Node
+	doc.Find("hr").Each(func(_ int, s *goquery.Selection) {
+		rule := s.Nodes[0]
+		if last != nil && !rendersBetween(last, rule) {
+			s.Remove()
+			return
+		}
+		last = rule
+	})
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return fragment
+	}
+	return out
+}
+
+// rendersBetween reports whether anything that shows up in the output lies
+// between two nodes: words, or an element that is content in itself. Empty
+// paragraphs and the containers a document closes on the way are not.
+func rendersBetween(from, to *nethtml.Node) bool {
+	for n := nextNode(from); n != nil && n != to; n = nextNode(n) {
+		switch {
+		case n.Type == nethtml.TextNode && strings.TrimSpace(n.Data) != "":
+			return true
+		case n.Type == nethtml.ElementNode && selfContent[n.Data]:
+			return true
+		}
+	}
+	return false
+}
+
+// selfContent are the elements that show something without any text of their
+// own, so a rule on either side of one is not a doubled rule.
+var selfContent = map[string]bool{
+	"img": true, "br": true, "input": true, "textarea": true, "select": true,
+	"svg": true, "video": true, "audio": true, "iframe": true, "canvas": true,
+}
+
+// nextNode is the following node in document order.
+func nextNode(n *nethtml.Node) *nethtml.Node {
+	if n.FirstChild != nil {
+		return n.FirstChild
+	}
+	for ; n != nil; n = n.Parent {
+		if n.NextSibling != nil {
+			return n.NextSibling
+		}
+	}
+	return nil
 }
 
 // dropTrailingRule takes back the rule of the last expansion when the document
@@ -862,6 +925,7 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 	if err != nil {
 		return content, children
 	}
+	out = collapseRules(out)
 	var rest []unfold.Node
 	for _, c := range children {
 		if !placed[c.Ref.Path] {
