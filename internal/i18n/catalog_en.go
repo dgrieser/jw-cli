@@ -23,6 +23,12 @@ var en = Messages{
 	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",
 
+	LabelAltText:       "Alt text",
+	LabelCredit:        "Credit",
+	LabelImageSize:     "Size",
+	LabelDescription:   "Description",
+	ImageFallbackTitle: "Image %d",
+
 	FilesHeading:      "Files",
 	LabelLANK:         "LANK",
 	LabelType:         "Type",

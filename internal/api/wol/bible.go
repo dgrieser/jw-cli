@@ -37,6 +37,7 @@ const (
 	selMediaItem    = ".group.media li.item"       // one media entry
 	selMediaImg     = "img.studyItemMedia"         // its thumbnail
 	selMediaLink    = "a.directLinkItem"           // finder deep link
+	selMediaGallery = "a.galleryItem"              // gallery page of a picture
 	selResearchItem = ".group.index li.item"       // research guide entry
 	selFootnoteItem = ".group.footnote li.item"    // footnotes (best effort)
 	selSectionTitle = "h3.title"
@@ -158,13 +159,26 @@ func (d *ChapterDoc) StudySection(verse int) (model.StudySection, bool) {
 	sec.Find(selMediaItem).Each(func(_ int, li *goquery.Selection) {
 		asset := model.MediaAsset{Caption: cleanSpace(li.Find(".caption").First().Text())}
 		if img := li.Find(selMediaImg).First(); img.Length() > 0 {
-			src, _ := img.Attr("src")
-			asset.URL = absURL(d.base, src)
-			asset.Alt, _ = img.Attr("alt")
+			// the study pane shows a thumbnail and names the full-size
+			// rendition beside it; the picture is the latter
+			thumb := absURL(d.base, img.AttrOr("src", ""))
+			asset.URL = absURL(d.base, img.AttrOr("data-img-large-src", ""))
+			if asset.URL == "" {
+				asset.URL = thumb
+			} else if thumb != asset.URL {
+				asset.ThumbnailURL = thumb
+			}
+			asset.Alt = cleanSpace(img.AttrOr("alt", ""))
 		}
 		if a := li.Find(selMediaLink).First(); a.Length() > 0 {
 			href, _ := a.Attr("href")
 			asset.FinderLink = absURL(d.base, href)
+		}
+		// a picture links to its gallery page, which is where its caption and
+		// rights line are written down (see GalleryItem)
+		if a := li.Find(selMediaGallery).First(); a.Length() > 0 {
+			href, _ := a.Attr("href")
+			asset.SourceURL = absURL(d.base, href)
 		}
 		if asset.URL == "" && asset.FinderLink == "" {
 			return

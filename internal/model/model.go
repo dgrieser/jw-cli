@@ -28,22 +28,25 @@ type PubKey struct {
 // lists). It is self-contained so follow-up commands (show/open/download) can
 // act on it from the results cache without re-querying.
 type Result struct {
-	Index       int     `json:"index"`
-	Kind        string  `json:"kind"` // article|video|audio|publication|bible|category|file|image
-	Title       string  `json:"title"`
-	Snippet     string  `json:"snippet,omitempty"`
-	Context     string  `json:"context,omitempty"`
-	LANK        string  `json:"lank,omitempty"`
-	CategoryKey string  `json:"categoryKey,omitempty"` // mediator category to browse into
-	DocID       int     `json:"docid,omitempty"`
-	JWLink      string  `json:"jwLink,omitempty"`
-	WOLLink     string  `json:"wolLink,omitempty"`
-	FileURL     string  `json:"fileUrl,omitempty"` // direct download URL when known
-	Checksum    string  `json:"checksum,omitempty"`
-	Filesize    int64   `json:"filesize,omitempty"`
-	Duration    string  `json:"duration,omitempty"`
-	ImageURL    string  `json:"imageUrl,omitempty"`
-	Pub         *PubKey `json:"pub,omitempty"`
+	Index       int    `json:"index"`
+	Kind        string `json:"kind"` // article|video|audio|publication|bible|category|file|image
+	Title       string `json:"title"`
+	Snippet     string `json:"snippet,omitempty"`
+	Context     string `json:"context,omitempty"`
+	LANK        string `json:"lank,omitempty"`
+	CategoryKey string `json:"categoryKey,omitempty"` // mediator category to browse into
+	DocID       int    `json:"docid,omitempty"`
+	JWLink      string `json:"jwLink,omitempty"`
+	WOLLink     string `json:"wolLink,omitempty"`
+	FileURL     string `json:"fileUrl,omitempty"` // direct download URL when known
+	Checksum    string `json:"checksum,omitempty"`
+	Filesize    int64  `json:"filesize,omitempty"`
+	Duration    string `json:"duration,omitempty"`
+	ImageURL    string `json:"imageUrl,omitempty"`
+	// Image is the metadata of an image row (kind "image"): caption, alt text,
+	// rights line, pixel size. Printed even under --no-urls.
+	Image *ImageMeta `json:"image,omitempty"`
+	Pub   *PubKey    `json:"pub,omitempty"`
 }
 
 // SearchPage is one page of search or browse results.
@@ -142,11 +145,60 @@ type CrossRef struct {
 
 // MediaAsset is an image (or linked clip) with caption, e.g. verse media or
 // article figures.
+//
+// Everything past URL is metadata the picture carries in the page that
+// references it: the sites strip EXIF/IPTC from the image files themselves, so
+// the caption, the alt text, the rights line and the pixel size are only ever
+// readable from the HTML (or, for study-bible media, from the gallery page the
+// thumbnail links to). It is collected whether or not the URLs are printed —
+// --no-urls hides targets, not the picture's description.
 type MediaAsset struct {
-	URL        string `json:"url"`
-	Caption    string `json:"caption,omitempty"`
-	Alt        string `json:"alt,omitempty"`
-	FinderLink string `json:"finderLink,omitempty"` // jw.org finder deep link (videos w/ timestamps)
+	URL          string `json:"url"`
+	ThumbnailURL string `json:"thumbnailUrl,omitempty"` // small rendition, when URL is the large one
+	Caption      string `json:"caption,omitempty"`
+	Alt          string `json:"alt,omitempty"`
+	Credit       string `json:"credit,omitempty"`      // rights line printed beside the picture
+	Description  string `json:"description,omitempty"` // the long caption of a gallery item
+	Width        int    `json:"width,omitempty"`
+	Height       int    `json:"height,omitempty"`
+	SourceURL    string `json:"sourceUrl,omitempty"`  // page carrying the metadata (wol gallery item)
+	FinderLink   string `json:"finderLink,omitempty"` // jw.org finder deep link (videos w/ timestamps)
+}
+
+// Meta condenses the asset's metadata into the record a listing row carries.
+func (m MediaAsset) Meta() *ImageMeta {
+	im := ImageMeta{
+		Caption: m.Caption, Alt: m.Alt, Credit: m.Credit,
+		Description: m.Description, Width: m.Width, Height: m.Height,
+	}
+	if im == (ImageMeta{}) {
+		return nil
+	}
+	return &im
+}
+
+// ImageMeta is what is known about an image besides where it is: the words
+// printed with it and its pixel size. Carried by an image result so a listing,
+// jw show and -o json can all report it, with or without --no-urls.
+type ImageMeta struct {
+	Caption     string `json:"caption,omitempty"`
+	Alt         string `json:"alt,omitempty"`
+	Credit      string `json:"credit,omitempty"`
+	Description string `json:"description,omitempty"`
+	Width       int    `json:"width,omitempty"`
+	Height      int    `json:"height,omitempty"`
+}
+
+// Label is the best one-line name for the image: the caption, else the alt
+// text, else the rights line. Empty when the image says nothing about itself,
+// in which case a listing falls back to its index.
+func (m ImageMeta) Label() string {
+	for _, s := range []string{m.Caption, m.Alt, m.Credit} {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // ResearchItem is one research-guide reference on a verse: a link to a

@@ -146,20 +146,28 @@ func writeArticle(a *app.App, art model.Article) error {
 }
 
 func imagesToResults(art model.Article) []model.Result {
-	var items []model.Result
+	items := make([]model.Result, 0, len(art.Images))
 	for _, img := range art.Images {
-		title := img.Caption
-		if title == "" {
-			title = img.Alt
-		}
-		if title == "" {
-			title = img.URL
-		}
-		items = append(items, model.Result{
-			Kind: "image", Title: title, FileURL: img.URL, ImageURL: img.URL,
-		})
+		items = append(items, imageResult(img, ""))
 	}
 	return items
+}
+
+// imageResult turns an illustration into a listing row: its own words as the
+// title, everything else it says as metadata. The URL is never the title —
+// under --no-urls the row would be the one place a target still shows up, and a
+// picture with nothing to say falls back to its index instead (see
+// listStyle.imageFallbackTitle).
+func imageResult(img model.MediaAsset, context string) model.Result {
+	meta := img.Meta()
+	title := ""
+	if meta != nil {
+		title = meta.Label()
+	}
+	return model.Result{
+		Kind: "image", Title: title, Context: context, Image: meta,
+		FileURL: img.URL, ImageURL: img.URL,
+	}
 }
 
 func writeScriptureRefs(a *app.App, art model.Article) error {

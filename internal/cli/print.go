@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
@@ -55,10 +56,16 @@ type listStyle struct {
 	// noURLs leaves the link line off every entry (--no-urls). The index still
 	// identifies the entry for jw show|open|download.
 	noURLs bool
+	// txt labels the metadata lines of an image row.
+	txt *i18n.Messages
 }
 
 func listStyleFor(a *app.App) listStyle {
-	s := listStyle{inline: render.InlineOptions{Emphasis: a.Styled()}, noURLs: a.Flags.NoURLs}
+	s := listStyle{
+		inline: render.InlineOptions{Emphasis: a.Styled()},
+		noURLs: a.Flags.NoURLs,
+		txt:    a.Text(),
+	}
 	if a.Styled() {
 		s.width = a.Width()
 	}
@@ -80,6 +87,9 @@ func formatResult(r model.Result, style listStyle) string {
 		meta = append(meta, humanSize(r.Filesize))
 	}
 	title := render.Inline(r.Title, style.inline)
+	if title == "" && r.Kind == "image" {
+		title = style.imageFallbackTitle(r.Index)
+	}
 	if r.Context != "" {
 		title += " — " + render.Inline(r.Context, style.inline)
 	}
@@ -92,11 +102,72 @@ func formatResult(r model.Result, style listStyle) string {
 	if snippet := render.Inline(r.Snippet, style.inline); snippet != "" {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(snippet))
 	}
+	// what the image itself says: printed with or without --no-urls, since the
+	// flag drops the target, not the picture's description
+	for _, line := range style.imageMetaLines(r) {
+		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(line))
+	}
 	// links stay on one line: a wrapped URL cannot be clicked or copied
 	if link := preferredLink(r); link != "" && !style.noURLs {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, link)
 	}
 	return b.String()
+}
+
+// imageMetaLines labels the metadata of an image row, leaving out whatever
+// already stands in the title.
+func (s listStyle) imageMetaLines(r model.Result) []string {
+	if r.Image == nil || s.txt == nil {
+		return nil
+	}
+	im := *r.Image
+	var out []string
+	add := func(label, value string) {
+		if value == "" || value == r.Title {
+			return
+		}
+		out = append(out, label+": "+render.Inline(value, s.inline))
+	}
+	add(s.txt.LabelDescription, im.Description)
+	add(s.txt.LabelAltText, im.Alt)
+	add(s.txt.LabelCredit, im.Credit)
+	if size := imageSize(im); size != "" {
+		out = append(out, s.txt.LabelImageSize+": "+size)
+	}
+	return out
+}
+
+// imageDetailLines spells one image out for `jw show <n>` and the TUI detail
+// pane: the title the listing showed, then every metadata line it printed
+// underneath. Independent of --no-urls — the caller adds the URL, or does not.
+func imageDetailLines(r model.Result, txt *i18n.Messages) []string {
+	style := listStyle{txt: txt}
+	title := r.Title
+	if title == "" && r.Kind == "image" {
+		title = style.imageFallbackTitle(r.Index)
+	}
+	return append([]string{title}, style.imageMetaLines(r)...)
+}
+
+// imageFallbackTitle names an image row that carries no words of its own.
+func (s listStyle) imageFallbackTitle(index int) string {
+	if s.txt == nil {
+		return ""
+	}
+	return fmt.Sprintf(s.txt.ImageFallbackTitle, index)
+}
+
+// imageSize spells the pixel size out, or just the one side that is known.
+func imageSize(im model.ImageMeta) string {
+	switch {
+	case im.Width > 0 && im.Height > 0:
+		return fmt.Sprintf("%d×%d px", im.Width, im.Height)
+	case im.Width > 0:
+		return fmt.Sprintf("%d px", im.Width)
+	case im.Height > 0:
+		return fmt.Sprintf("%d px", im.Height)
+	}
+	return ""
 }
 
 func preferredLink(r model.Result) string {

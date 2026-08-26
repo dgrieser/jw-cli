@@ -18,7 +18,8 @@ func articleMux(t *testing.T) *http.ServeMux {
 		  <header><h1>Caleb—He Fought Loyally</h1></header>
 		  <div class="bodyTxt">
 		    <p>CALEB trusted in Jehovah. (<a href="/en/wol/bc/r1/lp-e/2024360/0/0" data-bid="1-1" class="b">Num. 14:24</a>)</p>
-		    <figure><img src="https://cms-imgp.example/caleb_lg.jpg" alt="Caleb"/><figcaption>Caleb in Hebron</figcaption></figure>
+		    <figure><img src="https://cms-imgp.example/caleb_lg.jpg" alt="Caleb" width="1200" height="675"/><p class="imgCredit">© Example Picture Library</p><figcaption>Caleb in Hebron</figcaption></figure>
+		    <figure><img src="https://cms-imgp.example/nameless.jpg"/></figure>
 		  </div>
 		</div></body></html>`))
 	})
@@ -55,6 +56,28 @@ func TestArticleImagesListing(t *testing.T) {
 	if !strings.Contains(out, "[image] Caleb in Hebron") || !strings.Contains(out, "caleb_lg.jpg") {
 		t.Errorf("images output:\n%s", out)
 	}
+	// the words and the pixel size the figure states beside the picture
+	for _, want := range []string{"Alt text: Caleb", "Credit: © Example Picture Library", "Size: 1200×675 px"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// The metadata is what the listing has to show once the URLs are gone: a
+// picture that says nothing about itself falls back to its index, which is
+// still what jw show|download takes — the URL is never the title.
+func TestArticleImagesListingNoURLs(t *testing.T) {
+	out, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--images", "--no-urls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"[image] Caleb in Hebron", "Credit: © Example Picture Library", "[image] Image 2"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	assertNoURLs(t, out)
 }
 
 // TestArticleRawOutput pins -o raw to the same body as -o markdown to a pipe:

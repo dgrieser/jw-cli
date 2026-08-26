@@ -472,20 +472,16 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 		Short: "Show images and clips attached to a verse (with captions)",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			var items []model.Result
-			err := forEachStudySection(cmd.Context(), a, args, func(ref string, _ model.Verse, sec model.StudySection) {
+			err := forEachStudySection(ctx, a, args, func(ref string, _ model.Verse, sec model.StudySection) {
 				for _, m := range sec.Media {
-					title := m.Caption
-					if title == "" {
-						title = m.Alt
+					if !doDL {
+						m = withGalleryMeta(ctx, a, m)
 					}
-					if title == "" {
-						title = m.URL
-					}
-					items = append(items, model.Result{
-						Kind: "image", Title: title, Context: ref,
-						FileURL: m.URL, ImageURL: m.URL, JWLink: m.FinderLink,
-					})
+					r := imageResult(m, ref)
+					r.JWLink = m.FinderLink
+					items = append(items, r)
 				}
 			})
 			if err != nil {
@@ -504,6 +500,42 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 	cmd.Flags().BoolVar(&doDL, "download", false, "download the media files")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download directory")
 	return cmd
+}
+
+// withGalleryMeta fills in what the study pane leaves out. A verse's picture is
+// listed there as a thumbnail with a one-line title; its explanatory caption
+// and its rights line are written down only on the gallery page it links to, so
+// that page is read (cached for a month) whenever a picture names one. Failing
+// to read it costs the extra words, not the entry: the thumbnail's own title
+// stays.
+func withGalleryMeta(ctx context.Context, a *app.App, m model.MediaAsset) model.MediaAsset {
+	if m.SourceURL == "" {
+		return m
+	}
+	g, err := a.WOL().GalleryItem(ctx, m.SourceURL)
+	if err != nil {
+		return m
+	}
+	if g.URL != "" && g.URL != m.URL {
+		if m.ThumbnailURL == "" {
+			m.ThumbnailURL = m.URL // what the study pane pointed at
+		}
+		m.URL = g.URL
+	}
+	for _, f := range []struct {
+		dst *string
+		src string
+	}{
+		{&m.Caption, g.Caption},
+		{&m.Alt, g.Alt},
+		{&m.Credit, g.Credit},
+		{&m.Description, g.Description},
+	} {
+		if *f.dst == "" {
+			*f.dst = f.src
+		}
+	}
+	return m
 }
 
 func newBibleResearchCmd(a *app.App) *cobra.Command {

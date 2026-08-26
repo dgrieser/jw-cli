@@ -43,6 +43,18 @@ type Messages struct {
 	NoCrossRefs  string
 	NoResearch   string
 
+	// --- image metadata ---------------------------------------------------
+	// The words an image carries in the page that references it. Printed with
+	// every image row and by `jw show <n>` on one, --no-urls or not: the flag
+	// hides where the picture is, not what it shows.
+	LabelAltText     string
+	LabelCredit      string
+	LabelImageSize   string
+	LabelDescription string
+	// ImageFallbackTitle names an image that says nothing about itself and
+	// takes the result index, which is what jw show|download takes.
+	ImageFallbackTitle string
+
 	// --- media details ----------------------------------------------------
 	FilesHeading   string
 	LabelLANK      string

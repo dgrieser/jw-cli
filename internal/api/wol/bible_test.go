@@ -210,3 +210,76 @@ func TestBookNameVariantsUnstructured(t *testing.T) {
 		t.Errorf("variants = %q, want %q", got, want)
 	}
 }
+
+// A picture in the study pane points at its gallery page and names the
+// full-size rendition beside the thumbnail it shows.
+func TestStudySectionGalleryPicture(t *testing.T) {
+	c := chapterClient(t)
+	doc, err := c.Chapter(context.Background(), cfgEN, "nwtsty", 43, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, ok := doc.StudySection(17)
+	if !ok {
+		t.Fatal("no study section for John 3:17")
+	}
+	if len(sec.Media) != 1 {
+		t.Fatalf("media = %+v", sec.Media)
+	}
+	m := sec.Media[0]
+	if !strings.HasSuffix(m.URL, "/en/wol/mp/r1/lp-e/nwtsty/2026/665") {
+		t.Errorf("url = %q, want the full-size rendition", m.URL)
+	}
+	if !strings.HasSuffix(m.ThumbnailURL, "/thumbnail") {
+		t.Errorf("thumbnail = %q", m.ThumbnailURL)
+	}
+	if !strings.Contains(m.SourceURL, "/en/wol/gallery/r1/lp-e/nwtsty/43/1001072075") {
+		t.Errorf("source = %q, want the gallery page", m.SourceURL)
+	}
+	if m.Caption != "Roman Judge" {
+		t.Errorf("caption = %q", m.Caption)
+	}
+}
+
+// GalleryItem reads what the study pane does not carry: the explanatory
+// caption and the rights line.
+func TestGalleryItem(t *testing.T) {
+	mux := http.NewServeMux()
+	var hits int
+	mux.HandleFunc("/en/wol/gallery/r1/lp-e/nwtsty/43/1001072075", func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		serveFile(t, "testdata/gallery_item.html")(w, r)
+	})
+	c := testClient(t, mux)
+	// the fragment the study pane appends must not reach the request
+	url := c.hc.Base.WOL + "/en/wol/gallery/r1/lp-e/nwtsty/43/1001072075#chapter=3"
+	got, err := c.GalleryItem(context.Background(), url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Caption != "Roman Judge" {
+		t.Errorf("caption = %q", got.Caption)
+	}
+	if !strings.Contains(got.Description, "raised seat") {
+		t.Errorf("description = %q", got.Description)
+	}
+	if got.Credit != "© Example Picture Library" {
+		t.Errorf("credit = %q", got.Credit)
+	}
+	if got.Alt != "A judge on his seat" {
+		t.Errorf("alt = %q", got.Alt)
+	}
+	if !strings.HasSuffix(got.URL, "/en/wol/mp/r1/lp-e/nwtsty/2026/665") {
+		t.Errorf("url = %q", got.URL)
+	}
+	if got.SourceURL != url {
+		t.Errorf("source = %q, want the URL it was asked for", got.SourceURL)
+	}
+	// second call is served from the cache
+	if _, err := c.GalleryItem(context.Background(), url); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 1 {
+		t.Errorf("gallery page fetched %d times, want 1", hits)
+	}
+}

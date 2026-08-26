@@ -29,7 +29,7 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 				}
 				return tui.Content{Text: mediaInfoText(mi, a.Text(), a.Flags.NoURLs)}, nil
 			case "file", "image":
-				parts := []string{item.Title}
+				parts := []string{strings.Join(imageDetailLines(item, a.Text()), "\n")}
 				if !a.Flags.NoURLs && item.FileURL != "" {
 					parts = append(parts, item.FileURL)
 				}

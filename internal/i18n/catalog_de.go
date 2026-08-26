@@ -23,6 +23,12 @@ var de = Messages{
 	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
 
+	LabelAltText:       "Bildbeschreibung",
+	LabelCredit:        "Bildnachweis",
+	LabelImageSize:     "Größe",
+	LabelDescription:   "Beschreibung",
+	ImageFallbackTitle: "Bild %d",
+
 	FilesHeading:      "Dateien",
 	LabelLANK:         "LANK",
 	LabelType:         "Typ",

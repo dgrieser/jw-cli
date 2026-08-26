@@ -25,6 +25,15 @@ func bibleMux(t *testing.T) *http.ServeMux {
 		}
 		w.Write(b)
 	})
+	mux.HandleFunc("/en/wol/gallery/r1/lp-e/nwtsty/43/1001072075", func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(filepath.Join("..", "api", "wol", "testdata", "gallery_item.html"))
+		if err != nil {
+			t.Errorf("fixture: %v", err)
+			http.Error(w, "missing", 500)
+			return
+		}
+		w.Write(b)
+	})
 	mux.HandleFunc("/en/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<ul><li>For God so loved... (Ge 22:2)</li></ul>`))
 	})
@@ -236,6 +245,39 @@ func TestBibleMedia(t *testing.T) {
 	if !strings.Contains(out, "[image]") || !strings.Contains(out, "Jesus explains birth") {
 		t.Fatalf("media output:\n%s", out)
 	}
+}
+
+// A verse picture is listed with everything the page says about it: the
+// caption from the study pane, the explanation and the rights line from its
+// gallery page.
+func TestBibleMediaImageMetadata(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "media", "-l", "en", "John 3:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Roman Judge", "Description: A Roman judge", "Credit: © Example Picture Library"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	// the full-size rendition, not the thumbnail the study pane shows
+	if !strings.Contains(out, "/en/wol/mp/r1/lp-e/nwtsty/2026/665") || strings.Contains(out, "/thumbnail") {
+		t.Errorf("wrong image URL:\n%s", out)
+	}
+}
+
+// --no-urls hides where the picture is, not what it shows.
+func TestBibleMediaImageMetadataNoURLs(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "media", "-l", "en", "--no-urls", "John 3:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Roman Judge", "A Roman judge", "Example Picture Library"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	assertNoURLs(t, out)
 }
 
 func TestBibleResearchExcerpts(t *testing.T) {

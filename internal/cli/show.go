@@ -52,7 +52,7 @@ rendered in the selected output format, videos/audio show their details.`,
 				if format == render.JSON {
 					return a.WriteJSON(item)
 				}
-				lines := []string{item.Title}
+				lines := imageDetailLines(item, a.Text())
 				if !a.Flags.NoURLs && item.FileURL != "" {
 					lines = append(lines, item.FileURL)
 				}

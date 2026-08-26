@@ -10,8 +10,8 @@
 - **Read** articles and bible text as **Markdown** (default), **HTML**, plain
   **text**, or **JSON**.
 - **Bible study material**: study notes, cross references (with full verse
-  text), verse media (images with captions, clips), and Research Guide
-  references with excerpts and article links.
+  text), verse media (full-size images with caption, explanation and credit,
+  clips), and Research Guide references with excerpts and article links.
 - **Download** videos (quality selection), audio, publications (PDF, EPUB,
   JWPUB, MP3, ...), subtitles, and article/verse images.
 - **Interactive TUI** for navigating search results and the media library.
@@ -118,6 +118,9 @@ that carried it. It applies to `markdown`, `raw`, `html`, and `text`:
 
 - a link becomes its own text, so a Bible citation still reads as a citation;
 - an image becomes `[image: alt]`, or is dropped when it has no alt text;
+- an image listing keeps its metadata — caption, alt text, credit, size — and
+  falls back to `Image <n>` where a picture says nothing about itself, so a URL
+  is never printed as a title;
 - result listings print title and snippet without the link line — the result
   index still drives `jw show|open|download <n>`;
 - `jw media info` lists the renditions without their file URLs.
@@ -167,7 +170,7 @@ jw bible read John 3:16 --unfold 1           # verse + study notes + its referen
 jw bible read -l de "Matthäus 24:14"         # localized book names
 jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text
-jw bible media John 3:16 --download          # verse images/clips w/ captions
+jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
 jw bible research John 3:16 -x               # research guide + excerpts
 jw bible books                               # book numbers/names
 ```
@@ -180,6 +183,35 @@ jw article https://wol.jw.org/en/wol/d/r1/lp-e/1102025912
 jw article <url> --refs                      # bible verses cited in the article
 jw article <url> --images                    # list images (then: jw download 2)
 jw article <url> --download-images -d pics/
+```
+
+### Image metadata
+
+Both sites serve their illustrations with EXIF/IPTC stripped, so nothing about a
+picture is readable from the file itself. Everything that is known about one is
+written down in the page that references it, and that is what jw-cli collects
+with every image:
+
+- **caption** and **alt text** from the figure (jw.org keeps them in the
+  `data-img-att-alt`/`figcaption` markup of a responsive image, wol on the
+  `<img>` tag);
+- the **credit line** the sites print beside a picture (`.imgCredit`), e.g.
+  `© www.BibleLandPictures.com/Alamy`;
+- the **pixel size**, where the markup states it.
+
+A study-bible verse picture keeps its explanation and its credit on the gallery
+page its thumbnail links to, so `jw bible media` reads that page as well
+(cached for a month) and lists the full-size rendition instead of the
+thumbnail. Failing to reach it costs the extra words, not the entry.
+
+The metadata is printed with `--no-urls` too: the flag hides where a picture is,
+not what it shows. `-o json` carries it as the `image` object of a result and on
+`images[]` of an article.
+
+```sh
+jw article 1102025912 --images               # caption, alt text, credit, size
+jw bible media "Luke 2:7"                    # + the gallery explanation
+jw show 1                                    # the same for one listed image
 ```
 
 ### Media (JW Broadcasting library)
@@ -224,7 +256,7 @@ the two meeting parts — takes the same flags for what to do with it:
 | Flag | Meaning |
 |---|---|
 | `--refs` | List the bible verses the document cites, each linked to the verse. |
-| `--images` | List its illustrations with captions, downloadable by index. |
+| `--images` | List its illustrations with everything the page says about them — caption, alt text, credit line, pixel size — downloadable by index. |
 | `--download-images` | Download all of them, with `-d, --dir` for the target. |
 | `--unfold N` | Print the text behind every citation, following references `N` levels deep. Verses also bring their study material. |
 
@@ -302,7 +334,7 @@ whole picture.
 | `b.jw-cdn.org/apis/mediator/v1` | media categories, items, language list |
 | `b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS` | publication download links |
 | `b.jw-cdn.org/apis/search` + `/tokens/jworg.jwt` | unified search (anonymous JWT, auto-refreshed on 401) |
-| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations (`/bc/`, `/pc/` JSON via XHR headers), daily text, meetings |
+| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations (`/bc/`, `/pc/` JSON via XHR headers), daily text, meetings, media gallery pages (image metadata) |
 | `www.jw.org` | article pages reached by URL |
 
 The client sends a browser-like User-Agent, keeps a cookie jar, and paces
@@ -329,14 +361,17 @@ smoke-tested once on a normal network:
    (`internal/api/wol/client.go`, `LocalizedBookNames`).
 5. `jw bible notes/xrefs/media/research John 3:16` — study-pane selectors in
    `internal/api/wol/bible.go` (grouped in one `sel*` constant block).
-6. `jw dailytext` — the `.todayItem` markup.
-7. `jw dailytext --unfold 1` — an unfolded verse finds its study pane through
+6. `jw bible media "Luke 2:7"` — a verse picture: the gallery-page selectors in
+   `internal/api/wol/gallery.go` (caption, credit, full-size rendition), and
+   `jw article 1102025912 --images` for the figure metadata wol states inline.
+7. `jw dailytext` — the `.todayItem` markup.
+8. `jw dailytext --unfold 1` — an unfolded verse finds its study pane through
    the title wol answers the `/bc/` citation with ("John 3:16"), parsed as a
    reference. A live title in another shape leaves the notes out silently.
-8. A video download — confirm the pub-media/mediator `checksum` fields are
+9. A video download — confirm the pub-media/mediator `checksum` fields are
    MD5 (that is what the downloader verifies).
-9. wol requests from data-center IPs may hit Akamai bot protection; if you
-   see 403s, try from a residential connection.
+10. wol requests from data-center IPs may hit Akamai bot protection; if you
+    see 403s, try from a residential connection.
 
 Selectors and URL patterns most likely to drift are deliberately grouped in
 constants near the top of each parser file.
