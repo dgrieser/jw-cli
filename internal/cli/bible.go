@@ -111,22 +111,7 @@ Examples:
 			if err != nil {
 				return err
 			}
-			// verse is a verse with what it references expanded under it, so
-			// the study material of a verse is read where the verse is.
-			type verse struct {
-				model.Verse
-				// Unfold is the expansion of everything this verse references,
-				// as an HTML appendix to its text.
-				Unfold string `json:"unfold,omitempty"`
-			}
-			type passage struct {
-				Ref    string  `json:"ref"`
-				Verses []verse `json:"verses"`
-				// UnfoldNote says an expansion was cut short, which is about the
-				// passage rather than about one of its verses.
-				UnfoldNote string `json:"unfoldNote,omitempty"`
-			}
-			var passages []passage
+			var passages []readPassage
 			chapters := map[string]*wol.ChapterDoc{}
 			// one expander for every passage read, so they share the chapter
 			// pages their study panes come from
@@ -149,7 +134,7 @@ Examples:
 					return fmt.Errorf("%s: %w", refString(ref, table), err)
 				}
 				ref = resolveChapterEnd(ref, verses)
-				p := passage{Ref: refString(ref, table)}
+				p := readPassage{Ref: refString(ref, table)}
 				var unfolded []string
 				if depth > 0 {
 					// several verses are headed one by one, so the expansion of a
@@ -165,7 +150,7 @@ Examples:
 					}
 				}
 				for i, v := range verses {
-					out := verse{Verse: v}
+					out := readVerse{Verse: v}
 					if i < len(unfolded) {
 						out.Unfold = unfolded[i]
 						if len(verses) > 1 {
@@ -188,13 +173,15 @@ Examples:
 					b.WriteString("\n")
 				}
 				var html strings.Builder
-				for _, v := range p.Verses {
-					if v.Citation != "" {
-						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(v.Citation)))
+				for _, run := range verseRuns(p.Verses) {
+					if cite := runCitation(run, table); cite != "" {
+						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
 					}
-					html.WriteString(v.HTML)
-					html.WriteString(" ")
-					html.WriteString(v.Unfold)
+					for _, v := range run {
+						html.WriteString(v.HTML)
+						html.WriteString(" ")
+						html.WriteString(v.Unfold)
+					}
 				}
 				html.WriteString(unfoldNoteHTML(p.UnfoldNote))
 				body, err := render.Render(html.String(), format, render.Options{BaseURL: a.HTTP().Base.WOL})
@@ -217,6 +204,64 @@ Examples:
 	cmd.Flags().IntVar(&depth, "unfold", 0, "print the study notes and the text behind every reference, following references this many levels deep")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
 	return cmd
+}
+
+// readVerse is a verse as jw bible read prints it: the text, and with --unfold
+// what the verse references expanded under it, so the study material of a verse
+// is read where the verse is.
+type readVerse struct {
+	model.Verse
+	// Unfold is the expansion of everything this verse references, as an HTML
+	// appendix to its text.
+	Unfold string `json:"unfold,omitempty"`
+}
+
+// readPassage is one reference read.
+type readPassage struct {
+	Ref    string      `json:"ref"`
+	Verses []readVerse `json:"verses"`
+	// UnfoldNote says an expansion was cut short, which is about the passage
+	// rather than about one of its verses.
+	UnfoldNote string `json:"unfoldNote,omitempty"`
+}
+
+// verseRuns groups the verses of a passage into the spans printed under one
+// heading. A verse that brought something of its own stands alone, so what
+// follows the verse reads as belonging to it; the verses around it that brought
+// nothing are one span of plain text and are headed as the span they are —
+// "Jeremiah 30:1, 2" rather than a heading over every verse of it.
+func verseRuns(verses []readVerse) [][]readVerse {
+	var runs [][]readVerse
+	for i := 0; i < len(verses); {
+		j := i + 1
+		if verses[i].Unfold == "" {
+			for j < len(verses) && verses[j].Unfold == "" {
+				j++
+			}
+		}
+		runs = append(runs, verses[i:j])
+		i = j
+	}
+	return runs
+}
+
+// runCitation heads a span of verses. It is empty when the verses of the passage
+// are not headed one by one at all: without an expansion under them there is
+// nothing to tell apart, and the passage heading already says what they are.
+func runCitation(run []readVerse, t *bibleref.Table) string {
+	if len(run) == 0 || run[0].Citation == "" {
+		return ""
+	}
+	if len(run) == 1 {
+		return run[0].Citation
+	}
+	first, last := run[0].ID, run[len(run)-1].ID
+	return refString(bibleref.Ref{
+		Book:       first / 1_000_000,
+		Chapter:    first / 1_000 % 1_000,
+		VerseStart: first % 1_000,
+		VerseEnd:   last % 1_000,
+	}, t)
 }
 
 // refString renders a ref with the (possibly localized) book table.

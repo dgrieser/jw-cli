@@ -251,6 +251,12 @@ func unfoldBibleVerses(ctx context.Context, a *app.App, r *tooltipResolver, ref 
 		var b strings.Builder
 		writeStudy(&b, unfold.Node{Notes: studies[i].Notes, Links: studies[i].Links}, level, txt)
 		b.WriteString(parts[i])
+		if b.Len() > 0 && i < len(verses)-1 {
+			// the rule closes what the verse brought rather than opening it,
+			// parting it from the verse that follows. Nothing follows the last
+			// verse, so nothing needs parting from it either
+			b.WriteString("<hr/>")
+		}
 		out[i] = b.String()
 	}
 	return out, note, nil
@@ -411,7 +417,9 @@ func unfoldHTMLAt(res unfold.Result, txt *i18n.Messages, level int) string {
 	if body == "" {
 		return ""
 	}
-	return body + unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt))
+	// an appendix is opened by the rule: what follows it, to the end of the
+	// output, is the expansion rather than the document
+	return "<hr/>" + body + unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt))
 }
 
 // unfoldNodesHTML renders one tier of expanded references under its own heading.
@@ -420,7 +428,7 @@ func unfoldNodesHTML(nodes []unfold.Node, txt *i18n.Messages, level int) string 
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString("<hr/>" + headingHTML(level, html.EscapeString(txt.UnfoldHeading)))
+	b.WriteString(headingHTML(level, html.EscapeString(txt.UnfoldHeading)))
 	writeUnfoldNodes(&b, nodes, level+1, "", txt)
 	return b.String()
 }
