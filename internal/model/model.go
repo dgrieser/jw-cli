@@ -152,12 +152,26 @@ type MediaAsset struct {
 // ResearchItem is one research-guide reference on a verse: a link to a
 // publication passage discussing it.
 type ResearchItem struct {
-	Title       string `json:"title"`
-	Source      string `json:"source,omitempty"` // publication line, e.g. "it-2 528"
+	Title  string `json:"title"`
+	Source string `json:"source,omitempty"` // publication line, e.g. "it-2 528"
+	// Kind is the index the entry was listed under: ResearchGuideItem or
+	// PublicationIndexItem. wol marks the group with a class of its own, which
+	// is the same in every language, while Source is the localized heading the
+	// group carries.
+	Kind        string `json:"kind,omitempty"`
 	PCPath      string `json:"pcPath,omitempty"` // wol /pc/ path for the excerpt
 	ExcerptHTML string `json:"excerptHtml,omitempty"`
 	ArticleURL  string `json:"articleUrl,omitempty"`
 }
+
+// The indexes a research entry can come from. Both point at publications
+// discussing a verse, and the same passage is regularly listed in each: the
+// research guide spells the publication out ("Insight, Volume 1, page 1044"),
+// the publications index cites it by symbol ("it-1 1044").
+const (
+	ResearchGuideItem    = "researchGuide"
+	PublicationIndexItem = "publicationIndex"
+)
 
 // StudySection groups everything the study bible attaches to one verse.
 type StudySection struct {

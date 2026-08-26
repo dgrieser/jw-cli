@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 func chapterClient(t *testing.T) *Client {
@@ -112,7 +114,7 @@ func TestStudySection(t *testing.T) {
 		!strings.Contains(m.FinderLink, "lank=pub-gnj_3_VIDEO") {
 		t.Errorf("media = %+v", m)
 	}
-	if len(sec.Research) != 2 {
+	if len(sec.Research) != 3 {
 		t.Fatalf("research = %+v", sec.Research)
 	}
 	if sec.Research[0].PCPath == "" || !strings.Contains(sec.Research[0].Title, "God So Loved") {
@@ -120,6 +122,14 @@ func TestStudySection(t *testing.T) {
 	}
 	if sec.Research[1].ArticleURL == "" {
 		t.Errorf("research[1] should have a direct article URL: %+v", sec.Research[1])
+	}
+	// the index the entry was listed under, which is what an expansion prefers
+	// one of two entries for the same passage by
+	if sec.Research[0].Kind != model.ResearchGuideItem {
+		t.Errorf("research[0] kind = %q", sec.Research[0].Kind)
+	}
+	if sec.Research[2].Kind != model.PublicationIndexItem {
+		t.Errorf("research[2] kind = %q", sec.Research[2].Kind)
 	}
 
 	// verse 17 has only xrefs

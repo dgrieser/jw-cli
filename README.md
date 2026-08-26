@@ -236,6 +236,13 @@ reads the way it does in the study pane:
 - research-guide entries naming a whole article instead of a passage have no
   passage to unfold and are listed with their link under `Research guide`.
 
+The study bible lists a verse's publications twice — the research guide spells
+each one out ("Insight, Volume 1, page 1044"), the publications index cites it by
+symbol ("it-1 1044") — and `jw bible research` prints both, as the study pane
+does. An expansion instead shows such a passage once, under the research guide's
+citation: the two point at the same article, each cutting it where it likes, so
+unfolding both would print the same text twice.
+
 The study pane lives on the chapter page, so the first verse of a chapter pays
 for it and every other verse of that chapter comes free. `jw bible read` takes
 `--unfold` on the same terms, on the verses it is reading:

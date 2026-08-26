@@ -42,6 +42,12 @@ const (
 	selSectionTitle = "h3.title"
 )
 
+// The two indexes a research entry can be listed under, as wol classes them.
+const (
+	classResearchGuide    = "ref-rsg"
+	classPublicationIndex = "ref-dx"
+)
+
 // Chapter fetches one bible chapter page (with the study pane inlined).
 func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, chapter int) (*ChapterDoc, error) {
 	if edition == "" {
@@ -176,6 +182,7 @@ func (d *ChapterDoc) StudySection(verse int) (model.StudySection, bool) {
 		item := model.ResearchItem{
 			Title:  cleanSpace(a.Text()),
 			Source: cleanSpace(li.Find(".subtitle").First().Text()),
+			Kind:   researchKind(li),
 		}
 		if strings.Contains(href, "/pc/") {
 			item.PCPath = absURL(d.base, href)
@@ -195,6 +202,19 @@ func (d *ChapterDoc) StudySection(verse int) (model.StudySection, bool) {
 	})
 
 	return out, true
+}
+
+// researchKind names the index a research entry was listed under. The class is
+// the same in every language, so it says what the localized group heading
+// cannot; an entry in neither group is left unnamed rather than guessed at.
+func researchKind(li *goquery.Selection) string {
+	switch {
+	case li.HasClass(classResearchGuide):
+		return model.ResearchGuideItem
+	case li.HasClass(classPublicationIndex):
+		return model.PublicationIndexItem
+	}
+	return ""
 }
 
 // MarginalReference fetches the full text of one cross-reference group (the

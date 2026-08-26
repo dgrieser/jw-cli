@@ -116,7 +116,9 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 				out.Links = append(out.Links, item)
 				continue
 			}
-			out.Research = append(out.Research, unfold.Ref{Text: researchLabel(item), Path: item.PCPath})
+			out.Research = append(out.Research, unfold.Ref{
+				Text: researchLabel(item), Path: item.PCPath, Rank: researchRank(item),
+			})
 		}
 	}
 	return out, nil
@@ -131,6 +133,21 @@ func researchLabel(item model.ResearchItem) string {
 		return item.Title
 	}
 	return item.Source
+}
+
+// researchRank is which of two index entries for the same passage is kept when
+// the expansion finds they say the same thing: the research guide, which names
+// the publication as a reader would cite it ("Einsichten, Band 1, S. 1044"),
+// over the publications index citing it by symbol ("it-1 1044"). An entry from
+// neither index sits between the two: it is nothing to prefer the symbol over.
+func researchRank(item model.ResearchItem) int {
+	switch item.Kind {
+	case model.ResearchGuideItem:
+		return 0
+	case model.PublicationIndexItem:
+		return 2
+	}
+	return 1
 }
 
 // longestChapter is how far to look for study sections when the chapter's own

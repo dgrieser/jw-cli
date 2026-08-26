@@ -19,6 +19,11 @@ import (
 type Ref struct {
 	Text string
 	Path string
+	// Rank breaks the tie when two references turn out to resolve to the same
+	// content: the lowest rank is the one kept. Zero for anything cited in a
+	// document, which is a single list with nothing to prefer; the indexes of
+	// the study bible list the same passage twice and rank one above the other.
+	Rank int
 }
 
 // IsVerse reports whether the citation resolves to bible text rather than to a
@@ -64,7 +69,11 @@ type Node struct {
 	// gap in the output is never silent.
 	Title string
 	HTML  string
-	Err   error
+	// URL is the document the passage was lifted out of, with an anchor naming
+	// the extent that was taken. It is what tells two references pointing at one
+	// passage apart from two references pointing at different ones.
+	URL string
+	Err error
 	// Notes and Links are the study material of a verse; StudyErr says the
 	// study pane could not be read, for the same reason Err is kept.
 	Notes    []model.StudyNote
@@ -156,13 +165,22 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 	}
 	study, _ := r.(StudyResolver)
 	seen := map[string]bool{}
-	var frontier []*Node
+	shown := map[string][]passage{}
+	// the node lists of the level being expanded: the roots of every group to
+	// start with, the children of what those resolved to after that. Nodes are
+	// reached through their list rather than kept as pointers, because dropping
+	// a duplicate rewrites the list it sat in.
+	var tiers []*[]Node
 	for i, g := range groups {
 		res.Nodes[i] = plan(append(Refs(g.Fragment), g.RootRefs...), seen)
-		frontier = append(frontier, pointersTo(res.Nodes[i])...)
+		tiers = append(tiers, &res.Nodes[i])
 	}
 
-	for level := 1; len(frontier) > 0; level++ {
+	for level := 1; ; level++ {
+		frontier := nodesIn(tiers)
+		if len(frontier) == 0 {
+			break
+		}
 		if o.Confirm != nil {
 			if cost := requestCost(frontier, study != nil); cost > o.Threshold {
 				ok, err := o.Confirm(level, cost)
@@ -177,8 +195,9 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 			}
 		}
 		// the research-guide passages each verse turned out to have, kept aside
-		// so they join the citations found in its text
-		research := map[*Node][]Ref{}
+		// so they join the citations found in its text. Keyed by path rather
+		// than by node: dropping a duplicate moves the nodes of a tier around.
+		research := map[string][]Ref{}
 		for i, n := range frontier {
 			if err := ctx.Err(); err != nil {
 				res.Pending += len(frontier) - i
@@ -189,7 +208,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 			if err != nil {
 				n.Err = err
 			} else {
-				n.Title, n.HTML = tip.Title, tip.ContentHTML
+				n.Title, n.HTML, n.URL = tip.Title, tip.ContentHTML, tip.URL
 			}
 			if study != nil && n.Err == nil && n.Ref.IsVerse() {
 				s, err := study.Study(ctx, n.Title)
@@ -198,16 +217,24 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 					n.StudyErr = err
 				} else {
 					n.Notes, n.Links = s.Notes, s.Links
-					research[n] = s.Research
+					research[n.Ref.Path] = s.Research
 				}
 			}
 			if o.Progress != nil {
 				o.Progress(level, i+1, len(frontier))
 			}
 		}
-		var next []*Node
-		for _, n := range frontier {
-			refs := plan(append(Refs(n.HTML), research[n]...), seen)
+		if dropped := duplicates(frontier, shown, level); len(dropped) > 0 {
+			for _, tier := range tiers {
+				*tier = without(*tier, dropped)
+			}
+		}
+		// the pointers in frontier no longer stand for what they did before the
+		// duplicates came out of the tiers, so the survivors are read back from
+		// the tiers themselves
+		var next []*[]Node
+		for _, n := range nodesIn(tiers) {
+			refs := plan(append(Refs(n.HTML), research[n.Ref.Path]...), seen)
 			if level == o.Depth {
 				// the depth is used up: report what was left rather than
 				// letting the output look complete
@@ -215,14 +242,128 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 				continue
 			}
 			n.Children = refs
-			next = append(next, pointersTo(n.Children)...)
+			next = append(next, &n.Children)
 		}
 		if level == o.Depth {
 			break
 		}
-		frontier = next
+		tiers = next
 	}
 	return res, nil
+}
+
+// passage is a piece of content already in the output: the reference it is shown
+// under, the text it brought, and the level it was expanded at.
+type passage struct {
+	path  string
+	text  string
+	rank  int
+	level int
+}
+
+// duplicates picks out the references of a level that say what another one
+// already says, and returns the paths to drop. Two entries of the study bible's
+// indexes regularly point at the same passage — the research guide spelling the
+// publication out, the publications index citing it by symbol — through paths of
+// their own, and each cuts the passage where it likes, so the duplication is
+// only visible once both are resolved and the same article comes back twice. The
+// lower rank wins, and equal ranks leave the reference that came first standing;
+// a passage already shown at an earlier level keeps its place, since the output
+// above it is written by then.
+func duplicates(frontier []*Node, shown map[string][]passage, level int) map[string]bool {
+	dropped := map[string]bool{}
+	for _, n := range frontier {
+		text := plainText(n)
+		if text == "" {
+			// nothing came back: an unresolved reference is reported on its own
+			continue
+		}
+		doc := document(n)
+		i := saidAlready(shown[doc], text, n.Ref.Rank)
+		here := passage{path: n.Ref.Path, text: text, rank: n.Ref.Rank, level: level}
+		if i < 0 {
+			shown[doc] = append(shown[doc], here)
+			continue
+		}
+		if prev := shown[doc][i]; prev.level == level && n.Ref.Rank < prev.rank {
+			dropped[prev.path] = true
+			shown[doc][i] = here
+			continue
+		}
+		dropped[n.Ref.Path] = true
+	}
+	return dropped
+}
+
+// saidAlready finds the passage of the same document that says what text says,
+// and returns -1 when none does. Word for word is the same passage however it
+// was cited. One text containing the other is too — but only across indexes,
+// which cite one passage at lengths of their own: within a single list two
+// citations of overlapping length are two citations, a verse and the passage it
+// opens, and both belong in the output.
+func saidAlready(list []passage, text string, rank int) int {
+	for i, p := range list {
+		switch {
+		case p.text == text:
+			return i
+		case p.rank != rank && (strings.Contains(p.text, text) || strings.Contains(text, p.text)):
+			return i
+		}
+	}
+	return -1
+}
+
+// document identifies the article a passage was lifted out of: the resolved URL
+// without the anchor naming the extent, which is exactly what two index entries
+// for the same passage differ in. A citation that came back without a URL falls
+// back to its title, so passages of one article are still only weighed against
+// each other.
+func document(n *Node) string {
+	if n.URL == "" {
+		return n.Title
+	}
+	if i := strings.IndexByte(n.URL, '#'); i >= 0 {
+		return n.URL[:i]
+	}
+	return n.URL
+}
+
+// plainText is the words a resolved reference brought, without the markup they
+// came wrapped in: the same passage cited at two lengths is nested markup in one
+// and top-level paragraphs in the other, and only the text of it is comparable.
+func plainText(n *Node) string {
+	if n.Err != nil {
+		return ""
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(n.HTML))
+	if err != nil {
+		return collapseSpace(n.HTML)
+	}
+	return collapseSpace(doc.Find("body").Text())
+}
+
+// without drops the nodes whose reference path is in paths, keeping the order of
+// the rest.
+func without(nodes []Node, paths map[string]bool) []Node {
+	out := nodes[:0]
+	for _, n := range nodes {
+		if paths[n.Ref.Path] {
+			continue
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// nodesIn is every node of a level, in the order of the lists holding them.
+func nodesIn(tiers []*[]Node) []*Node {
+	var out []*Node
+	for _, tier := range tiers {
+		for i := range *tier {
+			out = append(out, &(*tier)[i])
+		}
+	}
+	return out
 }
 
 // requestCost is how many requests a level needs. With study material a verse
@@ -253,14 +394,6 @@ func plan(refs []Ref, seen map[string]bool) []Node {
 		}
 		seen[ref.Path] = true
 		out = append(out, Node{Ref: ref})
-	}
-	return out
-}
-
-func pointersTo(nodes []Node) []*Node {
-	out := make([]*Node, len(nodes))
-	for i := range nodes {
-		out[i] = &nodes[i]
 	}
 	return out
 }

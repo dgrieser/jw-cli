@@ -178,6 +178,144 @@ func TestRunRootRefs(t *testing.T) {
 	}
 }
 
+// TestRunDropsSameContentUnderTwoPaths covers the study bible listing one
+// passage in both of its indexes: the research guide names the publication, the
+// publications index cites it by symbol, and the two paths answer with the same
+// text. The expansion shows it once, under the lower-ranked reference — whatever
+// order the two arrive in.
+func TestRunDropsSameContentUnderTwoPaths(t *testing.T) {
+	const same = "<p>a yoke on the neck meant slavery</p>"
+	for _, tc := range []struct {
+		name string
+		refs []Ref
+	}{
+		{"guide first", []Ref{
+			{Text: "Insight, Volume 1, page 1044", Path: "/wol/pc/rsg/1", Rank: 0},
+			{Text: "it-1 1044", Path: "/wol/pc/dx/1", Rank: 2},
+		}},
+		{"index first", []Ref{
+			{Text: "it-1 1044", Path: "/wol/pc/dx/1", Rank: 2},
+			{Text: "Insight, Volume 1, page 1044", Path: "/wol/pc/rsg/1", Rank: 0},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &fakeResolver{content: map[string]model.Tooltip{
+				"/wol/pc/rsg/1": {Title: "Neck", ContentHTML: same},
+				"/wol/pc/dx/1":  {Title: "Neck", ContentHTML: same},
+			}}
+			res, err := Run(context.Background(), r, "", Options{Depth: 1, RootRefs: tc.refs})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(res.Nodes) != 1 {
+				t.Fatalf("got %d nodes, want the passage once: %+v", len(res.Nodes), res.Nodes)
+			}
+			if got := res.Nodes[0].Ref.Path; got != "/wol/pc/rsg/1" {
+				t.Errorf("kept %s, want the research guide entry", got)
+			}
+		})
+	}
+}
+
+// TestRunDropsSamePassageCitedAtDifferentLengths covers the same pair cutting
+// the passage differently: the research guide's extent runs on past where the
+// publications index stops, so the two answer with the same article at two
+// lengths. What the guide brought is the fuller text, and the one kept.
+func TestRunDropsSamePassageCitedAtDifferentLengths(t *testing.T) {
+	const doc = "/wol/d/r10/lp-x/1200002451"
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/pc/rsg/1": {
+			Title:       "Jesus Christ",
+			URL:         doc + "#h=93:0-94:0",
+			ContentHTML: "<p>he proclaimed liberty to the captives</p><p>and a day of vengeance</p>",
+		},
+		"/wol/pc/dx/1": {
+			Title:       "Jesus Christ",
+			URL:         doc + "#h=93:0-93:234",
+			ContentHTML: "<div><p>he proclaimed liberty to the captives</p></div>",
+		},
+	}}
+	res, err := Run(context.Background(), r, "", Options{Depth: 1, RootRefs: []Ref{
+		{Text: "Insight, Volume 1, pages 1354-1355", Path: "/wol/pc/rsg/1", Rank: 0},
+		{Text: "it-1 1354-1355", Path: "/wol/pc/dx/1", Rank: 2},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 1 {
+		t.Fatalf("got %d nodes, want the passage once: %+v", len(res.Nodes), res.Nodes)
+	}
+	if got := res.Nodes[0].Ref.Path; got != "/wol/pc/rsg/1" {
+		t.Errorf("kept %s, want the research guide entry", got)
+	}
+}
+
+// TestRunKeepsOverlappingCitationsOfOneList covers the other side of the length
+// rule: a document citing a verse and the passage that opens with it says one
+// text inside the other, and both are the document's own citations. Neither is
+// an index entry for the other, so both stay.
+func TestRunKeepsOverlappingCitationsOfOneList(t *testing.T) {
+	const doc = "/wol/d/r10/lp-x/1001070128"
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/bc/1/1": {Title: "Jeremiah 30:8", URL: doc + "#v=24:30:8", ContentHTML: "<p>on that day</p>"},
+		"/wol/bc/1/2": {
+			Title:       "Jeremiah 30:8, 9",
+			URL:         doc + "#v=24:30:8-24:30:9",
+			ContentHTML: "<p>on that day</p><p>they will serve Jehovah</p>",
+		},
+	}}
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Jer 30:8")+link("/wol/bc/1/2", "Jer 30:8, 9"),
+		Options{Depth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 2 {
+		t.Errorf("got %d nodes, want both citations: %+v", len(res.Nodes), res.Nodes)
+	}
+}
+
+// TestRunKeepsDifferentContent is the other side of it: two references that
+// resolve to passages of their own both stay, title alone is not a duplicate.
+func TestRunKeepsDifferentContent(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/pc/it/1": {Title: "Neck", ContentHTML: "<p>the first paragraph</p>"},
+		"/wol/pc/it/2": {Title: "Neck", ContentHTML: "<p>the second paragraph</p>"},
+	}}
+	res, err := Run(context.Background(), r, "", Options{Depth: 1, RootRefs: []Ref{
+		{Path: "/wol/pc/it/1"}, {Path: "/wol/pc/it/2"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 2 {
+		t.Errorf("got %d nodes, want both passages: %+v", len(res.Nodes), res.Nodes)
+	}
+}
+
+// TestRunDropsSameContentDeeper covers a duplicate found a level down: the
+// reference above it is part of the output by then, so it is the deeper one that
+// goes, whatever the ranks say.
+func TestRunDropsSameContentDeeper(t *testing.T) {
+	const same = "<p>the same passage</p>"
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/pc/dx/1":  {Title: "Neck", ContentHTML: same},
+		"/wol/pc/w/1":   {Title: "Trust", ContentHTML: "<p>see " + link("/wol/pc/rsg/1", "Insight, Volume 1, page 1044") + "</p>"},
+		"/wol/pc/rsg/1": {Title: "Neck", ContentHTML: same},
+	}}
+	res, err := Run(context.Background(), r, "", Options{Depth: 2, RootRefs: []Ref{
+		{Path: "/wol/pc/dx/1", Rank: 2}, {Path: "/wol/pc/w/1"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 2 {
+		t.Fatalf("got %d nodes: %+v", len(res.Nodes), res.Nodes)
+	}
+	if len(res.Nodes[1].Children) != 0 {
+		t.Errorf("the passage already shown above should not repeat: %+v", res.Nodes[1].Children)
+	}
+}
+
 func TestRefs(t *testing.T) {
 	body := `<p>` +
 		link("/wol/bc/1/1", "Matt 24:14") +
