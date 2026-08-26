@@ -7,11 +7,13 @@ import (
 	"html"
 	"io"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
+	nethtml "golang.org/x/net/html"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
@@ -197,17 +199,205 @@ const (
 )
 
 // unfoldArticle expands the citations in art and returns the document body with
-// the expansion appended as HTML, so the whole thing goes through the same
-// renderer — and gains the same hyperlinks, wrapping and styling — as the
-// article itself.
+// the text behind every citation inlined under the block that cites it, the way
+// jw bible read prints it under a verse. It comes back as HTML, so the whole
+// thing goes through the same renderer — and gains the same hyperlinks, wrapping
+// and styling — as the article itself.
 func unfoldArticle(ctx context.Context, a *app.App, art model.Article, depth int, assumeYes bool) (string, error) {
-	appendix, err := unfoldFragment(ctx, a, newTooltipResolver(a, nil), art.HTML, unfoldRequest{
-		depth: depth, assumeYes: assumeYes, level: documentUnfoldLevel,
+	return unfoldInline(ctx, a, newTooltipResolver(a, nil), art.HTML, unfoldRequest{
+		depth: depth, assumeYes: assumeYes,
 	})
+}
+
+// blockTags are the elements an expansion is inlined under: the smallest piece of
+// a document that reads as a unit of its own, so what a citation resolves to
+// lands under the sentence that cites it rather than at the end of the page.
+var blockTags = map[string]bool{
+	"p": true, "li": true, "blockquote": true, "figcaption": true,
+	"dd": true, "dt": true, "td": true, "th": true, "caption": true,
+	"h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true,
+}
+
+// citingBlock is one such block: what it cites, and the heading level its
+// expansion is written at — one below the section the block sits in, so the
+// expansion reads as part of that section rather than taking it over.
+type citingBlock struct {
+	sel   *goquery.Selection
+	level int
+	refs  []citation
+	// block says the citation sits in a block of its own. Without one there is
+	// no place inside the text that an expansion could go without landing in
+	// the middle of a sentence.
+	block bool
+}
+
+// citation is one reference found in a block, together with the verse of that
+// block it sits in when the block is bible text. A marginal reference is written
+// as a bare "+", so the verse around it is the only thing that says where the
+// reference came from.
+type citation struct {
+	ref     unfold.Ref
+	chapter int
+	verse   int
+}
+
+// verseSpan matches the id wol wraps a verse of a passage in, "v24-29-2-1":
+// book, chapter, verse, segment.
+var verseSpan = regexp.MustCompile(`^v(\d+)-(\d+)-(\d+)`)
+
+// verseAt is the verse of the passage a citation sits in, zero when the text
+// around it is not bible text.
+func verseAt(s *goquery.Selection) (int, int) {
+	id, ok := s.Closest("span.v").Attr("id")
+	if !ok {
+		return 0, 0
+	}
+	m := verseSpan.FindStringSubmatch(id)
+	if m == nil {
+		return 0, 0
+	}
+	chapter, _ := strconv.Atoi(m[2])
+	verse, _ := strconv.Atoi(m[3])
+	return chapter, verse
+}
+
+// citingBlocks finds the blocks of a document that cite something, in document
+// order, with the citations of each. A citation belongs to the smallest block
+// around it, and is listed once per document: a reference repeated further down
+// is expanded where it first appears.
+func citingBlocks(doc *goquery.Document) []citingBlock {
+	var out []citingBlock
+	at := map[*nethtml.Node]int{}
+	seen := map[string]bool{}
+	// nothing seen yet: the document's own title is the heading above it
+	heading := documentUnfoldLevel - 1
+	doc.Find("body *").Each(func(_ int, s *goquery.Selection) {
+		name := goquery.NodeName(s)
+		if level, ok := headingLevel(name); ok {
+			heading = level
+		}
+		href, _ := s.Attr("href")
+		if name != "a" || !unfold.IsCitation(href) || seen[href] {
+			return
+		}
+		seen[href] = true
+		block, isBlock := blockOf(s)
+		chapter, verse := verseAt(s)
+		cite := citation{
+			ref:     unfold.Ref{Text: collapseSpace(s.Text()), Path: href},
+			chapter: chapter,
+			verse:   verse,
+		}
+		if i, ok := at[block.Nodes[0]]; ok {
+			out[i].refs = append(out[i].refs, cite)
+			return
+		}
+		at[block.Nodes[0]] = len(out)
+		out = append(out, citingBlock{
+			sel: block, level: heading + 1, refs: []citation{cite}, block: isBlock,
+		})
+	})
+	return out
+}
+
+// headingLevel reads the level of a heading element, and reports whether the
+// element is one at all.
+func headingLevel(name string) (int, bool) {
+	if len(name) != 2 || name[0] != 'h' || name[1] < '1' || name[1] > '6' {
+		return 0, false
+	}
+	return int(name[1] - '0'), true
+}
+
+// blockOf is the smallest block a citation sits in. A citation in none — a
+// passage that came back as bare text rather than as paragraphs — reports the
+// citation itself, and that it is no block: a document still has to carry the
+// expansion somewhere, while a passage can simply put it after itself.
+func blockOf(s *goquery.Selection) (*goquery.Selection, bool) {
+	for p := s.Parent(); p.Length() > 0 && goquery.NodeName(p) != "body"; p = p.Parent() {
+		if blockTags[goquery.NodeName(p)] {
+			return p, true
+		}
+	}
+	return s, false
+}
+
+// inlineUnder puts an expansion where it reads as belonging to the block: inside
+// a list item, since a heading between two items would land outside the list,
+// and after any other block.
+func inlineUnder(block *goquery.Selection, fragment string) {
+	if goquery.NodeName(block) == "li" {
+		block.AppendHtml(fragment)
+		return
+	}
+	block.AfterHtml(fragment)
+}
+
+// collapseSpace is the citation text as a heading takes it, without the line
+// breaks the document wrapped it in.
+func collapseSpace(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// unfoldInline expands the citations of a document and returns its HTML with
+// every expansion inlined under the block that cites it. What an expanded
+// passage cites in turn keeps nesting under it, so every level is read where it
+// belongs. One run for the whole document: the request budget is confirmed once,
+// and a passage cited twice is expanded once, under the citation that came first.
+func unfoldInline(ctx context.Context, a *app.App, r unfold.Resolver, fragment string,
+	req unfoldRequest) (string, error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
 	if err != nil {
 		return "", err
 	}
-	return art.HTML + appendix, nil
+	blocks := citingBlocks(doc)
+	if len(blocks) == 0 {
+		return fragment, nil
+	}
+	groups := make([]unfold.Group, len(blocks))
+	for i, b := range blocks {
+		groups[i] = unfold.Group{RootRefs: refsOf(b.refs)}
+	}
+	res, err := unfold.RunGroups(ctx, r, groups, unfoldOptions(a, req))
+	if err != nil {
+		return "", err
+	}
+	txt := a.Text()
+	for i, b := range blocks {
+		part := unfoldNodesHTML(res.Nodes[i], txt, b.level)
+		if part == "" {
+			continue
+		}
+		// the rule parts what the block brought from the document going on
+		// after it
+		inlineUnder(b.sel, part+"<hr/>")
+	}
+	body := doc.Find("body")
+	if note := unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt)); note != "" {
+		body.AppendHtml(note)
+	}
+	out, err := body.Html()
+	if err != nil {
+		return "", err
+	}
+	return dropTrailingRule(out), nil
+}
+
+// refsOf is what a block cites, for an expansion that only needs the references.
+func refsOf(cites []citation) []unfold.Ref {
+	out := make([]unfold.Ref, len(cites))
+	for i, c := range cites {
+		out[i] = c.ref
+	}
+	return out
+}
+
+// dropTrailingRule takes back the rule of the last expansion when the document
+// ends there: it parts an expansion from what follows it, and nothing does.
+func dropTrailingRule(s string) string {
+	trimmed := strings.TrimRight(s, " \t\n")
+	if rest, ok := strings.CutSuffix(trimmed, "<hr/>"); ok {
+		return rest
+	}
+	return s
 }
 
 // unfoldBibleVerses expands what every verse of a passage references and returns
@@ -266,25 +456,9 @@ func unfoldBibleVerses(ctx context.Context, a *app.App, r *tooltipResolver, ref 
 type unfoldRequest struct {
 	depth     int
 	assumeYes bool
-	// level is the heading level the appendix is written at.
+	// level is the heading level the expansion is written at. Inlined
+	// expansions take it from the document instead.
 	level int
-	// rootRefs are references of the fragment itself rather than of a citation
-	// inside it, for a single fragment. Grouped expansions carry them per group
-	// instead.
-	rootRefs []unfold.Ref
-}
-
-// unfoldFragment expands the citations in an HTML fragment and returns the
-// expansion as an HTML appendix, to be appended to the fragment before it is
-// rendered.
-func unfoldFragment(ctx context.Context, a *app.App, r unfold.Resolver, fragment string, req unfoldRequest) (string, error) {
-	o := unfoldOptions(a, req)
-	o.RootRefs = req.rootRefs
-	res, err := unfold.Run(ctx, r, fragment, o)
-	if err != nil {
-		return "", err
-	}
-	return unfoldHTMLAt(res, a.Text(), req.level), nil
 }
 
 // unfoldFragments expands several fragments in one run and returns the expansion
@@ -402,24 +576,6 @@ func headingHTML(level int, inner string) string {
 		return "<p><strong>" + inner + "</strong></p>"
 	}
 	return fmt.Sprintf("<h%d>%s</h%d>", level, inner, level)
-}
-
-// unfoldHTML renders an expansion as an HTML appendix under a document.
-func unfoldHTML(res unfold.Result, txt *i18n.Messages) string {
-	return unfoldHTMLAt(res, txt, documentUnfoldLevel)
-}
-
-// unfoldHTMLAt renders an expansion as an HTML appendix at the given heading
-// level: one heading per reference carrying its own content, nested one level
-// deeper for what that content cited.
-func unfoldHTMLAt(res unfold.Result, txt *i18n.Messages, level int) string {
-	body := unfoldNodesHTML(res.Nodes, txt, level)
-	if body == "" {
-		return ""
-	}
-	// an appendix is opened by the rule: what follows it, to the end of the
-	// output, is the expansion rather than the document
-	return "<hr/>" + body + unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt))
 }
 
 // unfoldNodesHTML renders one tier of expanded references under its own heading.
@@ -544,6 +700,33 @@ func unquote(s string) string {
 	}, s))
 }
 
+// verseSource names the verse of a passage a reference was found in. The passage
+// is named as a whole — "Jeremia 29:1-30:24" — while a marginal reference in it
+// belongs to one of its verses, and saying the passage instead puts the same
+// name on every reference the passage carries. The book comes from the passage's
+// own name, so it stays in the language the passage is read in; a passage that
+// is not bible text has no verse to name and keeps its name.
+func verseSource(passage string, chapter, verse int) string {
+	book := bookNameOf(passage)
+	if book == "" || chapter == 0 || verse == 0 {
+		return passage
+	}
+	return fmt.Sprintf("%s %d:%d", book, chapter, verse)
+}
+
+// bookNameOf is the book a bible citation names: everything before the chapter
+// it goes on to name. Empty when the citation names no chapter, and so is not a
+// bible citation at all.
+func bookNameOf(citation string) string {
+	fields := strings.Fields(citation)
+	for i, f := range fields {
+		if i > 0 && f != "" && f[0] >= '0' && f[0] <= '9' {
+			return strings.Join(fields[:i], " ")
+		}
+	}
+	return ""
+}
+
 // unfoldSource names a passage well enough to be cited as the origin of a cross
 // reference found inside it. The resolved title is preferred over the citation
 // text, so both ends of the reference are spelled out the same way rather than
@@ -608,14 +791,82 @@ func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source
 	for _, n := range nodes {
 		label := unfoldHeading(n, source, txt)
 		b.WriteString(headingHTML(level, html.EscapeString(label)))
+		// what the passage cites is read inside the passage, at the block citing
+		// it; what it does not cite itself follows the passage
+		rest := n.Children
 		switch {
 		case n.Err != nil:
 			fmt.Fprintf(b, "<p><em>%s</em></p>",
 				html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, n.Err)))
 		case strings.TrimSpace(n.HTML) != "":
-			b.WriteString(demoteHeadings(n.HTML, level))
+			var content string
+			content, rest = inlineChildren(demoteHeadings(n.HTML, level), rest,
+				level+1, unfoldSource(n, label), txt)
+			b.WriteString(content)
 		}
 		writeStudy(b, n, level+1, txt)
-		writeUnfoldNodes(b, n.Children, level+1, unfoldSource(n, label), txt)
+		writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)
 	}
+}
+
+// inlineChildren puts the expansion of every citation of a passage under the
+// block of that passage which cites it, the way a document carries the
+// expansions of its own citations, and returns the passage with them in place.
+// The children it could not place come back to be read after the passage: a
+// verse's research-guide passages are references of the verse rather than of
+// anything its text says, so its text has nowhere to hold them.
+func inlineChildren(content string, children []unfold.Node, level int, source string,
+	txt *i18n.Messages) (string, []unfold.Node) {
+	if len(children) == 0 {
+		return content, nil
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
+	if err != nil {
+		return content, children
+	}
+	blocks := citingBlocks(doc)
+	if len(blocks) == 0 {
+		return content, children
+	}
+	at := map[string]int{}
+	for i, c := range children {
+		at[c.Ref.Path] = i
+	}
+	placed := map[string]bool{}
+	for _, block := range blocks {
+		if !block.block {
+			// nowhere inside the passage to put it: it goes after the passage,
+			// as it did before
+			continue
+		}
+		var sub strings.Builder
+		for _, cite := range block.refs {
+			i, ok := at[cite.ref.Path]
+			if !ok || placed[cite.ref.Path] {
+				// cited here but expanded elsewhere: at another block of this
+				// passage, or not at all because the depth ran out
+				continue
+			}
+			placed[cite.ref.Path] = true
+			// one at a time: each names the verse it was found in, which is
+			// what a marginal reference has instead of a citation text
+			writeUnfoldNodes(&sub, []unfold.Node{children[i]}, level,
+				verseSource(source, cite.chapter, cite.verse), txt)
+		}
+		if sub.Len() == 0 {
+			continue
+		}
+		inlineUnder(block.sel, sub.String()+"<hr/>")
+	}
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return content, children
+	}
+	var rest []unfold.Node
+	for _, c := range children {
+		if !placed[c.Ref.Path] {
+			rest = append(rest, c)
+		}
+	}
+	return dropTrailingRule(out), rest
 }

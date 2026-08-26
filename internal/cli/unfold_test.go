@@ -139,6 +139,18 @@ func TestUnfoldSource(t *testing.T) {
 	}
 }
 
+// unfoldedHTML renders an expansion the way a document block carries it: the
+// references heading with its nodes, and the note closing an expansion that was
+// cut short. What the cases below are about is that shape, not where in the
+// document it is inlined.
+func unfoldedHTML(res unfold.Result, txt *i18n.Messages) string {
+	body := unfoldNodesHTML(res.Nodes, txt, documentUnfoldLevel)
+	if body == "" {
+		return ""
+	}
+	return body + unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt))
+}
+
 func TestUnfoldHTML(t *testing.T) {
 	txt := i18n.EN.Text()
 	res := unfold.Result{Nodes: []unfold.Node{{
@@ -151,7 +163,7 @@ func TestUnfoldHTML(t *testing.T) {
 			HTML:  "<p>the mountain</p>",
 		}},
 	}}}
-	out := unfoldHTML(res, txt)
+	out := unfoldedHTML(res, txt)
 	// the citation and what it turned out to be share one heading; what that
 	// passage cited nests one level deeper
 	for _, want := range []string{
@@ -169,8 +181,113 @@ func TestUnfoldHTML(t *testing.T) {
 	if strings.Contains(out, "<em>Matthew 24:14</em>") {
 		t.Errorf("the title belongs in the heading, not a paragraph of its own:\n%s", out)
 	}
-	if unfoldHTML(unfold.Result{}, txt) != "" {
+	if unfoldedHTML(unfold.Result{}, txt) != "" {
 		t.Error("nothing expanded should append nothing")
+	}
+}
+
+// TestUnfoldInlinesNestedCitations pins that a passage carries what it cites the
+// same way a document does: under the paragraph citing it, not after the whole
+// passage.
+func TestUnfoldInlinesNestedCitations(t *testing.T) {
+	res := unfold.Result{Nodes: []unfold.Node{{
+		Ref:   unfold.Ref{Text: "w24.11 7", Path: "/wol/pc/1/1"},
+		Title: "Facing injustice",
+		HTML: `<p>First, on prayer (<a href="/wol/bc/2/2">Rom 12:21</a>).</p>` +
+			`<p>Then, on forgiveness (<a href="/wol/bc/3/3">Luke 23:34</a>).</p>`,
+		Children: []unfold.Node{
+			{Ref: unfold.Ref{Text: "Rom 12:21", Path: "/wol/bc/2/2"}, Title: "Romans 12:21",
+				HTML: "<p>conquer evil with good</p>"},
+			{Ref: unfold.Ref{Text: "Luke 23:34", Path: "/wol/bc/3/3"}, Title: "Luke 23:34",
+				HTML: "<p>Father, forgive them</p>"},
+		},
+	}}}
+	out := unfoldedHTML(res, i18n.EN.Text())
+	first := strings.Index(out, "First, on prayer")
+	romans := strings.Index(out, "conquer evil with good")
+	second := strings.Index(out, "Then, on forgiveness")
+	luke := strings.Index(out, "Father, forgive them")
+	if first < 0 || romans < 0 || second < 0 || luke < 0 {
+		t.Fatalf("paragraph %d, its verse %d, next paragraph %d, its verse %d:\n%s",
+			first, romans, second, luke, out)
+	}
+	if first >= romans || romans >= second || second >= luke {
+		t.Errorf("each verse belongs under the paragraph that cites it:\n%s", out)
+	}
+}
+
+// TestUnfoldNamesTheVerseAMarkerCameFrom pins what a marginal reference is
+// headed with: the verse of the passage the marker sits in, not the passage as a
+// whole, which would put the same name on every reference the passage carries.
+func TestUnfoldNamesTheVerseAMarkerCameFrom(t *testing.T) {
+	verse := func(id, num, text, marker string) string {
+		return fmt.Sprintf(`<span id="%s" class="v"><a class="vl" href="/wol/dx/%s">%s </a>%s`+
+			`<a class="b" href="%s">+</a> </span>`, id, num, num, text, marker)
+	}
+	res := unfold.Result{Nodes: []unfold.Node{{
+		Ref:   unfold.Ref{Text: "Joh 3:16, 17", Path: "/wol/bc/1/1"},
+		Title: "John 3:16, 17",
+		HTML: "<p>" + verse("v43-3-16-1", "16", "God loved the world", "/wol/bc/2/2") +
+			verse("v43-3-17-1", "17", "God did not send his Son", "/wol/bc/3/3") + "</p>",
+		Children: []unfold.Node{
+			{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/2/2"}, Title: "Romans 5:8",
+				HTML: "<p>while we were sinners</p>"},
+			{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/3/3"}, Title: "1 John 4:14",
+				HTML: "<p>as Savior of the world</p>"},
+		},
+	}}}
+	out := unfoldedHTML(res, i18n.EN.Text())
+	for _, want := range []string{
+		"Marginal reference John 3:16 → Romans 5:8",
+		"Marginal reference John 3:17 → 1 John 4:14",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Marginal reference John 3:16, 17") {
+		t.Errorf("the passage as a whole is not where a marker came from:\n%s", out)
+	}
+}
+
+// TestVerseSource covers the naming itself, including what is not bible text.
+func TestVerseSource(t *testing.T) {
+	for _, tc := range []struct {
+		passage        string
+		chapter, verse int
+		want           string
+	}{
+		{"Jeremia 29:1-30:24", 29, 2, "Jeremia 29:2"},
+		{"Jeremia 29:1-30:24", 30, 11, "Jeremia 30:11"},
+		{"1. Petrus 3:8, 9", 3, 9, "1. Petrus 3:9"},
+		// a passage of a publication carries no verse to name
+		{"Insight, Volume 1, page 1044", 0, 0, "Insight, Volume 1, page 1044"},
+		{"Hals, Nacken", 0, 0, "Hals, Nacken"},
+	} {
+		if got := verseSource(tc.passage, tc.chapter, tc.verse); got != tc.want {
+			t.Errorf("verseSource(%q, %d, %d) = %q, want %q",
+				tc.passage, tc.chapter, tc.verse, got, tc.want)
+		}
+	}
+}
+
+// TestUnfoldKeepsUncitedChildrenAfterThePassage is the other side of it: the
+// research-guide passages of a verse are references of the verse and not of
+// anything its text says, so its text has nowhere to hold them.
+func TestUnfoldKeepsUncitedChildrenAfterThePassage(t *testing.T) {
+	res := unfold.Result{Nodes: []unfold.Node{{
+		Ref:   unfold.Ref{Text: "Joh 3:16", Path: "/wol/bc/1/1"},
+		Title: "John 3:16",
+		HTML:  "<p>God loved the world</p>",
+		Children: []unfold.Node{{
+			Ref: unfold.Ref{Text: "it-2 528", Path: "/wol/pc/9/9"}, Title: "Love",
+			HTML: "<p>the Greek word</p>",
+		}},
+	}}}
+	out := unfoldedHTML(res, i18n.EN.Text())
+	verse, research := strings.Index(out, "God loved the world"), strings.Index(out, "the Greek word")
+	if verse < 0 || research < 0 || verse >= research {
+		t.Errorf("verse %d, research passage %d: the passage follows the verse:\n%s", verse, research, out)
 	}
 }
 
@@ -277,6 +394,43 @@ func TestArticleUnfoldBringsVerseStudyMaterial(t *testing.T) {
 	}
 }
 
+// TestArticleUnfoldInlinesUnderTheCitingBlock pins where an expansion goes: under
+// the paragraph that cites it, not in an appendix after the document.
+func TestArticleUnfoldInlinesUnderTheCitingBlock(t *testing.T) {
+	mux := studyUnfoldMux(t)
+	mux.HandleFunc("/en/wol/d/r1/lp-e/2024361", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><div id="article">
+		  <header><h1>God So Loved</h1></header>
+		  <div class="bodyTxt">
+		    <h2>What Jesus said</h2>
+		    <p>Consider it.
+		      (<a href="/en/wol/bc/r1/lp-e/2024360/0/0" class="b">Joh 3:16</a>)</p>
+		    <p>And the last word.</p>
+		  </div>
+		</div></body></html>`))
+	})
+	out, err := runCmd(t, mux, "article", "2024361", "-l", "en", "-o", "raw", "--unfold", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cite := strings.Index(out, "Consider it.")
+	refs := strings.Index(out, "### References")
+	verse := strings.Index(out, "For God loved the world so much")
+	rule := strings.Index(out, "\n---")
+	after := strings.Index(out, "And the last word.")
+	if cite < 0 || refs < 0 || verse < 0 || rule < 0 || after < 0 {
+		t.Fatalf("citation %d, references %d, verse %d, rule %d, next paragraph %d:\n%s",
+			cite, refs, verse, rule, after, out)
+	}
+	if cite >= refs || refs >= verse || verse >= rule || rule >= after {
+		t.Errorf("the expansion belongs between the paragraph that cites it and the next one:\n%s", out)
+	}
+	// the references of a paragraph inside an h2 section sit under that section
+	if strings.Contains(out, "## References") && !strings.Contains(out, "### References") {
+		t.Errorf("the heading should sit below the section it is in:\n%s", out)
+	}
+}
+
 // TestArticleUnfoldOneLevelKeepsResearchPending pins the request curve: the
 // notes come with the verse, the passages it references wait for level two.
 func TestArticleUnfoldOneLevelKeepsResearchPending(t *testing.T) {
@@ -299,14 +453,14 @@ func TestUnfoldNote(t *testing.T) {
 	txt := i18n.EN.Text()
 	node := []unfold.Node{{Ref: unfold.Ref{Text: "Matt 24:14"}, HTML: "<p>x</p>"}}
 
-	cutShort := unfoldHTML(unfold.Result{Nodes: node, Stopped: true, Pending: 137}, txt)
+	cutShort := unfoldedHTML(unfold.Result{Nodes: node, Stopped: true, Pending: 137}, txt)
 	if !strings.Contains(cutShort, "Stopped here") || !strings.Contains(cutShort, "137") {
 		t.Errorf("a declined expansion should say it stopped:\n%s", cutShort)
 	}
 
 	// the normal end of --unfold 1: the verses it printed cite 35 more, which
 	// is the depth working as asked and needs no remark
-	atDepth := unfoldHTML(unfold.Result{Nodes: node, Pending: 35}, txt)
+	atDepth := unfoldedHTML(unfold.Result{Nodes: node, Pending: 35}, txt)
 	if strings.Contains(atDepth, "35") || strings.Contains(atDepth, "unfold") {
 		t.Errorf("reaching the requested depth should say nothing:\n%s", atDepth)
 	}
@@ -319,7 +473,7 @@ func TestUnfoldNote(t *testing.T) {
 // markup breaking out of its heading.
 func TestUnfoldHTMLEscapesHeadings(t *testing.T) {
 	res := unfold.Result{Nodes: []unfold.Node{{Ref: unfold.Ref{Text: `a<script>x</script>b`}}}}
-	out := unfoldHTML(res, i18n.EN.Text())
+	out := unfoldedHTML(res, i18n.EN.Text())
 	if strings.Contains(out, "<script>") {
 		t.Errorf("heading not escaped:\n%s", out)
 	}
@@ -330,7 +484,7 @@ func TestUnfoldHTMLReportsAFailedReference(t *testing.T) {
 		Ref: unfold.Ref{Text: "Matt 24:14"},
 		Err: errTest,
 	}}}
-	out := unfoldHTML(res, i18n.EN.Text())
+	out := unfoldedHTML(res, i18n.EN.Text())
 	if !strings.Contains(out, "could not be unfolded") || !strings.Contains(out, "boom") {
 		t.Errorf("a dead reference should say so:\n%s", out)
 	}
@@ -409,7 +563,7 @@ func TestUnfoldHTMLDeepNestingGoesBold(t *testing.T) {
 	for _, text := range []string{"level4", "level3", "level2", "level1"} {
 		node = unfold.Node{Ref: unfold.Ref{Text: text}, Children: []unfold.Node{node}}
 	}
-	out := unfoldHTML(unfold.Result{Nodes: []unfold.Node{node}}, i18n.EN.Text())
+	out := unfoldedHTML(unfold.Result{Nodes: []unfold.Node{node}}, i18n.EN.Text())
 	for _, want := range []string{"<h3>level1</h3>", "<h6>level4</h6>", "<p><strong>level5</strong></p>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)

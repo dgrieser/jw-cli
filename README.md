@@ -224,10 +224,13 @@ jw meetings midweek --unfold 1        # the workbook part with its passages
 jw dailytext --unfold 2 --yes         # and the cross references inside those verses
 ```
 
-Each reference becomes a heading under `References`, and at depth two and beyond
-what *those* passages cite nests one level deeper. Every reference is expanded at
-most once across the whole document, which removes repeats and stops two passages
-that cite each other from looping.
+The text lands where it is cited: under the paragraph, list item or heading that
+carries the citation, headed `References` and closed by a rule, rather than
+gathered into an appendix at the end. Each reference becomes a heading of its
+own, and at depth two and beyond what *those* passages cite nests one level
+deeper under it. Every reference is expanded at most once across the whole
+document — a citation repeated further down is read where it first appears —
+which removes repeats and stops two passages that cite each other from looping.
 
 An unfolded verse brings the study bible's material on it as well, so a verse
 reads the way it does in the study pane:

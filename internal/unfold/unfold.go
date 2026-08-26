@@ -404,6 +404,13 @@ const (
 	publicationPath = "/pc/" // a passage of another publication
 )
 
+// IsCitation reports whether a link resolves a citation, which is what makes it
+// something to unfold: wol answers both of its citation endpoints with the text
+// behind the reference.
+func IsCitation(href string) bool {
+	return strings.Contains(href, versePath) || strings.Contains(href, publicationPath)
+}
+
 // citationLinks matches a citation of either kind.
 var citationLinks = fmt.Sprintf("a[href*=%q], a[href*=%q]", versePath, publicationPath)
 
