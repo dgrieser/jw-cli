@@ -102,7 +102,7 @@ func TestBibleReadUnfoldInlinePerVerse(t *testing.T) {
 	first, second := strings.Index(out, "### John 3:16\n"), strings.Index(out, "### John 3:17")
 	note16 := strings.Index(out, "**loved:**")
 	text17 := strings.Index(out, "did not send his Son")
-	if !(first < note16 && note16 < second && second < text17) {
+	if first >= note16 || note16 >= second || second >= text17 {
 		t.Errorf("verse 16 %d, its note %d, verse 17 %d, its text %d: the study material of a verse "+
 			"belongs between that verse and the next:\n%s", first, note16, second, text17, out)
 	}
