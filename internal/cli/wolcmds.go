@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -10,25 +12,143 @@ import (
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
-	"github.com/dgrieser/jw-cli/internal/results"
 )
 
-// searchWOL runs the wol search engine for jw search -e wol.
-func searchWOL(ctx context.Context, a *app.App, lng model.Language, query, scope, sortBy string, page int) (results.ResultSet, string, error) {
+// searchWOL runs the wol search engine for jw search -e wol and jw bible cited.
+func searchWOL(ctx context.Context, a *app.App, lng model.Language, p searchParams, page int) (model.SearchPage, error) {
 	cfg, err := a.WOL().ConfigFor(ctx, lng.Locale)
 	if err != nil {
-		return results.ResultSet{}, "", err
+		return model.SearchPage{}, err
 	}
+	sortBy := p.Sort
 	if sortBy == "rel" {
 		sortBy = "occ" // wol's default ranking
 	}
-	sp, err := a.WOL().Search(ctx, cfg, query, wol.SearchOpts{Scope: scope, Sort: sortBy, Page: page})
+	opts := wol.SearchOpts{Scope: p.Scope, Sort: sortBy, Page: page, Categories: p.Categories.list}
+	sp, err := a.WOL().Search(ctx, cfg, p.Query, opts)
 	if err != nil {
-		return results.ResultSet{}, "", err
+		return model.SearchPage{}, err
 	}
-	header := a.Text().WolResults(sp.Total, query, sp.Page)
-	rs := results.ResultSet{Kind: "wol-search", Query: query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}
-	return rs, header, nil
+	// the category list differs per language; if the page names one the sent
+	// whitelist did not know, its documents were just dropped — ask again with
+	// the corrected list. The list is cached, so this happens once per language.
+	if fixed, ok := p.Categories.corrected(sp.Filters); ok {
+		opts.Categories = fixed
+		if sp, err = a.WOL().Search(ctx, cfg, p.Query, opts); err != nil {
+			return model.SearchPage{}, err
+		}
+	}
+	return sp, nil
+}
+
+// wolKnownCategories is the fc[] category list of the active language, as last
+// seen on a search page. Best effort: an empty list falls back to the
+// language-independent superset.
+func wolKnownCategories(ctx context.Context, a *app.App) []string {
+	lng, err := a.Lang(ctx)
+	if err != nil {
+		return nil
+	}
+	cfg, err := a.WOL().ConfigFor(ctx, lng.Locale)
+	if err != nil {
+		return nil
+	}
+	return a.WOL().Categories(cfg)
+}
+
+// wolCategories is the resolved fc[] publication-category filter of one search.
+type wolCategories struct {
+	// list is the whitelist to send; nil sends no filter at all.
+	list []string
+	// exclude is what must stay out of the whitelist. Nil when the filter was
+	// spelled out by the user (--all, --include), which switches the
+	// correction pass off.
+	exclude []string
+}
+
+// corrected returns the whitelist to retry with when the search page offers a
+// category this language has but the sent list did not name.
+func (c wolCategories) corrected(available []string) ([]string, bool) {
+	if c.exclude == nil || len(available) == 0 {
+		return nil, false
+	}
+	var fixed []string
+	missing := false
+	for _, cat := range available {
+		if slices.Contains(c.exclude, cat) {
+			continue
+		}
+		if !slices.Contains(c.list, cat) {
+			missing = true
+		}
+		fixed = append(fixed, cat)
+	}
+	if !missing {
+		return nil, false
+	}
+	return fixed, true
+}
+
+// categoryFilter is the --all/--include/--exclude flag set of the wol engine:
+// which publication categories a search covers.
+type categoryFilter struct {
+	all     bool
+	include []string
+	exclude []string
+	// defaultExclude is left out when the user names none of the flags. Empty
+	// means "no filter at all", which is what the site itself does.
+	defaultExclude []string
+}
+
+func (f *categoryFilter) bind(cmd *cobra.Command) {
+	fl := cmd.Flags()
+	fl.BoolVar(&f.all, "all", false, "cover every publication category, bibles and indexes included")
+	fl.StringSliceVar(&f.include, "include", nil, "cover only these publication categories (see jw search --help)")
+	fl.StringSliceVar(&f.exclude, "exclude", nil, "cover every publication category except these")
+	cmd.MarkFlagsMutuallyExclusive("all", "include", "exclude")
+}
+
+// resolve turns the flags into the whitelist to send. known is the category
+// list of the active language, as last seen on a search page.
+func (f *categoryFilter) resolve(cmd *cobra.Command, known []string) (wolCategories, error) {
+	if len(known) == 0 {
+		known = wol.AllCategories
+	}
+	if err := validCategories(f.include, known); err != nil {
+		return wolCategories{}, err
+	}
+	if err := validCategories(f.exclude, known); err != nil {
+		return wolCategories{}, err
+	}
+	switch {
+	case f.all:
+		return wolCategories{}, nil
+	case len(f.include) > 0:
+		return wolCategories{list: f.include}, nil
+	}
+	exclude := f.exclude
+	if !cmd.Flags().Changed("exclude") {
+		exclude = f.defaultExclude
+	}
+	if len(exclude) == 0 {
+		return wolCategories{}, nil
+	}
+	var list []string
+	for _, cat := range known {
+		if !slices.Contains(exclude, cat) {
+			list = append(list, cat)
+		}
+	}
+	return wolCategories{list: list, exclude: exclude}, nil
+}
+
+func validCategories(cats, known []string) error {
+	for _, cat := range cats {
+		if !slices.Contains(known, cat) && !slices.Contains(wol.AllCategories, cat) {
+			return fmt.Errorf("unknown publication category %q (known: %s)", cat, strings.Join(known, ", "))
+		}
+	}
+	return nil
 }
 
 func newDailyTextCmd(a *app.App) *cobra.Command {

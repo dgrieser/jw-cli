@@ -147,10 +147,25 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 	}
 }
 
+// searchParams is one search request, minus the page: what the user asked for,
+// as both the listing and the TUI fetcher need it.
+type searchParams struct {
+	Engine string // jworg (default) or wol
+	Query  string
+	Facet  string // jworg content type
+	Sort   string
+	Scope  string // wol match unit: par or sen
+	Limit  int    // jworg page size; wol pages are server-sized
+	// Categories is the wol publication-category filter.
+	Categories wolCategories
+	// Header renders the result-count line. Nil uses the engine's own.
+	Header func(total, page int) string
+}
+
 // searchFetcher pages through search results for either engine.
-func searchFetcher(ctx context.Context, a *app.App, lng model.Language, engine, query, facet, sortBy, scope string, limit int) tui.Fetcher {
+func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p searchParams) tui.Fetcher {
 	return func(page int) (results.ResultSet, string, error) {
-		rs, header, err := runSearch(ctx, a, lng, engine, query, facet, sortBy, scope, limit, page)
+		rs, header, err := runSearch(ctx, a, lng, p, page)
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
@@ -163,26 +178,35 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, engine, 
 }
 
 // runSearch executes one page of a search on the chosen engine.
-func runSearch(ctx context.Context, a *app.App, lng model.Language, engine, query, facet, sortBy, scope string, limit, page int) (results.ResultSet, string, error) {
-	switch engine {
+func runSearch(ctx context.Context, a *app.App, lng model.Language, p searchParams, page int) (results.ResultSet, string, error) {
+	switch p.Engine {
 	case "jworg", "jw", "":
 		sp, err := a.Search().Search(ctx, lng.Symbol, search.Params{
-			Query: query, Facet: facet, Sort: sortBy,
-			Offset: (page - 1) * limit, Limit: limit,
+			Query: p.Query, Facet: p.Facet, Sort: p.Sort,
+			Offset: (page - 1) * p.Limit, Limit: p.Limit,
 		})
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
-		header := a.Text().Results(sp.Total, query)
-		if sp.Total > limit {
-			header += fmt.Sprintf(a.Text().PageSuffix, page, limit)
+		header := a.Text().Results(sp.Total, p.Query)
+		if sp.Total > p.Limit {
+			header += fmt.Sprintf(a.Text().PageSuffix, page, p.Limit)
 		}
-		rs := results.ResultSet{Kind: "search", Query: query, Lang: lng.Symbol, Page: page, Items: sp.Results}
+		rs := results.ResultSet{Kind: "search", Query: p.Query, Lang: lng.Symbol, Page: page, Items: sp.Results}
 		return rs, header, nil
 	case "wol":
-		return searchWOL(ctx, a, lng, query, scope, sortBy, page)
+		sp, err := searchWOL(ctx, a, lng, p, page)
+		if err != nil {
+			return results.ResultSet{}, "", err
+		}
+		header := a.Text().WolResults(sp.Total, p.Query, sp.Page)
+		if p.Header != nil {
+			header = p.Header(sp.Total, sp.Page)
+		}
+		rs := results.ResultSet{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}
+		return rs, header, nil
 	}
-	return results.ResultSet{}, "", fmt.Errorf("invalid engine %q (want jworg or wol)", engine)
+	return results.ResultSet{}, "", fmt.Errorf("invalid engine %q (want jworg or wol)", p.Engine)
 }
 
 func runSearchTUI(ctx context.Context, a *app.App, lng model.Language, fetch tui.Fetcher, header string) error {

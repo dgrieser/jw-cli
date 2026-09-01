@@ -140,13 +140,30 @@ jw search --no-urls Schöpfung                # listing without link lines
 ### Search
 
 ```sh
-jw search kingdom of god                     # jw.org unified search
-jw search -t videos -s newest creation       # facet + sort
-jw search -n 25 -p 2 jehovah                 # pagination
-jw search -e wol '(Matthew 24:14)'           # all articles citing that verse
-jw search -e wol 'faith & works' --scope sen # wol AND-search, sentence scope
-jw search -i bible study                     # interactive TUI
+jw search kingdom of god                      # jw.org unified search
+jw search -t videos -s newest creation        # facet + sort
+jw search -n 25 -p 2 jehovah                  # pagination
+jw search -e wol '(Matthew 24:14)'            # all articles citing that verse
+jw search -e wol 'faith & works' --scope sen  # wol AND-search, sentence scope
+jw search -e wol '(Mt 24:14)' --exclude bi,dx # without bibles and indexes
+jw search -i bible study                      # interactive TUI
 ```
+
+The wol engine covers every publication category by default. Which categories a
+search covers is controlled by three mutually exclusive flags, also available on
+`jw bible cited`:
+
+| Flag | Meaning |
+| --- | --- |
+| `--all` | every category, bibles and indexes included |
+| `--include w,g` | only these categories |
+| `--exclude bi,dx` | every category except these |
+
+The codes are wol's own, from its "refine search" sidebar: `bi` bibles, `dx`
+indexes, `w` Watchtower, `g` Awake!, `it` Insight, `bk` books, `bklt`/`brch`
+brochures, `mwb` workbooks, `es` daily texts, `yb` yearbooks, `web` jw.org
+pages. Which of them a language offers differs; an unknown code is rejected with
+the list the language actually has.
 
 Every listing is numbered and cached, so follow-up commands take an index:
 
@@ -173,6 +190,9 @@ jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
 jw bible research John 3:16 -x               # research guide + excerpts
+jw bible cited "Jer 31:15"                   # publications citing that verse
+jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
+jw bible cited "Jer 31:15; Mt 2:18" -p 2     # either verse, second page
 jw bible books                               # book numbers/names
 ```
 
@@ -354,9 +374,14 @@ smoke-tested once on a normal network:
 1. `jw languages` — mediator language list and JWT-less endpoints reachable.
 2. `jw search kingdom` — token fetch from `/tokens/jworg.jwt`, real TTL, and
    the 401-refresh path.
-3. `jw search -e wol '(Matthew 24:14)'` — the parenthetical citation syntax
-   is community-documented but was not verifiable offline; also check the
-   result markup matches the selectors in `internal/api/wol/search.go`.
+3. `jw search -e wol '(Matthew 24:14)'` and `jw bible cited "Jer 31:15"` — the
+   parenthetical citation syntax, the result markup against the selectors in
+   `internal/api/wol/search.go`, and the `fc[]` category filter. The category
+   list is language-dependent (German has `mwbr`, English `vern`), so check a
+   second language: a code the sent whitelist did not know must trigger one
+   corrected retry, not silently missing results. Verified live once against
+   `de` (66 hits filtered, 94 unfiltered) and `en` (74) — a large drift in
+   those numbers means the filter or the selectors moved.
 4. `jw bible read -l de "Matthäus 1:1"` — non-English `rsconf`/`lp`
    discovery and localized book-name extraction
    (`internal/api/wol/client.go`, `LocalizedBookNames`).

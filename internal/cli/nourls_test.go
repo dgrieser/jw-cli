@@ -97,3 +97,22 @@ func TestNoURLsLeavesJSONAlone(t *testing.T) {
 		t.Errorf("json lost its URLs:\n%s", out)
 	}
 }
+
+// A citation listing keeps the publication line and the citing sentence; only
+// the link to the document goes.
+func TestNoURLsBibleCited(t *testing.T) {
+	var queries []string
+	out, err := runCmd(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15", "-l", "en", "--no-urls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
+		"Wie hat sich diese Prophezeiung",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	assertNoURLs(t, out)
+}
