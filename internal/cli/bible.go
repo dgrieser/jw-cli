@@ -1,19 +1,17 @@
 package cli
 
 import (
-	"context"
 	"fmt"
-	htmlpkg "html"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
-	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newBibleCmd(a *app.App) *cobra.Command {
@@ -31,43 +29,6 @@ func newBibleCmd(a *app.App) *cobra.Command {
 		newBibleBooksCmd(a),
 	)
 	return cmd
-}
-
-// bookTable returns the reference table, merged with localized book names
-// for the active language when they can be fetched (best effort).
-func bookTable(ctx context.Context, a *app.App) *bibleref.Table {
-	t := bibleref.English()
-	lng, err := a.Lang(ctx)
-	if err != nil || lng.Locale == "en" {
-		return t
-	}
-	cfg, err := a.WOL().ConfigFor(ctx, lng.Locale)
-	if err != nil {
-		return t
-	}
-	if names, err := a.WOL().LocalizedBookNames(ctx, cfg); err == nil {
-		t.Merge(names)
-	}
-	return t
-}
-
-// parseRefsArg joins args into one reference string and parses it.
-func parseRefsArg(ctx context.Context, a *app.App, args []string) ([]bibleref.Ref, *bibleref.Table, error) {
-	t := bookTable(ctx, a)
-	refs, err := bibleref.Parse(strings.Join(args, " "), t)
-	if err != nil {
-		return nil, nil, err
-	}
-	return refs, t, nil
-}
-
-// chapterFor fetches the wol chapter page containing ref.
-func chapterFor(ctx context.Context, a *app.App, edition string, ref bibleref.Ref) (*wol.ChapterDoc, error) {
-	cfg, err := a.WOLConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return a.WOL().Chapter(ctx, cfg, edition, ref.Book, ref.Chapter)
 }
 
 func newBibleReadCmd(a *app.App) *cobra.Command {
@@ -115,140 +76,29 @@ Examples:
 			if allBibles && cmd.Flags().Changed("bible") {
 				return fmt.Errorf("--bible and --bible-all cannot be combined")
 			}
-			refs, table, err := parseRefsArg(ctx, a, args)
-			if err != nil {
-				return err
-			}
 			format, err := a.Format()
 			if err != nil {
 				return err
 			}
-			editions, err := readEditions(ctx, a, edition, allBibles)
+			lng, err := a.Lang(ctx)
 			if err != nil {
 				return err
 			}
-			var passages []readPassage
-			// references an edition does not carry, named once the rest is read
-			var missing []string
-			chapters := map[string]*wol.ChapterDoc{}
-			// one expander for every passage read, so they share the chapter
-			// pages their study panes come from
-			var expander *tooltipResolver
-			if depth > 0 {
-				expander = newTooltipResolver(a, chapters)
-			}
-			for _, ref := range refs {
-				var skipped []string
-				for _, ed := range editions {
-					key := fmt.Sprintf("%s-%d-%d", ed.Symbol, ref.Book, ref.Chapter)
-					doc, ok := chapters[key]
-					if !ok {
-						doc, err = chapterFor(ctx, a, ed.Symbol, ref)
-						if err != nil {
-							if !allBibles {
-								return err
-							}
-							// a translation of part of the Bible only, or one
-							// that numbers its chapters differently
-							skipped = append(skipped, ed.Symbol)
-							continue
-						}
-						chapters[key] = doc
-					}
-					verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
-					if err != nil {
-						if !allBibles {
-							return fmt.Errorf("%s: %w", refString(ref, table), err)
-						}
-						skipped = append(skipped, ed.Symbol)
-						continue
-					}
-					// where a reference running past its chapter ends is the
-					// edition's own answer, so it is resolved per edition
-					r := resolveChapterEnd(ref, verses)
-					p := readPassage{Ref: refString(r, table)}
-					if allBibles {
-						p.Bible, p.BibleTitle = ed.Symbol, ed.Label()
-					}
-					var unfolded []string
-					if depth > 0 {
-						// several verses are headed one by one, so the expansion of a
-						// verse reads as belonging to that verse rather than to the
-						// passage; a single verse is already the passage heading
-						level := passageUnfoldLevel
-						if len(verses) > 1 {
-							level = verseUnfoldLevel
-						}
-						unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, a, expander, r, verses, depth, level, assumeYes)
-						if err != nil {
-							return err
-						}
-					}
-					for i, v := range verses {
-						out := readVerse{Verse: v}
-						if i < len(unfolded) {
-							out.Unfold = unfolded[i]
-							if len(verses) > 1 {
-								num := v.ID % 1000
-								out.Citation = refString(bibleref.Ref{
-									Book: r.Book, Chapter: r.Chapter, VerseStart: num, VerseEnd: num,
-								}, table)
-							}
-						}
-						p.Verses = append(p.Verses, out)
-					}
-					passages = append(passages, p)
-				}
-				if len(skipped) > 0 {
-					missing = append(missing, fmt.Sprintf(a.Text().NotInEditions,
-						refString(ref, table), strings.Join(skipped, ", ")))
-				}
+			res, err := a.Service().ReadPassages(ctx, lng, service.ReadRequest{
+				Refs: strings.Join(args, " "), Edition: edition, AllBibles: allBibles,
+				Unfold: unfoldConfig(a, depth, assumeYes),
+			}, a.Text())
+			if err != nil {
+				return err
 			}
 			if format == render.JSON {
-				return a.WriteJSON(passages)
+				return a.WriteJSON(res.Passages)
 			}
-			var b strings.Builder
-			for i, p := range passages {
-				if i > 0 {
-					b.WriteString("\n")
-				}
-				var html strings.Builder
-				for _, run := range verseRuns(p.Verses) {
-					if cite := runCitation(run, table); cite != "" {
-						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
-					}
-					for _, v := range run {
-						html.WriteString(v.HTML)
-						html.WriteString(" ")
-						html.WriteString(v.Unfold)
-					}
-				}
-				html.WriteString(unfoldNoteHTML(p.UnfoldNote))
-				body, err := render.Render(collapseRules(html.String()), format,
-					a.RenderOptions(a.HTTP().Base.WOL))
-				if err != nil {
-					return err
-				}
-				switch format {
-				case render.Markdown, render.Raw:
-					fmt.Fprintf(&b, "## %s\n\n%s\n", p.heading(), body)
-				case render.HTML:
-					fmt.Fprintf(&b, "<h2>%s</h2>\n%s\n", htmlpkg.EscapeString(p.heading()), body)
-				default:
-					fmt.Fprintf(&b, "%s\n\n%s\n", p.heading(), body)
-				}
+			body, err := service.FormatPassages(res, format, a.RenderOptions(a.HTTP().Base.WOL))
+			if err != nil {
+				return err
 			}
-			for _, note := range missing {
-				switch format {
-				case render.Markdown, render.Raw:
-					fmt.Fprintf(&b, "\n_%s_\n", note)
-				case render.HTML:
-					fmt.Fprintf(&b, "%s\n", unfoldNoteHTML(note))
-				default:
-					fmt.Fprintf(&b, "\n%s\n", note)
-				}
-			}
-			return a.WriteMarkdown(b.String())
+			return a.WriteMarkdown(body)
 		},
 	}
 	cmd.Flags().StringVarP(&edition, "bible", "b", "nwtsty", "bible edition, as available in the selected language: "+strings.Join(wol.BibleEditions, ", "))
@@ -256,167 +106,6 @@ Examples:
 	cmd.Flags().IntVar(&depth, "unfold", 0, "print the study notes and the text behind every reference, following references this many levels deep")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
 	return cmd
-}
-
-// readVerse is a verse as jw bible read prints it: the text, and with --unfold
-// what the verse references expanded under it, so the study material of a verse
-// is read where the verse is.
-type readVerse struct {
-	model.Verse
-	// Unfold is the expansion of everything this verse references, as an HTML
-	// appendix to its text.
-	Unfold string `json:"unfold,omitempty"`
-}
-
-// readPassage is one reference read, in one bible edition.
-type readPassage struct {
-	Ref string `json:"ref"`
-	// Bible and BibleTitle name the edition the passage was read in. Both are
-	// empty unless several editions were read (--bible-all), where saying which
-	// one a passage came from is the point.
-	Bible      string      `json:"bible,omitempty"`
-	BibleTitle string      `json:"bibleTitle,omitempty"`
-	Verses     []readVerse `json:"verses"`
-	// UnfoldNote says an expansion was cut short, which is about the passage
-	// rather than about one of its verses.
-	UnfoldNote string `json:"unfoldNote,omitempty"`
-}
-
-// heading is the line a passage is printed under: the reference, and with
-// several editions read the edition it was read in.
-func (p readPassage) heading() string {
-	if p.BibleTitle == "" {
-		return p.Ref
-	}
-	return p.Ref + " — " + p.BibleTitle
-}
-
-// readEditions is the set of bibles one read covers: the single edition --bible
-// names, or every bible the library carries in the selected language.
-func readEditions(ctx context.Context, a *app.App, edition string, all bool) ([]wol.BibleEdition, error) {
-	if !all {
-		return []wol.BibleEdition{{Symbol: edition}}, nil
-	}
-	cfg, err := a.WOLConfig(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return a.WOL().Bibles(ctx, cfg)
-}
-
-// verseRuns groups the verses of a passage into the spans printed under one
-// heading. A verse that brought something of its own stands alone, so what
-// follows the verse reads as belonging to it; the verses around it that brought
-// nothing are one span of plain text and are headed as the span they are —
-// "Jeremiah 30:1, 2" rather than a heading over every verse of it.
-func verseRuns(verses []readVerse) [][]readVerse {
-	var runs [][]readVerse
-	for i := 0; i < len(verses); {
-		j := i + 1
-		if verses[i].Unfold == "" {
-			for j < len(verses) && verses[j].Unfold == "" {
-				j++
-			}
-		}
-		runs = append(runs, verses[i:j])
-		i = j
-	}
-	return runs
-}
-
-// runCitation heads a span of verses. It is empty when the verses of the passage
-// are not headed one by one at all: without an expansion under them there is
-// nothing to tell apart, and the passage heading already says what they are.
-func runCitation(run []readVerse, t *bibleref.Table) string {
-	if len(run) == 0 || run[0].Citation == "" {
-		return ""
-	}
-	if len(run) == 1 {
-		return run[0].Citation
-	}
-	first, last := run[0].ID, run[len(run)-1].ID
-	return refString(bibleref.Ref{
-		Book:       first / 1_000_000,
-		Chapter:    first / 1_000 % 1_000,
-		VerseStart: first % 1_000,
-		VerseEnd:   last % 1_000,
-	}, t)
-}
-
-// refString renders a ref with the (possibly localized) book table.
-func refString(r bibleref.Ref, t *bibleref.Table) string {
-	name := t.Name(r.Book)
-	switch {
-	case r.VerseStart == 0:
-		return fmt.Sprintf("%s %d", name, r.Chapter)
-	case r.RunsToChapterEnd():
-		// the chapter was not read here, so its last verse cannot be named
-		return fmt.Sprintf("%s %d:%dff.", name, r.Chapter, r.VerseStart)
-	case r.VerseEnd > r.VerseStart:
-		return fmt.Sprintf("%s %d:%d-%d", name, r.Chapter, r.VerseStart, r.VerseEnd)
-	default:
-		return fmt.Sprintf("%s %d:%d", name, r.Chapter, r.VerseStart)
-	}
-}
-
-// resolveChapterEnd names the last verse of a reference that was written as
-// running past its chapter — "Pr 8:5-9:10" takes chapter 8 to its end — now that
-// the chapter has been read and where it ends is known.
-func resolveChapterEnd(ref bibleref.Ref, verses []model.Verse) bibleref.Ref {
-	if !ref.RunsToChapterEnd() || len(verses) == 0 {
-		return ref
-	}
-	ref.VerseEnd = verses[len(verses)-1].ID % 1000
-	return ref
-}
-
-// forEachStudySection iterates the study sections of every verse in refs,
-// together with the verse itself (zero value when its text is not on the page).
-func forEachStudySection(ctx context.Context, a *app.App, args []string, fn func(ref string, verse model.Verse, sec model.StudySection)) error {
-	refs, table, err := parseRefsArg(ctx, a, args)
-	if err != nil {
-		return err
-	}
-	chapters := map[string]*wol.ChapterDoc{}
-	for _, ref := range refs {
-		key := fmt.Sprintf("%d-%d", ref.Book, ref.Chapter)
-		doc, ok := chapters[key]
-		if !ok {
-			doc, err = chapterFor(ctx, a, "nwtsty", ref)
-			if err != nil {
-				return err
-			}
-			chapters[key] = doc
-		}
-		// the verse text of the whole span, so every study section can be
-		// printed with the verse it belongs to
-		texts := map[int]model.Verse{}
-		verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
-		if err != nil {
-			return fmt.Errorf("%s: %w", refString(ref, table), err)
-		}
-		ref = resolveChapterEnd(ref, verses)
-		from, to := ref.VerseStart, ref.VerseEnd
-		for _, v := range verses {
-			texts[v.ID%1000] = v
-		}
-		if from == 0 {
-			// bound the scan to the chapter's real last verse
-			from, to = 1, verses[len(verses)-1].ID%1000
-		}
-		for v := from; v <= to; v++ {
-			sec, ok := doc.StudySection(v)
-			if !ok {
-				continue
-			}
-			label := sec.Verse
-			if label == "" {
-				label = refString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter, VerseStart: v, VerseEnd: v}, table)
-			}
-			fn(label, texts[v], sec)
-		}
-	}
-	return nil
 }
 
 func newBibleNotesCmd(a *app.App) *cobra.Command {
@@ -431,17 +120,11 @@ verse text they explain.`,
 			if err != nil {
 				return err
 			}
-			type entry struct {
-				Ref   string            `json:"ref"`
-				Verse model.Verse       `json:"verse"`
-				Notes []model.StudyNote `json:"notes"`
+			lng, err := a.Lang(cmd.Context())
+			if err != nil {
+				return err
 			}
-			var entries []entry
-			err = forEachStudySection(cmd.Context(), a, args, func(ref string, verse model.Verse, sec model.StudySection) {
-				if len(sec.Notes) > 0 {
-					entries = append(entries, entry{Ref: ref, Verse: verse, Notes: sec.Notes})
-				}
-			})
+			entries, err := a.Service().Notes(cmd.Context(), lng, strings.Join(args, " "))
 			if err != nil {
 				return err
 			}
@@ -485,32 +168,13 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			type entry struct {
-				Ref   string           `json:"ref"`
-				XRefs []model.CrossRef `json:"xrefs"`
-			}
-			var entries []entry
-			err = forEachStudySection(ctx, a, args, func(ref string, _ model.Verse, sec model.StudySection) {
-				if len(sec.XRefs) > 0 {
-					entries = append(entries, entry{Ref: ref, XRefs: sec.XRefs})
-				}
-			})
+			lng, err := a.Lang(ctx)
 			if err != nil {
 				return err
 			}
-			if resolve {
-				for _, e := range entries {
-					for i := range e.XRefs {
-						if e.XRefs[i].SourcePath == "" {
-							continue
-						}
-						html, err := a.WOL().MarginalReference(ctx, e.XRefs[i].SourcePath)
-						if err != nil {
-							return fmt.Errorf("resolve %s: %w", e.XRefs[i].Citation, err)
-						}
-						e.XRefs[i].ResolvedHTML = html
-					}
-				}
+			entries, err := a.Service().XRefs(ctx, lng, strings.Join(args, " "), resolve)
+			if err != nil {
+				return err
 			}
 			if format == render.JSON {
 				return a.WriteJSON(entries)
@@ -551,17 +215,11 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			var items []model.Result
-			err := forEachStudySection(ctx, a, args, func(ref string, _ model.Verse, sec model.StudySection) {
-				for _, m := range sec.Media {
-					if !doDL {
-						m = withGalleryMeta(ctx, a, m)
-					}
-					r := imageResult(m, ref)
-					r.JWLink = m.FinderLink
-					items = append(items, r)
-				}
-			})
+			lng, err := a.Lang(ctx)
+			if err != nil {
+				return err
+			}
+			items, err := a.Service().BibleMedia(ctx, lng, strings.Join(args, " "), !doDL)
 			if err != nil {
 				return err
 			}
@@ -580,42 +238,6 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 	return cmd
 }
 
-// withGalleryMeta fills in what the study pane leaves out. A verse's picture is
-// listed there as a thumbnail with a one-line title; its explanatory caption
-// and its rights line are written down only on the gallery page it links to, so
-// that page is read (cached for a month) whenever a picture names one. Failing
-// to read it costs the extra words, not the entry: the thumbnail's own title
-// stays.
-func withGalleryMeta(ctx context.Context, a *app.App, m model.MediaAsset) model.MediaAsset {
-	if m.SourceURL == "" {
-		return m
-	}
-	g, err := a.WOL().GalleryItem(ctx, m.SourceURL)
-	if err != nil {
-		return m
-	}
-	if g.URL != "" && g.URL != m.URL {
-		if m.ThumbnailURL == "" {
-			m.ThumbnailURL = m.URL // what the study pane pointed at
-		}
-		m.URL = g.URL
-	}
-	for _, f := range []struct {
-		dst *string
-		src string
-	}{
-		{&m.Caption, g.Caption},
-		{&m.Alt, g.Alt},
-		{&m.Credit, g.Credit},
-		{&m.Description, g.Description},
-	} {
-		if *f.dst == "" {
-			*f.dst = f.src
-		}
-	}
-	return m
-}
-
 func newBibleResearchCmd(a *app.App) *cobra.Command {
 	var excerpts bool
 	cmd := &cobra.Command{
@@ -632,39 +254,13 @@ shown, including a link to the full article.`,
 			if err != nil {
 				return err
 			}
-			type entry struct {
-				Ref   string               `json:"ref"`
-				Verse model.Verse          `json:"verse"`
-				Items []model.ResearchItem `json:"items"`
-			}
-			var entries []entry
-			err = forEachStudySection(ctx, a, args, func(ref string, verse model.Verse, sec model.StudySection) {
-				if len(sec.Research) > 0 {
-					entries = append(entries, entry{Ref: ref, Verse: verse, Items: sec.Research})
-				}
-			})
+			lng, err := a.Lang(ctx)
 			if err != nil {
 				return err
 			}
-			if excerpts {
-				for _, e := range entries {
-					for i := range e.Items {
-						if e.Items[i].PCPath == "" {
-							continue
-						}
-						tip, err := a.WOL().Tooltip(ctx, e.Items[i].PCPath)
-						if err != nil {
-							continue // excerpts are best effort
-						}
-						e.Items[i].ExcerptHTML = tip.ContentHTML
-						if e.Items[i].ArticleURL == "" {
-							e.Items[i].ArticleURL = tip.URL
-						}
-						if e.Items[i].Title == "" {
-							e.Items[i].Title = tip.Title
-						}
-					}
-				}
+			entries, err := a.Service().Research(ctx, lng, strings.Join(args, " "), excerpts)
+			if err != nil {
+				return err
 			}
 			if format == render.JSON {
 				return a.WriteJSON(entries)
@@ -706,25 +302,19 @@ func newBibleBooksCmd(a *app.App) *cobra.Command {
 		Short: "List the 66 bible books with their numbers",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			t := bookTable(cmd.Context(), a)
 			format, err := a.Format()
 			if err != nil {
 				return err
 			}
+			// best effort: without a resolvable language the English names stand
+			lng, _ := a.Lang(cmd.Context())
+			books := a.Service().Books(cmd.Context(), lng)
 			if format == render.JSON {
-				type book struct {
-					Number int    `json:"number"`
-					Name   string `json:"name"`
-				}
-				var books []book
-				for i := 1; i <= 66; i++ {
-					books = append(books, book{i, t.Name(i)})
-				}
 				return a.WriteJSON(books)
 			}
 			var b strings.Builder
-			for i := 1; i <= 66; i++ {
-				fmt.Fprintf(&b, "%2d. %s\n", i, t.Name(i))
+			for _, book := range books {
+				fmt.Fprintf(&b, "%2d. %s\n", book.Number, book.Name)
 			}
 			return a.Write(b.String())
 		},

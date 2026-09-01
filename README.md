@@ -15,6 +15,8 @@
 - **Download** videos (quality selection), audio, publications (PDF, EPUB,
   JWPUB, MP3, ...), subtitles, and article/verse images.
 - **Interactive TUI** for navigating search results and the media library.
+- **Web server** (`jw serve`): the same features as a browsable web site and a
+  JSON API under `/api/v1`.
 
 ## Build
 
@@ -357,6 +359,92 @@ The count is an upper bound because verses of one chapter share its page.
 since a script has nobody to ask. Declining stops there and the output says how
 many references were left unfolded, so a partial expansion never reads as the
 whole picture.
+
+## Web server (`jw serve`)
+
+```sh
+jw serve                          # http://127.0.0.1:8080
+jw serve --port 8100              # another port
+jw serve -l de -v                 # German by default, log upstream requests
+jw serve --addr 0.0.0.0           # expose on the network (see below)
+```
+
+`jw serve` runs the binary as a web server carrying every feature twice: a
+server-rendered **web site** (no JavaScript required) and a **JSON API** under
+`/api/v1`. Both are driven by the same code the commands use, so output and
+behavior match the CLI.
+
+**There is no authentication.** The server binds to `127.0.0.1` unless
+`--addr` says otherwise, and warns when it is about to listen on a
+non-loopback address.
+
+### Docker
+
+```sh
+make docker                                    # build jw:dev locally
+docker run --rm -p 8080:8080 jw:dev            # http://127.0.0.1:8080
+docker run --rm -p 8080:8080 -v jw-cache:/data jw:dev   # keep the cache
+docker run --rm jw:dev languages -s german     # any CLI command works too
+```
+
+Published images land on GHCR on every release tag (`latest`, `1.2`, `1.2.3`)
+and on every push to `main` (`edge`):
+
+```sh
+docker run --rm -p 8080:8080 ghcr.io/dgrieser/jw-cli:latest
+```
+
+The image is distroless, runs as a non-root user, and defaults to
+`serve --addr 0.0.0.0 --port 8080` — inside the container network the port
+mapping is the boundary, but remember the server has no authentication, so
+publish the port to localhost (`-p 127.0.0.1:8080:8080`) or put an
+authenticating reverse proxy in front for anything internet-facing. `/data`
+holds the on-disk cache; mount a volume to keep it across restarts.
+
+`--lang` sets the default content language; every page and endpoint takes a
+`?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
+endpoints render bodies as sanitized HTML by default; `?format=markdown` and
+`?format=text` select the other formats. Errors come back as
+`{"error": {"code": "...", "message": "..."}}` with `400` (bad parameters),
+`404` (nothing there upstream), `422` (an unfold that would need more upstream
+requests than an unattended server spends), or `502` (upstream failure).
+
+| Endpoint | Parameters | CLI equivalent |
+|---|---|---|
+| `GET /api/v1/languages` | `q` | `jw languages -s` |
+| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=true` | `jw search` |
+| `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3) | `jw article` (images and scripture refs are fields of the response) |
+| `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `format` | `jw bible read` |
+| `GET /api/v1/bible/notes` | `ref`* | `jw bible notes` |
+| `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
+| `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |
+| `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
+| `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=true` | `jw bible cited` |
+| `GET /api/v1/bible/books` | — | `jw bible books` |
+| `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
+| `GET /api/v1/media/items/{lank}` | — | `jw media info` |
+| `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
+| `GET /api/v1/dailytext` | `date`, `format`, `unfold` | `jw dailytext` |
+| `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold` | `jw meetings ...` |
+| `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` |
+| `GET /download/pub` | pub parameters | `jw pub --download` |
+
+```sh
+curl 'http://127.0.0.1:8080/api/v1/search?q=kingdom&limit=5'
+curl 'http://127.0.0.1:8080/api/v1/bible/read?ref=John+3:16&lang=de&format=markdown'
+curl -L -o video.mp4 'http://127.0.0.1:8080/download/media/pub-jwbcov_201505_1_VIDEO?quality=720p'
+```
+
+A few CLI affordances have no server counterpart by design: the TUI and
+`open --browser` are terminal affairs; the index-based `show`/`open`/
+`download <n>` follow-ups are replaced by explicit parameters (every listing
+item carries its `wolLink`/`jwLink`/`lank`/`fileUrl`); and nothing is ever
+written to the server's filesystem — the `/download/...` endpoints do the
+quality/format selection, then answer `302 Found` with the file's public CDN
+URL instead of proxying the bytes. Search excerpts, on by default in the CLI,
+are opt-in per request (`excerpts=true`): they cost one upstream request per
+result. One shared HTTP client paces all upstream traffic, so concurrent
+requests queue against the same polite rate limit the CLI keeps.
 
 ## How it talks to the sites
 

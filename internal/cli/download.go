@@ -15,6 +15,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newDownloadCmd(a *app.App) *cobra.Command {
@@ -71,12 +72,12 @@ Examples:
 			}
 			pm, err := a.PubMedia().Links(ctx, pubmedia.Query{
 				Pub: target, Issue: issue, BookNum: booknum, Track: track,
-				Formats: splitFormats(formats), Lang: lng.Symbol,
+				Formats: service.SplitFormats(formats), Lang: lng.Symbol,
 			})
 			if err != nil {
 				return err
 			}
-			return downloadAll(ctx, a, pubFilesToResults(pm), dir)
+			return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
 		},
 	}
 	fl := cmd.Flags()
@@ -132,7 +133,7 @@ func downloadResult(ctx context.Context, a *app.App, item model.Result, quality 
 		if err != nil {
 			return err
 		}
-		return downloadAll(ctx, a, pubFilesToResults(pm), dir)
+		return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
 	case item.DocID != 0:
 		lng, err := a.Lang(ctx)
 		if err != nil {
@@ -142,7 +143,7 @@ func downloadResult(ctx context.Context, a *app.App, item model.Result, quality 
 		if err != nil {
 			return err
 		}
-		return downloadAll(ctx, a, pubFilesToResults(pm), dir)
+		return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
 	}
 	return fmt.Errorf("result %d (%s) has nothing downloadable; try 'jw show %d'", item.Index, item.Title, item.Index)
 }

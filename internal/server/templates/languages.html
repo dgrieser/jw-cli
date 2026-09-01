@@ -1,0 +1,24 @@
+{{define "content"}}
+<h1>Languages</h1>
+<form class="searchform" method="get" action="/languages">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="search" name="q" value="{{.Query}}" placeholder="Filter by name, symbol, or locale">
+  <button type="submit">Filter</button>
+</form>
+
+<table class="langs">
+  <thead><tr><th>Symbol</th><th>Locale</th><th>Name</th><th>Vernacular</th></tr></thead>
+  <tbody>
+    {{- range .Languages}}
+    <tr>
+      <td><code>{{.Symbol}}</code></td>
+      <td><code>{{.Locale}}</code></td>
+      <td>{{.Name}}{{if .IsSignLanguage}} (sign language){{end}}</td>
+      <td>{{.Vernacular}}</td>
+    </tr>
+    {{- else}}
+    <tr><td colspan="4">No languages match.</td></tr>
+    {{- end}}
+  </tbody>
+</table>
+{{end}}

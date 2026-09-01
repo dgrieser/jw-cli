@@ -1,0 +1,7 @@
+{
+  "languages": [
+    {"code": "E", "locale": "en", "name": "English", "vernacular": "English", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "X", "locale": "de", "name": "German", "vernacular": "Deutsch", "script": "ROMAN", "isRTL": false, "isSignLanguage": false},
+    {"code": "F", "locale": "fr", "name": "French", "vernacular": "Français", "script": "ROMAN", "isRTL": false, "isSignLanguage": false}
+  ]
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/lang"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 // Flags holds the values of the global persistent flags.
@@ -52,6 +53,7 @@ type App struct {
 	wol      *wol.Client
 	jworg    *jworg.Client
 	resolver *lang.Resolver
+	svc      *service.Service
 
 	langOnce sync.Once
 	language model.Language
@@ -95,7 +97,19 @@ func (a *App) init() {
 		a.wol = wol.New(a.http, a.cache)
 		a.jworg = jworg.New(a.http)
 		a.resolver = &lang.Resolver{Source: a.mediator, Cache: a.cache}
+		a.svc = &service.Service{
+			HTTP: a.http, Cache: a.cache,
+			Mediator: a.mediator, PubMedia: a.pubmedia, Search: a.search,
+			WOL: a.wol, JWOrg: a.jworg, Langs: a.resolver,
+		}
 	})
+}
+
+// Service is the shared orchestration layer, built around the same clients the
+// commands use directly.
+func (a *App) Service() *service.Service {
+	a.init()
+	return a.svc
 }
 
 func (a *App) HTTP() *httpx.Client {

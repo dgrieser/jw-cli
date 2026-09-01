@@ -1,0 +1,32 @@
+{{define "listing"}}
+<ol class="listing">
+  {{- range .}}
+  <li>
+    <p class="row">
+      <span class="kind">{{.Kind}}</span>
+      {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title "(untitled)"}}</a>{{else}}<span class="title">{{or .Title "(untitled)"}}</span>{{end}}
+      {{- if .Context}} <span class="context">— {{.Context}}</span>{{end}}
+      {{- if .Duration}} <span class="meta">({{.Duration}})</span>{{end}}
+      {{- if .Size}} <span class="meta">({{.Size}})</span>{{end}}
+    </p>
+    {{- if .ImageURL}}
+    <p class="thumb">{{if .Href}}<a href="{{.Href}}"><img src="{{.ImageURL}}" alt="" loading="lazy"></a>{{else}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{end}}</p>
+    {{- end}}
+    {{- if .Excerpt}}
+    <blockquote class="excerpt">{{.Excerpt}}</blockquote>
+    {{- else if .Snippet}}
+    <blockquote class="snippet">{{.Snippet}}</blockquote>
+    {{- end}}
+    {{- range .Meta}}
+    <p class="imagemeta">{{.}}</p>
+    {{- end}}
+    <p class="links">
+      {{- if .External}}<a href="{{.External}}" rel="noopener">Open on site</a>{{end}}
+      {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">Download</a>{{end}}
+    </p>
+  </li>
+  {{- else}}
+  <li class="empty">No results.</li>
+  {{- end}}
+</ol>
+{{end}}

@@ -1,0 +1,22 @@
+{{define "content"}}
+<h1>jw</h1>
+<p>Browse the public content of jw.org and wol.jw.org: search, articles, Bible
+reading with study material, media, publications, the daily text and the
+weekly meeting material.</p>
+
+<form class="searchform" method="get" action="{{.WithLang "/search"}}">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="search" name="q" placeholder="Search jw.org and wol.jw.org" autofocus>
+  <button type="submit">Search</button>
+</form>
+
+<ul class="cards">
+  <li><a href="{{.WithLang "/search"}}"><strong>Search</strong></a> — unified jw.org search and the wol library search</li>
+  <li><a href="{{.WithLang "/bible"}}"><strong>Bible</strong></a> — read verses with study notes, cross references, research links and reverse citation lookup</li>
+  <li><a href="{{.WithLang "/dailytext"}}"><strong>Daily text</strong></a> — Examining the Scriptures Daily</li>
+  <li><a href="{{.WithLang "/meetings"}}"><strong>Meetings</strong></a> — this week's workbook part and Watchtower study</li>
+  <li><a href="{{.WithLang "/media"}}"><strong>Media</strong></a> — the JW Broadcasting media library</li>
+  <li><a href="{{.WithLang "/pub"}}"><strong>Publications</strong></a> — downloadable files (PDF, EPUB, MP3, ...)</li>
+  <li><a href="{{.WithLang "/languages"}}"><strong>Languages</strong></a> — every available content language</li>
+</ul>
+{{end}}

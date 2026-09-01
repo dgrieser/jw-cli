@@ -11,6 +11,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newMediaCmd(a *app.App) *cobra.Command {
@@ -57,14 +58,14 @@ Examples:
 					return err
 				}
 				header = a.Text().MediaCategories
-				items = categoriesToResults(cats)
+				items = service.CategoriesToResults(cats)
 			} else {
 				cat, err := a.Mediator().Category(cmd.Context(), lng.Symbol, key, limit, offset)
 				if err != nil {
 					return err
 				}
 				header = fmt.Sprintf("%s (%s)", cat.Name, cat.Key)
-				items = append(categoriesToResults(cat.Subcategories), mediaToResults(cat.Media)...)
+				items = append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
 			}
 			rs := results.ResultSet{Kind: "media-browse", Query: key, Lang: lng.Symbol, Items: items}
 			return writeListing(a, rs, header)
@@ -80,47 +81,6 @@ Examples:
 func argOrEmpty(args []string) string {
 	if len(args) > 0 {
 		return args[0]
-	}
-	return ""
-}
-
-func categoriesToResults(cats []model.Category) []model.Result {
-	var out []model.Result
-	for _, c := range cats {
-		out = append(out, model.Result{
-			Kind:        "category",
-			Title:       c.Name,
-			Snippet:     c.Description,
-			Context:     c.Key,
-			CategoryKey: c.Key,
-		})
-	}
-	return out
-}
-
-func mediaToResults(media []model.MediaItem) []model.Result {
-	var out []model.Result
-	for _, m := range media {
-		out = append(out, model.Result{
-			Kind:     m.Type,
-			Title:    m.Title,
-			LANK:     m.LANK,
-			Duration: m.DurationFormatted,
-			ImageURL: bestImage(m.Images),
-		})
-	}
-	return out
-}
-
-func bestImage(images map[string]map[string]string) string {
-	for _, typ := range []string{"lss", "sqr", "wss", "pnr", "cvr"} {
-		if sizes, ok := images[typ]; ok {
-			for _, size := range []string{"lg", "xl", "md", "sm", "xs"} {
-				if u := sizes[size]; u != "" {
-					return u
-				}
-			}
-		}
 	}
 	return ""
 }

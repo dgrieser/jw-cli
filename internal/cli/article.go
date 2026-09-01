@@ -12,6 +12,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 // articleView is the set of things a command can do with an article once it has
@@ -49,16 +50,20 @@ func (v *articleView) write(ctx context.Context, a *app.App, art model.Article) 
 		if len(art.Images) == 0 {
 			return fmt.Errorf("no images found in %q", art.Title)
 		}
-		return downloadAll(ctx, a, imagesToResults(art), v.dir)
+		return downloadAll(ctx, a, service.ImagesToResults(art), v.dir)
 	case v.images:
-		items := imagesToResults(art)
+		items := service.ImagesToResults(art)
 		rs := results.ResultSet{Kind: "article-images", Query: art.Title, Items: items}
 		return writeListing(a, rs, fmt.Sprintf(a.Text().ImagesIn, art.Title))
 	case v.refs:
 		return writeScriptureRefs(a, art)
 	}
 	if v.unfold > 0 {
-		body, err := unfoldArticle(ctx, a, art, v.unfold, v.assumeYes)
+		// best effort: study panes carry their own error notes when the
+		// language cannot be resolved
+		lng, _ := a.Lang(ctx)
+		body, err := a.Service().UnfoldArticle(ctx, lng, art,
+			unfoldConfig(a, v.unfold, v.assumeYes), a.Text())
 		if err != nil {
 			return err
 		}
@@ -97,22 +102,17 @@ Examples:
 	return cmd
 }
 
-// fetchArticle resolves a docid or URL to a parsed article.
+// fetchArticle resolves a docid or URL to a parsed article. The language is
+// only resolved — and only required — for a docid, which is looked up in the
+// library of that language.
 func fetchArticle(ctx context.Context, a *app.App, target string) (model.Article, error) {
-	if docid, err := strconv.Atoi(target); err == nil {
-		cfg, err := a.WOLConfig(ctx)
-		if err != nil {
+	var lng model.Language
+	if _, err := strconv.Atoi(target); err == nil {
+		if lng, err = a.Lang(ctx); err != nil {
 			return model.Article{}, err
 		}
-		return a.WOL().Document(ctx, cfg, docid)
 	}
-	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
-		return model.Article{}, fmt.Errorf("expected a document id or URL, got %q", target)
-	}
-	if strings.Contains(target, "wol.jw.org") || strings.Contains(target, "/wol/") {
-		return a.WOL().DocumentByURL(ctx, target)
-	}
-	return a.JWOrg().ArticleByURL(ctx, target)
+	return a.Service().Article(ctx, lng, target)
 }
 
 // writeArticle renders an article body in the selected format.
@@ -124,11 +124,7 @@ func writeArticle(a *app.App, art model.Article) error {
 	if format == render.JSON {
 		return a.WriteJSON(art)
 	}
-	base := a.HTTP().Base.WOL
-	if strings.Contains(art.URL, a.HTTP().Base.JWOrg) {
-		base = a.HTTP().Base.JWOrg
-	}
-	body, err := render.Render(art.HTML, format, a.RenderOptions(base))
+	body, err := render.Render(art.HTML, format, a.RenderOptions(a.Service().ArticleBase(art)))
 	if err != nil {
 		return err
 	}
@@ -143,31 +139,6 @@ func writeArticle(a *app.App, art model.Article) error {
 		}
 	}
 	return a.WriteMarkdown(body)
-}
-
-func imagesToResults(art model.Article) []model.Result {
-	items := make([]model.Result, 0, len(art.Images))
-	for _, img := range art.Images {
-		items = append(items, imageResult(img, ""))
-	}
-	return items
-}
-
-// imageResult turns an illustration into a listing row: its own words as the
-// title, everything else it says as metadata. The URL is never the title —
-// under --no-urls the row would be the one place a target still shows up, and a
-// picture with nothing to say falls back to its index instead (see
-// listStyle.imageFallbackTitle).
-func imageResult(img model.MediaAsset, context string) model.Result {
-	meta := img.Meta()
-	title := ""
-	if meta != nil {
-		title = meta.Label()
-	}
-	return model.Result{
-		Kind: "image", Title: title, Context: context, Image: meta,
-		FileURL: img.URL, ImageURL: img.URL,
-	}
 }
 
 func writeScriptureRefs(a *app.App, art model.Article) error {

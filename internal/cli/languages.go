@@ -11,6 +11,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newLanguagesCmd(a *app.App) *cobra.Command {
@@ -26,19 +27,7 @@ symbol (used by the APIs), the ISO locale, and the language names.`,
 			if err != nil {
 				return err
 			}
-			if search != "" {
-				q := strings.ToLower(search)
-				filtered := langs[:0]
-				for _, l := range langs {
-					if strings.Contains(strings.ToLower(l.Name), q) ||
-						strings.Contains(strings.ToLower(l.Vernacular), q) ||
-						strings.EqualFold(l.Locale, q) ||
-						strings.EqualFold(l.Symbol, q) {
-						filtered = append(filtered, l)
-					}
-				}
-				langs = filtered
-			}
+			langs = service.FilterLanguages(langs, search)
 			format, err := a.Format()
 			if err != nil {
 				return err

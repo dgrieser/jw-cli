@@ -1,0 +1,12 @@
+# Keep the image build context to the sources: the binary is stamped via
+# build args, so the git history is not needed inside the context.
+.git
+.github
+.dockerignore
+Dockerfile
+/jw
+/dist
+coverage.out
+coverage.html
+*.test
+README.md

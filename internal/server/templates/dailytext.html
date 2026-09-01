@@ -1,0 +1,14 @@
+{{define "content"}}
+<h1>Daily text</h1>
+<form class="searchform" method="get" action="/dailytext">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="date" name="date" value="{{.Date}}">
+  <button type="submit">Show</button>
+</form>
+
+<article class="document">
+{{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
+{{.Body}}
+</article>
+<p class="links">{{if .URL}}<a href="{{.URL}}" rel="noopener">Open on site</a>{{end}}</p>
+{{end}}

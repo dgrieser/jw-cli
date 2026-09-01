@@ -66,6 +66,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 		newBibleCmd(a),
 		newDailyTextCmd(a),
 		newMeetingsCmd(a),
+		newServeCmd(a),
 	)
 	return root
 }

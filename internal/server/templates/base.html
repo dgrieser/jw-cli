@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · jw</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="{{.WithLang "/"}}">jw</a>
+    <a href="{{.WithLang "/search"}}">Search</a>
+    <a href="{{.WithLang "/bible"}}">Bible</a>
+    <a href="{{.WithLang "/dailytext"}}">Daily text</a>
+    <a href="{{.WithLang "/meetings"}}">Meetings</a>
+    <a href="{{.WithLang "/media"}}">Media</a>
+    <a href="{{.WithLang "/pub"}}">Publications</a>
+    <a href="{{.WithLang "/languages"}}">Languages</a>
+  </nav>
+  <form class="langform" method="get" action="{{.Path}}">
+    {{- range .Hidden}}
+    <input type="hidden" name="{{.Name}}" value="{{.Value}}">
+    {{- end}}
+    <label for="lang">Language</label>
+    <input id="lang" name="lang" value="{{.Lang}}" size="6" placeholder="en" title="JW symbol (E), ISO code (de), or BCP-47 (de-AT)">
+    <button type="submit">Go</button>
+  </form>
+</header>
+<main>
+{{- if .Error}}
+<p class="error">{{.Error}}</p>
+{{- end}}
+{{template "content" .}}
+</main>
+<footer class="site">
+  <p>Served by <code>jw serve</code> — the same features as the <code>jw</code> CLI. JSON API under <a href="/api/v1/languages"><code>/api/v1</code></a>.</p>
+</footer>
+</body>
+</html>

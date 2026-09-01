@@ -1,0 +1,90 @@
+{{define "content"}}
+<h1>Bible</h1>
+<form class="searchform wide" method="get" action="/bible">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  {{- if ne .View "read"}}<input type="hidden" name="view" value="{{.View}}">{{end}}
+  <input type="text" name="ref" value="{{.Ref}}" placeholder='Matthew 24:14 — also "Pr 8-9", "Joh 3:16; Ro 5:8"' autofocus>
+  <button type="submit">Go</button>
+  {{- if eq .View "read"}}
+  <fieldset class="options">
+    <label>Edition
+      <select name="bible">
+        {{- range $e := .Editions}}
+        <option value="{{$e}}" {{if eq $.Edition $e}}selected{{end}}>{{$e}}</option>
+        {{- end}}
+      </select>
+    </label>
+    <label>Unfold <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="print the study notes and the text behind every reference, this many levels deep"></label>
+  </fieldset>
+  {{- end}}
+</form>
+
+{{- if .Ref}}
+<nav class="tabs">
+  {{- $page := . -}}
+  {{- range $v := .Views}}
+  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active"{{end}}>{{$v}}</a>
+  {{- end}}
+</nav>
+
+{{- if eq .View "read"}}
+<article class="document">
+{{.Body}}
+</article>
+{{- end}}
+
+{{- if eq .View "notes"}}
+{{- range .Notes}}
+<section class="entry">
+  <h2>{{.Ref}}</h2>
+  {{- if .Verse}}<div class="verse">{{.Verse}}</div>{{end}}
+  {{- range .Notes}}
+  <div class="note">{{.}}</div>
+  {{- end}}
+</section>
+{{- else}}
+<p class="empty">No study notes.</p>
+{{- end}}
+{{- end}}
+
+{{- if eq .View "xrefs"}}
+{{- range .XRefs}}
+<section class="entry">
+  <h2>{{.Ref}}</h2>
+  <ul>
+    {{- range .XRefs}}
+    <li>{{.Citation}}</li>
+    {{- end}}
+  </ul>
+</section>
+{{- else}}
+<p class="empty">No cross references.</p>
+{{- end}}
+{{- end}}
+
+{{- if eq .View "research"}}
+{{- range .Research}}
+<section class="entry">
+  <h2>{{.Ref}}</h2>
+  {{- if .Verse}}<div class="verse">{{.Verse}}</div>{{end}}
+  <ul>
+    {{- range .Items}}
+    <li>
+      {{if .URL}}<a href="{{.URL}}" rel="noopener">{{.Title}}</a>{{else}}{{.Title}}{{end}}
+      {{- if .Source}} <span class="meta">({{.Source}})</span>{{end}}
+      {{- if .Excerpt}}<blockquote class="excerpt">{{.Excerpt}}</blockquote>{{end}}
+    </li>
+    {{- end}}
+  </ul>
+</section>
+{{- else}}
+<p class="empty">No research-guide entries.</p>
+{{- end}}
+{{- end}}
+
+{{- if or (eq .View "cited") (eq .View "media")}}
+{{- if .Header}}<h2 class="listheader">{{.Header}}</h2>{{end}}
+{{template "listing" .Items}}
+{{- end}}
+{{- end}}
+{{end}}
