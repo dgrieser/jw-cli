@@ -378,6 +378,29 @@ behavior match the CLI.
 `--addr` says otherwise, and warns when it is about to listen on a
 non-loopback address.
 
+### Docker
+
+```sh
+make docker                                    # build jw:dev locally
+docker run --rm -p 8080:8080 jw:dev            # http://127.0.0.1:8080
+docker run --rm -p 8080:8080 -v jw-cache:/data jw:dev   # keep the cache
+docker run --rm jw:dev languages -s german     # any CLI command works too
+```
+
+Published images land on GHCR on every release tag (`latest`, `1.2`, `1.2.3`)
+and on every push to `main` (`edge`):
+
+```sh
+docker run --rm -p 8080:8080 ghcr.io/dgrieser/jw-cli:latest
+```
+
+The image is distroless, runs as a non-root user, and defaults to
+`serve --addr 0.0.0.0 --port 8080` — inside the container network the port
+mapping is the boundary, but remember the server has no authentication, so
+publish the port to localhost (`-p 127.0.0.1:8080:8080`) or put an
+authenticating reverse proxy in front for anything internet-facing. `/data`
+holds the on-disk cache; mount a volume to keep it across restarts.
+
 `--lang` sets the default content language; every page and endpoint takes a
 `?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
 endpoints render bodies as sanitized HTML by default; `?format=markdown` and

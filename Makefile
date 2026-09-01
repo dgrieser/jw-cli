@@ -54,6 +54,14 @@ install: ## Install jw into $$GOBIN
 run: ## Run the CLI: make run ARGS="search jehovah"
 	$(GO) run -ldflags '$(LDFLAGS)' $(MAIN_PKG) $(ARGS)
 
+.PHONY: docker
+docker: ## Build the Docker image as jw:dev (VERSION=v1.2.3 to stamp a version)
+	docker build \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(shell git rev-parse HEAD 2>/dev/null) \
+		--build-arg DATE=$(shell git log -1 --format=%cI 2>/dev/null) \
+		-t $(BINARY):dev .
+
 ## --- test ----------------------------------------------------------------
 
 .PHONY: test
