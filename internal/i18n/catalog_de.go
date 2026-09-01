@@ -22,6 +22,8 @@ var de = Messages{
 	NoStudyNotes: "Keine Studienanmerkungen gefunden (Studienanmerkungen gibt es in der Studienausgabe, nwtsty).",
 	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
+	// NotInEditions nimmt die Bibelstelle und die Ausgaben.
+	NotInEditions: "%s ist nicht enthalten in: %s",
 
 	LabelAltText:       "Bildbeschreibung",
 	LabelCredit:        "Bildnachweis",

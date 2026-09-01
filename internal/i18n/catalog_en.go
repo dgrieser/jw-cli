@@ -22,6 +22,8 @@ var en = Messages{
 	NoStudyNotes: "No study notes found (study notes are available in the study edition, nwtsty).",
 	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",
+	// NotInEditions takes the reference and the editions.
+	NotInEditions: "%s is not available in: %s",
 
 	LabelAltText:       "Alt text",
 	LabelCredit:        "Credit",

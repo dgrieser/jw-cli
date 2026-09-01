@@ -14,8 +14,33 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
-// Bible editions available on wol (publication symbols for the /b/ command).
-var BibleEditions = []string{"nwtsty", "nwt", "bi12", "bi10", "bi22", "by", "int", "rh"}
+// BibleEditions are well-known bible publication symbols for the /b/ command.
+// Which of them a language actually carries differs per language, and a language
+// may carry others still, so this is a hint for the flag help only — Bibles
+// reports what the library really offers.
+var BibleEditions = []string{"nwtsty", "nwt", "Rbi8", "int", "by", "bi22", "rh", "bi10"}
+
+// BibleEdition is one bible available in a language, as the library's own bible
+// list names it.
+type BibleEdition struct {
+	Symbol string `json:"symbol"` // publication symbol used in /b/ URLs ("nwtsty")
+	Title  string `json:"title"`  // "New World Translation ... (Study Edition)"
+	Year   string `json:"year"`   // the year printed beside the title, may be empty
+}
+
+// Label names an edition the way a heading should: its title with the symbol
+// (and year, when the list gave one) after it, so the symbol --bible takes is
+// always visible next to the translation it stands for.
+func (e BibleEdition) Label() string {
+	switch {
+	case e.Title == "":
+		return e.Symbol
+	case e.Year == "":
+		return fmt.Sprintf("%s (%s)", e.Title, e.Symbol)
+	default:
+		return fmt.Sprintf("%s (%s, %s)", e.Title, e.Symbol, e.Year)
+	}
+}
 
 // ChapterDoc wraps a fetched bible chapter page. All selectors that mirror
 // the live wol markup are grouped in the sel* constants below so layout
@@ -41,6 +66,11 @@ const (
 	selResearchItem = ".group.index li.item"       // research guide entry
 	selFootnoteItem = ".group.footnote li.item"    // footnotes (best effort)
 	selSectionTitle = "h3.title"
+
+	selBibleCard  = "li.resultAlternatePubTitle a" // one bible on the bible list
+	selCardSymbol = "[data-pub-symbol]"            // its publication symbol
+	selCardTitle  = ".cardLine1"                   // its title
+	selCardDetail = ".cardTitleDetail"             // the year beside the title
 )
 
 // The two indexes a research entry can be listed under, as wol classes them.
@@ -318,6 +348,42 @@ func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]
 	}
 	c.cache.Put(key, names)
 	return names, nil
+}
+
+// Bibles lists the bible editions the library carries in a language, in the
+// order its own bible list prints them (the current translation first, older
+// ones after it). Which editions exist is language specific — English has eight,
+// German three — and the list moves, so it is read rather than hardcoded.
+// Cached for 30 days.
+func (c *Client) Bibles(ctx context.Context, cfg Config) ([]BibleEdition, error) {
+	key := "bibles-" + cfg.Locale
+	var cached []BibleEdition
+	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached) > 0 {
+		return cached, nil
+	}
+	doc, err := c.hc.GetHTML(ctx, c.url(cfg, "bibles", ""))
+	if err != nil {
+		return nil, err
+	}
+	var out []BibleEdition
+	seen := map[string]bool{}
+	doc.Find(selBibleCard).Each(func(_ int, a *goquery.Selection) {
+		sym := cleanSpace(a.Find(selCardSymbol).AttrOr("data-pub-symbol", ""))
+		if sym == "" || seen[sym] {
+			return
+		}
+		seen[sym] = true
+		out = append(out, BibleEdition{
+			Symbol: sym,
+			Title:  cleanSpace(a.Find(selCardTitle).Text()),
+			Year:   cleanSpace(a.Find(selCardDetail).Text()),
+		})
+	})
+	if len(out) == 0 {
+		return nil, fmt.Errorf("could not find the bible editions of %s at %s (page layout changed?)", cfg.Locale, c.url(cfg, "bibles", ""))
+	}
+	c.cache.Put(key, out)
+	return out, nil
 }
 
 // bookNameVariants pulls the name forms out of one bible-navigation link.

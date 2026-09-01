@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,6 +46,95 @@ func bibleMux(t *testing.T) *http.ServeMux {
 			"title": "God So Loved the World", "url": "/en/wol/d/r1/lp-e/2014486"}]}`))
 	})
 	return mux
+}
+
+// wolFixture serves a fixture that lives with the wol client's own tests.
+func wolFixture(t *testing.T, name string) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(filepath.Join("..", "api", "wol", "testdata", name))
+		if err != nil {
+			t.Errorf("fixture %s: %v", name, err)
+			http.Error(w, "missing", 500)
+			return
+		}
+		w.Write(b)
+	}
+}
+
+// bibleAllMux adds what --bible-all needs: the language's bible list, the same
+// chapter in a second edition, and a third edition whose page carries no verses
+// — the shape of an edition that does not run to this book.
+func bibleAllMux(t *testing.T) *http.ServeMux {
+	mux := bibleMux(t)
+	mux.HandleFunc("/en/wol/bibles/r1/lp-e", wolFixture(t, "bibles_en.html"))
+	mux.HandleFunc("/en/wol/b/r1/lp-e/nwt/43/3", wolFixture(t, "chapter_john3.html"))
+	mux.HandleFunc("/en/wol/b/r1/lp-e/int/43/3", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><p>The Greek Scriptures only.</p></body></html>`))
+	})
+	return mux
+}
+
+func TestBibleReadAllBibles(t *testing.T) {
+	out, err := runCmd(t, bibleAllMux(t), "bible", "read", "-l", "en", "-o", "raw", "--bible-all", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"## John 3:16 — New World Translation of the Holy Scriptures (Study Edition) (nwtsty, 2026)",
+		"## John 3:16 — New World Translation of the Holy Scriptures (nwt, 2013)",
+		// the edition without the passage is named, not fatal
+		"John 3:16 is not available in: int",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if n := strings.Count(out, "God loved the world so much"); n != 2 {
+		t.Errorf("verse printed %d times, want 2:\n%s", n, out)
+	}
+}
+
+func TestBibleReadAllBiblesJSON(t *testing.T) {
+	out, err := runCmd(t, bibleAllMux(t), "bible", "read", "-l", "en", "-o", "json", "--bible-all", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var passages []struct {
+		Ref        string `json:"ref"`
+		Bible      string `json:"bible"`
+		BibleTitle string `json:"bibleTitle"`
+	}
+	if err := json.Unmarshal([]byte(out), &passages); err != nil {
+		t.Fatalf("json: %v\n%s", err, out)
+	}
+	if len(passages) != 2 {
+		t.Fatalf("passages = %+v", passages)
+	}
+	if passages[0].Bible != "nwtsty" || passages[1].Bible != "nwt" {
+		t.Errorf("editions not carried into json: %+v", passages)
+	}
+	if passages[1].BibleTitle != "New World Translation of the Holy Scriptures (nwt, 2013)" {
+		t.Errorf("title = %q", passages[1].BibleTitle)
+	}
+}
+
+// A single edition is the default, and says nothing about which one it is.
+func TestBibleReadSingleEditionHasNoBibleField(t *testing.T) {
+	out, err := runCmd(t, bibleAllMux(t), "bible", "read", "-l", "en", "-o", "raw", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "## John 3:16\n") || strings.Contains(out, "nwtsty,") {
+		t.Errorf("heading names an edition:\n%s", out)
+	}
+}
+
+func TestBibleReadAllBiblesRejectsBible(t *testing.T) {
+	_, err := runCmd(t, bibleAllMux(t), "bible", "read", "-l", "en", "--bible-all", "--bible", "nwt", "John 3:16")
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("err = %v", err)
+	}
 }
 
 func TestBibleRead(t *testing.T) {

@@ -42,6 +42,9 @@ type Messages struct {
 	NoStudyNotes string
 	NoCrossRefs  string
 	NoResearch   string
+	// NotInEditions takes a bible reference and the bible editions that do not
+	// carry it, which --bible-all passes over instead of failing on.
+	NotInEditions string
 
 	// --- image metadata ---------------------------------------------------
 	// The words an image carries in the page that references it. Printed with

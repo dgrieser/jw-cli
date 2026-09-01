@@ -72,6 +72,7 @@ func chapterFor(ctx context.Context, a *app.App, edition string, ref bibleref.Re
 func newBibleReadCmd(a *app.App) *cobra.Command {
 	var (
 		edition   string
+		allBibles bool
 		depth     int
 		assumeYes bool
 	)
@@ -91,6 +92,12 @@ With --unfold the study material of every verse is printed under that verse:
 its study notes, and the text behind every reference it carries — the marginal
 references and the research-guide passages — followed that many levels deep.
 
+With --bible-all the passage is read in every bible the library carries in the
+selected language, one after the other, so translations can be compared. Which
+editions those are is looked up per language; an edition that does not carry the
+passage — the Kingdom Interlinear has the Greek Scriptures only — is named at
+the end instead of failing the run.
+
 Examples:
   jw bible read Matthew 24:14
   jw bible read "mt 24:3-14"
@@ -98,11 +105,15 @@ Examples:
   jw bible read "Pr 8:30-9:6"
   jw bible read "Joh 3:16; Ro 5:8" -o text
   jw bible read "Psalm 83" --bible nwt
+  jw bible read "Joh 3:16" --bible-all
   jw bible read -l de "Matthäus 24:14"
   jw bible read John 3:16 --unfold 1`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			if allBibles && cmd.Flags().Changed("bible") {
+				return fmt.Errorf("--bible and --bible-all cannot be combined")
+			}
 			refs, table, err := parseRefsArg(ctx, a, args)
 			if err != nil {
 				return err
@@ -111,7 +122,13 @@ Examples:
 			if err != nil {
 				return err
 			}
+			editions, err := readEditions(ctx, a, edition, allBibles)
+			if err != nil {
+				return err
+			}
 			var passages []readPassage
+			// references an edition does not carry, named once the rest is read
+			var missing []string
 			chapters := map[string]*wol.ChapterDoc{}
 			// one expander for every passage read, so they share the chapter
 			// pages their study panes come from
@@ -120,49 +137,71 @@ Examples:
 				expander = newTooltipResolver(a, chapters)
 			}
 			for _, ref := range refs {
-				key := fmt.Sprintf("%s-%d-%d", edition, ref.Book, ref.Chapter)
-				doc, ok := chapters[key]
-				if !ok {
-					doc, err = chapterFor(ctx, a, edition, ref)
+				var skipped []string
+				for _, ed := range editions {
+					key := fmt.Sprintf("%s-%d-%d", ed.Symbol, ref.Book, ref.Chapter)
+					doc, ok := chapters[key]
+					if !ok {
+						doc, err = chapterFor(ctx, a, ed.Symbol, ref)
+						if err != nil {
+							if !allBibles {
+								return err
+							}
+							// a translation of part of the Bible only, or one
+							// that numbers its chapters differently
+							skipped = append(skipped, ed.Symbol)
+							continue
+						}
+						chapters[key] = doc
+					}
+					verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 					if err != nil {
-						return err
+						if !allBibles {
+							return fmt.Errorf("%s: %w", refString(ref, table), err)
+						}
+						skipped = append(skipped, ed.Symbol)
+						continue
 					}
-					chapters[key] = doc
-				}
-				verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
-				if err != nil {
-					return fmt.Errorf("%s: %w", refString(ref, table), err)
-				}
-				ref = resolveChapterEnd(ref, verses)
-				p := readPassage{Ref: refString(ref, table)}
-				var unfolded []string
-				if depth > 0 {
-					// several verses are headed one by one, so the expansion of a
-					// verse reads as belonging to that verse rather than to the
-					// passage; a single verse is already the passage heading
-					level := passageUnfoldLevel
-					if len(verses) > 1 {
-						level = verseUnfoldLevel
+					// where a reference running past its chapter ends is the
+					// edition's own answer, so it is resolved per edition
+					r := resolveChapterEnd(ref, verses)
+					p := readPassage{Ref: refString(r, table)}
+					if allBibles {
+						p.Bible, p.BibleTitle = ed.Symbol, ed.Label()
 					}
-					unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, a, expander, ref, verses, depth, level, assumeYes)
-					if err != nil {
-						return err
-					}
-				}
-				for i, v := range verses {
-					out := readVerse{Verse: v}
-					if i < len(unfolded) {
-						out.Unfold = unfolded[i]
+					var unfolded []string
+					if depth > 0 {
+						// several verses are headed one by one, so the expansion of a
+						// verse reads as belonging to that verse rather than to the
+						// passage; a single verse is already the passage heading
+						level := passageUnfoldLevel
 						if len(verses) > 1 {
-							num := v.ID % 1000
-							out.Citation = refString(bibleref.Ref{
-								Book: ref.Book, Chapter: ref.Chapter, VerseStart: num, VerseEnd: num,
-							}, table)
+							level = verseUnfoldLevel
+						}
+						unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, a, expander, r, verses, depth, level, assumeYes)
+						if err != nil {
+							return err
 						}
 					}
-					p.Verses = append(p.Verses, out)
+					for i, v := range verses {
+						out := readVerse{Verse: v}
+						if i < len(unfolded) {
+							out.Unfold = unfolded[i]
+							if len(verses) > 1 {
+								num := v.ID % 1000
+								out.Citation = refString(bibleref.Ref{
+									Book: r.Book, Chapter: r.Chapter, VerseStart: num, VerseEnd: num,
+								}, table)
+							}
+						}
+						p.Verses = append(p.Verses, out)
+					}
+					passages = append(passages, p)
 				}
-				passages = append(passages, p)
+				if len(skipped) > 0 {
+					missing = append(missing, fmt.Sprintf(a.Text().NotInEditions,
+						refString(ref, table), strings.Join(skipped, ", ")))
+				}
 			}
 			if format == render.JSON {
 				return a.WriteJSON(passages)
@@ -191,17 +230,28 @@ Examples:
 				}
 				switch format {
 				case render.Markdown, render.Raw:
-					fmt.Fprintf(&b, "## %s\n\n%s\n", p.Ref, body)
+					fmt.Fprintf(&b, "## %s\n\n%s\n", p.heading(), body)
 				case render.HTML:
-					fmt.Fprintf(&b, "<h2>%s</h2>\n%s\n", p.Ref, body)
+					fmt.Fprintf(&b, "<h2>%s</h2>\n%s\n", htmlpkg.EscapeString(p.heading()), body)
 				default:
-					fmt.Fprintf(&b, "%s\n\n%s\n", p.Ref, body)
+					fmt.Fprintf(&b, "%s\n\n%s\n", p.heading(), body)
+				}
+			}
+			for _, note := range missing {
+				switch format {
+				case render.Markdown, render.Raw:
+					fmt.Fprintf(&b, "\n_%s_\n", note)
+				case render.HTML:
+					fmt.Fprintf(&b, "%s\n", unfoldNoteHTML(note))
+				default:
+					fmt.Fprintf(&b, "\n%s\n", note)
 				}
 			}
 			return a.WriteMarkdown(b.String())
 		},
 	}
-	cmd.Flags().StringVarP(&edition, "bible", "b", "nwtsty", "bible edition: "+strings.Join(wol.BibleEditions, ", "))
+	cmd.Flags().StringVarP(&edition, "bible", "b", "nwtsty", "bible edition, as available in the selected language: "+strings.Join(wol.BibleEditions, ", "))
+	cmd.Flags().BoolVar(&allBibles, "bible-all", false, "read the passage in every bible available in the selected language")
 	cmd.Flags().IntVar(&depth, "unfold", 0, "print the study notes and the text behind every reference, following references this many levels deep")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
 	return cmd
@@ -217,13 +267,40 @@ type readVerse struct {
 	Unfold string `json:"unfold,omitempty"`
 }
 
-// readPassage is one reference read.
+// readPassage is one reference read, in one bible edition.
 type readPassage struct {
-	Ref    string      `json:"ref"`
-	Verses []readVerse `json:"verses"`
+	Ref string `json:"ref"`
+	// Bible and BibleTitle name the edition the passage was read in. Both are
+	// empty unless several editions were read (--bible-all), where saying which
+	// one a passage came from is the point.
+	Bible      string      `json:"bible,omitempty"`
+	BibleTitle string      `json:"bibleTitle,omitempty"`
+	Verses     []readVerse `json:"verses"`
 	// UnfoldNote says an expansion was cut short, which is about the passage
 	// rather than about one of its verses.
 	UnfoldNote string `json:"unfoldNote,omitempty"`
+}
+
+// heading is the line a passage is printed under: the reference, and with
+// several editions read the edition it was read in.
+func (p readPassage) heading() string {
+	if p.BibleTitle == "" {
+		return p.Ref
+	}
+	return p.Ref + " — " + p.BibleTitle
+}
+
+// readEditions is the set of bibles one read covers: the single edition --bible
+// names, or every bible the library carries in the selected language.
+func readEditions(ctx context.Context, a *app.App, edition string, all bool) ([]wol.BibleEdition, error) {
+	if !all {
+		return []wol.BibleEdition{{Symbol: edition}}, nil
+	}
+	cfg, err := a.WOLConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return a.WOL().Bibles(ctx, cfg)
 }
 
 // verseRuns groups the verses of a passage into the spans printed under one

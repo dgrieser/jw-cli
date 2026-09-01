@@ -165,7 +165,8 @@ jw bible read "Pr 8:8, 9"                    # single verses
 jw bible read "Pr 8-9"                       # whole chapters
 jw bible read "Pr 8:30-9:6"                  # across a chapter boundary
 jw bible read "Joh 3:16; Ro 5:8"             # multiple references
-jw bible read "Psalm 83" --bible nwt         # other editions: nwt, bi12, ...
+jw bible read "Psalm 83" --bible nwt         # other editions: nwt, Rbi8, int, ...
+jw bible read "Joh 3:16" --bible-all         # every edition of the language, compared
 jw bible read John 3:16 --unfold 1           # verse + study notes + its references
 jw bible read -l de "Matthäus 24:14"         # localized book names
 jw bible notes John 3:16                     # study notes (nwtsty)
@@ -361,16 +362,20 @@ smoke-tested once on a normal network:
    (`internal/api/wol/client.go`, `LocalizedBookNames`).
 5. `jw bible notes/xrefs/media/research John 3:16` — study-pane selectors in
    `internal/api/wol/bible.go` (grouped in one `sel*` constant block).
-6. `jw bible media "Luke 2:7"` — a verse picture: the gallery-page selectors in
+6. `jw bible read --bible-all "Joh 3:16"` — the per-language bible list at
+   `/{locale}/wol/bibles/{rsconf}/{lp}` and its card selectors (`Bibles` in
+   `internal/api/wol/bible.go`). Which editions a language carries differs, so
+   check a second language too (`-l de` has three, English eight).
+7. `jw bible media "Luke 2:7"` — a verse picture: the gallery-page selectors in
    `internal/api/wol/gallery.go` (caption, credit, full-size rendition), and
    `jw article 1102025912 --images` for the figure metadata wol states inline.
-7. `jw dailytext` — the `.todayItem` markup.
-8. `jw dailytext --unfold 1` — an unfolded verse finds its study pane through
+8. `jw dailytext` — the `.todayItem` markup.
+9. `jw dailytext --unfold 1` — an unfolded verse finds its study pane through
    the title wol answers the `/bc/` citation with ("John 3:16"), parsed as a
    reference. A live title in another shape leaves the notes out silently.
-9. A video download — confirm the pub-media/mediator `checksum` fields are
-   MD5 (that is what the downloader verifies).
-10. wol requests from data-center IPs may hit Akamai bot protection; if you
+10. A video download — confirm the pub-media/mediator `checksum` fields are
+    MD5 (that is what the downloader verifies).
+11. wol requests from data-center IPs may hit Akamai bot protection; if you
     see 403s, try from a residential connection.
 
 Selectors and URL patterns most likely to drift are deliberately grouped in

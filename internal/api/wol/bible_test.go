@@ -283,3 +283,52 @@ func TestGalleryItem(t *testing.T) {
 		t.Errorf("gallery page fetched %d times, want 1", hits)
 	}
 }
+
+func TestBibles(t *testing.T) {
+	mux := http.NewServeMux()
+	hits := 0
+	mux.HandleFunc("/en/wol/bibles/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		serveFile(t, "testdata/bibles_en.html")(w, r)
+	})
+	c := testClient(t, mux)
+
+	got, err := c.Bibles(context.Background(), cfgEN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []BibleEdition{
+		{Symbol: "nwtsty", Title: "New World Translation of the Holy Scriptures (Study Edition)", Year: "2026"},
+		{Symbol: "nwt", Title: "New World Translation of the Holy Scriptures", Year: "2013"},
+		{Symbol: "int", Title: "The Kingdom Interlinear Translation of the Greek Scriptures", Year: "1985"},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("bibles = %+v, want %+v", got, want)
+	}
+	if l := got[1].Label(); l != "New World Translation of the Holy Scriptures (nwt, 2013)" {
+		t.Errorf("label = %q", l)
+	}
+
+	// the list is cached, so a second call does not fetch the page again
+	if _, err := c.Bibles(context.Background(), cfgEN); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 1 {
+		t.Errorf("fetched the bible list %d times, want 1", hits)
+	}
+}
+
+func TestBibleEditionLabel(t *testing.T) {
+	for _, tc := range []struct {
+		in   BibleEdition
+		want string
+	}{
+		{BibleEdition{Symbol: "nwt"}, "nwt"},
+		{BibleEdition{Symbol: "nwt", Title: "New World Translation"}, "New World Translation (nwt)"},
+		{BibleEdition{Symbol: "nwt", Title: "New World Translation", Year: "2013"}, "New World Translation (nwt, 2013)"},
+	} {
+		if got := tc.in.Label(); got != tc.want {
+			t.Errorf("Label(%+v) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
