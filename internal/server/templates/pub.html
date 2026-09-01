@@ -1,0 +1,21 @@
+{{define "content"}}
+<h1>Publications</h1>
+<form class="searchform wide" method="get" action="/pub">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <fieldset class="options">
+    <label>Symbol <input type="text" name="pub" value="{{.Pub}}" size="8" placeholder="nwt, w, g"></label>
+    <label>Doc id <input type="text" name="docid" value="{{.DocID}}" size="10"></label>
+    <label>Issue <input type="text" name="issue" value="{{.Issue}}" size="8" placeholder="202405"></label>
+    <label>Book <input type="text" name="booknum" value="{{.BookNum}}" size="4" placeholder="1-66"></label>
+    <label>Track <input type="text" name="track" value="{{.Track}}" size="4"></label>
+    <label>Formats <input type="text" name="fileformat" value="{{.Formats}}" size="14" placeholder="PDF,EPUB,MP3"></label>
+    <label><input type="checkbox" name="allLangs" value="true" {{if .AllLangs}}checked{{end}}> all languages</label>
+    <button type="submit">List files</button>
+  </fieldset>
+</form>
+
+{{- if .Heading}}
+<h2 class="listheader">{{.Heading}}</h2>
+{{template "listing" .Items}}
+{{- end}}
+{{end}}

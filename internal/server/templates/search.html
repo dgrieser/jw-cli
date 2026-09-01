@@ -1,0 +1,44 @@
+{{define "content"}}
+<h1>Search</h1>
+<form class="searchform wide" method="get" action="/search">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="search" name="q" value="{{.Query}}" placeholder="kingdom of god, or (Matthew 24:14) on the wol engine" autofocus>
+  <button type="submit">Search</button>
+  <fieldset class="options">
+    <label>Engine
+      <select name="engine">
+        <option value="jworg" {{if eq .Engine "jworg"}}selected{{end}}>jw.org</option>
+        <option value="wol" {{if eq .Engine "wol"}}selected{{end}}>wol</option>
+      </select>
+    </label>
+    <label>Type
+      <select name="type">
+        <option {{if eq .Type "all"}}selected{{end}}>all</option>
+        <option {{if eq .Type "publications"}}selected{{end}}>publications</option>
+        <option {{if eq .Type "videos"}}selected{{end}}>videos</option>
+        <option {{if eq .Type "audio"}}selected{{end}}>audio</option>
+        <option {{if eq .Type "bible"}}selected{{end}}>bible</option>
+        <option {{if eq .Type "indexes"}}selected{{end}}>indexes</option>
+      </select>
+    </label>
+    <label>Sort
+      <select name="sort">
+        <option {{if eq .Sort "rel"}}selected{{end}}>rel</option>
+        <option {{if eq .Sort "newest"}}selected{{end}}>newest</option>
+        <option {{if eq .Sort "oldest"}}selected{{end}}>oldest</option>
+        <option {{if eq .Sort "occ"}}selected{{end}}>occ</option>
+      </select>
+    </label>
+    <label><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}> full excerpts (wol)</label>
+  </fieldset>
+</form>
+
+{{- if .Header}}
+<h2 class="listheader">{{.Header}}</h2>
+{{template "listing" .Items}}
+<p class="pager">
+  {{if .PrevURL}}<a href="{{.PrevURL}}">← Previous page</a>{{end}}
+  {{if .NextURL}}<a href="{{.NextURL}}">Next page →</a>{{end}}
+</p>
+{{- end}}
+{{end}}

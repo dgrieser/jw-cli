@@ -1,0 +1,38 @@
+{{define "content"}}
+<p class="crumbs"><a href="{{.WithLang "/media"}}">Media</a></p>
+<h1>{{.Item.Title}}</h1>
+{{- if .Image}}
+<p class="hero"><img src="{{.Image}}" alt="" loading="lazy"></p>
+{{- end}}
+{{- if .Item.Description}}
+<p>{{.Item.Description}}</p>
+{{- end}}
+<dl class="facts">
+  <dt>LANK</dt><dd><code>{{.Item.LANK}}</code></dd>
+  <dt>Type</dt><dd>{{.Item.Type}}</dd>
+  {{- if .Item.DurationFormatted}}<dt>Duration</dt><dd>{{.Item.DurationFormatted}}</dd>{{end}}
+  {{- if .Item.FirstPublished}}<dt>Published</dt><dd>{{.Item.FirstPublished}}</dd>{{end}}
+  {{- if .Item.PrimaryCategory}}<dt>Category</dt><dd>{{.Item.PrimaryCategory}}</dd>{{end}}
+  {{- if .Item.AvailableLanguages}}<dt>Languages</dt><dd>{{len .Item.AvailableLanguages}}</dd>{{end}}
+</dl>
+
+{{- if .Files}}
+<h2>Files</h2>
+<table class="files">
+  <thead><tr><th>Rendition</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+    {{- range .Files}}
+    <tr>
+      <td>{{.Label}}</td>
+      <td>{{.Size}}</td>
+      <td>
+        <a href="{{.URL}}" rel="noopener">Download</a>
+        {{- if .Subtitles}} · <a href="{{.Subtitles}}" rel="noopener">Subtitles</a>{{end}}
+      </td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+<p class="hint">Best rendition: <a href="{{.WithLang (printf "/download/media/%s" .Item.LANK)}}">/download/media/{{.Item.LANK}}</a></p>
+{{- end}}
+{{end}}

@@ -1,0 +1,47 @@
+{{define "content"}}
+{{- if not .Target}}
+<h1>Article</h1>
+<form class="searchform wide" method="get" action="/article">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="text" name="target" placeholder="MEPS document id (1102025912) or a wol.jw.org / jw.org URL" autofocus>
+  <label>Unfold <input type="number" name="unfold" min="0" max="3" value="0" title="expand the text behind every citation, this many levels deep"></label>
+  <button type="submit">Read</button>
+</form>
+{{- else}}
+<article class="document">
+{{- if .Heading}}<h1>{{.Heading}}</h1>{{end}}
+{{.Body}}
+</article>
+
+{{- if .Refs}}
+<details class="extras">
+  <summary>Scripture references ({{len .Refs}})</summary>
+  <ul>
+    {{- range .Refs}}
+    <li>{{.Text}}</li>
+    {{- end}}
+  </ul>
+</details>
+{{- end}}
+
+{{- if .Images}}
+<details class="extras">
+  <summary>Images ({{len .Images}})</summary>
+  <ul class="gallery">
+    {{- range .Images}}
+    <li>
+      <a href="{{.URL}}" rel="noopener"><img src="{{if .ThumbnailURL}}{{.ThumbnailURL}}{{else}}{{.URL}}{{end}}" alt="{{.Alt}}" loading="lazy"></a>
+      {{- if .Caption}}<p>{{.Caption}}</p>{{end}}
+      {{- if .Credit}}<p class="credit">{{.Credit}}</p>{{end}}
+    </li>
+    {{- end}}
+  </ul>
+</details>
+{{- end}}
+
+<p class="links">
+  {{- if .URL}}<a href="{{.URL}}" rel="noopener">Open on site</a>{{end}}
+  {{- if not .Unfold}}<a href="{{.WithLang (printf "/article?target=%s&unfold=1" (urlquery .Target))}}">Unfold citations</a>{{end}}
+</p>
+{{- end}}
+{{end}}
