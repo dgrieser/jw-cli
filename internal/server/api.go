@@ -24,6 +24,11 @@ func (s *Server) apiLanguages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiSearch(w http.ResponseWriter, r *http.Request) {
+	// cheap validation before the language list is fetched
+	if strings.TrimSpace(r.FormValue("q")) == "" {
+		badRequest(w, "%s", errMissing("q"))
+		return
+	}
 	lng, err := s.language(r)
 	if err != nil {
 		failJSON(w, r, err)
@@ -146,19 +151,24 @@ type articleResponse struct {
 	ScriptureRefs []model.ScriptureAnchor `json:"scriptureRefs,omitempty"`
 }
 
-// writeArticleJSON optionally unfolds an article, renders its body, and writes
-// the article shape.
-func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng model.Language, art model.Article) {
+// articleParams validates the rendering parameters of an article-shaped
+// endpoint up front, before anything is fetched upstream.
+func articleParams(r *http.Request) (render.Format, int, error) {
 	format, err := bodyFormat(r)
 	if err != nil {
-		badRequest(w, "%s", err)
-		return
+		return format, 0, err
 	}
 	depth, err := intParam(r, "unfold", 0)
 	if err != nil {
-		badRequest(w, "%s", err)
-		return
+		return format, 0, err
 	}
+	return format, depth, nil
+}
+
+// writeArticleJSON optionally unfolds an article, renders its body, and writes
+// the article shape.
+func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng model.Language,
+	art model.Article, format render.Format, depth int) {
 	if depth > 0 {
 		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth), text(lng))
 		if err != nil {
@@ -185,6 +195,11 @@ func (s *Server) apiArticle(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%s", errMissing("target"))
 		return
 	}
+	format, depth, err := articleParams(r)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
 	lng, err := s.language(r)
 	if err != nil {
 		failJSON(w, r, err)
@@ -195,18 +210,23 @@ func (s *Server) apiArticle(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	s.writeArticleJSON(w, r, lng, art)
+	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
 func (s *Server) apiDailyText(w http.ResponseWriter, r *http.Request) {
-	lng, err := s.language(r)
+	format, depth, err := articleParams(r)
 	if err != nil {
-		failJSON(w, r, err)
+		badRequest(w, "%s", err)
 		return
 	}
 	date, err := dateParam(r)
 	if err != nil {
 		badRequest(w, "%s", err)
+		return
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
 		return
 	}
 	art, err := s.svc.DailyText(r.Context(), lng, date)
@@ -214,13 +234,13 @@ func (s *Server) apiDailyText(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	s.writeArticleJSON(w, r, lng, art)
+	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
 func (s *Server) apiMeetings(w http.ResponseWriter, r *http.Request) {
-	lng, err := s.language(r)
+	format, depth, err := articleParams(r)
 	if err != nil {
-		failJSON(w, r, err)
+		badRequest(w, "%s", err)
 		return
 	}
 	date, err := dateParam(r)
@@ -228,12 +248,17 @@ func (s *Server) apiMeetings(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%s", err)
 		return
 	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
 	art, err := s.svc.Meetings(r.Context(), lng, date)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
-	s.writeArticleJSON(w, r, lng, art)
+	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
 func (s *Server) apiMeetingPart(w http.ResponseWriter, r *http.Request) {
@@ -242,9 +267,9 @@ func (s *Server) apiMeetingPart(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "unknown meeting %q (want midweek or weekend)", part)
 		return
 	}
-	lng, err := s.language(r)
+	format, depth, err := articleParams(r)
 	if err != nil {
-		failJSON(w, r, err)
+		badRequest(w, "%s", err)
 		return
 	}
 	date, err := dateParam(r)
@@ -252,12 +277,17 @@ func (s *Server) apiMeetingPart(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%s", err)
 		return
 	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
 	art, err := s.svc.MeetingPart(r.Context(), lng, date, part)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
-	s.writeArticleJSON(w, r, lng, art)
+	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
 func (s *Server) apiMediaCategories(w http.ResponseWriter, r *http.Request) {
