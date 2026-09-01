@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,12 +11,13 @@ import (
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/results"
 )
 
 func newBibleCitedCmd(a *app.App) *cobra.Command {
 	var (
 		sortBy      string
-		page        int
 		scope       string
 		interactive bool
 		cats        categoryFilter
@@ -32,14 +34,15 @@ the curated Research Guide entries.
 
 Bibles and the indexes (concordance, bible-word index) are left out by default,
 since they cite every verse by construction. Several references, separated by
-semicolons, are searched together as one OR query.
+semicolons, are searched together as one OR query. Every result page is read,
+so the listing is the complete answer rather than its first 40 rows.
 
 Examples:
   jw bible cited "Jer 31:15"
   jw bible cited "Mt 24:14" --include w,g      only Watchtower and Awake!
   jw bible cited "Ps 83" --all                 bibles and indexes included
   jw bible cited "Jer 31:15; Mt 2:18"          either of the two
-  jw bible cited "Mt 24:14" -s oldest -p 2`,
+  jw bible cited "Mt 24:14" -s oldest`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -51,20 +54,31 @@ Examples:
 			if err != nil {
 				return err
 			}
-			if page < 1 {
-				page = 1
-			}
 			p := searchParams{Engine: "wol", Query: query, Sort: sortBy, Scope: scope}
 			if p.Categories, err = cats.resolve(cmd, wolKnownCategories(ctx, a)); err != nil {
 				return err
 			}
-			p.Header = func(total, pg int) string {
-				return a.Text().CitedResults(total, label, pg)
+			fetch := func(page int) (results.ResultSet, string, error) {
+				if page > 1 {
+					return results.ResultSet{}, "", errors.New(a.Text().NoMoreResults)
+				}
+				rs, total, err := citedListing(ctx, a, lng, &p)
+				if err != nil {
+					return results.ResultSet{}, "", err
+				}
+				return rs, a.Text().CitedResults(total, label), nil
 			}
 			if interactive {
-				return runSearchTUI(ctx, a, lng, searchFetcher(ctx, a, lng, p), label)
+				return runSearchTUI(ctx, a, lng, func(page int) (results.ResultSet, string, error) {
+					rs, header, err := fetch(page)
+					if err != nil {
+						return rs, header, err
+					}
+					_ = results.Save(a.Cache().Dir(), rs)
+					return rs, header, nil
+				}, label)
 			}
-			rs, header, err := runSearch(ctx, a, lng, p, page)
+			rs, header, err := fetch(1)
 			if err != nil {
 				return err
 			}
@@ -73,11 +87,57 @@ Examples:
 	}
 	fl := cmd.Flags()
 	fl.StringVarP(&sortBy, "sort", "s", "newest", "sort order: newest, oldest, occ (occurrences)")
-	fl.IntVarP(&page, "page", "p", 1, "page number")
 	fl.StringVar(&scope, "scope", "par", "match unit: par (paragraph) or sen (sentence)")
 	fl.BoolVarP(&interactive, "interactive", "i", false, "browse results interactively (TUI)")
 	cats.bind(cmd)
 	return cmd
+}
+
+// maxCitedPages bounds the page walk. wol serves 40 documents a page, so this
+// is 4000 of them — far past any single verse, and a stop that cannot spin
+// should the site ever keep answering full pages.
+const maxCitedPages = 100
+
+// citedListing reads every page of the citation search into one listing: the
+// publications quoting a verse are a finite set worth seeing whole, not
+// something to page through by hand. It returns the listing and the total the
+// site reports.
+func citedListing(ctx context.Context, a *app.App, lng model.Language, p *searchParams) (results.ResultSet, int, error) {
+	rs := results.ResultSet{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: 1}
+	seen := map[string]bool{}
+	total := 0
+	for page := 1; page <= maxCitedPages; page++ {
+		sp, err := searchWOL(ctx, a, lng, p, page)
+		if err != nil {
+			return results.ResultSet{}, 0, err
+		}
+		if page == 1 {
+			total = sp.Total
+		}
+		added := 0
+		for _, r := range sp.Results {
+			if seen[r.WOLLink] {
+				continue
+			}
+			seen[r.WOLLink] = true
+			rs.Items = append(rs.Items, r)
+			added++
+		}
+		// the last page is the one the site does not fill
+		if added == 0 || len(sp.Results) < pageSize(sp.Limit) {
+			break
+		}
+	}
+	return rs, total, nil
+}
+
+// pageSize is how many documents a full search page holds. The site states it;
+// 40 is what it has always answered when it does not.
+func pageSize(reported int) int {
+	if reported > 0 {
+		return reported
+	}
+	return 40
 }
 
 // citationQuery turns the reference arguments into wol's scripture-citation

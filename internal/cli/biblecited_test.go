@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -67,7 +68,7 @@ func TestBibleCited(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"66 publications citing Jeremiah 31:15 (page 1)",
+		"66 publications citing Jeremiah 31:15",
 		"31. August–6. September",
 		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
 		"Wie hat sich diese Prophezeiung",
@@ -183,5 +184,65 @@ func TestBibleCitedUnknownCategoryRetried(t *testing.T) {
 	}
 	if slices.Contains(sentCategories(t, queries[0]), "zz") {
 		t.Errorf("the first query could not have known zz: %s", queries[0])
+	}
+}
+
+// A citation search reads every page, so the listing is the complete answer.
+func TestBibleCitedReadsEveryPage(t *testing.T) {
+	var queries []string
+	mux := languagesMux(t)
+	mux.HandleFunc("/en", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<a href="/en/wol/h/r1/lp-e">home</a>`))
+	})
+	mux.HandleFunc("/en/wol/s/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {
+		queries = append(queries, r.URL.RawQuery)
+		// a full page, then the short one that ends the walk
+		n := 40
+		if r.URL.Query().Get("pg") == "2" {
+			n = 2
+		}
+		var b strings.Builder
+		b.WriteString(`<html><body><main><div class="resultsContainer">`)
+		for i := range n {
+			id := 1000 + i
+			if r.URL.Query().Get("pg") == "2" {
+				id = 2000 + i
+			}
+			fmt.Fprintf(&b, `<ul class="results resultContentDocument">
+			  <li class="caption"><a class="lnk" href="/en/wol/d/r1/lp-e/%d">Doc %d</a></li>
+			  <li class="result"><ul class="resultItems">
+			    <li class="searchResult"><article><div class="document"><p>Jer 31:15</p></div></article></li>
+			    <li class="ref">w24 - The Watchtower</li>
+			  </ul></li>
+			</ul>`, id, id)
+		}
+		b.WriteString(`</div></main>
+		<input type="hidden" id="searchResultsPageSize" value="40"/>
+		<input type="hidden" id="searchResultsTotal" value="42"/>
+		</body></html>`)
+		w.Write([]byte(b.String()))
+	})
+
+	out, err := runCmd(t, mux, "bible", "cited", "Jeremiah 31:15", "-l", "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(queries) != 2 {
+		t.Fatalf("want one request per page, got %d: %v", len(queries), queries)
+	}
+	if strings.Contains(queries[0], "pg=") || !strings.Contains(queries[1], "pg=2") {
+		t.Errorf("queries = %v", queries)
+	}
+	if !strings.Contains(out, "42 publications citing Jeremiah 31:15") {
+		t.Errorf("header missing the total:\n%s", out)
+	}
+	// both pages are numbered into one listing
+	for _, want := range []string{" 1. [article] Doc 1000", " 41. [article] Doc 2000", " 42. [article] Doc 2001"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Doc 2002") {
+		t.Errorf("walked past the short page:\n%s", out)
 	}
 }

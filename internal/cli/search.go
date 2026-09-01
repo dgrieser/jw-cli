@@ -67,7 +67,7 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 				fetch := searchFetcher(ctx, a, lng, p)
 				return runSearchTUI(ctx, a, lng, fetch, fmt.Sprintf(a.Text().SearchHeader, query))
 			}
-			rs, header, err := runSearch(ctx, a, lng, p, page)
+			rs, header, err := runSearch(ctx, a, lng, &p, page)
 			if err != nil {
 				return err
 			}

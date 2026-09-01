@@ -158,14 +158,12 @@ type searchParams struct {
 	Limit  int    // jworg page size; wol pages are server-sized
 	// Categories is the wol publication-category filter.
 	Categories wolCategories
-	// Header renders the result-count line. Nil uses the engine's own.
-	Header func(total, page int) string
 }
 
 // searchFetcher pages through search results for either engine.
 func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p searchParams) tui.Fetcher {
 	return func(page int) (results.ResultSet, string, error) {
-		rs, header, err := runSearch(ctx, a, lng, p, page)
+		rs, header, err := runSearch(ctx, a, lng, &p, page)
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
@@ -178,7 +176,7 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p search
 }
 
 // runSearch executes one page of a search on the chosen engine.
-func runSearch(ctx context.Context, a *app.App, lng model.Language, p searchParams, page int) (results.ResultSet, string, error) {
+func runSearch(ctx context.Context, a *app.App, lng model.Language, p *searchParams, page int) (results.ResultSet, string, error) {
 	switch p.Engine {
 	case "jworg", "jw", "":
 		sp, err := a.Search().Search(ctx, lng.Symbol, search.Params{
@@ -200,9 +198,6 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, p searchPara
 			return results.ResultSet{}, "", err
 		}
 		header := a.Text().WolResults(sp.Total, p.Query, sp.Page)
-		if p.Header != nil {
-			header = p.Header(sp.Total, sp.Page)
-		}
 		rs := results.ResultSet{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}
 		return rs, header, nil
 	}

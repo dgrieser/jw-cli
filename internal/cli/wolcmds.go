@@ -15,7 +15,7 @@ import (
 )
 
 // searchWOL runs the wol search engine for jw search -e wol and jw bible cited.
-func searchWOL(ctx context.Context, a *app.App, lng model.Language, p searchParams, page int) (model.SearchPage, error) {
+func searchWOL(ctx context.Context, a *app.App, lng model.Language, p *searchParams, page int) (model.SearchPage, error) {
 	cfg, err := a.WOL().ConfigFor(ctx, lng.Locale)
 	if err != nil {
 		return model.SearchPage{}, err
@@ -33,6 +33,9 @@ func searchWOL(ctx context.Context, a *app.App, lng model.Language, p searchPara
 	// whitelist did not know, its documents were just dropped — ask again with
 	// the corrected list. The list is cached, so this happens once per language.
 	if fixed, ok := p.Categories.corrected(sp.Filters); ok {
+		// the corrected list needs no second correction, so further pages of
+		// the same search go out as one request each
+		p.Categories = wolCategories{list: fixed}
 		opts.Categories = fixed
 		if sp, err = a.WOL().Search(ctx, cfg, p.Query, opts); err != nil {
 			return model.SearchPage{}, err

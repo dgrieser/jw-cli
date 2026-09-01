@@ -159,6 +159,9 @@ search covers is controlled by three mutually exclusive flags, also available on
 | `--include w,g` | only these categories |
 | `--exclude bi,dx` | every category except these |
 
+`jw bible cited` reads every result page and prints one listing; `jw search`
+pages with `-p`.
+
 The codes are wol's own, from its "refine search" sidebar: `bi` bibles, `dx`
 indexes, `w` Watchtower, `g` Awake!, `it` Insight, `bk` books, `bklt`/`brch`
 brochures, `mwb` workbooks, `es` daily texts, `yb` yearbooks, `web` jw.org
@@ -192,7 +195,7 @@ jw bible media John 3:16 --download          # verse images/clips w/ captions, c
 jw bible research John 3:16 -x               # research guide + excerpts
 jw bible cited "Jer 31:15"                   # publications citing that verse
 jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
-jw bible cited "Jer 31:15; Mt 2:18" -p 2     # either verse, second page
+jw bible cited "Jer 31:15; Mt 2:18"          # either verse, every page
 jw bible books                               # book numbers/names
 ```
 

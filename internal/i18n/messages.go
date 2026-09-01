@@ -22,12 +22,12 @@ type Messages struct {
 	WolResultsMany string
 	// WolResultsUnknown takes the query and the page, for a page with no total.
 	WolResultsUnknown string
-	// CitedResultsOne and CitedResultsMany take the count, the bible reference
-	// and the page.
+	// CitedResultsOne and CitedResultsMany take the count and the bible
+	// reference. A citation search reads every page, so there is no page to
+	// name.
 	CitedResultsOne  string
 	CitedResultsMany string
-	// CitedResultsUnknown takes the reference and the page, for a page with no
-	// total.
+	// CitedResultsUnknown takes the reference, for a listing with no total.
 	CitedResultsUnknown string
 	// PageSuffix takes the page number and the results per page.
 	PageSuffix string
@@ -179,13 +179,13 @@ func (m *Messages) WolResults(total int, query string, page int) string {
 }
 
 // CitedResults renders the result-count header for a citation search: the
-// publications quoting a bible reference. A total of zero means the page did
+// publications quoting a bible reference. A total of zero means the pages did
 // not report one.
-func (m *Messages) CitedResults(total int, ref string, page int) string {
+func (m *Messages) CitedResults(total int, ref string) string {
 	if total <= 0 {
-		return fmt.Sprintf(m.CitedResultsUnknown, ref, page)
+		return fmt.Sprintf(m.CitedResultsUnknown, ref)
 	}
-	return fmt.Sprintf(m.plural(total, m.CitedResultsOne, m.CitedResultsMany), total, ref, page)
+	return fmt.Sprintf(m.plural(total, m.CitedResultsOne, m.CitedResultsMany), total, ref)
 }
 
 func (m *Messages) plural(n int, one, many string) string {
