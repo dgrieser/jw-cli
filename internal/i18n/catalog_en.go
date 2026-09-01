@@ -12,6 +12,7 @@ var en = Messages{
 	CitedResultsOne:     "%d publication citing %s",
 	CitedResultsMany:    "%d publications citing %s",
 	CitedResultsUnknown: "publications citing %s",
+	ExcerptProgress:     "reading excerpts: %d/%d",
 	PageSuffix:          " (page %d, %d per page)",
 	PageSuffixShort:     " — page %d",
 	SearchHeader:        "Search: %s",

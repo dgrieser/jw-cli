@@ -158,6 +158,9 @@ type searchParams struct {
 	Limit  int    // jworg page size; wol pages are server-sized
 	// Categories is the wol publication-category filter.
 	Categories wolCategories
+	// Excerpts reads each result's document to replace its teaser with the
+	// passage it was cut from. wol engine only.
+	Excerpts bool
 }
 
 // searchFetcher pages through search results for either engine.
@@ -196,6 +199,9 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, p *searchPar
 		sp, err := searchWOL(ctx, a, lng, p, page)
 		if err != nil {
 			return results.ResultSet{}, "", err
+		}
+		if p.Excerpts {
+			fillExcerpts(ctx, a, sp.Results)
 		}
 		header := a.Text().WolResults(sp.Total, p.Query, sp.Page)
 		rs := results.ResultSet{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}

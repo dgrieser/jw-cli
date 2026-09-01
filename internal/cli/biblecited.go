@@ -20,6 +20,7 @@ func newBibleCitedCmd(a *app.App) *cobra.Command {
 		sortBy      string
 		scope       string
 		interactive bool
+		noExcerpts  bool
 		cats        categoryFilter
 	)
 	cats.defaultExclude = []string{wol.CategoryBibles, wol.CategoryIndex}
@@ -54,7 +55,7 @@ Examples:
 			if err != nil {
 				return err
 			}
-			p := searchParams{Engine: "wol", Query: query, Sort: sortBy, Scope: scope}
+			p := searchParams{Engine: "wol", Query: query, Sort: sortBy, Scope: scope, Excerpts: !noExcerpts}
 			if p.Categories, err = cats.resolve(cmd, wolKnownCategories(ctx, a)); err != nil {
 				return err
 			}
@@ -65,6 +66,10 @@ Examples:
 				rs, total, err := citedListing(ctx, a, lng, &p)
 				if err != nil {
 					return results.ResultSet{}, "", err
+				}
+				// after every page, so one counter covers the whole listing
+				if p.Excerpts {
+					fillExcerpts(ctx, a, rs.Items)
 				}
 				return rs, a.Text().CitedResults(total, label), nil
 			}
@@ -89,6 +94,7 @@ Examples:
 	fl.StringVarP(&sortBy, "sort", "s", "newest", "sort order: newest, oldest, occ (occurrences)")
 	fl.StringVar(&scope, "scope", "par", "match unit: par (paragraph) or sen (sentence)")
 	fl.BoolVarP(&interactive, "interactive", "i", false, "browse results interactively (TUI)")
+	fl.BoolVar(&noExcerpts, "no-excerpts", false, "keep wol's short teasers instead of reading each document")
 	cats.bind(cmd)
 	return cmd
 }

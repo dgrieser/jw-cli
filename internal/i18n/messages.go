@@ -29,6 +29,8 @@ type Messages struct {
 	CitedResultsMany string
 	// CitedResultsUnknown takes the reference, for a listing with no total.
 	CitedResultsUnknown string
+	// ExcerptProgress takes the number of documents read and their total.
+	ExcerptProgress string
 	// PageSuffix takes the page number and the results per page.
 	PageSuffix string
 	// PageSuffixShort takes the page number.

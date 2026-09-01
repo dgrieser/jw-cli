@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -22,12 +23,30 @@ func sentCategories(t *testing.T, rawQuery string) []string {
 	return v["fc[]"]
 }
 
+// citedDoc is the document behind the first row of the recorded search page:
+// the paragraph its teaser was cut from, whole.
+const citedDoc = `<html><body><div id="article"><h1>31. August–6. September</h1>
+<p id="p12" data-pid="12"><a href="/de/wol/bc/r10/lp-x/202026249/3/0" class="b">Jer 31:15</a> – Wie hat sich diese Prophezeiung möglicherweise erfüllt? Nenne mehrere Überlegungen, und lies dazu die Einsichten nach.</p>
+</div></body></html>`
+
 // citedMux serves the recorded citation-search page for every wol search,
 // recording the query string of each request.
 func citedMux(t *testing.T, queries *[]string) *http.ServeMux {
+	return citedMuxDocs(t, queries, nil)
+}
+
+// citedMuxDocs additionally serves the result documents, counting the requests
+// for them in docs.
+func citedMuxDocs(t *testing.T, queries *[]string, docs *atomic.Int64) *http.ServeMux {
 	mux := languagesMux(t)
 	mux.HandleFunc("/en", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<a href="/en/wol/h/r1/lp-e">home</a>`))
+	})
+	mux.HandleFunc("/de/wol/d/r10/lp-x/", func(w http.ResponseWriter, r *http.Request) {
+		if docs != nil {
+			docs.Add(1) // the documents are read concurrently
+		}
+		w.Write([]byte(citedDoc))
 	})
 	mux.HandleFunc("/en/wol/s/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {
 		*queries = append(*queries, r.URL.RawQuery)
@@ -244,5 +263,40 @@ func TestBibleCitedReadsEveryPage(t *testing.T) {
 	}
 	if strings.Contains(out, "Doc 2002") {
 		t.Errorf("walked past the short page:\n%s", out)
+	}
+}
+
+// By default each result's document is read and its teaser replaced by the
+// passage it was cut from.
+func TestBibleCitedExcerpts(t *testing.T) {
+	var queries []string
+	var docs atomic.Int64
+	out, err := runCmd(t, citedMuxDocs(t, &queries, &docs), "bible", "cited", "Jeremiah 31:15", "-l", "en")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := docs.Load(); n != 3 {
+		t.Errorf("document requests = %d, want one per result", n)
+	}
+	if !strings.Contains(out, "Nenne mehrere Überlegungen, und lies dazu die Einsichten nach.") {
+		t.Errorf("output missing the full passage:\n%s", out)
+	}
+}
+
+func TestBibleCitedNoExcerpts(t *testing.T) {
+	var queries []string
+	var docs atomic.Int64
+	out, err := runCmd(t, citedMuxDocs(t, &queries, &docs), "bible", "cited", "Jeremiah 31:15", "-l", "en", "--no-excerpts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := docs.Load(); n != 0 {
+		t.Errorf("--no-excerpts still read %d documents", n)
+	}
+	if !strings.Contains(out, "Wie hat sich diese Prophezeiung") {
+		t.Errorf("output missing the teaser:\n%s", out)
+	}
+	if strings.Contains(out, "lies dazu die Einsichten nach") {
+		t.Errorf("--no-excerpts printed a passage:\n%s", out)
 	}
 }

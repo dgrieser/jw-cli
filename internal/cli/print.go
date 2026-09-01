@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/i18n"
@@ -46,6 +47,10 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 // listIndent aligns a wrapped continuation line under a result's text.
 const listIndent = "     "
 
+// snippetMax caps the teaser line of a result, in runes. The APIs hand out
+// whole passages; a listing row is not the place to print them.
+const snippetMax = 300
+
 // listStyle is how a listing renders the text the APIs hand it.
 type listStyle struct {
 	// inline controls the HTML fragments in titles, contexts and snippets.
@@ -58,6 +63,9 @@ type listStyle struct {
 	noURLs bool
 	// txt labels the metadata lines of an image row.
 	txt *i18n.Messages
+	// block renders a result's excerpt — the passage of the document it was
+	// found in — as plain paragraphs. Nil leaves excerpts out.
+	block func(html string) string
 }
 
 func listStyleFor(a *app.App) listStyle {
@@ -68,6 +76,17 @@ func listStyleFor(a *app.App) listStyle {
 	}
 	if a.Styled() {
 		s.width = a.Width()
+	}
+	// text, not markdown: a listing is plain text throughout, and writeListing
+	// writes it with Write, so markdown would never be styled. --no-urls comes
+	// in through RenderOptions.
+	opts := a.RenderOptions(a.HTTP().Base.WOL)
+	s.block = func(fragment string) string {
+		out, err := render.Render(fragment, render.Text, opts)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(out)
 	}
 	return s
 }
@@ -99,7 +118,10 @@ func formatResult(r model.Result, style listStyle) string {
 	// the index prefix is wrapped along with the title, so a long title breaks
 	// onto the listing's indent instead of the terminal's left edge
 	fmt.Fprintf(&b, "%s\n", style.wrap(fmt.Sprintf("%3d. [%s] %s", r.Index, r.Kind, title)))
-	if snippet := render.Inline(r.Snippet, style.inline); snippet != "" {
+	// the excerpt is the passage the snippet was cut from, so it replaces it
+	if excerpt := style.excerpt(r); excerpt != "" {
+		b.WriteString(excerpt)
+	} else if snippet := truncate(render.Inline(r.Snippet, style.inline), snippetMax); snippet != "" {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(snippet))
 	}
 	// what the image itself says: printed with or without --no-urls, since the
@@ -111,6 +133,35 @@ func formatResult(r model.Result, style listStyle) string {
 	if link := preferredLink(r); link != "" && !style.noURLs {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, link)
 	}
+	return b.String()
+}
+
+// excerpt lays the passage a result was found in out under the listing indent,
+// one wrapped paragraph at a time, framed by blank lines so the rows stay
+// apart. Empty when the result carries none.
+func (s listStyle) excerpt(r model.Result) string {
+	if r.Excerpt == "" || s.block == nil {
+		return ""
+	}
+	body := s.block(r.Excerpt)
+	if body == "" {
+		return ""
+	}
+	// line by line, so a table keeps its rows and a list its items; the
+	// renderer already separates paragraphs with a blank line
+	var b strings.Builder
+	b.WriteString("\n")
+	for line := range strings.SplitSeq(body, "\n") {
+		if line = strings.TrimSpace(line); line == "" {
+			b.WriteString("\n")
+			continue
+		}
+		if !saysSomething(line) {
+			continue // a list marker whose item was a picture, and the like
+		}
+		fmt.Fprintf(&b, "%s%s\n", listIndent, s.wrap(line))
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -168,6 +219,23 @@ func imageSize(im model.ImageMeta) string {
 		return fmt.Sprintf("%d px", im.Height)
 	}
 	return ""
+}
+
+// saysSomething reports whether a line carries anything to read: bullets,
+// dashes and stray punctuation left over from an empty element do not.
+func saysSomething(line string) bool {
+	return strings.ContainsFunc(line, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r)
+	})
+}
+
+// truncate cuts a line to max runes, marking that it was cut.
+func truncate(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return strings.TrimRight(string(r[:max]), " ") + "…"
 }
 
 func preferredLink(r model.Result) string {

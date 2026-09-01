@@ -162,6 +162,12 @@ search covers is controlled by three mutually exclusive flags, also available on
 `jw bible cited` reads every result page and prints one listing; `jw search`
 pages with `-p`.
 
+For the wol engine both commands then read each result's document and print the
+passage the hit sits in — the paragraph, list item or table, whole — instead of
+wol's teaser, which is cut mid-sentence. That is one request per result, run
+eight at a time and cached for a week, so a repeated search costs nothing.
+`--no-excerpts` skips it and keeps the teasers.
+
 The codes are wol's own, from its "refine search" sidebar: `bi` bibles, `dx`
 indexes, `w` Watchtower, `g` Awake!, `it` Insight, `bk` books, `bklt`/`brch`
 brochures, `mwb` workbooks, `es` daily texts, `yb` yearbooks, `web` jw.org
@@ -196,6 +202,7 @@ jw bible research John 3:16 -x               # research guide + excerpts
 jw bible cited "Jer 31:15"                   # publications citing that verse
 jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
 jw bible cited "Jer 31:15; Mt 2:18"          # either verse, every page
+jw bible cited "Jer 31:15" --no-excerpts     # teasers only, no document reads
 jw bible books                               # book numbers/names
 ```
 
@@ -362,10 +369,12 @@ whole picture.
 | `www.jw.org` | article pages reached by URL |
 
 The client sends a browser-like User-Agent, keeps a cookie jar, and paces
-wol.jw.org requests at 20 a second (`wolRequestsPerSecond` in
+wol.jw.org requests at 50 a second (`requestsPerSecond` in
 `internal/httpx/client.go`, burst the same). Slow-changing data (language list,
-wol library config, localized bible book names) is cached under the user cache
-directory (`~/.cache/jw` on Linux).
+wol library config, localized bible book names, wol search categories) is cached
+under the user cache directory (`~/.cache/jw` on Linux), as are document pages
+for a week — a published document does not change, and search excerpts read a
+lot of them.
 
 ## Live smoke-test checklist
 
@@ -384,7 +393,10 @@ smoke-tested once on a normal network:
    second language: a code the sent whitelist did not know must trigger one
    corrected retry, not silently missing results. Verified live once against
    `de` (66 hits filtered, 94 unfiltered) and `en` (74) — a large drift in
-   those numbers means the filter or the selectors moved.
+   those numbers means the filter or the selectors moved. Check the excerpts
+   too: the passage under each row must be the document's, not wol's cut
+   teaser. 64 of the 66 rows resolved when this was written; the rest keep the
+   teaser, which is the intended fallback.
 4. `jw bible read -l de "Matthäus 1:1"` — non-English `rsconf`/`lp`
    discovery and localized book-name extraction
    (`internal/api/wol/client.go`, `LocalizedBookNames`).

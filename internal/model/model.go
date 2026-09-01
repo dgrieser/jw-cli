@@ -28,10 +28,13 @@ type PubKey struct {
 // lists). It is self-contained so follow-up commands (show/open/download) can
 // act on it from the results cache without re-querying.
 type Result struct {
-	Index       int    `json:"index"`
-	Kind        string `json:"kind"` // article|video|audio|publication|bible|category|file|image
-	Title       string `json:"title"`
-	Snippet     string `json:"snippet,omitempty"`
+	Index   int    `json:"index"`
+	Kind    string `json:"kind"` // article|video|audio|publication|bible|category|file|image
+	Title   string `json:"title"`
+	Snippet string `json:"snippet,omitempty"`
+	// Excerpt is the passage of the document a search hit sits in, as HTML:
+	// what Snippet only teases. Several blocks are joined, in document order.
+	Excerpt     string `json:"excerpt,omitempty"`
 	Context     string `json:"context,omitempty"`
 	LANK        string `json:"lank,omitempty"`
 	CategoryKey string `json:"categoryKey,omitempty"` // mediator category to browse into

@@ -96,15 +96,17 @@ func TestSearchWOLResultMarkup(t *testing.T) {
 	if !strings.HasSuffix(r.ImageURL, "/de/wol/d/r10/lp-x/202026249/thumbnail") {
 		t.Errorf("thumbnail = %q", r.ImageURL)
 	}
-	// a passage longer than the cap is cut down to plain text rather than to
-	// half a tag
+	// every matching passage is kept, whole and with its markup: it is what
+	// locates the passage in the document later
 	w14 := page.Results[2]
-	if !strings.Contains(w14.Snippet, "Rahel weint um ihre Söhne") ||
-		!strings.HasSuffix(w14.Snippet, "…") {
-		t.Errorf("long snippet = %q", w14.Snippet)
-	}
-	if strings.Contains(w14.Snippet, "<") {
-		t.Errorf("truncated snippet kept a tag: %q", w14.Snippet)
+	for _, want := range []string{
+		"Rahel weint um ihre Söhne",
+		"weil sie nicht mehr sind",
+		`href="/de/wol/bc/r10/lp-x/2014927/2/0"`,
+	} {
+		if !strings.Contains(w14.Snippet, want) {
+			t.Errorf("snippet missing %q: %q", want, w14.Snippet)
+		}
 	}
 	// the refine sidebar names every category the language offers
 	if !slices.Contains(page.Filters, "mwbr") || !slices.Contains(page.Filters, "bi") {

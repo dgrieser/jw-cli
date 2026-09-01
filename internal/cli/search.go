@@ -18,6 +18,7 @@ func newSearchCmd(a *app.App) *cobra.Command {
 		engine      string
 		scope       string
 		interactive bool
+		noExcerpts  bool
 		cats        categoryFilter
 	)
 	cmd := &cobra.Command{
@@ -55,7 +56,8 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 			if page < 1 {
 				page = 1
 			}
-			p := searchParams{Engine: engine, Query: query, Facet: facet, Sort: sortBy, Scope: scope, Limit: limit}
+			p := searchParams{Engine: engine, Query: query, Facet: facet, Sort: sortBy, Scope: scope, Limit: limit,
+				Excerpts: !noExcerpts}
 			var known []string
 			if engine == "wol" {
 				known = wolKnownCategories(ctx, a)
@@ -82,6 +84,7 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 	fl.StringVarP(&engine, "engine", "e", "jworg", "search engine: jworg or wol")
 	fl.StringVar(&scope, "scope", "par", "wol match unit: par (paragraph) or sen (sentence)")
 	fl.BoolVarP(&interactive, "interactive", "i", false, "browse results interactively (TUI)")
+	fl.BoolVar(&noExcerpts, "no-excerpts", false, "keep wol's short teasers instead of reading each document (wol engine)")
 	cats.bind(cmd)
 	return cmd
 }

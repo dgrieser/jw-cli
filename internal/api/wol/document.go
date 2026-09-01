@@ -3,9 +3,11 @@ package wol
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -21,7 +23,7 @@ func (c *Client) Document(ctx context.Context, cfg Config, docid int) (model.Art
 // DocumentByURL fetches and parses any wol document page (including finder
 // redirect URLs from search results).
 func (c *Client) DocumentByURL(ctx context.Context, pageURL string) (model.Article, error) {
-	doc, err := c.hc.GetHTML(ctx, pageURL)
+	doc, err := c.documentPage(ctx, pageURL)
 	if err != nil {
 		return model.Article{}, err
 	}
@@ -34,6 +36,43 @@ func (c *Client) DocumentByURL(ctx context.Context, pageURL string) (model.Artic
 		return art, fmt.Errorf("no article content found at %s", pageURL)
 	}
 	return art, nil
+}
+
+const (
+	docPageKey    = "woldoc1-"
+	docPageMaxAge = 7 * 24 * time.Hour
+)
+
+// documentPage fetches a document page, from the disk cache when it is there.
+// A published document does not change, so a week is safe, and it makes the
+// second reading of the same publication — a listing that quotes it, then
+// jw show on one of its rows — free.
+func (c *Client) documentPage(ctx context.Context, pageURL string) (*goquery.Document, error) {
+	key := docPageKey + docPageCacheKey(pageURL)
+	var body string
+	if !c.cache.Get(key, docPageMaxAge, &body) || body == "" {
+		var err error
+		if body, err = c.hc.GetText(ctx, pageURL, nil); err != nil {
+			return nil, err
+		}
+		c.cache.Put(key, body)
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML %s: %w", pageURL, err)
+	}
+	return doc, nil
+}
+
+// docPageCacheKey drops the query and the fragment: a search links the same
+// document with its own ?q=, and every one of them is the same page.
+func docPageCacheKey(pageURL string) string {
+	u, err := url.Parse(pageURL)
+	if err != nil {
+		return pageURL
+	}
+	u.RawQuery, u.Fragment = "", ""
+	return u.Host + u.Path
 }
 
 // contentSelectors are tried in order to find the document body; kept

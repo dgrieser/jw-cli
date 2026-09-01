@@ -2,6 +2,7 @@ package cli
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -102,13 +103,15 @@ func TestNoURLsLeavesJSONAlone(t *testing.T) {
 // the link to the document goes.
 func TestNoURLsBibleCited(t *testing.T) {
 	var queries []string
-	out, err := runCmd(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15", "-l", "en", "--no-urls")
+	var docs atomic.Int64
+	out, err := runCmd(t, citedMuxDocs(t, &queries, &docs), "bible", "cited", "Jeremiah 31:15", "-l", "en", "--no-urls")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
 		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
-		"Wie hat sich diese Prophezeiung",
+		// the passage read out of the document, links and all stripped
+		"lies dazu die Einsichten nach",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q:\n%s", want, out)

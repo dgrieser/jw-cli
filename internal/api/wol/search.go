@@ -3,7 +3,6 @@ package wol
 import (
 	"context"
 	"fmt"
-	htmlpkg "html"
 	"net/url"
 	"slices"
 	"strconv"
@@ -70,9 +69,6 @@ const (
 	selOldSnippet      = ".searchResultDocument, .docContent, .des"
 	selOldResultsCount = ".resultsCount, .searchesCount"
 )
-
-// snippetMax caps a result's excerpt, counted in runes of its text.
-const snippetMax = 300
 
 // Search runs the wol full-text search. wol supports special syntax passed
 // through verbatim in the query: quoted phrases, * wildcards, & (AND),
@@ -156,7 +152,7 @@ func (c *Client) Search(ctx context.Context, cfg Config, query string, opts Sear
 				title := cleanSpace(link.Text())
 				snippet = strings.TrimSpace(strings.TrimPrefix(full, title))
 			}
-			add(cleanSpace(link.Text()), href, truncText(snippet), "", "")
+			add(cleanSpace(link.Text()), href, snippet, "", "")
 		})
 	}
 
@@ -210,42 +206,22 @@ func filterValues(doc *goquery.Document) []string {
 	return out
 }
 
-// snippetOf joins the matching passages of one document, keeping their HTML so
-// the listing can show the search highlights. Passages are taken until the cap
-// is reached; a single passage longer than the cap is cut down to plain text.
+// snippetOf joins the matching passages of one document, keeping their HTML.
+// The markup is what carries the search highlights, the paragraph ids and the
+// citation links, so a listing can show the hit and jw can find the passage it
+// was cut from in the document. Shortening it is the listing's business.
 func snippetOf(passages *goquery.Selection) string {
 	var frags []string
-	runes := 0
-	passages.EachWithBreak(func(_ int, s *goquery.Selection) bool {
+	passages.Each(func(_ int, s *goquery.Selection) {
 		frag, err := s.Html()
 		if err != nil {
-			return false
+			return
 		}
-		frag = cleanSpace(frag)
-		if frag == "" {
-			return true
+		if frag = cleanSpace(frag); frag != "" {
+			frags = append(frags, frag)
 		}
-		n := len([]rune(cleanSpace(s.Text())))
-		if runes+n > snippetMax {
-			if runes == 0 {
-				frags = append(frags, htmlpkg.EscapeString(truncText(cleanSpace(s.Text()))))
-			}
-			return false
-		}
-		frags = append(frags, frag)
-		runes += n
-		return true
 	})
 	return strings.Join(frags, " ")
-}
-
-// truncText cuts plain text to the snippet cap.
-func truncText(s string) string {
-	r := []rune(s)
-	if len(r) <= snippetMax {
-		return s
-	}
-	return string(r[:snippetMax]) + "…"
 }
 
 func intAttr(sel *goquery.Selection, attr string) int {
