@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newSearchCmd(a *app.App) *cobra.Command {
@@ -56,7 +57,7 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 			if page < 1 {
 				page = 1
 			}
-			p := searchParams{Engine: engine, Query: query, Facet: facet, Sort: sortBy, Scope: scope, Limit: limit,
+			p := service.SearchParams{Engine: engine, Query: query, Facet: facet, Sort: sortBy, Scope: scope, Limit: limit,
 				Excerpts: !noExcerpts}
 			var known []string
 			if engine == "wol" {

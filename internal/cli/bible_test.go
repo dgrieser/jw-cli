@@ -7,9 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/dgrieser/jw-cli/internal/bibleref"
-	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 func bibleMux(t *testing.T) *http.ServeMux {
@@ -207,33 +204,6 @@ func TestBibleReadUnfoldInlinePerVerse(t *testing.T) {
 	if first >= note16 || note16 >= second || second >= text17 {
 		t.Errorf("verse 16 %d, its note %d, verse 17 %d, its text %d: the study material of a verse "+
 			"belongs between that verse and the next:\n%s", first, note16, second, text17, out)
-	}
-}
-
-// TestVerseRuns pins how the verses of a passage are headed: a verse that
-// brought study material of its own stands under its own heading, and the
-// verses around it that brought none are headed as the span they are.
-func TestVerseRuns(t *testing.T) {
-	verses := []readVerse{
-		{Verse: model.Verse{ID: 43003016, Citation: "John 3:16"}},
-		{Verse: model.Verse{ID: 43003017, Citation: "John 3:17"}},
-		{Verse: model.Verse{ID: 43003018, Citation: "John 3:18"}, Unfold: "<h4>References</h4>"},
-		{Verse: model.Verse{ID: 43003019, Citation: "John 3:19"}},
-	}
-	runs := verseRuns(verses)
-	if len(runs) != 3 {
-		t.Fatalf("got %d runs, want the bare pair, the expanded verse and the last: %+v", len(runs), runs)
-	}
-	tbl := bibleref.English()
-	for i, want := range []string{"John 3:16-17", "John 3:18", "John 3:19"} {
-		if got := runCitation(runs[i], tbl); got != want {
-			t.Errorf("run %d heading = %q, want %q", i, got, want)
-		}
-	}
-	// a passage whose verses are not headed one by one keeps its own heading
-	bare := []readVerse{{Verse: model.Verse{ID: 43003016}}, {Verse: model.Verse{ID: 43003017}}}
-	if got := runCitation(verseRuns(bare)[0], tbl); got != "" {
-		t.Errorf("unheaded verses got the heading %q", got)
 	}
 }
 

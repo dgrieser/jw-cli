@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/service"
 	"github.com/dgrieser/jw-cli/internal/tui"
 )
 
@@ -92,7 +92,7 @@ func tuiDownload(ctx context.Context, a *app.App, lng model.Language, item model
 		if err != nil {
 			return "", err
 		}
-		file, err := pickBest(mi)
+		file, err := service.PickBest(mi)
 		if err != nil {
 			return "", err
 		}
@@ -101,19 +101,6 @@ func tuiDownload(ctx context.Context, a *app.App, lng model.Language, item model
 		return downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, "", "")
 	}
 	return "", fmt.Errorf("%s has nothing directly downloadable", item.Title)
-}
-
-func pickBest(mi model.MediaItem) (model.MediaFile, error) {
-	if len(mi.Files) == 0 {
-		return model.MediaFile{}, fmt.Errorf("no files for %s", mi.Title)
-	}
-	best := mi.Files[0]
-	for _, f := range mi.Files[1:] {
-		if f.FrameHeight > best.FrameHeight || (f.FrameHeight == best.FrameHeight && f.Filesize > best.Filesize) {
-			best = f
-		}
-	}
-	return best, nil
 }
 
 // categoryFetcher pages through one mediator category ("" = root list).
@@ -125,7 +112,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			if err != nil {
 				return results.ResultSet{}, "", err
 			}
-			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: categoriesToResults(cats)}
+			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: service.CategoriesToResults(cats)}
 			_ = results.Save(a.Cache().Dir(), rs)
 			return rs, a.Text().MediaCategories, nil
 		}
@@ -133,7 +120,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
-		items := append(categoriesToResults(cat.Subcategories), mediaToResults(cat.Media)...)
+		items := append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
 		if len(items) == 0 && page > 1 {
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreItems)
 		}
@@ -147,24 +134,8 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 	}
 }
 
-// searchParams is one search request, minus the page: what the user asked for,
-// as both the listing and the TUI fetcher need it.
-type searchParams struct {
-	Engine string // jworg (default) or wol
-	Query  string
-	Facet  string // jworg content type
-	Sort   string
-	Scope  string // wol match unit: par or sen
-	Limit  int    // jworg page size; wol pages are server-sized
-	// Categories is the wol publication-category filter.
-	Categories wolCategories
-	// Excerpts reads each result's document to replace its teaser with the
-	// passage it was cut from. wol engine only.
-	Excerpts bool
-}
-
 // searchFetcher pages through search results for either engine.
-func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p searchParams) tui.Fetcher {
+func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p service.SearchParams) tui.Fetcher {
 	return func(page int) (results.ResultSet, string, error) {
 		rs, header, err := runSearch(ctx, a, lng, &p, page)
 		if err != nil {
@@ -178,36 +149,25 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p search
 	}
 }
 
-// runSearch executes one page of a search on the chosen engine.
-func runSearch(ctx context.Context, a *app.App, lng model.Language, p *searchParams, page int) (results.ResultSet, string, error) {
-	switch p.Engine {
-	case "jworg", "jw", "":
-		sp, err := a.Search().Search(ctx, lng.Symbol, search.Params{
-			Query: p.Query, Facet: p.Facet, Sort: p.Sort,
-			Offset: (page - 1) * p.Limit, Limit: p.Limit,
-		})
-		if err != nil {
-			return results.ResultSet{}, "", err
-		}
-		header := a.Text().Results(sp.Total, p.Query)
-		if sp.Total > p.Limit {
-			header += fmt.Sprintf(a.Text().PageSuffix, page, p.Limit)
-		}
-		rs := results.ResultSet{Kind: "search", Query: p.Query, Lang: lng.Symbol, Page: page, Items: sp.Results}
-		return rs, header, nil
-	case "wol":
-		sp, err := searchWOL(ctx, a, lng, p, page)
-		if err != nil {
-			return results.ResultSet{}, "", err
-		}
-		if p.Excerpts {
-			fillExcerpts(ctx, a, sp.Results)
-		}
-		header := a.Text().WolResults(sp.Total, p.Query, sp.Page)
-		rs := results.ResultSet{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: sp.Page, Items: sp.Results}
-		return rs, header, nil
+// runSearch executes one page of a search on the chosen engine and heads the
+// listing the way the terminal prints it.
+func runSearch(ctx context.Context, a *app.App, lng model.Language, p *service.SearchParams, page int) (results.ResultSet, string, error) {
+	out, err := a.Service().RunSearch(ctx, lng, p, page, excerptProgress(a))
+	if err != nil {
+		return results.ResultSet{}, "", err
 	}
-	return results.ResultSet{}, "", fmt.Errorf("invalid engine %q (want jworg or wol)", p.Engine)
+	var header string
+	switch out.Kind {
+	case "wol-search":
+		header = a.Text().WolResults(out.Total, out.Query, out.Page)
+	default:
+		header = a.Text().Results(out.Total, out.Query)
+		if out.Total > p.Limit {
+			header += fmt.Sprintf(a.Text().PageSuffix, out.Page, p.Limit)
+		}
+	}
+	rs := results.ResultSet{Kind: out.Kind, Query: out.Query, Lang: out.Lang, Page: out.Page, Items: out.Items}
+	return rs, header, nil
 }
 
 func runSearchTUI(ctx context.Context, a *app.App, lng model.Language, fetch tui.Fetcher, header string) error {
