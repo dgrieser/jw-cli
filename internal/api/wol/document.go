@@ -64,15 +64,17 @@ func (c *Client) documentPage(ctx context.Context, pageURL string) (*goquery.Doc
 	return doc, nil
 }
 
-// docPageCacheKey drops the query and the fragment: a search links the same
-// document with its own ?q=, and every one of them is the same page.
+// docPageCacheKey drops the fragment and keeps the query: wol renders a
+// document differently when a search hands it a ?q=, marking what it matched,
+// so the two are not the same page. jw show follows the same link a listing
+// stored, which is how it reads the copy the listing already paid for.
 func docPageCacheKey(pageURL string) string {
 	u, err := url.Parse(pageURL)
 	if err != nil {
 		return pageURL
 	}
-	u.RawQuery, u.Fragment = "", ""
-	return u.Host + u.Path
+	u.Fragment = ""
+	return u.Host + u.Path + "?" + u.RawQuery
 }
 
 // contentSelectors are tried in order to find the document body; kept

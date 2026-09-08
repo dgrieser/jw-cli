@@ -12,6 +12,11 @@ import (
 // whole table: one cell on its own says nothing.
 const selDocBlock = "p, li, td, th, figcaption, blockquote, h1, h2, h3, h4, h5, h6"
 
+// selMark is how wol marks what a search matched. A document fetched through
+// the ?q= link of a result carries one on every hit, which places the passage
+// exactly and lets the renderer highlight the words themselves.
+const selMark = "span.mk, .mk"
+
 // chromeInBlock is what a block carries that is not text: the answer boxes of a
 // study article, and anything scripted.
 const chromeInBlock = ".gen-field, textarea, script, style"
@@ -43,7 +48,19 @@ func (c *Client) Excerpts(ctx context.Context, pageURL, fragment string) ([]stri
 	if err != nil {
 		return nil, err
 	}
+	// the document wol serves through a result's link marks the hits itself
 	found := map[*html.Node]bool{}
+	doc.Find(selMark).Each(func(_ int, s *goquery.Selection) {
+		if n := blockOf(s); n != nil {
+			found[n] = true
+		}
+	})
+	if len(found) > 0 {
+		return blocksInOrder(doc, found), nil
+	}
+
+	// otherwise place the fragment in the document by hand: a link it holds,
+	// a paragraph id, or its opening words
 	pieces := frag.Find("body").Children()
 	if pieces.Length() == 0 {
 		// a fragment of bare text still has its opening words to match on
@@ -141,6 +158,8 @@ func blockOf(s *goquery.Selection) *html.Node {
 		block = s.Closest(selDocBlock)
 	}
 	if block.Length() == 0 {
+		// a hit laid out in bare divs — a reading plan's checkbox grid, say.
+		// There is no passage to quote, so the teaser stands.
 		return nil
 	}
 	if block.Is("td, th") {

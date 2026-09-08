@@ -122,22 +122,59 @@ func TestExcerptsOrderAndDedup(t *testing.T) {
 	}
 }
 
-// A document is read once and kept: a second excerpt, and any later reading of
-// the same page, come out of the cache.
+// A document is read once and kept: a second excerpt from it, and jw show
+// following the same link afterwards, come out of the cache. The link a search
+// stores carries its ?q=, and wol answers that with the hits marked, so it is
+// that link — not the bare one — that both share.
 func TestExcerptsCacheDocument(t *testing.T) {
 	hits := 0
-	c, url := excerptClient(t, &hits)
+	c, base := excerptClient(t, &hits)
 	ctx := context.Background()
+	link := base + "?q=%28Jer+31%3A15%29&p=par"
 	frag := `<p id="p3" data-pid="3">Rahel starb …</p>`
 	for range 2 {
-		if _, err := c.Excerpts(ctx, url+"?q=%28Jer+31%3A15%29&p=par", frag); err != nil {
+		if _, err := c.Excerpts(ctx, link, frag); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := c.DocumentByURL(ctx, url); err != nil {
+	if _, err := c.DocumentByURL(ctx, link); err != nil {
 		t.Fatal(err)
 	}
 	if hits != 1 {
 		t.Errorf("requests = %d, want 1", hits)
+	}
+	// the document without a search behind it is a different page
+	if _, err := c.DocumentByURL(ctx, base); err != nil {
+		t.Fatal(err)
+	}
+	if hits != 2 {
+		t.Errorf("requests = %d, want the unqueried page fetched once", hits)
+	}
+}
+
+// When wol marks the hits itself, those marks place the passage — no matter
+// what the search fragment looks like.
+func TestExcerptsFollowsMarks(t *testing.T) {
+	hits := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/d/r10/lp-x/2014927", func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(`<html><body><div id="article">
+		<p id="p3" data-pid="3">Nichts von Belang steht in diesem Absatz.</p>
+		<p id="p5" data-pid="5">Warum heißt es in <span class="mk">Jeremia 31:15</span>,
+		Rahel weine um ihre Söhne?</p>
+		</div></body></html>`))
+	})
+	c := testClient(t, mux)
+	blocks, err := c.Excerpts(context.Background(),
+		c.hc.Base.WOL+"/de/wol/d/r10/lp-x/2014927?q=x", `<p>something the locator would never find</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 1 || !strings.Contains(blocks[0], "Rahel weine um ihre Söhne") {
+		t.Fatalf("blocks = %q", blocks)
+	}
+	if !strings.Contains(blocks[0], `class="mk"`) {
+		t.Errorf("the mark is what the renderer highlights, and it is gone: %q", blocks[0])
 	}
 }

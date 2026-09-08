@@ -63,26 +63,31 @@ type listStyle struct {
 	noURLs bool
 	// txt labels the metadata lines of an image row.
 	txt *i18n.Messages
+	// text marks the parts of a row up for a terminal. Off for pipes, files
+	// and --no-color, where the listing stays exactly the plain text it was.
+	text render.TextStyle
 	// block renders a result's excerpt — the passage of the document it was
-	// found in — as plain paragraphs. Nil leaves excerpts out.
+	// found in — as paragraphs. Nil leaves excerpts out.
 	block func(html string) string
 }
 
 func listStyleFor(a *app.App) listStyle {
 	s := listStyle{
-		inline: render.InlineOptions{Emphasis: a.Styled()},
+		inline: render.InlineOptions{Emphasis: a.Styled() && !a.Flags.NoColor},
 		noURLs: a.Flags.NoURLs,
 		txt:    a.Text(),
+		text:   render.NewTextStyle(a.Styled(), !a.Flags.NoColor),
 	}
 	if a.Styled() {
 		s.width = a.Width()
 	}
 	// text, not markdown: a listing is plain text throughout, and writeListing
-	// writes it with Write, so markdown would never be styled. --no-urls comes
+	// writes it with Write, so markdown would never be styled. The style adds
+	// the emphasis and the search highlight back as ANSI, and --no-urls comes
 	// in through RenderOptions.
 	opts := a.RenderOptions(a.HTTP().Base.WOL)
 	s.block = func(fragment string) string {
-		out, err := render.Render(fragment, render.Text, opts)
+		out, err := render.StyledText(fragment, opts, s.text)
 		if err != nil {
 			return ""
 		}
@@ -93,7 +98,13 @@ func listStyleFor(a *app.App) listStyle {
 
 // wrap lays out one line of a result under the listing's indent.
 func (s listStyle) wrap(text string) string {
-	return render.WrapIndent(text, listIndent, s.width)
+	return s.wrapUnder(text, listIndent)
+}
+
+// wrapUnder wraps a line under an indent of the caller's choosing. The indent
+// is written by the caller for the first line and by the wrap for the rest.
+func (s listStyle) wrapUnder(text, indent string) string {
+	return render.WrapIndent(text, indent, s.width)
 }
 
 func formatResult(r model.Result, style listStyle) string {
@@ -109,19 +120,21 @@ func formatResult(r model.Result, style listStyle) string {
 	if title == "" && r.Kind == "image" {
 		title = style.imageFallbackTitle(r.Index)
 	}
+	head := style.text.Strong(title)
 	if r.Context != "" {
-		title += " — " + render.Inline(r.Context, style.inline)
+		head += " — " + style.text.Faint(render.Inline(r.Context, style.inline))
 	}
 	if len(meta) > 0 {
-		title += " (" + strings.Join(meta, ", ") + ")"
+		head += " " + style.text.Faint("("+strings.Join(meta, ", ")+")")
 	}
 	// the index prefix is wrapped along with the title, so a long title breaks
 	// onto the listing's indent instead of the terminal's left edge
-	fmt.Fprintf(&b, "%s\n", style.wrap(fmt.Sprintf("%3d. [%s] %s", r.Index, r.Kind, title)))
+	prefix := style.text.Faint(fmt.Sprintf("%3d.", r.Index)) + " " + style.text.Accent("["+r.Kind+"]")
+	fmt.Fprintf(&b, "%s\n", style.wrap(prefix+" "+head))
 	// the excerpt is the passage the snippet was cut from, so it replaces it
 	if excerpt := style.excerpt(r); excerpt != "" {
 		b.WriteString(excerpt)
-	} else if snippet := truncate(render.Inline(r.Snippet, style.inline), snippetMax); snippet != "" {
+	} else if snippet := render.Truncate(render.Inline(r.Snippet, style.inline), snippetMax); snippet != "" {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(snippet))
 	}
 	// what the image itself says: printed with or without --no-urls, since the
@@ -131,7 +144,7 @@ func formatResult(r model.Result, style listStyle) string {
 	}
 	// links stay on one line: a wrapped URL cannot be clicked or copied
 	if link := preferredLink(r); link != "" && !style.noURLs {
-		fmt.Fprintf(&b, "%s%s\n", listIndent, link)
+		fmt.Fprintf(&b, "%s%s\n", listIndent, style.text.Faint(link))
 	}
 	return b.String()
 }
@@ -147,19 +160,25 @@ func (s listStyle) excerpt(r model.Result) string {
 	if body == "" {
 		return ""
 	}
+	// a quote bar sets the publication's own words apart from the row that
+	// found them. It is ANSI-only, so a pipe keeps the plain layout it had.
+	indent := listIndent
+	if s.text.On() {
+		indent += s.text.Faint("│") + " "
+	}
 	// line by line, so a table keeps its rows and a list its items; the
 	// renderer already separates paragraphs with a blank line
 	var b strings.Builder
 	b.WriteString("\n")
 	for line := range strings.SplitSeq(body, "\n") {
 		if line = strings.TrimSpace(line); line == "" {
-			b.WriteString("\n")
+			b.WriteString(strings.TrimRight(indent, " ") + "\n")
 			continue
 		}
 		if !saysSomething(line) {
 			continue // a list marker whose item was a picture, and the like
 		}
-		fmt.Fprintf(&b, "%s%s\n", listIndent, s.wrap(line))
+		fmt.Fprintf(&b, "%s%s\n", indent, s.wrapUnder(line, indent))
 	}
 	b.WriteString("\n")
 	return b.String()
@@ -177,13 +196,13 @@ func (s listStyle) imageMetaLines(r model.Result) []string {
 		if value == "" || value == r.Title {
 			return
 		}
-		out = append(out, label+": "+render.Inline(value, s.inline))
+		out = append(out, s.text.Accent(label)+": "+render.Inline(value, s.inline))
 	}
 	add(s.txt.LabelDescription, im.Description)
 	add(s.txt.LabelAltText, im.Alt)
 	add(s.txt.LabelCredit, im.Credit)
 	if size := imageSize(im); size != "" {
-		out = append(out, s.txt.LabelImageSize+": "+size)
+		out = append(out, s.text.Accent(s.txt.LabelImageSize)+": "+size)
 	}
 	return out
 }
@@ -227,15 +246,6 @@ func saysSomething(line string) bool {
 	return strings.ContainsFunc(line, func(r rune) bool {
 		return unicode.IsLetter(r) || unicode.IsDigit(r)
 	})
-}
-
-// truncate cuts a line to max runes, marking that it was cut.
-func truncate(s string, max int) string {
-	r := []rune(s)
-	if len(r) <= max {
-		return s
-	}
-	return strings.TrimRight(string(r[:max]), " ") + "…"
 }
 
 func preferredLink(r model.Result) string {

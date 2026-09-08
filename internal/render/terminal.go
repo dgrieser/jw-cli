@@ -198,6 +198,15 @@ func WrapIndent(s, indent string, width int) string {
 	return strings.ReplaceAll(ansi.Wrap(s, limit, ""), "\n", "\n"+indent)
 }
 
+// Truncate cuts s to width printable columns, marking that it was cut. ANSI
+// escapes do not count towards the width and are not cut in half.
+func Truncate(s string, width int) string {
+	if StringWidth(s) <= width {
+		return s
+	}
+	return ansi.Truncate(s, width, "…")
+}
+
 // StringWidth is the printable column width of s, ignoring ANSI escapes.
 func StringWidth(s string) int { return ansi.StringWidth(s) }
 

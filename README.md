@@ -89,12 +89,20 @@ On a terminal, a command's output is framed by one blank line above and below so
 it stands off from the shell prompt. The frame is opened once per run, not per
 line, and a pipe, a redirect, `-f|--file` and `-o raw` get the bytes unchanged.
 
-Result listings are plain reports, not markdown, so they are never restyled —
-but the search APIs return titles and snippets as HTML fragments, and those are
-rendered too: the tags and entities are resolved, and on a terminal the matched
-words keep the API's highlight as bold. Long titles and snippets are wrapped to
-the listing's indent; links are left whole so they stay clickable. Redirect or
-pipe a listing and each result stays on its own line, ready to grep.
+Result listings are plain reports, not markdown, so glamour never touches them
+— but the search APIs return titles, snippets and passages as HTML fragments,
+and those are rendered: the tags and entities are resolved, and on a terminal
+the parts of a row are told apart with ANSI. The index, the publication line and
+the link are dim, the content type is colored, the title is bold, the passage
+under a result sits behind a quote bar, and what the search matched is
+highlighted inside it — wol marks its hits in the document, and that mark is
+what is painted. Long lines are wrapped to the listing's indent; links are left
+whole so they stay clickable.
+
+The styling is terminal-only. Redirect, pipe, `-f|--file`, `-o raw` or
+`--no-color` and a listing is byte for byte the plain report it always was, each
+result on its own line and ready to grep — the quote bar included, which is
+drawn only where colors are.
 
 The markdown is written verbatim whenever styling would get in the way:
 
@@ -103,6 +111,7 @@ jw article 1102025912 -o raw                 # never styled, even on a terminal
 jw article 1102025912 -f out.md              # -f|--file always writes raw markdown
 jw article 1102025912 | pandoc -f markdown   # a pipe is not a terminal: raw
 jw article 1102025912 --no-color             # styled layout, no colors
+jw bible cited "Jer 31:15" --no-color        # a listing: plain, no ANSI at all
 ```
 
 The color scheme follows the terminal background. Override it with

@@ -34,6 +34,17 @@ var markdownConverter = converter.NewConverter(
 	),
 )
 
+// StyledText renders a fragment as plain text with the inline emphasis and the
+// search highlight kept as ANSI. It is Render(fragment, Text, o) exactly when
+// the style is off, so the same call serves a terminal and a pipe.
+func StyledText(fragment string, o Options, style TextStyle) (string, error) {
+	clean, err := sanitize(fragment, o)
+	if err != nil {
+		return "", fmt.Errorf("sanitize HTML: %w", err)
+	}
+	return toText(clean, style)
+}
+
 // Render converts a site HTML fragment into the requested output format.
 // JSON is not a rendering of HTML; callers handle it before calling Render.
 func Render(fragment string, f Format, o Options) (string, error) {
@@ -51,7 +62,7 @@ func Render(fragment string, f Format, o Options) (string, error) {
 		}
 		return md, nil
 	case Text:
-		return toText(clean)
+		return toText(clean, TextStyle{})
 	case JSON:
 		return "", fmt.Errorf("render: JSON output must be handled by the caller")
 	}
