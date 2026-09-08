@@ -68,7 +68,7 @@ func Run(header string, fetch Fetcher, actions Actions) error {
 type item struct{ r model.Result }
 
 func (i item) Title() string {
-	t := fmt.Sprintf("[%s] %s", i.r.Kind, plain(i.r.Title))
+	t := plain(i.r.Title)
 	if i.r.Duration != "" {
 		t += " (" + i.r.Duration + ")"
 	}

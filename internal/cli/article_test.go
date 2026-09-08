@@ -53,7 +53,7 @@ func TestArticleImagesListing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[image] Caleb in Hebron") || !strings.Contains(out, "caleb_lg.jpg") {
+	if !strings.Contains(out, "Caleb in Hebron") || !strings.Contains(out, "caleb_lg.jpg") {
 		t.Errorf("images output:\n%s", out)
 	}
 	// the words and the pixel size the figure states beside the picture
@@ -72,7 +72,7 @@ func TestArticleImagesListingNoURLs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"[image] Caleb in Hebron", "Credit: © Example Picture Library", "[image] Image 2"} {
+	for _, want := range []string{"Caleb in Hebron", "Credit: © Example Picture Library", "Image 2"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q:\n%s", want, out)
 		}

@@ -42,7 +42,7 @@ func TestListLoadsAndPaginates(t *testing.T) {
 	if m.mode != "list" || len(m.list.Items()) != 2 {
 		t.Fatalf("mode=%s items=%d", m.mode, len(m.list.Items()))
 	}
-	if !strings.Contains(m.list.Items()[1].(item).Title(), "[video] Second (3:10)") {
+	if !strings.Contains(m.list.Items()[1].(item).Title(), "Second (3:10)") {
 		t.Errorf("item title: %s", m.list.Items()[1].(item).Title())
 	}
 
@@ -135,7 +135,7 @@ func TestListItemStripsSourceMarkup(t *testing.T) {
 		Title:   "Daniel&nbsp;7:27",
 		Snippet: "vom <strong>Königreich</strong>\nbekannt machen?",
 	}}
-	if got := it.Title(); got != "[verse] Daniel 7:27" {
+	if got := it.Title(); got != "Daniel 7:27" {
 		t.Errorf("title: %q", got)
 	}
 	if got := it.Description(); got != "vom Königreich bekannt machen?" {

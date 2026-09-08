@@ -66,7 +66,7 @@ func TestNoURLsListing(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the index still identifies the result for jw show|open|download
-	if !strings.Contains(out, "[video] Daniel 7:27 Schöpfung") || !strings.Contains(out, "  1. ") {
+	if !strings.Contains(out, "Daniel 7:27 Schöpfung") || !strings.Contains(out, "  1. ") {
 		t.Errorf("listing lost its entry:\n%s", out)
 	}
 	assertNoURLs(t, out)

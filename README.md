@@ -93,11 +93,13 @@ Result listings are plain reports, not markdown, so glamour never touches them
 — but the search APIs return titles, snippets and passages as HTML fragments,
 and those are rendered: the tags and entities are resolved, and on a terminal
 the parts of a row are told apart with ANSI. The index, the publication line and
-the link are dim, the content type is colored, the title is bold, the passage
-under a result sits behind a quote bar, and what the search matched is
-highlighted inside it — wol marks its hits in the document, and that mark is
-what is painted. Long lines are wrapped to the listing's indent; links are left
-whole so they stay clickable.
+the link are dim, the title is bold, the passage under a result sits behind a
+quote bar, and what the search matched is highlighted inside it — wol marks its
+hits in the document, and that mark is what is painted. Long lines are wrapped
+to the listing's indent; links are left whole so they stay clickable. A result's
+kind (`article`, `video`, `category`, ...) is in `-o json` but is not printed: it
+repeats itself down a whole listing, and a duration or a file size already says
+what a row is.
 
 The styling is terminal-only. Redirect, pipe, `-f|--file`, `-o raw` or
 `--no-color` and a listing is byte for byte the plain report it always was, each

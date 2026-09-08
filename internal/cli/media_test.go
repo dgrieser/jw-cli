@@ -79,7 +79,7 @@ func TestMediaBrowseRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[category] Videos") || !strings.Contains(out, "Audio") {
+	if !strings.Contains(out, "Videos") || !strings.Contains(out, "Audio") {
 		t.Fatalf("unexpected output:\n%s", out)
 	}
 }
@@ -89,7 +89,7 @@ func TestMediaBrowseCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[video] A New Video (5:00)") {
+	if !strings.Contains(out, "A New Video (5:00)") {
 		t.Fatalf("unexpected output:\n%s", out)
 	}
 }

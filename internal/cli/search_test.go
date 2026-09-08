@@ -45,7 +45,7 @@ func TestSearchCommand(t *testing.T) {
 	// snippet's newline is collapsed so it cannot break the indented listing
 	for _, want := range []string{
 		`1 Ergebnis für "Schöpfung"`,
-		"[video] Daniel 7:27 Schöpfung (3:10)",
+		"Daniel 7:27 Schöpfung (3:10)",
 		"     vom Königreich bekannt machen?\n",
 	} {
 		if !strings.Contains(out, want) {

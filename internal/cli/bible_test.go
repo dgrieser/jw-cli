@@ -302,7 +302,7 @@ func TestBibleMedia(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[image]") || !strings.Contains(out, "Jesus explains birth") {
+	if !strings.Contains(out, "Jesus explains birth") {
 		t.Fatalf("media output:\n%s", out)
 	}
 }

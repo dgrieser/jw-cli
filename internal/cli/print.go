@@ -128,8 +128,11 @@ func formatResult(r model.Result, style listStyle) string {
 		head += " " + style.text.Faint("("+strings.Join(meta, ", ")+")")
 	}
 	// the index prefix is wrapped along with the title, so a long title breaks
-	// onto the listing's indent instead of the terminal's left edge
-	prefix := style.text.Faint(fmt.Sprintf("%3d.", r.Index)) + " " + style.text.Accent("["+r.Kind+"]")
+	// onto the listing's indent instead of the terminal's left edge. The kind
+	// of a result stays in the data (-o json) but is not printed: it repeats
+	// itself down a whole listing, and what a row is is plain from its title,
+	// its duration or its file size.
+	prefix := style.text.Faint(fmt.Sprintf("%3d.", r.Index))
 	fmt.Fprintf(&b, "%s\n", style.wrap(prefix+" "+head))
 	// the excerpt is the passage the snippet was cut from, so it replaces it
 	if excerpt := style.excerpt(r); excerpt != "" {

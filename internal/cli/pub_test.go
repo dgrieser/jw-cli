@@ -49,7 +49,7 @@ func TestPubListAndDownloadByIndex(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "Der Wachtturm") || !strings.Contains(out, "[file]") {
+	if !strings.Contains(out, "Der Wachtturm") || !strings.Contains(out, "PDF") {
 		t.Fatalf("listing unexpected:\n%s", out)
 	}
 

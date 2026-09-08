@@ -256,7 +256,7 @@ func TestBibleCitedReadsEveryPage(t *testing.T) {
 		t.Errorf("header missing the total:\n%s", out)
 	}
 	// both pages are numbered into one listing
-	for _, want := range []string{" 1. [article] Doc 1000", " 41. [article] Doc 2000", " 42. [article] Doc 2001"} {
+	for _, want := range []string{" 1. Doc 1000", " 41. Doc 2000", " 42. Doc 2001"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
