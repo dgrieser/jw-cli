@@ -3,6 +3,13 @@ package render
 // ANSI sequences for the parts of a listing. Weight and faintness carry
 // structure and read the same in any palette; the hues are the part NO_COLOR
 // and --no-color turn off.
+// OSC 8 is the hyperlink sequence: an opening one carrying the target, the
+// text, then an empty one closing it.
+const (
+	osc8   = "\x1b]8;;"
+	oscEnd = "\x1b\\"
+)
+
 const (
 	ansiFaint  = "\x1b[2m"
 	ansiCyan   = "\x1b[36m"
@@ -46,6 +53,17 @@ func (t TextStyle) Accent(s string) string { return t.wrap(t.accentSeq(), s) }
 
 // Mark is the hit itself inside a passage: the words a search matched.
 func (t TextStyle) Mark(s string) string { return t.wrap(t.markSeq(), s) }
+
+// Link makes text clickable through OSC 8, the way ToTerminal does for the
+// links inside a document, so a listing does not have to spell its targets out
+// on lines of their own. Nothing is written where styling is off — a pipe, a
+// file and --no-color get the target printed instead.
+func (t TextStyle) Link(text, url string) string {
+	if !t.on || text == "" || url == "" {
+		return text
+	}
+	return osc8 + url + oscEnd + text + osc8 + oscEnd
+}
 
 func (t TextStyle) strongSeq() string { return t.escape(ansiBold) }
 func (t TextStyle) faintSeq() string  { return t.escape(ansiFaint) }

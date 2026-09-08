@@ -25,4 +25,8 @@ func TestListingIsPlainOffTerminal(t *testing.T) {
 	if strings.Contains(out, "│") {
 		t.Errorf("piped listing drew the excerpt bar:\n%s", out)
 	}
+	// with no terminal to click in, the target is spelled out on its own line
+	if !strings.Contains(out, "/de/wol/d/r10/lp-x/202026249") {
+		t.Errorf("piped listing dropped the link line:\n%s", out)
+	}
 }

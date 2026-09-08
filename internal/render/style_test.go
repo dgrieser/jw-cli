@@ -94,3 +94,31 @@ func TestTruncateKeepsEscapes(t *testing.T) {
 		t.Errorf("no mark that it was cut: %q", got)
 	}
 }
+
+// A styled listing hangs the target on the title instead of spelling it out;
+// off a terminal it writes nothing, so the caller prints the URL itself.
+func TestTextStyleLink(t *testing.T) {
+	const url = "https://wol.jw.org/de/wol/d/r10/lp-x/2014927"
+	got := NewTextStyle(true, true).Link("Fragen von Lesern", url)
+	if !strings.HasPrefix(got, osc8+url+oscEnd) || !strings.HasSuffix(got, osc8+oscEnd) {
+		t.Errorf("no OSC 8 around the text: %q", got)
+	}
+	if !strings.Contains(got, "Fragen von Lesern") {
+		t.Errorf("text lost: %q", got)
+	}
+	if StringWidth(got) != StringWidth("Fragen von Lesern") {
+		t.Errorf("the target counts towards the width: %d", StringWidth(got))
+	}
+	var off TextStyle
+	if got := off.Link("Fragen von Lesern", url); got != "Fragen von Lesern" {
+		t.Errorf("zero style wrote %q", got)
+	}
+	// nothing to hang it on, or nowhere to go
+	on := NewTextStyle(true, true)
+	if got := on.Link("", url); got != "" {
+		t.Errorf("linked empty text: %q", got)
+	}
+	if got := on.Link("x", ""); got != "x" {
+		t.Errorf("linked to nothing: %q", got)
+	}
+}

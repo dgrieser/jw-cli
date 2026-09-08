@@ -95,16 +95,19 @@ and those are rendered: the tags and entities are resolved, and on a terminal
 the parts of a row are told apart with ANSI. The index, the publication line and
 the link are dim, the title is bold, the passage under a result sits behind a
 quote bar, and what the search matched is highlighted inside it — wol marks its
-hits in the document, and that mark is what is painted. Long lines are wrapped
-to the listing's indent; links are left whole so they stay clickable. A result's
-kind (`article`, `video`, `category`, ...) is in `-o json` but is not printed: it
-repeats itself down a whole listing, and a duration or a file size already says
-what a row is.
+hits in the document, and that mark is what is painted. The title carries the
+result's target as an OSC 8 hyperlink, the same way a document's links are
+rendered, so a listing spends no line on spelling URLs out. Long lines are
+wrapped to the listing's indent. A result's kind (`article`, `video`,
+`category`, ...) is in `-o json` but is not printed: it repeats itself down a
+whole listing, and a duration or a file size already says what a row is.
 
 The styling is terminal-only. Redirect, pipe, `-f|--file`, `-o raw` or
 `--no-color` and a listing is byte for byte the plain report it always was, each
-result on its own line and ready to grep — the quote bar included, which is
-drawn only where colors are.
+result on its own line and ready to grep — the quote bar included, and the link
+back on a line of its own, since there is nothing to click. In a terminal
+without OSC 8 support the title simply is not clickable; `jw open <n>` prints
+the target of any result, and `--no-color` puts the URLs back in the listing.
 
 The markdown is written verbatim whenever styling would get in the way:
 
@@ -113,7 +116,7 @@ jw article 1102025912 -o raw                 # never styled, even on a terminal
 jw article 1102025912 -f out.md              # -f|--file always writes raw markdown
 jw article 1102025912 | pandoc -f markdown   # a pipe is not a terminal: raw
 jw article 1102025912 --no-color             # styled layout, no colors
-jw bible cited "Jer 31:15" --no-color        # a listing: plain, no ANSI at all
+jw bible cited "Jer 31:15" --no-color        # a listing: plain, URLs spelled out
 ```
 
 The color scheme follows the terminal background. Override it with
@@ -134,8 +137,9 @@ that carried it. It applies to `markdown`, `raw`, `html`, and `text`:
 - an image listing keeps its metadata — caption, alt text, credit, size — and
   falls back to `Image <n>` where a picture says nothing about itself, so a URL
   is never printed as a title;
-- result listings print title and snippet without the link line — the result
-  index still drives `jw show|open|download <n>`;
+- result listings print title and snippet with no target at all, neither on the
+  title nor on a line of its own — the result index still drives
+  `jw show|open|download <n>`;
 - `jw media info` lists the renditions without their file URLs.
 
 `-o json` is deliberately untouched: it is the data model the other commands

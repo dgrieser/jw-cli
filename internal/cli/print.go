@@ -120,7 +120,12 @@ func formatResult(r model.Result, style listStyle) string {
 	if title == "" && r.Kind == "image" {
 		title = style.imageFallbackTitle(r.Index)
 	}
-	head := style.text.Strong(title)
+	// the title carries the target, so a terminal needs no line for it
+	link := preferredLink(r)
+	if style.noURLs {
+		link = ""
+	}
+	head := style.text.Link(style.text.Strong(title), link)
 	if r.Context != "" {
 		head += " — " + style.text.Faint(render.Inline(r.Context, style.inline))
 	}
@@ -145,9 +150,10 @@ func formatResult(r model.Result, style listStyle) string {
 	for _, line := range style.imageMetaLines(r) {
 		fmt.Fprintf(&b, "%s%s\n", listIndent, style.wrap(line))
 	}
-	// links stay on one line: a wrapped URL cannot be clicked or copied
-	if link := preferredLink(r); link != "" && !style.noURLs {
-		fmt.Fprintf(&b, "%s%s\n", listIndent, style.text.Faint(link))
+	// spelled out only where the title could not carry it: a wrapped URL can
+	// be neither clicked nor copied, so it stays on one line
+	if link != "" && !style.text.On() {
+		fmt.Fprintf(&b, "%s%s\n", listIndent, link)
 	}
 	return b.String()
 }
