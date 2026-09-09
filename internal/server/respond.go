@@ -92,6 +92,9 @@ const maxUnfoldDepth = 3
 func unfoldConfig(depth int) service.UnfoldConfig {
 	return service.UnfoldConfig{
 		Depth: min(depth, maxUnfoldDepth),
+		// Cited stays off: a citation lookup per verse is hundreds of upstream
+		// requests, and nobody is at the other end of this to confirm them
+		Cited: false,
 		Confirm: func(level, requests int) (bool, error) {
 			return false, &tooExpensiveError{level: level, requests: requests}
 		},

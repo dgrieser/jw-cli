@@ -302,6 +302,49 @@ func TestWriteStudy(t *testing.T) {
 	}
 }
 
+// The publications a citation search found are printed under the verse the same
+// way the research guide above them is, each with the passage it quotes.
+func TestWriteCited(t *testing.T) {
+	var b strings.Builder
+	writeStudy(&b, unfold.Node{
+		Cited: []model.Result{{
+			Title:   "Questions From Readers",
+			Context: "w14 12/15 p. 21 - The Watchtower 2014",
+			WOLLink: "https://wol.jw.org/en/wol/d/r1/lp-e/2014927",
+			Excerpt: "<h2>Rachel</h2><p>Rachel's first son was Joseph.</p>",
+		}, {
+			Title:   "Rama",
+			Context: "it-2 - Insight, Volume 2",
+			WOLLink: "https://wol.jw.org/en/wol/d/r1/lp-e/1200003630",
+			Snippet: "<p>a teaser</p>",
+		}},
+		CitedTotal: 66,
+	}, 4, i18n.EN.Text())
+	out := b.String()
+	for _, want := range []string{
+		"<h4>Cited in 2 publications</h4>",
+		`<a href="https://wol.jw.org/en/wol/d/r1/lp-e/2014927">Questions From Readers</a>`,
+		"(<em>w14 12/15 p. 21 - The Watchtower 2014</em>)",
+		"Rachel&#39;s first son was Joseph.",
+		// the teaser stands in where no passage could be placed
+		"<p>a teaser</p>",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in:\n%s", want, out)
+		}
+	}
+	// a passage brings its own headings, which must not break the ladder of the
+	// document it is quoted into
+	if strings.Contains(out, "<h2>") {
+		t.Errorf("an excerpt heading escaped its block:\n%s", out)
+	}
+	var empty strings.Builder
+	writeStudy(&empty, unfold.Node{CitedTotal: 66}, 4, i18n.EN.Text())
+	if empty.String() != "" {
+		t.Errorf("nothing found should say nothing: %q", empty.String())
+	}
+}
+
 // TestWriteStudyReportsAnUnreadablePane pins that a study pane that could not be
 // read says so instead of leaving the verse looking like it has none.
 func TestWriteStudyReportsAnUnreadablePane(t *testing.T) {
@@ -464,5 +507,60 @@ func TestVerseRuns(t *testing.T) {
 	bare := []Verse{{Verse: model.Verse{ID: 43003016}}, {Verse: model.Verse{ID: 43003017}}}
 	if got := runCitation(verseRuns(bare)[0], tbl); got != "" {
 		t.Errorf("unheaded verses got the heading %q", got)
+	}
+}
+
+// The two indexes name the same publication in ways neither line contains: the
+// research guide cites a passage, the search cites the document holding it. The
+// document id settles it; the normalized citation catches the twins that spell
+// themselves the same way.
+func TestResearchNamesHas(t *testing.T) {
+	names := researchNames{
+		docs:  map[int]bool{502018132: true},
+		lines: []string{normalizeCitation("ijwbq Artikel 146;"), normalizeCitation("it-2 528")},
+	}
+	tests := []struct {
+		name string
+		item model.Result
+		want bool
+	}{
+		{"same document", model.Result{DocID: 502018132, Context: "whatever"}, true},
+		{"same citation spelled the same way",
+			model.Result{DocID: 1, Context: "ijwbq Artikel 146 - Antworten auf Fragen zur Bibel (ijwbq)"}, true},
+		{"page markers do not have to agree",
+			model.Result{DocID: 2, Context: "it-2 S. 528 - Einsichten, Band 2"}, true},
+		{"same publication, different document",
+			model.Result{DocID: 3, Context: "it-1 „Herodes“ - Einsichten, Band 1"}, false},
+		{"nothing to compare", model.Result{DocID: 4}, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := names.has(tc.item); got != tc.want {
+				t.Errorf("has = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeCitation(t *testing.T) {
+	for in, want := range map[string]string{
+		"ijwbq Artikel 146;":               "ijwbq artikel 146",
+		"w14 15. 12. S. 21":                "w14 15 12 21",
+		"it-2 „Rama“ - Einsichten, Band 2": "it 2 rama einsichten band 2",
+		"":                                 "",
+	} {
+		if got := normalizeCitation(in); got != want {
+			t.Errorf("normalizeCitation(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// citedRequests prices a listing the way it was actually spent: a page of
+// results per forty documents, and a read per document.
+func TestCitedRequests(t *testing.T) {
+	for items, want := range map[int]int{0: 1, 1: 2, 40: 41, 41: 43, 66: 68} {
+		if got := citedRequests(items); got != want {
+			t.Errorf("citedRequests(%d) = %d, want %d", items, got, want)
+		}
 	}
 }

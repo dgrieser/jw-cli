@@ -49,6 +49,12 @@ type Study struct {
 	// than a passage. There is no citation endpoint behind those, so they are
 	// listed instead of unfolded.
 	Links []model.ResearchItem
+	// Cited are the publications a citation search found quoting the verse,
+	// with the passage each quotes it in — the other direction from Research,
+	// which is a curated index. Already deduplicated against it.
+	Cited []model.Result
+	// CitedTotal is how many the search reported before that deduplication.
+	CitedTotal int
 	// Requests is how many requests gathering this cost, reported even
 	// alongside an error, so the budget the user confirmed stays honest.
 	Requests int
@@ -74,12 +80,14 @@ type Node struct {
 	// passage apart from two references pointing at different ones.
 	URL string
 	Err error
-	// Notes and Links are the study material of a verse; StudyErr says the
-	// study pane could not be read, for the same reason Err is kept.
-	Notes    []model.StudyNote
-	Links    []model.ResearchItem
-	StudyErr error
-	Children []Node
+	// Notes, Links and Cited are the study material of a verse; StudyErr says
+	// the study pane could not be read, for the same reason Err is kept.
+	Notes      []model.StudyNote
+	Links      []model.ResearchItem
+	Cited      []model.Result
+	CitedTotal int
+	StudyErr   error
+	Children   []Node
 }
 
 // Options controls one expansion.
@@ -95,6 +103,12 @@ type Options struct {
 	Confirm func(level, requests int) (bool, error)
 	// Progress reports each completed request within a level. Nil is silent.
 	Progress func(level, done, total int)
+	// CitedCost is what the study material of one verse is assumed to cost
+	// beyond its chapter page — a citation search reads a page of results and
+	// then a document per result, and how many there are is only known once it
+	// has run. Zero prices it at nothing, which is right for a resolver that
+	// does not look citations up.
+	CitedCost int
 	// RootRefs are references belonging to the fragment itself rather than to a
 	// citation inside it — the research-guide passages of the verses a bible
 	// passage is made of. They are expanded alongside the fragment's own
@@ -182,7 +196,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 			break
 		}
 		if o.Confirm != nil {
-			if cost := requestCost(frontier, study != nil); cost > o.Threshold {
+			if cost := requestCost(frontier, study != nil, o.CitedCost); cost > o.Threshold {
 				ok, err := o.Confirm(level, cost)
 				if err != nil {
 					return res, err
@@ -217,6 +231,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 					n.StudyErr = err
 				} else {
 					n.Notes, n.Links = s.Notes, s.Links
+					n.Cited, n.CitedTotal = s.Cited, s.CitedTotal
 					research[n.Ref.Path] = s.Research
 				}
 			}
@@ -371,14 +386,14 @@ func nodesIn(tiers []*[]Node) []*Node {
 // Chapter pages are shared by every verse in the chapter and fetched once, so
 // this is an upper bound — the right side to err on for a question that is
 // answered before the traffic is spent.
-func requestCost(frontier []*Node, withStudy bool) int {
+func requestCost(frontier []*Node, withStudy bool, citedCost int) int {
 	cost := len(frontier)
 	if !withStudy {
 		return cost
 	}
 	for _, n := range frontier {
 		if n.Ref.IsVerse() {
-			cost++
+			cost += 1 + citedCost
 		}
 	}
 	return cost

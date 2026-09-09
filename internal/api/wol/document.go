@@ -113,6 +113,11 @@ func parseDocument(doc *goquery.Document, base string) model.Article {
 	return art
 }
 
+// DocIDFromURL is the document id a wol link points at, or zero when it points
+// at something else. Callers outside this package match a search result against
+// a citation with it.
+func DocIDFromURL(u string) int { return docIDFromURL(u) }
+
 var docIDPattern = regexp.MustCompile(`(?:/d/[^/]+/[^/]+/|docid=)(\d+)`)
 
 func docIDFromURL(u string) int {

@@ -156,6 +156,55 @@ func TestRunConfirmCountsChapterPages(t *testing.T) {
 	}
 }
 
+// A resolver that also looks up who quotes a verse spends much more than a
+// chapter page on it, and the question asked before the traffic has to say so.
+func TestRunConfirmCountsCitedLookups(t *testing.T) {
+	r := &fakeStudyResolver{fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/bc/1": {Title: "A"}, "/wol/bc/2": {Title: "B"}, "/wol/pc/3": {Title: "C"},
+	}}}
+	var asked int
+	_, err := Run(context.Background(), r,
+		link("/wol/bc/1", "A")+link("/wol/bc/2", "B")+link("/wol/pc/3", "C"),
+		Options{
+			Depth:     1,
+			CitedCost: 10,
+			Confirm:   func(_, requests int) (bool, error) { asked = requests; return true, nil },
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// three references, and the two verses cost a chapter page and a lookup
+	if want := 3 + 2*(1+10); asked != want {
+		t.Errorf("confirm asked for %d requests, want %d", asked, want)
+	}
+}
+
+// What the citation search found reaches the node, so the caller can print it
+// under the verse.
+func TestRunStudyCarriesCitedResults(t *testing.T) {
+	cited := []model.Result{{Title: "Rama", Context: "it-2 „Rama“", DocID: 1200003630}}
+	r := &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/1/1": {Title: "Jeremiah 31:15"},
+		}},
+		study: map[string]Study{
+			"Jeremiah 31:15": {Cited: cited, CitedTotal: 66, Requests: 68},
+		},
+	}
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Jer 31:15"), Options{Depth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := res.Nodes[0]
+	if len(n.Cited) != 1 || n.Cited[0].Title != "Rama" || n.CitedTotal != 66 {
+		t.Errorf("cited results did not reach the node: %+v", n)
+	}
+	// one to resolve the citation, plus what the study material reported
+	if res.Requests != 69 {
+		t.Errorf("requests = %d, want the lookup counted too", res.Requests)
+	}
+}
+
 // TestRunRootRefs covers the references of the fragment itself, which jw bible
 // read hands over: they expand alongside the citations found inside it.
 func TestRunRootRefs(t *testing.T) {

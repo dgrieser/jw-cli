@@ -119,3 +119,20 @@ func TestNoURLsBibleCited(t *testing.T) {
 	}
 	assertNoURLs(t, out)
 }
+
+// An unfolded verse brings passages full of links — the citations of the
+// document that quotes it — and none of them may reach the output.
+func TestNoURLsUnfoldCited(t *testing.T) {
+	var queries []string
+	out, err := runCmd(t, citedUnfoldMux(t, &queries),
+		"article", "2024360", "-l", "en", "--unfold", "1", "-y", "--no-urls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Cited in 1 publication", "Doc 9999999"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	assertNoURLs(t, out)
+}

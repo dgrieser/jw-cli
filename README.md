@@ -342,7 +342,25 @@ reads the way it does in the study pane:
   of that verse, so their text arrives one level deeper — `--unfold 1` gives the
   verses and their notes, `--unfold 2` also what those verses point at,
 - research-guide entries naming a whole article instead of a passage have no
-  passage to unfold and are listed with their link under `Research guide`.
+  passage to unfold and are listed with their link under `Research guide`,
+- and, under `Cited in …`, every publication a citation search finds quoting the
+  verse, each with the passage it quotes it in — `jw bible cited` for that verse,
+  printed where the verse stands.
+
+The two directions are deduplicated against each other. The research guide cites
+a passage (`it-2 528`), the search cites the document holding it (`it-2 „Rama“`);
+neither line contains the other, so the research passage is resolved to the
+document it sits in and a search result naming that document is left out. The
+count in the heading is what is left.
+
+A citation is looked up **as it is written**: a reference reading `Jeremia
+33:1-5` is one question, not five. `jw bible read` is the exception — it asks per
+verse, because the verses are what it is printing:
+
+```sh
+jw article 2014927 --unfold 1         # one lookup for each reference the article writes
+jw bible read "Jer 33:1-5" --unfold 1 # five lookups, one under each verse
+```
 
 The study bible lists a verse's publications twice — the research guide spells
 each one out ("Insight, Volume 1, page 1044"), the publications index cites it by
@@ -360,15 +378,21 @@ jw bible read John 3:16 --unfold 1    # the verse, its study notes, its research
 jw bible read John 3:16 --unfold 2    # and the text behind each of those references
 ```
 
-Depth costs requests: one per reference plus one per chapter page, paced at 20 a
-second. References are followed breadth first, so the count for the next level is
-known before it is spent — above 2000 it is quoted and confirmed:
+Depth costs requests: one per reference, one per chapter page, and — for a bible
+reference — a citation search plus one read per publication it finds, all paced
+at 50 a second. That last part dominates: a verse quoted 66 times costs 68
+requests of its own, so a study article with 39 references runs into the
+thousands. References are followed breadth first, so the count for the next level
+is known before it is spent — above 2000 it is quoted and confirmed:
 
 ```
 Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 ```
 
-The count is an upper bound because verses of one chapter share its page.
+The count is an upper bound: verses of one chapter share its page, and a verse's
+citation lookup is priced at two full pages of results before anyone knows how
+many there are. Documents are cached for a week, so a second run of the same
+material spends almost nothing.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
 since a script has nobody to ask. Declining stops there and the output says how

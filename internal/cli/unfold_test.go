@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/i18n"
@@ -186,3 +188,88 @@ func TestArticleUnfoldOneLevelKeepsResearchPending(t *testing.T) {
 // TestUnfoldNote separates the two ways an expansion leaves references behind.
 // Being cut short did not do what was asked and is worth saying; reaching the
 // requested depth did exactly that, and is not worth a word.
+
+// citedResultsPage is a wol search page holding the documents named, in the
+// shape the result parser reads.
+func citedResultsPage(docs map[int]string) string {
+	var b strings.Builder
+	b.WriteString(`<html><body><main><div class="resultsContainer">`)
+	for id, ref := range docs {
+		fmt.Fprintf(&b, `<ul class="results resultContentDocument">
+		  <li class="caption"><a class="lnk" href="/en/wol/d/r1/lp-e/%d">Doc %d</a></li>
+		  <li class="result"><ul class="resultItems">
+		    <li class="searchResult"><article><div class="document"><p>quotes it</p></div></article></li>
+		    <li class="ref">%s</li>
+		  </ul></li>
+		</ul>`, id, id, ref)
+	}
+	fmt.Fprintf(&b, `</div></main><input type="hidden" id="searchResultsTotal" value="%d"/>
+	  <input type="hidden" id="searchResultsPageSize" value="40"/></body></html>`, len(docs))
+	return b.String()
+}
+
+// citedUnfoldMux adds the citation search — and the documents its results point
+// at — to the study chain, recording every query the unfolding asks. One of the
+// results is the very document the verse's research guide points at, so the
+// deduplication has something to drop.
+func citedUnfoldMux(t *testing.T, queries *[]string) *http.ServeMux {
+	t.Helper()
+	mux := studyUnfoldMux(t)
+	var mu sync.Mutex
+	mux.HandleFunc("/en/wol/s/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		*queries = append(*queries, r.URL.Query().Get("q"))
+		mu.Unlock()
+		w.Write([]byte(citedResultsPage(map[int]string{
+			2014486: "w14 - the one the research guide already names",
+			9999999: "g20 - a publication only the search knows",
+		})))
+	})
+	for _, id := range []int{2014486, 9999999} {
+		mux.HandleFunc(fmt.Sprintf("/en/wol/d/r1/lp-e/%d", id), func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`<html><body><div id="article"><p>the passage quoting the verse</p></div></body></html>`))
+		})
+	}
+	return mux
+}
+
+// An unfolded verse also says who quotes it, and leaves out what the research
+// guide of that verse already points at.
+func TestArticleUnfoldListsWhoCitesTheVerse(t *testing.T) {
+	var queries []string
+	out, err := runCmd(t, citedUnfoldMux(t, &queries), "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "1", "-y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the citation is asked about as it was written, once
+	if len(queries) != 1 || queries[0] != "(John 3:16)" {
+		t.Fatalf("queries = %q", queries)
+	}
+	if !strings.Contains(out, "Cited in 1 publication") {
+		t.Errorf("missing the heading, or the count did not follow the dedup:\n%s", out)
+	}
+	if !strings.Contains(out, "Doc 9999999") {
+		t.Errorf("the publication only the search knows is missing:\n%s", out)
+	}
+	if strings.Contains(out, "Doc 2014486") {
+		t.Errorf("a publication the research guide already names was repeated:\n%s", out)
+	}
+}
+
+// jw bible read asks per verse, where a document's citation asks as written.
+func TestBibleReadUnfoldAsksPerVerse(t *testing.T) {
+	var queries []string
+	if _, err := runCmd(t, citedUnfoldMux(t, &queries),
+		"bible", "read", "John 3:16-17", "-l", "en", "-o", "raw", "--unfold", "1", "-y"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"(John 3:16)", "(John 3:17)"}
+	for _, q := range want {
+		if !slices.Contains(queries, q) {
+			t.Errorf("missing a lookup for %s: %q", q, queries)
+		}
+	}
+	if slices.Contains(queries, "(John 3:16-17)") {
+		t.Errorf("the range was asked about as a whole: %q", queries)
+	}
+}

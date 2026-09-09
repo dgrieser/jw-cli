@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -29,6 +30,11 @@ const UnfoldThreshold = 2000
 // consulted while it runs. A zero Depth expands nothing.
 type UnfoldConfig struct {
 	Depth int
+	// Cited also lists, under every bible citation expanded, the publications a
+	// citation search finds quoting it. Off leaves the expansion to the study
+	// bible's own material, which is where a request nobody can be asked to
+	// confirm — a web request — has to stay.
+	Cited bool
 	// Confirm is asked before a level that needs more than UnfoldThreshold
 	// requests. Nil proceeds without asking; returning false stops the
 	// expansion there and keeps what was already gathered.
@@ -47,6 +53,10 @@ type tooltipResolver struct {
 	s     *Service
 	lng   model.Language
 	table *bibleref.Table
+	// cited turns the citation search on; cats is the publication filter it
+	// runs with, resolved once for the language.
+	cited bool
+	cats  WOLCategories
 	// sections holds the study pane of a chapter, keyed edition-book-chapter.
 	// Only the extracted sections are kept, not the chapter document they came
 	// from: an expansion can touch dozens of chapters, and their parsed pages
@@ -59,6 +69,28 @@ type tooltipResolver struct {
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
 	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
+}
+
+// withCited turns the citation search on for this run, with the filter
+// jw bible cited uses: everything but the bibles and the indexes, which quote
+// every verse by construction.
+func (r *tooltipResolver) withCited(ctx context.Context, on bool) *tooltipResolver {
+	if !on {
+		return r
+	}
+	exclude := []string{wol.CategoryBibles, wol.CategoryIndex}
+	known := r.s.KnownCategories(ctx, r.lng)
+	if len(known) == 0 {
+		known = wol.AllCategories
+	}
+	var list []string
+	for _, cat := range known {
+		if !slices.Contains(exclude, cat) {
+			list = append(list, cat)
+		}
+	}
+	r.cited, r.cats = true, WOLCategories{List: list, Exclude: exclude}
+	return r
 }
 
 func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
@@ -88,7 +120,138 @@ func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study
 		out.Research = append(out.Research, s.Research...)
 		out.Links = append(out.Links, s.Links...)
 	}
+	// one lookup for the citation as it was written: a reference reading
+	// "Jeremia 33:1-5" is one question, not five
+	r.addCited(ctx, refs, &out)
 	return out, nil
+}
+
+// addCited lists the publications quoting refs and drops the ones the verse's
+// research guide already points at. Best effort: a search that fails leaves the
+// study material it was meant to complement standing.
+func (r *tooltipResolver) addCited(ctx context.Context, refs []bibleref.Ref, st *unfold.Study) {
+	if !r.cited || len(refs) == 0 {
+		return
+	}
+	if r.table == nil {
+		r.table = r.s.BookTable(ctx, r.lng)
+	}
+	query, _, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
+	if err != nil || query == "" {
+		return
+	}
+	p := SearchParams{
+		Engine: "wol", Query: query, Sort: "newest", Scope: "par",
+		Excerpts: true, Categories: r.cats,
+	}
+	out, err := r.s.CitedListing(ctx, r.lng, &p, nil)
+	if err != nil {
+		return
+	}
+	st.Requests += citedRequests(len(out.Items))
+	named, requests := r.namedByResearch(ctx, st)
+	st.Requests += requests
+	for _, item := range out.Items {
+		if named.has(item) {
+			continue
+		}
+		st.Cited = append(st.Cited, item)
+	}
+	st.CitedTotal = out.Total
+}
+
+// citedRequests is what a citation listing cost: one page of results per forty
+// documents, and one read per document for the passage it quotes.
+func citedRequests(items int) int {
+	return items + max(1, (items+pageSize(0)-1)/pageSize(0))
+}
+
+// researchNames is what the research guide of a verse already points at, so the
+// citation search does not report the same publication a second time.
+type researchNames struct {
+	// docs are the documents named, by wol document id — the only exact key.
+	docs map[int]bool
+	// lines are the citations named, normalized. A research entry whose passage
+	// could not be resolved is still recognisable by the way it cites its
+	// publication ("ijwbq Artikel 146"), which the search result repeats in its
+	// own publication line.
+	lines []string
+}
+
+func (n researchNames) has(item model.Result) bool {
+	if item.DocID != 0 && n.docs[item.DocID] {
+		return true
+	}
+	line := normalizeCitation(item.Context)
+	if line == "" {
+		return false
+	}
+	for _, named := range n.lines {
+		if strings.Contains(line, named) {
+			return true
+		}
+	}
+	return false
+}
+
+// namedByResearch resolves every research passage of the verse to the document
+// it sits in. The research guide cites a passage ("it-2 528") and the search
+// cites the document holding it ("it-2 „Rama“"), so neither line contains the
+// other and only the document identity matches them. Resolving costs one
+// request per entry, which the count it returns reports.
+func (r *tooltipResolver) namedByResearch(ctx context.Context, st *unfold.Study) (researchNames, int) {
+	names := researchNames{docs: map[int]bool{}}
+	requests := 0
+	add := func(rawURL, line string) {
+		if id := wol.DocIDFromURL(rawURL); id != 0 {
+			names.docs[id] = true
+		}
+		if norm := normalizeCitation(line); norm != "" {
+			names.lines = append(names.lines, norm)
+		}
+	}
+	for _, item := range st.Links {
+		add(item.ArticleURL, item.Source)
+		add("", item.Title)
+	}
+	for _, ref := range st.Research {
+		tip, err := r.s.WOL.Tooltip(ctx, ref.Path)
+		requests++
+		if err != nil {
+			add("", ref.Text)
+			continue
+		}
+		add(tip.URL, ref.Text)
+	}
+	return names, requests
+}
+
+// citationNoise are the words a citation spends on where in a publication a
+// passage sits. The two indexes disagree on them — one writes a page number the
+// other never mentions — so they are left out of the comparison.
+var citationNoise = map[string]bool{
+	"s": true, "p": true, "pp": true, "seite": true, "seiten": true,
+	"page": true, "pages": true, "abs": true, "par": true, "nr": true, "no": true,
+}
+
+// normalizeCitation reduces a citation line to its bare words: lowercase, no
+// punctuation, no typographic quotes, no page markers.
+func normalizeCitation(line string) string {
+	var out []string
+	for word := range strings.FieldsSeq(strings.ToLower(line)) {
+		word = strings.Map(func(r rune) rune {
+			if unicode.IsLetter(r) || unicode.IsDigit(r) {
+				return r
+			}
+			return ' '
+		}, word)
+		for part := range strings.FieldsSeq(word) {
+			if !citationNoise[part] {
+				out = append(out, part)
+			}
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 // studyOf collects the study material of every verse ref covers.
@@ -213,7 +376,7 @@ const (
 // and styling — as the article itself.
 func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art model.Article,
 	cfg UnfoldConfig, txt *i18n.Messages) (string, error) {
-	return unfoldInline(ctx, newTooltipResolver(s, lng, nil), art.HTML, cfg, txt)
+	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited), art.HTML, cfg, txt)
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
@@ -495,6 +658,11 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		if err != nil {
 			return nil, "", err
 		}
+		// one lookup per verse: a reading asks about each verse it prints,
+		// where a document's citation asks about the reference as written
+		r.addCited(ctx, []bibleref.Ref{{
+			Book: ref.Book, Chapter: ref.Chapter, VerseStart: num, VerseEnd: num,
+		}}, &study)
 		studies[i] = study
 		groups[i] = unfold.Group{Fragment: v.HTML, RootRefs: study.Research}
 	}
@@ -505,7 +673,10 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 	out := make([]string, len(verses))
 	for i := range verses {
 		var b strings.Builder
-		writeStudy(&b, unfold.Node{Notes: studies[i].Notes, Links: studies[i].Links}, level, txt)
+		writeStudy(&b, unfold.Node{
+			Notes: studies[i].Notes, Links: studies[i].Links,
+			Cited: studies[i].Cited, CitedTotal: studies[i].CitedTotal,
+		}, level, txt)
 		b.WriteString(parts[i])
 		if b.Len() > 0 && i < len(verses)-1 {
 			// the rule closes what the verse brought rather than opening it,
@@ -538,13 +709,25 @@ func unfoldFragments(ctx context.Context, r unfold.Resolver, groups []unfold.Gro
 // unfoldOptions is what every expansion is run with: the confirmation of a level
 // that costs a lot of requests, and the progress of the level being spent.
 func unfoldOptions(cfg UnfoldConfig) unfold.Options {
-	return unfold.Options{
+	o := unfold.Options{
 		Depth:     cfg.Depth,
 		Threshold: UnfoldThreshold,
 		Confirm:   cfg.Confirm,
 		Progress:  cfg.Progress,
 	}
+	if cfg.Cited {
+		o.CitedCost = citedCostEstimate
+	}
+	return o
 }
+
+// citedCostEstimate is what one verse's citation lookup is priced at before it
+// runs: two pages of results and a document read for each of them. How many
+// there really are is only known once the search has answered, and the question
+// the estimate feeds — "continue?" — is asked before that. Two pages is the
+// generous side, which is the right side for a number promised as an upper
+// bound.
+const citedCostEstimate = 2 + 2*40
 
 // maxHeading is the deepest heading level markdown has. Past it, headingHTML
 // falls back to bold text.
@@ -749,22 +932,48 @@ func writeStudy(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages
 			b.WriteString("<p>" + note.HTML + "</p>")
 		}
 	}
-	if len(n.Links) == 0 {
+	if len(n.Links) > 0 {
+		b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
+		b.WriteString("<ul>")
+		for _, item := range n.Links {
+			// the same shape jw bible research prints: the title carries the
+			// link, the publication line follows in parentheses
+			fmt.Fprintf(b, `<li><a href="%s">%s</a>`,
+				html.EscapeString(item.ArticleURL), html.EscapeString(item.Title))
+			if item.Source != "" {
+				fmt.Fprintf(b, " (%s)", html.EscapeString(item.Source))
+			}
+			b.WriteString("</li>")
+		}
+		b.WriteString("</ul>")
+	}
+	writeCited(b, n, level, txt)
+}
+
+// writeCited renders the publications a citation search found quoting the
+// verse: the other direction from the research guide above it, and the same
+// shape, with the passage each one quotes it in underneath.
+func writeCited(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
+	if len(n.Cited) == 0 {
 		return
 	}
-	b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
-	b.WriteString("<ul>")
-	for _, item := range n.Links {
-		// the same shape jw bible research prints: the title carries the link,
-		// the publication line follows in parentheses
-		fmt.Fprintf(b, `<li><a href="%s">%s</a>`,
-			html.EscapeString(item.ArticleURL), html.EscapeString(item.Title))
-		if item.Source != "" {
-			fmt.Fprintf(b, " (%s)", html.EscapeString(item.Source))
+	b.WriteString(headingHTML(level, html.EscapeString(txt.CitedIn(len(n.Cited)))))
+	for _, item := range n.Cited {
+		fmt.Fprintf(b, `<p><a href="%s">%s</a>`,
+			html.EscapeString(item.WOLLink), html.EscapeString(collapseSpace(item.Title)))
+		if item.Context != "" {
+			fmt.Fprintf(b, " (<em>%s</em>)", html.EscapeString(item.Context))
 		}
-		b.WriteString("</li>")
+		b.WriteString("</p>")
+		// the passage itself, as the document wrote it; its own headings are
+		// pushed below this block so they cannot break the document's ladder.
+		// The teaser stands in where no passage could be placed
+		if item.Excerpt != "" {
+			b.WriteString(demoteHeadings(item.Excerpt, level))
+		} else if item.Snippet != "" {
+			b.WriteString("<p>" + item.Snippet + "</p>")
+		}
 	}
-	b.WriteString("</ul>")
 }
 
 // writeUnfoldNodes renders one tier of an expansion. source names the passage

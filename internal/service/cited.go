@@ -68,12 +68,23 @@ func (s *Service) CitationQuery(ctx context.Context, lng model.Language, input s
 	if err != nil {
 		return "", "", err
 	}
+	return s.CitationQueryFor(ctx, lng, refs, table)
+}
+
+// CitationQueryFor is CitationQuery for references that are already parsed:
+// what the unfolder has when it looks a citation up as written, or a bible
+// reading up one verse at a time.
+func (s *Service) CitationQueryFor(ctx context.Context, lng model.Language,
+	refs []bibleref.Ref, table *bibleref.Table) (query, label string, err error) {
 	terms := make([]string, 0, len(refs))
 	for _, ref := range refs {
 		if ref, err = s.closeOpenEnd(ctx, lng, ref); err != nil {
 			return "", "", err
 		}
 		terms = append(terms, RefString(ref, table))
+	}
+	if len(terms) == 0 {
+		return "", "", nil
 	}
 	label = strings.Join(terms, "; ")
 	return "(" + strings.Join(terms, ") | (") + ")", label, nil
