@@ -219,6 +219,16 @@ type ResearchItem struct {
 	ArticleURL  string `json:"articleUrl,omitempty"`
 }
 
+// SameTarget reports whether href points at what this entry already points at.
+// An index spells one entry over several links — the publication name, then
+// the issue, then the page — all with the same target, and they are one entry.
+func (r ResearchItem) SameTarget(href string) bool {
+	if href == "" {
+		return false
+	}
+	return href == r.PCPath || href == r.ArticleURL
+}
+
 // The indexes a research entry can come from. Both point at publications
 // discussing a verse, and the same passage is regularly listed in each: the
 // research guide spells the publication out ("Insight, Volume 1, page 1044"),

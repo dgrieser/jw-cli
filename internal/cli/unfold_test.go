@@ -198,7 +198,9 @@ func citedResultsPage(docs map[int]string) string {
 		fmt.Fprintf(&b, `<ul class="results resultContentDocument">
 		  <li class="caption"><a class="lnk" href="/en/wol/d/r1/lp-e/%d">Doc %d</a></li>
 		  <li class="result"><ul class="resultItems">
-		    <li class="searchResult"><article><div class="document"><p>quotes it</p></div></article></li>
+		    <li class="searchResult"><article><div class="document"><p>This publication
+		      discusses the verse at some length, which is what makes it worth
+		      printing under it.</p></div></article></li>
 		    <li class="ref">%s</li>
 		  </ul></li>
 		</ul>`, id, id, ref)
@@ -227,7 +229,9 @@ func citedUnfoldMux(t *testing.T, queries *[]string) *http.ServeMux {
 	})
 	for _, id := range []int{2014486, 9999999} {
 		mux.HandleFunc(fmt.Sprintf("/en/wol/d/r1/lp-e/%d", id), func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`<html><body><div id="article"><p>the passage quoting the verse</p></div></body></html>`))
+			w.Write([]byte(`<html><body><div id="article"><p>This publication discusses
+			  the verse at some length, which is what makes it worth printing under
+			  it.</p></div></body></html>`))
 		})
 	}
 	return mux
@@ -245,8 +249,8 @@ func TestArticleUnfoldListsWhoCitesTheVerse(t *testing.T) {
 	if len(queries) != 1 || queries[0] != "(John 3:16)" {
 		t.Fatalf("queries = %q", queries)
 	}
-	if !strings.Contains(out, "Cited in 1 publication") {
-		t.Errorf("missing the heading, or the count did not follow the dedup:\n%s", out)
+	if !strings.Contains(out, "Quotations of John 3:16") {
+		t.Errorf("missing the heading, or it does not name the reference:\n%s", out)
 	}
 	if !strings.Contains(out, "Doc 9999999") {
 		t.Errorf("the publication only the search knows is missing:\n%s", out)

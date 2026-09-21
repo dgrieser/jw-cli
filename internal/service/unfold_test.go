@@ -319,14 +319,17 @@ func TestWriteCited(t *testing.T) {
 			Snippet: "<p>a teaser</p>",
 		}},
 		CitedTotal: 66,
+		CitedRef:   "Jeremiah 31:15",
 	}, 4, i18n.EN.Text())
 	out := b.String()
 	for _, want := range []string{
-		"<h4>Cited in 2 publications</h4>",
-		`<a href="https://wol.jw.org/en/wol/d/r1/lp-e/2014927">Questions From Readers</a>`,
-		"(<em>w14 12/15 p. 21 - The Watchtower 2014</em>)",
+		"<h4>Quotations of Jeremiah 31:15</h4>",
+		// every publication heads the passage it quotes the verse in
+		`<h5><a href="https://wol.jw.org/en/wol/d/r1/lp-e/2014927">Questions From Readers</a>` +
+			` (w14 12/15 p. 21 - The Watchtower 2014)</h5>`,
 		"Rachel&#39;s first son was Joseph.",
-		// the teaser stands in where no passage could be placed
+		// the teaser stands in where no passage could be placed, and brings
+		// its own paragraph rather than being wrapped in a second one
 		"<p>a teaser</p>",
 	} {
 		if !strings.Contains(out, want) {
@@ -338,8 +341,11 @@ func TestWriteCited(t *testing.T) {
 	if strings.Contains(out, "<h2>") {
 		t.Errorf("an excerpt heading escaped its block:\n%s", out)
 	}
+	if strings.Contains(out, "<p><p>") {
+		t.Errorf("a teaser wrapped in a paragraph of its own:\n%s", out)
+	}
 	var empty strings.Builder
-	writeStudy(&empty, unfold.Node{CitedTotal: 66}, 4, i18n.EN.Text())
+	writeStudy(&empty, unfold.Node{CitedTotal: 66, CitedRef: "Jeremiah 31:15"}, 4, i18n.EN.Text())
 	if empty.String() != "" {
 		t.Errorf("nothing found should say nothing: %q", empty.String())
 	}
@@ -562,5 +568,56 @@ func TestCitedRequests(t *testing.T) {
 		if got := citedRequests(items); got != want {
 			t.Errorf("citedRequests(%d) = %d, want %d", items, got, want)
 		}
+	}
+}
+
+// Each index of the study bible is headed as the page names it, with no parent
+// heading over the two, and an entry the first index already listed is left out
+// of the second.
+func TestWriteIndexGroups(t *testing.T) {
+	var b strings.Builder
+	writeIndexGroups(&b,
+		[]model.ResearchItem{
+			{Title: "it-2 274", Source: "Publications Index",
+				Kind: model.PublicationIndexItem, ArticleURL: "/en/wol/d/r1/lp-e/1102014204"},
+			{Title: "Insight, Volume 2, page 274", Source: "Research Guide",
+				Kind: model.ResearchGuideItem, ArticleURL: "/en/wol/d/r1/lp-e/1102014204"},
+			{Title: "w62 10/1 604", Source: "Publications Index",
+				Kind: model.PublicationIndexItem, ArticleURL: "/en/wol/d/r1/lp-e/1962604"},
+		},
+		[]unfold.Node{
+			{Ref: unfold.Ref{Text: "w14 12/15 21", Group: "Publications Index", Rank: 2},
+				HTML: "<p>the index passage</p>"},
+			{Ref: unfold.Ref{Text: "The Watchtower, 12/15/2014", Group: "Research Guide"},
+				HTML: "<p>the guide passage</p>"},
+		}, 3, i18n.EN.Text())
+	out := b.String()
+	guide, index := strings.Index(out, "<h3>Research Guide</h3>"), strings.Index(out, "<h3>Publications Index</h3>")
+	if guide < 0 || index < 0 || guide >= index {
+		t.Fatalf("research guide %d, publications index %d:\n%s", guide, index, out)
+	}
+	if strings.Contains(out, "Indexes") || strings.Contains(out, "Research guide</h3>") {
+		t.Errorf("a parent heading, or our own name for one of the indexes:\n%s", out)
+	}
+	// the article both indexes name is listed once, under the first of them
+	if n := strings.Count(out, "1102014204"); n != 1 {
+		t.Errorf("the same article listed %d times:\n%s", n, out)
+	}
+	if strings.Index(out, "Insight, Volume 2, page 274") > index {
+		t.Errorf("the surviving entry should be the research guide's:\n%s", out)
+	}
+	// an entry does not repeat the name of the heading it sits under
+	if strings.Contains(out, "(Research Guide)") || strings.Contains(out, "(Publications Index)") {
+		t.Errorf("heading name repeated beside an entry:\n%s", out)
+	}
+	// each group keeps its own passages
+	if strings.Index(out, "the guide passage") > index || strings.Index(out, "the index passage") < index {
+		t.Errorf("passages sorted into the wrong index:\n%s", out)
+	}
+	// an index nobody was listed under prints nothing
+	var empty strings.Builder
+	writeIndexGroups(&empty, nil, nil, 3, i18n.EN.Text())
+	if empty.String() != "" {
+		t.Errorf("nothing listed should print nothing: %q", empty.String())
 	}
 }

@@ -332,3 +332,68 @@ func TestBibleEditionLabel(t *testing.T) {
 		}
 	}
 }
+
+// The live study pane gives one item per index, holding every entry that index
+// lists — and spells a single entry over several links, the publication name
+// and the issue each carrying one, all pointing at the same passage. Reading
+// only the first link of an item loses almost everything.
+func TestStudySectionReadsEveryIndexEntry(t *testing.T) {
+	const page = `<html><body><div id="article">
+	<p><span id="v24-31-15-1" class="v">15 Das sagt Jehova.</span></p>
+	<div id="studyDiscover">
+	<div class="section" data-key="24-31-15">
+	  <h3 class="title">Jeremia 31:15</h3>
+	  <div class="group index collapsible">
+	    <div class="header"><h4 class="title">Indexe</h4></div>
+	    <ul class="content">
+	      <li class="item ref-rsg"><div class="subtitle">Studienleitfaden</div>
+	        <p class="su"><a href="/de/wol/pc/r10/lp-x/1204413/441/0">Antworten auf Fragen zur Bibel, Artikel 146</a></p>
+	        <p class="su"><a href="/de/wol/pc/r10/lp-x/1204413/446/0">Der Wachtturm,</a><a href="/de/wol/pc/r10/lp-x/1204413/446/0"> 15. 12. 2014, S. 21</a></p>
+	        <p class="su"><a href="/de/wol/d/r10/lp-x/1102014204">Einsichten, Band 2, S. 659-660</a></p>
+	      </li>
+	      <li class="item ref-dx"><div class="subtitle">Index der Publikationen</div>
+	        <p class="sx"><a href="/de/wol/pc/r10/lp-x/1200270024/253/0">ijwbq Artikel 146;</a></p>
+	        <p class="sx"><a href="/de/wol/pc/r10/lp-x/1200270024/253/2">it-1 381,</a></p>
+	      </li>
+	    </ul>
+	  </div>
+	</div></div></div></body></html>`
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/b/r10/lp-x/nwtsty/24/31", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(page))
+	})
+	c := testClient(t, mux)
+	cfgDE := Config{Locale: "de", Rsconf: "r10", Lp: "lp-x"}
+	doc, err := c.Chapter(context.Background(), cfgDE, "nwtsty", 24, 31)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sec, ok := doc.StudySection(15)
+	if !ok {
+		t.Fatal("no study section for verse 15")
+	}
+	// five links, of which two name one passage between them
+	if len(sec.Research) != 5 {
+		for _, item := range sec.Research {
+			t.Logf("%+v", item)
+		}
+		t.Fatalf("research entries = %d, want 5", len(sec.Research))
+	}
+	if got := sec.Research[1].Title; got != "Der Wachtturm, 15. 12. 2014, S. 21" {
+		t.Errorf("links onto one passage should read as one entry, got %q", got)
+	}
+	// a link that is not a passage is an article of its own
+	if sec.Research[2].ArticleURL == "" || sec.Research[2].PCPath != "" {
+		t.Errorf("research[2] = %+v, want a direct article URL", sec.Research[2])
+	}
+	// the index that listed an entry travels with it, in the page's own words
+	for i, want := range []string{"Studienleitfaden", "Studienleitfaden", "Studienleitfaden",
+		"Index der Publikationen", "Index der Publikationen"} {
+		if sec.Research[i].Source != want {
+			t.Errorf("research[%d] source = %q, want %q", i, sec.Research[i].Source, want)
+		}
+	}
+	if sec.Research[0].Kind != model.ResearchGuideItem || sec.Research[4].Kind != model.PublicationIndexItem {
+		t.Errorf("kinds = %q, %q", sec.Research[0].Kind, sec.Research[4].Kind)
+	}
+}

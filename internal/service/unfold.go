@@ -30,11 +30,15 @@ const UnfoldThreshold = 2000
 // consulted while it runs. A zero Depth expands nothing.
 type UnfoldConfig struct {
 	Depth int
-	// Cited also lists, under every bible citation expanded, the publications a
-	// citation search finds quoting it. Off leaves the expansion to the study
-	// bible's own material, which is where a request nobody can be asked to
-	// confirm — a web request — has to stay.
+	// Cited also lists who quotes the bible references an expansion touches.
+	// Off leaves it to the study bible's own material, which is where a
+	// request nobody can be asked to confirm — a web request — has to stay.
 	Cited bool
+	// CitedDepth is how many levels of the expansion those lookups reach.
+	// One covers the references a document writes; zero covers none, so the
+	// verses jw bible read prints are looked up and the references reached
+	// through them are not. Set by the operation, not by the caller.
+	CitedDepth int
 	// Confirm is asked before a level that needs more than UnfoldThreshold
 	// requests. Nil proceeds without asking; returning false stops the
 	// expansion there and keeps what was already gathered.
@@ -57,6 +61,10 @@ type tooltipResolver struct {
 	// runs with, resolved once for the language.
 	cited bool
 	cats  WOLCategories
+	// tips are the citations already resolved in this run. A research passage
+	// is resolved twice — once to see which document it names, once to read
+	// it — and an index lists dozens of them per verse.
+	tips map[string]model.Tooltip
 	// sections holds the study pane of a chapter, keyed edition-book-chapter.
 	// Only the extracted sections are kept, not the chapter document they came
 	// from: an expansion can touch dozens of chapters, and their parsed pages
@@ -73,7 +81,8 @@ func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.Cha
 
 // withCited turns the citation search on for this run, with the filter
 // jw bible cited uses: everything but the bibles and the indexes, which quote
-// every verse by construction.
+// every verse by construction. How far into an expansion it is asked is the
+// engine's business (unfold.Options.CitedDepth); this only says it can be.
 func (r *tooltipResolver) withCited(ctx context.Context, on bool) *tooltipResolver {
 	if !on {
 		return r
@@ -94,7 +103,18 @@ func (r *tooltipResolver) withCited(ctx context.Context, on bool) *tooltipResolv
 }
 
 func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
-	return r.s.WOL.Tooltip(ctx, path)
+	if tip, ok := r.tips[path]; ok {
+		return tip, nil
+	}
+	tip, err := r.s.WOL.Tooltip(ctx, path)
+	if err != nil {
+		return tip, err
+	}
+	if r.tips == nil {
+		r.tips = map[string]model.Tooltip{}
+	}
+	r.tips[path] = tip
+	return tip, nil
 }
 
 // Study reads the study pane of the verse wol titled a citation with. wol titles
@@ -120,44 +140,75 @@ func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study
 		out.Research = append(out.Research, s.Research...)
 		out.Links = append(out.Links, s.Links...)
 	}
-	// one lookup for the citation as it was written: a reference reading
-	// "Jeremia 33:1-5" is one question, not five
-	r.addCited(ctx, refs, &out)
 	return out, nil
+}
+
+// Cited answers unfold.CitedResolver: who quotes the verse a citation resolved
+// to. The citation is asked about as it was written — a reference reading
+// "Jeremia 33:1-5" is one question, not five — and wol's own title for it is
+// the compact way the language spells it, which is what heads the answer.
+func (r *tooltipResolver) Cited(ctx context.Context, title string) unfold.Cited {
+	if r.table == nil {
+		r.table = r.s.BookTable(ctx, r.lng)
+	}
+	refs, err := bibleref.Parse(title, r.table)
+	if err != nil {
+		return unfold.Cited{}
+	}
+	return r.citedFor(ctx, refs, strings.TrimRight(title, ",;. "))
 }
 
 // addCited lists the publications quoting refs and drops the ones the verse's
 // research guide already points at. Best effort: a search that fails leaves the
 // study material it was meant to complement standing.
-func (r *tooltipResolver) addCited(ctx context.Context, refs []bibleref.Ref, st *unfold.Study) {
+// citedFor lists the publications quoting refs and drops the ones the indexes
+// of the same verses already point at. label is how the reference is spelled
+// over the answer; empty spells it out of the references themselves. Best
+// effort: a search that fails comes back empty, having cost what it cost.
+func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, label string) unfold.Cited {
 	if !r.cited || len(refs) == 0 {
-		return
+		return unfold.Cited{}
 	}
 	if r.table == nil {
 		r.table = r.s.BookTable(ctx, r.lng)
 	}
-	query, _, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
+	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
 	if err != nil || query == "" {
-		return
+		return unfold.Cited{}
+	}
+	if label == "" {
+		label = spelled
 	}
 	p := SearchParams{
 		Engine: "wol", Query: query, Sort: "newest", Scope: "par",
 		Excerpts: true, Categories: r.cats,
 	}
-	out, err := r.s.CitedListing(ctx, r.lng, &p, nil)
+	found, err := r.s.CitedListing(ctx, r.lng, &p, nil)
 	if err != nil {
-		return
+		return unfold.Cited{}
 	}
-	st.Requests += citedRequests(len(out.Items))
-	named, requests := r.namedByResearch(ctx, st)
-	st.Requests += requests
-	for _, item := range out.Items {
+	out := unfold.Cited{Total: found.Total, Ref: label, Requests: citedRequests(len(found.Items))}
+	// the indexes of these very verses, read back out of the chapter pages
+	// already in hand, so a publication they name is not reported twice
+	var study unfold.Study
+	for _, ref := range refs {
+		st, err := r.studyOf(ctx, ref)
+		out.Requests += st.Requests
+		if err != nil {
+			continue
+		}
+		study.Research = append(study.Research, st.Research...)
+		study.Links = append(study.Links, st.Links...)
+	}
+	named, requests := r.namedByResearch(ctx, &study)
+	out.Requests += requests
+	for _, item := range found.Items {
 		if named.has(item) {
 			continue
 		}
-		st.Cited = append(st.Cited, item)
+		out.Results = append(out.Results, item)
 	}
-	st.CitedTotal = out.Total
+	return out
 }
 
 // citedRequests is what a citation listing cost: one page of results per forty
@@ -215,7 +266,7 @@ func (r *tooltipResolver) namedByResearch(ctx context.Context, st *unfold.Study)
 		add("", item.Title)
 	}
 	for _, ref := range st.Research {
-		tip, err := r.s.WOL.Tooltip(ctx, ref.Path)
+		tip, err := r.Resolve(ctx, ref.Path)
 		requests++
 		if err != nil {
 			add("", ref.Text)
@@ -296,7 +347,8 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 				continue
 			}
 			out.Research = append(out.Research, unfold.Ref{
-				Text: researchLabel(item), Path: item.PCPath, Rank: researchRank(item),
+				Text: researchLabel(item), Path: item.PCPath,
+				Rank: researchRank(item), Group: item.Source,
 			})
 		}
 	}
@@ -376,6 +428,9 @@ const (
 // and styling — as the article itself.
 func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art model.Article,
 	cfg UnfoldConfig, txt *i18n.Messages) (string, error) {
+	// the references the document writes are worth the traffic; the ones
+	// reached through them multiply it
+	cfg.CitedDepth = 1
 	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited), art.HTML, cfg, txt)
 }
 
@@ -649,6 +704,7 @@ func dropTrailingRule(s string) string {
 func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref,
 	verses []model.Verse, level int, cfg UnfoldConfig, txt *i18n.Messages) ([]string, string, error) {
 	studies := make([]unfold.Study, len(verses))
+	cited := make([]unfold.Cited, len(verses))
 	groups := make([]unfold.Group, len(verses))
 	for i, v := range verses {
 		num := v.ID % 1000
@@ -659,25 +715,34 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 			return nil, "", err
 		}
 		// one lookup per verse: a reading asks about each verse it prints,
-		// where a document's citation asks about the reference as written
-		r.addCited(ctx, []bibleref.Ref{{
+		// where a document's citation asks about the reference as written.
+		// These are what was asked for, so they are looked up whatever depth
+		// the expansion itself has for it
+		cited[i] = r.citedFor(ctx, []bibleref.Ref{{
 			Book: ref.Book, Chapter: ref.Chapter, VerseStart: num, VerseEnd: num,
-		}}, &study)
+		}}, "")
 		studies[i] = study
 		groups[i] = unfold.Group{Fragment: v.HTML, RootRefs: study.Research}
 	}
-	parts, note, err := unfoldFragments(ctx, r, groups, level, cfg, txt)
+	expanded, note, err := unfoldGroupNodes(ctx, r, groups, cfg, txt)
 	if err != nil {
 		return nil, "", err
 	}
 	out := make([]string, len(verses))
 	for i := range verses {
+		// a verse reads in the order a study pane does: what it says about
+		// itself, what the indexes point at, what its own margin points at,
+		// and only then who else quotes it
+		research, marginal := splitRootRefs(expanded[i], studies[i].Research)
 		var b strings.Builder
-		writeStudy(&b, unfold.Node{
-			Notes: studies[i].Notes, Links: studies[i].Links,
-			Cited: studies[i].Cited, CitedTotal: studies[i].CitedTotal,
+		writeStudyNotes(&b, unfold.Node{Notes: studies[i].Notes}, level, txt)
+		writeIndexGroups(&b, studies[i].Links, research, level, txt)
+		// no heading over the marginal references: each one is headed by the
+		// reference it is, beside the indexes rather than under a group name
+		writeUnfoldNodes(&b, marginal, level, "", txt)
+		writeCited(&b, unfold.Node{
+			Cited: cited[i].Results, CitedTotal: cited[i].Total, CitedRef: cited[i].Ref,
 		}, level, txt)
-		b.WriteString(parts[i])
 		if b.Len() > 0 && i < len(verses)-1 {
 			// the rule closes what the verse brought rather than opening it,
 			// parting it from the verse that follows. Nothing follows the last
@@ -689,21 +754,15 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 	return out, note, nil
 }
 
-// unfoldFragments expands several fragments in one run and returns the expansion
-// of each, to be appended to the fragment it belongs to. One run rather than one
-// per fragment: the request budget is confirmed once, and a passage cited by two
-// fragments is expanded once.
-func unfoldFragments(ctx context.Context, r unfold.Resolver, groups []unfold.Group,
-	level int, cfg UnfoldConfig, txt *i18n.Messages) ([]string, string, error) {
+// unfoldGroupNodes runs the expansion and hands the tree back unrendered, for a
+// caller that sorts the references into groups of its own before printing them.
+func unfoldGroupNodes(ctx context.Context, r unfold.Resolver, groups []unfold.Group,
+	cfg UnfoldConfig, txt *i18n.Messages) ([][]unfold.Node, string, error) {
 	res, err := unfold.RunGroups(ctx, r, groups, unfoldOptions(cfg))
 	if err != nil {
 		return nil, "", err
 	}
-	out := make([]string, len(groups))
-	for i, nodes := range res.Nodes {
-		out[i] = unfoldNodesHTML(nodes, txt, level)
-	}
-	return out, stoppedNote(res.Stopped, res.Pending, txt), nil
+	return res.Nodes, stoppedNote(res.Stopped, res.Pending, txt), nil
 }
 
 // unfoldOptions is what every expansion is run with: the confirmation of a level
@@ -716,7 +775,7 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 		Progress:  cfg.Progress,
 	}
 	if cfg.Cited {
-		o.CitedCost = citedCostEstimate
+		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
 	}
 	return o
 }
@@ -920,58 +979,168 @@ func isMarker(s string) bool {
 // passage to unfold. Both belong to the verse above them and sit at the same
 // level as what the verse cites, which follows them.
 func writeStudy(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
+	writeStudyNotes(b, n, level, txt)
+	if len(n.Links) > 0 {
+		b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
+		writeResearchLinks(b, n.Links, "")
+	}
+	writeCited(b, n, level, txt)
+}
+
+// writeStudyNotes renders the study pane's notes, or says the pane could not be
+// read — the first thing a verse has to say about itself either way.
+func writeStudyNotes(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
 	if n.StudyErr != nil {
 		fmt.Fprintf(b, "<p><em>%s</em></p>",
 			html.EscapeString(fmt.Sprintf(txt.StudyFailed, n.StudyErr)))
 	}
-	if len(n.Notes) > 0 {
-		b.WriteString(headingHTML(level, html.EscapeString(txt.StudyNotesHeading)))
-		for _, note := range n.Notes {
-			// a note is the inside of its paragraph, so it needs one of its own:
-			// without it two notes run together into one
-			b.WriteString("<p>" + note.HTML + "</p>")
-		}
+	if len(n.Notes) == 0 {
+		return
 	}
-	if len(n.Links) > 0 {
-		b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
-		b.WriteString("<ul>")
-		for _, item := range n.Links {
-			// the same shape jw bible research prints: the title carries the
-			// link, the publication line follows in parentheses
-			fmt.Fprintf(b, `<li><a href="%s">%s</a>`,
-				html.EscapeString(item.ArticleURL), html.EscapeString(item.Title))
-			if item.Source != "" {
-				fmt.Fprintf(b, " (%s)", html.EscapeString(item.Source))
+	b.WriteString(headingHTML(level, html.EscapeString(txt.StudyNotesHeading)))
+	for _, note := range n.Notes {
+		// a note is the inside of its paragraph, so it needs one of its own:
+		// without it two notes run together into one
+		b.WriteString("<p>" + note.HTML + "</p>")
+	}
+}
+
+// writeResearchLinks lists the research-guide entries that name a whole article
+// and so have no passage to unfold. The caller writes the heading, since the
+// expanded passages of the same index sit under it too.
+// heading is the index these entries are printed under, whose name they need
+// not repeat; empty prints the index of every entry beside it.
+func writeResearchLinks(b *strings.Builder, links []model.ResearchItem, heading string) {
+	if len(links) == 0 {
+		return
+	}
+	b.WriteString("<ul>")
+	for _, item := range links {
+		// the same shape jw bible research prints: the title carries the
+		// link, the publication line follows in parentheses
+		fmt.Fprintf(b, `<li><a href="%s">%s</a>`,
+			html.EscapeString(item.ArticleURL), html.EscapeString(item.Title))
+		if item.Source != "" && item.Source != heading {
+			fmt.Fprintf(b, " (%s)", html.EscapeString(item.Source))
+		}
+		b.WriteString("</li>")
+	}
+	b.WriteString("</ul>")
+}
+
+// indexGroup is one of the study bible's indexes as it lists a verse: the name
+// the page gives it, the entries with a passage to unfold, and the entries that
+// name a whole article and so have none.
+type indexGroup struct {
+	name  string
+	rank  int
+	nodes []unfold.Node
+	links []model.ResearchItem
+}
+
+// writeIndexGroups prints each index of the study bible under its own heading —
+// "Study Guide", then "Publications Index" — rather than lumping both under one
+// name. There is no heading over the two: the indexes are what the page names,
+// and the group holding them is not worth a line of its own.
+//
+// An entry the first index already listed is left out of the second. The
+// expansion drops a passage the other index also points at (the ranks part
+// them, see duplicates in internal/unfold); the entries with nothing to expand
+// are parted here, by the document they name.
+func writeIndexGroups(b *strings.Builder, links []model.ResearchItem, nodes []unfold.Node,
+	level int, txt *i18n.Messages) {
+	var groups []*indexGroup
+	find := func(name string, rank int) *indexGroup {
+		if name == "" {
+			name = txt.ResearchHeading
+		}
+		for _, g := range groups {
+			if g.name == name {
+				return g
 			}
-			b.WriteString("</li>")
 		}
-		b.WriteString("</ul>")
+		g := &indexGroup{name: name, rank: rank}
+		groups = append(groups, g)
+		return g
 	}
-	writeCited(b, n, level, txt)
+	seen := map[int]bool{}
+	for _, item := range links {
+		// the same article under two index names is one article
+		if id := wol.DocIDFromURL(item.ArticleURL); id != 0 {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
+		}
+		g := find(item.Source, researchRank(item))
+		g.links = append(g.links, item)
+	}
+	for _, n := range nodes {
+		g := find(n.Ref.Group, n.Ref.Rank)
+		g.nodes = append(g.nodes, n)
+	}
+	// the research guide before the publications index, which is the order
+	// their ranks already put them in
+	slices.SortStableFunc(groups, func(a, b *indexGroup) int { return a.rank - b.rank })
+	for _, g := range groups {
+		b.WriteString(headingHTML(level, html.EscapeString(g.name)))
+		writeResearchLinks(b, g.links, g.name)
+		writeUnfoldNodes(b, g.nodes, level+1, "", txt)
+	}
+}
+
+// splitRootRefs parts the expansion of a verse into what its research guide
+// pointed at and what its own margin did. The engine expands both in one run,
+// under one budget; only the caller knows which references it handed in.
+func splitRootRefs(nodes []unfold.Node, roots []unfold.Ref) (research, marginal []unfold.Node) {
+	paths := make(map[string]bool, len(roots))
+	for _, ref := range roots {
+		paths[ref.Path] = true
+	}
+	for _, n := range nodes {
+		if paths[n.Ref.Path] {
+			research = append(research, n)
+			continue
+		}
+		marginal = append(marginal, n)
+	}
+	return research, marginal
+}
+
+// paragraph wraps a fragment that is bare text; one that already carries
+// markup brings its own blocks and would only be nested inside a stray one.
+func paragraph(fragment string) string {
+	if strings.Contains(fragment, "<") {
+		return fragment
+	}
+	return "<p>" + fragment + "</p>"
 }
 
 // writeCited renders the publications a citation search found quoting the
 // verse: the other direction from the research guide above it, and the same
 // shape, with the passage each one quotes it in underneath.
 func writeCited(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
-	if len(n.Cited) == 0 {
+	if len(n.Cited) == 0 || n.CitedRef == "" {
 		return
 	}
-	b.WriteString(headingHTML(level, html.EscapeString(txt.CitedIn(len(n.Cited)))))
+	b.WriteString(headingHTML(level,
+		html.EscapeString(fmt.Sprintf(txt.CitedInHeading, n.CitedRef))))
 	for _, item := range n.Cited {
-		fmt.Fprintf(b, `<p><a href="%s">%s</a>`,
+		// each publication heads the passage it quotes the verse in, the way
+		// every other reference of an expansion heads its own text
+		label := fmt.Sprintf(`<a href="%s">%s</a>`,
 			html.EscapeString(item.WOLLink), html.EscapeString(collapseSpace(item.Title)))
 		if item.Context != "" {
-			fmt.Fprintf(b, " (<em>%s</em>)", html.EscapeString(item.Context))
+			label += " (" + html.EscapeString(item.Context) + ")"
 		}
-		b.WriteString("</p>")
+		b.WriteString(headingHTML(level+1, label))
 		// the passage itself, as the document wrote it; its own headings are
-		// pushed below this block so they cannot break the document's ladder.
+		// pushed below that one so they cannot break the document's ladder.
 		// The teaser stands in where no passage could be placed
 		if item.Excerpt != "" {
-			b.WriteString(demoteHeadings(item.Excerpt, level))
+			b.WriteString(demoteHeadings(item.Excerpt, level+1))
 		} else if item.Snippet != "" {
-			b.WriteString("<p>" + item.Snippet + "</p>")
+			b.WriteString(paragraph(item.Snippet))
 		}
 	}
 }

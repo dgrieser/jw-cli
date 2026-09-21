@@ -129,7 +129,7 @@ func TestNoURLsUnfoldCited(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Cited in 1 publication", "Doc 9999999"} {
+	for _, want := range []string{"Quotations of John 3:16", "Doc 9999999"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q:\n%s", want, out)
 		}

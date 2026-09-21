@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -41,6 +42,19 @@ type fakeStudyResolver struct {
 	study    map[string]Study
 	fail     map[string]bool
 	askedFor []string
+}
+
+// fakeCitedResolver also answers who quotes a verse, recording what it was
+// asked so a test can pin which levels reach it.
+type fakeCitedResolver struct {
+	*fakeStudyResolver
+	cited    map[string]Cited
+	askedFor []string
+}
+
+func (f *fakeCitedResolver) Cited(_ context.Context, title string) Cited {
+	f.askedFor = append(f.askedFor, title)
+	return f.cited[title]
 }
 
 func (f *fakeStudyResolver) Study(_ context.Context, title string) (Study, error) {
@@ -159,23 +173,61 @@ func TestRunConfirmCountsChapterPages(t *testing.T) {
 // A resolver that also looks up who quotes a verse spends much more than a
 // chapter page on it, and the question asked before the traffic has to say so.
 func TestRunConfirmCountsCitedLookups(t *testing.T) {
-	r := &fakeStudyResolver{fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
-		"/wol/bc/1": {Title: "A"}, "/wol/bc/2": {Title: "B"}, "/wol/pc/3": {Title: "C"},
-	}}}
-	var asked int
+	r := &fakeCitedResolver{fakeStudyResolver: &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/1": {Title: "A"}, "/wol/bc/2": {Title: "B"}, "/wol/pc/3": {Title: "C"},
+		}}}}
+	var asked []int
 	_, err := Run(context.Background(), r,
 		link("/wol/bc/1", "A")+link("/wol/bc/2", "B")+link("/wol/pc/3", "C"),
 		Options{
-			Depth:     1,
-			CitedCost: 10,
-			Confirm:   func(_, requests int) (bool, error) { asked = requests; return true, nil },
+			Depth: 1, CitedDepth: 1, CitedCost: 10, Threshold: -1,
+			Confirm: func(_, requests int) (bool, error) {
+				asked = append(asked, requests)
+				return true, nil
+			},
 		})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// three references, and the two verses cost a chapter page and a lookup
-	if want := 3 + 2*(1+10); asked != want {
-		t.Errorf("confirm asked for %d requests, want %d", asked, want)
+	if want := 3 + 2*(1+10); len(asked) != 1 || asked[0] != want {
+		t.Errorf("confirm asked for %v requests, want [%d]", asked, want)
+	}
+}
+
+// A lookup is priced, and made, only within CitedDepth: the references a
+// source names are worth the traffic, the ones reached through them are not.
+func TestRunCitedStopsAtCitedDepth(t *testing.T) {
+	r := &fakeCitedResolver{fakeStudyResolver: &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/1": {Title: "A", ContentHTML: link("/wol/bc/2", "B")},
+			"/wol/bc/2": {Title: "B"},
+		}}},
+		cited: map[string]Cited{
+			"A": {Results: []model.Result{{Title: "quotes A"}}, Ref: "A", Requests: 7},
+			"B": {Results: []model.Result{{Title: "quotes B"}}, Ref: "B", Requests: 7},
+		}}
+	var asked []int
+	res, err := Run(context.Background(), r, link("/wol/bc/1", "A"), Options{
+		Depth: 2, CitedDepth: 1, CitedCost: 10, Threshold: -1,
+		Confirm: func(_, requests int) (bool, error) {
+			asked = append(asked, requests)
+			return true, nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(r.askedFor, []string{"A"}) {
+		t.Errorf("looked up %v, want only the reference the fragment names", r.askedFor)
+	}
+	// level 1 prices the lookup, level 2 only the chapter page
+	if want := []int{1 + 1 + 10, 1 + 1}; !slices.Equal(asked, want) {
+		t.Errorf("confirm asked for %v, want %v", asked, want)
+	}
+	if len(res.Nodes[0].Children) != 1 || len(res.Nodes[0].Children[0].Cited) != 0 {
+		t.Errorf("a reference reached through another should carry no lookup: %+v", res.Nodes[0].Children)
 	}
 }
 
@@ -183,20 +235,23 @@ func TestRunConfirmCountsCitedLookups(t *testing.T) {
 // under the verse.
 func TestRunStudyCarriesCitedResults(t *testing.T) {
 	cited := []model.Result{{Title: "Rama", Context: "it-2 „Rama“", DocID: 1200003630}}
-	r := &fakeStudyResolver{
-		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
-			"/wol/bc/1/1": {Title: "Jeremiah 31:15"},
-		}},
-		study: map[string]Study{
-			"Jeremiah 31:15": {Cited: cited, CitedTotal: 66, Requests: 68},
+	r := &fakeCitedResolver{
+		fakeStudyResolver: &fakeStudyResolver{
+			fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+				"/wol/bc/1/1": {Title: "Jeremiah 31:15"},
+			}},
+		},
+		cited: map[string]Cited{
+			"Jeremiah 31:15": {Results: cited, Total: 66, Ref: "Jeremiah 31:15", Requests: 68},
 		},
 	}
-	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Jer 31:15"), Options{Depth: 1})
+	res, err := Run(context.Background(), r, link("/wol/bc/1/1", "Jer 31:15"),
+		Options{Depth: 1, CitedDepth: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	n := res.Nodes[0]
-	if len(n.Cited) != 1 || n.Cited[0].Title != "Rama" || n.CitedTotal != 66 {
+	if len(n.Cited) != 1 || n.Cited[0].Title != "Rama" || n.CitedTotal != 66 || n.CitedRef != "Jeremiah 31:15" {
 		t.Errorf("cited results did not reach the node: %+v", n)
 	}
 	// one to resolve the citation, plus what the study material reported

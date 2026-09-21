@@ -87,7 +87,10 @@ func TestBibleCited(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"66 publications citing Jeremiah 31:15",
+		// two of the three recorded results say something about the verse;
+		// the third only lists it in a reading schedule, and the count
+		// follows what is printed
+		"2 publications citing Jeremiah 31:15",
 		"31. August–6. September",
 		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
 		"Wie hat sich diese Prophezeiung",
@@ -230,7 +233,8 @@ func TestBibleCitedReadsEveryPage(t *testing.T) {
 			fmt.Fprintf(&b, `<ul class="results resultContentDocument">
 			  <li class="caption"><a class="lnk" href="/en/wol/d/r1/lp-e/%d">Doc %d</a></li>
 			  <li class="result"><ul class="resultItems">
-			    <li class="searchResult"><article><div class="document"><p>Jer 31:15</p></div></article></li>
+			    <li class="searchResult"><article><div class="document"><p>Rachel weeping for her
+		      children is how the prophet described the grief of that day.</p></div></article></li>
 			    <li class="ref">w24 - The Watchtower</li>
 			  </ul></li>
 			</ul>`, id, id)
@@ -295,6 +299,11 @@ func TestBibleCitedNoExcerpts(t *testing.T) {
 	}
 	if !strings.Contains(out, "Wie hat sich diese Prophezeiung") {
 		t.Errorf("output missing the teaser:\n%s", out)
+	}
+	// nothing was read to judge a passage by, so nothing is filtered out and
+	// the count is the one the site reported
+	if !strings.Contains(out, "66 publications citing Jeremiah 31:15") {
+		t.Errorf("--no-excerpts should report and show every hit:\n%s", out)
 	}
 	if strings.Contains(out, "lies dazu die Einsichten nach") {
 		t.Errorf("--no-excerpts printed a passage:\n%s", out)

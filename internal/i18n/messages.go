@@ -29,10 +29,10 @@ type Messages struct {
 	CitedResultsMany string
 	// CitedResultsUnknown takes the reference, for a listing with no total.
 	CitedResultsUnknown string
-	// CitedInOne and CitedInMany head the publications quoting an unfolded
-	// verse; they take how many are listed.
-	CitedInOne  string
-	CitedInMany string
+	// CitedInHeading heads the passages quoting an unfolded verse; it takes the
+	// reference they quote, which is what tells it from the same heading under
+	// a reference of that verse.
+	CitedInHeading string
 	// ExcerptProgress takes the number of documents read and their total.
 	ExcerptProgress string
 	// PageSuffix takes the page number and the results per page.
@@ -192,11 +192,6 @@ func (m *Messages) CitedResults(total int, ref string) string {
 		return fmt.Sprintf(m.CitedResultsUnknown, ref)
 	}
 	return fmt.Sprintf(m.plural(total, m.CitedResultsOne, m.CitedResultsMany), total, ref)
-}
-
-// CitedIn heads the publications quoting an unfolded verse.
-func (m *Messages) CitedIn(count int) string {
-	return fmt.Sprintf(m.plural(count, m.CitedInOne, m.CitedInMany), count)
 }
 
 func (m *Messages) plural(n int, one, many string) string {

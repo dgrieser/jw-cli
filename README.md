@@ -179,6 +179,18 @@ search covers is controlled by three mutually exclusive flags, also available on
 `jw bible cited` reads every result page and prints one listing; `jw search`
 pages with `-p`.
 
+A citation search matches wherever a verse is *named*, and much of the library
+names verses without saying anything about them: reading schedules, scripture
+indexes, school programmes, the headline over a workbook section. `jw bible
+cited` leaves those out, passage by passage — a workbook that heads its section
+with the reference and then asks a question about it keeps the question — and
+drops a result left with nothing to say, so its count is what it prints. The
+test is what remains once the reference itself is taken out of a passage:
+under eight words, it was naming the verse rather than discussing it. It needs
+the real passage to judge, so `--no-excerpts` shows everything unfiltered, and
+`jw search` is never filtered — a search is asked for matches and should report
+the matches it found.
+
 For the wol engine both commands then read each result's document and print the
 passage the hit sits in — the paragraph, list item or table, whole — instead of
 wol's teaser, which is cut mid-sentence. That is one request per result, run
@@ -335,17 +347,41 @@ document — a citation repeated further down is read where it first appears —
 which removes repeats and stops two passages that cite each other from looping.
 
 An unfolded verse brings the study bible's material on it as well, so a verse
-reads the way it does in the study pane:
+reads the way it does in the study pane. `jw bible read` prints it in that
+order, and leaves out whatever the verse does not have:
 
-- its **study notes** print under the verse text,
-- its **marginal references** and its **research-guide passages** are references
-  of that verse, so their text arrives one level deeper — `--unfold 1` gives the
-  verses and their notes, `--unfold 2` also what those verses point at,
-- research-guide entries naming a whole article instead of a passage have no
-  passage to unfold and are listed with their link under `Research guide`,
-- and, under `Cited in …`, every publication a citation search finds quoting the
-  verse, each with the passage it quotes it in — `jw bible cited` for that verse,
-  printed where the verse stands.
+1. **Study notes**, under `Study notes`.
+2. **The study bible's indexes**, each under the name the page gives it —
+   `Study Guide`, then `Publications Index` — with no parent heading over the
+   two. Every entry an index lists is read, whether it has a passage to unfold
+   or only names an article; an entry the first index already listed is left
+   out of the second.
+3. **The marginal references**, each headed by the reference it is and standing
+   beside the indexes — no parent heading over them either. What belongs to one
+   of them, its own quotations included, is nested under it.
+4. **Quotations of …** — every publication a citation search finds quoting the
+   verse, each with the passage it quotes it in: `jw bible cited` for that
+   verse, printed where the verse stands. The heading names the reference it
+   answers for.
+
+Each unfolded reference is a verse in its own right, so at `--unfold 2` it
+brings its own notes, indexes and margin in turn, one level deeper. The
+quotations stop at the first tier: the references a source names are worth
+looking up, the ones reached through them multiply the traffic without being
+what was asked about. So `jw bible read` looks up the verses it prints and not
+their marginal references, and a document looks up the references it writes and
+not what those point at — at any `--unfold` depth.
+
+```
+## Jeremia 34:3
+### Index der Publikationen
+#### w80 1. 3. 24 → Befreiung! Das Ende der Christenheit überleben
+### Querverweis Jeremia 37:17
+#### Zitate von Jeremia 37:17
+### Querverweis 2. Könige 25:6, 7
+#### Zitate von 2. Könige 25:6, 7
+### Zitate von Jeremia 34:3
+```
 
 The two directions are deduplicated against each other. The research guide cites
 a passage (`it-2 528`), the search cites the document holding it (`it-2 „Rama“`);
@@ -362,27 +398,29 @@ jw article 2014927 --unfold 1         # one lookup for each reference the articl
 jw bible read "Jer 33:1-5" --unfold 1 # five lookups, one under each verse
 ```
 
-The study bible lists a verse's publications twice — the research guide spells
-each one out ("Insight, Volume 1, page 1044"), the publications index cites it by
+The study bible lists a verse's publications twice — the study guide spells each
+one out ("Insight, Volume 1, page 1044"), the publications index cites it by
 symbol ("it-1 1044") — and `jw bible research` prints both, as the study pane
-does. An expansion instead shows such a passage once, under the research guide's
+does. An expansion instead shows such a passage once, under the study guide's
 citation: the two point at the same article, each cutting it where it likes, so
-unfolding both would print the same text twice.
+unfolding both would print the same text twice. The publications index then
+holds only what it alone lists.
 
 The study pane lives on the chapter page, so the first verse of a chapter pays
 for it and every other verse of that chapter comes free. `jw bible read` takes
 `--unfold` on the same terms, on the verses it is reading:
 
 ```sh
-jw bible read John 3:16 --unfold 1    # the verse, its study notes, its research entries
-jw bible read John 3:16 --unfold 2    # and the text behind each of those references
+jw bible read John 3:16 --unfold 1    # notes, research guide, margin, who quotes it
+jw bible read John 3:16 --unfold 2    # and the same four for every verse those point at
 ```
 
 Depth costs requests: one per reference, one per chapter page, and — for a bible
-reference — a citation search plus one read per publication it finds, all paced
-at 50 a second. That last part dominates: a verse quoted 66 times costs 68
-requests of its own, so a study article with 39 references runs into the
-thousands. References are followed breadth first, so the count for the next level
+reference in the first tier — a citation search plus one read per publication it
+finds, all paced at 50 a second. That last part dominates: a verse quoted 66
+times costs 68 requests of its own, so a study article with 39 references runs
+into the thousands. It does not grow with depth, since only the first tier is
+looked up. References are followed breadth first, so the count for the next level
 is known before it is spent — above 2000 it is quoted and confirmed:
 
 ```

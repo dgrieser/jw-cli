@@ -54,18 +54,19 @@ type ChapterDoc struct {
 }
 
 const (
-	selVerse        = "span.v"                     // verse text segments, id=v{b}-{c}-{v}-{seg}
-	selStudySection = "#studyDiscover div.section" // per-verse study material, data-key={b}-{c}-{v}
-	selStudyNote    = ".studyNoteGroup li.item p"  // one study note paragraph
-	selMarginalItem = ".group.marginal li.item"    // one cross-reference group
-	selMarginalCite = ".marginal.title"            // inline citation list
-	selMediaItem    = ".group.media li.item"       // one media entry
-	selMediaImg     = "img.studyItemMedia"         // its thumbnail
-	selMediaLink    = "a.directLinkItem"           // finder deep link
-	selMediaGallery = "a.galleryItem"              // gallery page of a picture
-	selResearchItem = ".group.index li.item"       // research guide entry
-	selFootnoteItem = ".group.footnote li.item"    // footnotes (best effort)
-	selSectionTitle = "h3.title"
+	selVerse            = "span.v"                     // verse text segments, id=v{b}-{c}-{v}-{seg}
+	selStudySection     = "#studyDiscover div.section" // per-verse study material, data-key={b}-{c}-{v}
+	selStudyNote        = ".studyNoteGroup li.item p"  // one study note paragraph
+	selMarginalItem     = ".group.marginal li.item"    // one cross-reference group
+	selMarginalCite     = ".marginal.title"            // inline citation list
+	selMediaItem        = ".group.media li.item"       // one media entry
+	selMediaImg         = "img.studyItemMedia"         // its thumbnail
+	selMediaLink        = "a.directLinkItem"           // finder deep link
+	selMediaGallery     = "a.galleryItem"              // gallery page of a picture
+	selResearchItem     = ".group.index li.item"       // one index's entries
+	selResearchSubtitle = ".subtitle"                  // the index that listed them
+	selFootnoteItem     = ".group.footnote li.item"    // footnotes (best effort)
+	selSectionTitle     = "h3.title"
 
 	selBibleCard  = "li.resultAlternatePubTitle a" // one bible on the bible list
 	selCardSymbol = "[data-pub-symbol]"            // its publication symbol
@@ -217,26 +218,32 @@ func (d *ChapterDoc) StudySection(verse int) (model.StudySection, bool) {
 	})
 
 	sec.Find(selResearchItem).Each(func(_ int, li *goquery.Selection) {
-		// media entries live in their own group; skip anything without a link
-		a := li.Find("a").First()
-		if a.Length() == 0 {
-			return
-		}
-		href, _ := a.Attr("href")
-		item := model.ResearchItem{
-			Title:  cleanSpace(a.Text()),
-			Source: cleanSpace(li.Find(".subtitle").First().Text()),
-			Kind:   researchKind(li),
-		}
-		if strings.Contains(href, "/pc/") {
-			item.PCPath = absURL(d.base, href)
-		} else {
-			item.ArticleURL = absURL(d.base, href)
-		}
-		if item.Title == "" && item.PCPath == "" && item.ArticleURL == "" {
-			return
-		}
-		out.Research = append(out.Research, item)
+		// one item per index, holding every entry that index lists — and a
+		// single entry is spelled over several links, the publication and the
+		// issue each carrying one, all pointing at the same passage
+		source := cleanSpace(li.Find(selResearchSubtitle).First().Text())
+		kind := researchKind(li)
+		var last *model.ResearchItem
+		li.Find("a").Each(func(_ int, a *goquery.Selection) {
+			href, _ := a.Attr("href")
+			href = absURL(d.base, href)
+			text := cleanSpace(a.Text())
+			if href == "" && text == "" {
+				return
+			}
+			if last != nil && last.SameTarget(href) {
+				last.Title = cleanSpace(last.Title + " " + text)
+				return
+			}
+			item := model.ResearchItem{Title: text, Source: source, Kind: kind}
+			if strings.Contains(href, "/pc/") {
+				item.PCPath = href
+			} else {
+				item.ArticleURL = href
+			}
+			out.Research = append(out.Research, item)
+			last = &out.Research[len(out.Research)-1]
+		})
 	})
 
 	sec.Find(selFootnoteItem).Each(func(_ int, li *goquery.Selection) {

@@ -24,6 +24,10 @@ type Ref struct {
 	// document, which is a single list with nothing to prefer; the indexes of
 	// the study bible list the same passage twice and rank one above the other.
 	Rank int
+	// Group names the list a reference was taken from, as the page names it —
+	// "Study Guide", "Publications Index". The engine only ranks; a caller
+	// that prints its references grouped heads them with this.
+	Group string
 }
 
 // IsVerse reports whether the citation resolves to bible text rather than to a
@@ -49,12 +53,6 @@ type Study struct {
 	// than a passage. There is no citation endpoint behind those, so they are
 	// listed instead of unfolded.
 	Links []model.ResearchItem
-	// Cited are the publications a citation search found quoting the verse,
-	// with the passage each quotes it in — the other direction from Research,
-	// which is a curated index. Already deduplicated against it.
-	Cited []model.Result
-	// CitedTotal is how many the search reported before that deduplication.
-	CitedTotal int
 	// Requests is how many requests gathering this cost, reported even
 	// alongside an error, so the budget the user confirmed stays honest.
 	Requests int
@@ -65,6 +63,30 @@ type Study struct {
 // A Resolver without it leaves every verse at its bare text.
 type StudyResolver interface {
 	Study(ctx context.Context, verseTitle string) (Study, error)
+}
+
+// Cited is what a citation search found quoting a verse — the other direction
+// from the study bible's indexes, which are curated lists.
+type Cited struct {
+	// Results are the quoting passages, already deduplicated against the
+	// indexes of the same verse.
+	Results []model.Result
+	// Total is how many the search reported before that deduplication.
+	Total int
+	// Ref is the reference asked about, spelled the way the language spells it.
+	Ref string
+	// Requests is what the lookup cost, reported even when it found nothing,
+	// so the budget the user confirmed stays honest.
+	Requests int
+}
+
+// CitedResolver is an optional capability of a Resolver: who quotes the verse
+// a citation resolved to. It is asked only within Options.CitedDepth, because
+// one lookup reads a page of results and then a document per result — far more
+// than everything else a level spends. A failed lookup comes back empty: the
+// verse is worth reading without it.
+type CitedResolver interface {
+	Cited(ctx context.Context, verseTitle string) Cited
 }
 
 // Node is one expanded citation together with what its own content cites.
@@ -86,6 +108,7 @@ type Node struct {
 	Links      []model.ResearchItem
 	Cited      []model.Result
 	CitedTotal int
+	CitedRef   string
 	StudyErr   error
 	Children   []Node
 }
@@ -103,11 +126,13 @@ type Options struct {
 	Confirm func(level, requests int) (bool, error)
 	// Progress reports each completed request within a level. Nil is silent.
 	Progress func(level, done, total int)
-	// CitedCost is what the study material of one verse is assumed to cost
-	// beyond its chapter page — a citation search reads a page of results and
-	// then a document per result, and how many there are is only known once it
-	// has run. Zero prices it at nothing, which is right for a resolver that
-	// does not look citations up.
+	// CitedDepth is how many levels of the expansion have the verses they
+	// resolve looked up. Zero asks for none: the references a source names are
+	// worth the traffic, the ones reached through them multiply it.
+	CitedDepth int
+	// CitedCost is what one such lookup is assumed to cost — a citation search
+	// reads a page of results and then a document per result, and how many
+	// there are is only known once it has run. Zero prices it at nothing.
 	CitedCost int
 	// RootRefs are references belonging to the fragment itself rather than to a
 	// citation inside it — the research-guide passages of the verses a bible
@@ -178,6 +203,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 		return res, nil
 	}
 	study, _ := r.(StudyResolver)
+	cited, _ := r.(CitedResolver)
 	seen := map[string]bool{}
 	shown := map[string][]passage{}
 	// the node lists of the level being expanded: the roots of every group to
@@ -196,7 +222,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 			break
 		}
 		if o.Confirm != nil {
-			if cost := requestCost(frontier, study != nil, o.CitedCost); cost > o.Threshold {
+			if cost := requestCost(frontier, study != nil, o.citedCostAt(level, cited != nil)); cost > o.Threshold {
 				ok, err := o.Confirm(level, cost)
 				if err != nil {
 					return res, err
@@ -231,9 +257,13 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 					n.StudyErr = err
 				} else {
 					n.Notes, n.Links = s.Notes, s.Links
-					n.Cited, n.CitedTotal = s.Cited, s.CitedTotal
 					research[n.Ref.Path] = s.Research
 				}
+			}
+			if cited != nil && level <= o.CitedDepth && n.Err == nil && n.Ref.IsVerse() {
+				c := cited.Cited(ctx, n.Title)
+				res.Requests += c.Requests
+				n.Cited, n.CitedTotal, n.CitedRef = c.Results, c.Total, c.Ref
 			}
 			if o.Progress != nil {
 				o.Progress(level, i+1, len(frontier))
@@ -386,6 +416,15 @@ func nodesIn(tiers []*[]Node) []*Node {
 // Chapter pages are shared by every verse in the chapter and fetched once, so
 // this is an upper bound — the right side to err on for a question that is
 // answered before the traffic is spent.
+// citedCostAt is what a lookup is priced at on this level: nothing past the
+// depth that has them, where none are made.
+func (o Options) citedCostAt(level int, withCited bool) int {
+	if !withCited || level > o.CitedDepth {
+		return 0
+	}
+	return o.CitedCost
+}
+
 func requestCost(frontier []*Node, withStudy bool, citedCost int) int {
 	cost := len(frontier)
 	if !withStudy {
