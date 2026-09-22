@@ -54,7 +54,7 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		Refs:      ref,
 		Edition:   valueOr(r, "bible", "nwtsty"),
 		AllBibles: boolParam(r, "all"),
-		Unfold:    unfoldConfig(depth),
+		Unfold:    unfoldConfig(depth, forceParam(r)),
 	}, text(lng))
 	if err != nil {
 		failJSON(w, r, err)

@@ -171,7 +171,13 @@ func FormatPassages(res ReadResult, format render.Format, opts render.Options) (
 			for _, v := range run {
 				html.WriteString(v.HTML)
 				html.WriteString(" ")
-				html.WriteString(v.Unfold)
+				if v.Unfold != "" {
+					// what a verse brought, kept together and marked as its
+					// own: a reader of the rendered page can then fold it
+					// away, and the markdown and text renderers pass a plain
+					// div through untouched
+					html.WriteString(`<div class="expansion">` + v.Unfold + `</div>`)
+				}
 			}
 		}
 		html.WriteString(unfoldNoteHTML(p.UnfoldNote))

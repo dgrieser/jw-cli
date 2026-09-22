@@ -18,7 +18,7 @@ type htmlTemplate = template.Template
 // and the shared listing partial.
 var uiPages = []string{
 	"index", "search", "article", "bible", "dailytext", "meetings",
-	"media", "media_category", "media_item", "pub", "languages", "error",
+	"media", "media_category", "media_item", "pub", "languages", "error", "confirm",
 }
 
 // parseTemplates builds one template set per page at startup, so a parse error

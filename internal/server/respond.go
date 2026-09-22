@@ -80,7 +80,8 @@ type tooExpensiveError struct {
 }
 
 func (e *tooExpensiveError) Error() string {
-	return fmt.Sprintf("unfolding level %d needs %d requests to wol.jw.org; lower the unfold depth", e.level, e.requests)
+	return fmt.Sprintf("unfolding level %d needs %d requests to wol.jw.org; "+
+		"repeat with force=1 to spend them, or lower the unfold depth", e.level, e.requests)
 }
 
 // maxUnfoldDepth caps ?unfold= on the server: each level multiplies upstream
@@ -88,18 +89,26 @@ func (e *tooExpensiveError) Error() string {
 const maxUnfoldDepth = 3
 
 // unfoldConfig is how the server runs an expansion: capped in depth, never
-// waiting on anybody, refusing a level that would cost too many requests.
-func unfoldConfig(depth int) service.UnfoldConfig {
-	return service.UnfoldConfig{
+// waiting on anybody, and refusing a level that would cost too many requests
+// unless the caller has already said to spend them. force is what -y is on the
+// command line — the answer to a question nobody is there to be asked.
+func unfoldConfig(depth int, force bool) service.UnfoldConfig {
+	cfg := service.UnfoldConfig{
 		Depth: min(depth, maxUnfoldDepth),
-		// Cited stays off: a citation lookup per verse is hundreds of upstream
-		// requests, and nobody is at the other end of this to confirm them
-		Cited: false,
-		Confirm: func(level, requests int) (bool, error) {
-			return false, &tooExpensiveError{level: level, requests: requests}
-		},
+		// the same expansion the CLI runs, citation lookups included
+		Cited: depth > 0,
 	}
+	if !force {
+		cfg.Confirm = func(level, requests int) (bool, error) {
+			return false, &tooExpensiveError{level: level, requests: requests}
+		}
+	}
+	return cfg
 }
+
+// forceParam reads the answer a caller gave in advance to the question an
+// expensive expansion would otherwise be refused over.
+func forceParam(r *http.Request) bool { return boolParam(r, "force") }
 
 // bodyFormat parses ?format= for endpoints that render a document body:
 // html (default), markdown, or text. JSON is the endpoint's own shape and raw
@@ -133,8 +142,14 @@ func intParam(r *http.Request, name string, def int) (int, error) {
 // boolParam reads an optional boolean query parameter: absent and "false" are
 // false, "" (bare ?x), "true" and "1" are true.
 func boolParam(r *http.Request, name string) bool {
+	return boolParamOr(r, name, false)
+}
+
+// boolParamOr is boolParam for a switch that is on unless it is turned off:
+// ?excerpts=0 where the CLI takes --no-excerpts.
+func boolParamOr(r *http.Request, name string, fallback bool) bool {
 	if !r.URL.Query().Has(name) {
-		return false
+		return fallback
 	}
 	switch r.FormValue(name) {
 	case "", "1", "true", "yes":

@@ -70,7 +70,7 @@ func (s *Server) searchParams(r *http.Request, lng model.Language) (*service.Sea
 		Sort:     valueOr(r, "sort", "rel"),
 		Scope:    valueOr(r, "scope", "par"),
 		Limit:    limit,
-		Excerpts: boolParam(r, "excerpts"),
+		Excerpts: boolParamOr(r, "excerpts", true),
 	}
 	if p.Engine == "wol" {
 		if p.Categories, err = s.categoriesParam(r, lng, nil); err != nil {
@@ -124,7 +124,7 @@ func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
 		Query:    query,
 		Sort:     valueOr(r, "sort", "newest"),
 		Scope:    valueOr(r, "scope", "par"),
-		Excerpts: boolParam(r, "excerpts"),
+		Excerpts: boolParamOr(r, "excerpts", true),
 	}
 	if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
 		badRequest(w, "%s", err)
@@ -170,7 +170,7 @@ func articleParams(r *http.Request) (render.Format, int, error) {
 func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng model.Language,
 	art model.Article, format render.Format, depth int) {
 	if depth > 0 {
-		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth), text(lng))
+		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth, forceParam(r)), text(lng))
 		if err != nil {
 			failJSON(w, r, err)
 			return

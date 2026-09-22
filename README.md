@@ -489,14 +489,14 @@ requests than an unattended server spends), or `502` (upstream failure).
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
-| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=true` | `jw search` |
+| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=0` | `jw search` |
 | `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3) | `jw article` (images and scripture refs are fields of the response) |
 | `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `format` | `jw bible read` |
 | `GET /api/v1/bible/notes` | `ref`* | `jw bible notes` |
 | `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
 | `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |
 | `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
-| `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=true` | `jw bible cited` |
+| `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
@@ -518,10 +518,24 @@ A few CLI affordances have no server counterpart by design: the TUI and
 item carries its `wolLink`/`jwLink`/`lank`/`fileUrl`); and nothing is ever
 written to the server's filesystem — the `/download/...` endpoints do the
 quality/format selection, then answer `302 Found` with the file's public CDN
-URL instead of proxying the bytes. Search excerpts, on by default in the CLI,
-are opt-in per request (`excerpts=true`): they cost one upstream request per
-result. One shared HTTP client paces all upstream traffic, so concurrent
-requests queue against the same polite rate limit the CLI keeps.
+URL instead of proxying the bytes. One shared HTTP client paces all upstream
+traffic, so concurrent requests queue against the same polite rate limit the
+CLI keeps.
+
+The server runs the same expansions and listings the CLI does, defaults
+included: excerpts are read for wol searches and citation listings
+(`excerpts=0` turns them off), and an expansion lists who quotes the verses it
+touches. That costs upstream requests, and the CLI asks before spending a lot
+of them, so the server asks too: past 2000 requests for one level the API
+answers `422 too_expensive` naming the count, and the web pages offer the count
+with a link that repeats the request. `force=1` is the answer given in advance
+— what `-y` is on the command line — and `unfold` stays capped at depth 3. A
+study article with dozens of references costs thousands of requests, so forcing
+one takes minutes: the command line is the better place for it.
+
+A bible reading folds what it brings. Each verse's study notes, indexes,
+marginal references and quotations become a disclosure of its own, closed until
+it is opened, so the verses stay readable however much hangs off them.
 
 ## How it talks to the sites
 

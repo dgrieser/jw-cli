@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/PuerkitoBio/goquery"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -86,9 +89,32 @@ type errorPage struct {
 	Message string
 }
 
+// confirmPage is the web's answer to the terminal prompt: an expansion that
+// costs more than the server spends unasked is offered rather than refused.
+type confirmPage struct {
+	basePage
+	Message  string
+	Level    int
+	Requests int
+	ForceURL string
+	BackURL  string
+}
+
 func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 	status, _ := classify(r.Context(), err)
 	if status == 0 {
+		return
+	}
+	var te *tooExpensiveError
+	if errors.As(err, &te) {
+		s.render(w, status, "confirm", confirmPage{
+			basePage: s.base(r, "Unfold?"),
+			Message:  err.Error(),
+			Level:    te.level,
+			Requests: te.requests,
+			ForceURL: urlWith(r, "force", "1"),
+			BackURL:  urlWith(r, "unfold", ""),
+		})
 		return
 	}
 	s.render(w, status, "error", errorPage{
@@ -96,6 +122,86 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 		Status:   status,
 		Message:  err.Error(),
 	})
+}
+
+// foldSections turns every section a verse brought with it — the study bible's
+// indexes, each marginal reference, the publications quoting it — into a
+// disclosure of its own. A reading then reads as a reading, and what hangs off
+// a verse is opened when it is wanted rather than pushing the next verse off
+// the screen.
+func foldSections(fragment string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	doc.Find("div.expansion").Each(func(_ int, div *goquery.Selection) {
+		foldChildren(div)
+	})
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return fragment
+	}
+	return out
+}
+
+// foldChildren wraps each run of an expansion under its own heading. The
+// sections are the shallowest headings it holds; what they head — an index
+// entry, a quoting publication — stays inside the section it belongs to.
+func foldChildren(div *goquery.Selection) {
+	level := 0
+	div.Children().Each(func(_ int, s *goquery.Selection) {
+		if n := headingLevel(goquery.NodeName(s)); n > 0 && (level == 0 || n < level) {
+			level = n
+		}
+	})
+	if level == 0 {
+		return
+	}
+	var out strings.Builder
+	open := false
+	div.Children().Each(func(_ int, s *goquery.Selection) {
+		if headingLevel(goquery.NodeName(s)) == level {
+			if open {
+				out.WriteString("</details>")
+			}
+			summary, err := s.Html()
+			if err != nil {
+				return
+			}
+			out.WriteString(`<details class="section"><summary>` + summary + "</summary>")
+			open = true
+			return
+		}
+		if html, err := goquery.OuterHtml(s); err == nil {
+			out.WriteString(html)
+		}
+	})
+	if open {
+		out.WriteString("</details>")
+	}
+	div.SetHtml(out.String())
+}
+
+// headingLevel is the depth of a heading element, or zero for anything else.
+func headingLevel(name string) int {
+	if len(name) == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6' {
+		return int(name[1] - '0')
+	}
+	return 0
+}
+
+// urlWith is this request's own URL with one parameter set, or dropped when
+// the value is empty.
+func urlWith(r *http.Request, name, value string) string {
+	u := *r.URL
+	q := u.Query()
+	if value == "" {
+		q.Del(name)
+	} else {
+		q.Set(name, value)
+	}
+	u.RawQuery = q.Encode()
+	return u.RequestURI()
 }
 
 // sanitized runs a site HTML fragment through the same sanitizer the CLI
@@ -247,7 +353,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		Type:     valueOr(r, "type", "all"),
 		Sort:     valueOr(r, "sort", "rel"),
 		Scope:    valueOr(r, "scope", "par"),
-		Excerpts: boolParam(r, "excerpts"),
+		Excerpts: boolParamOr(r, "excerpts", true),
 	}
 	if page.Query == "" {
 		s.render(w, http.StatusOK, "search", page)
@@ -326,7 +432,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if depth > 0 {
-		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth), text(lng))
+		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth, forceParam(r)), text(lng))
 		if err != nil {
 			s.failUI(w, r, err)
 			return
@@ -691,7 +797,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	case "read":
 		res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
 			Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
-			Unfold: unfoldConfig(depth),
+			Unfold: unfoldConfig(depth, forceParam(r)),
 		}, text(lng))
 		if err != nil {
 			s.failUI(w, r, err)
@@ -704,7 +810,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		}
 		// FormatPassages already sanitizes each passage through render.Render;
 		// the headings around them are escaped there too.
-		page.Body = template.HTML(body) //nolint:gosec // sanitized per passage above
+		page.Body = template.HTML(foldSections(body)) //nolint:gosec // sanitized per passage above
 	case "notes":
 		entries, err := s.svc.Notes(r.Context(), lng, page.Ref)
 		if err != nil {
@@ -750,7 +856,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		}
 		p := service.SearchParams{
 			Engine: "wol", Query: query, Sort: valueOr(r, "sort", "newest"),
-			Scope: "par", Excerpts: boolParam(r, "excerpts"),
+			Scope: "par", Excerpts: boolParamOr(r, "excerpts", true),
 		}
 		if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
 			s.failUI(w, r, err)

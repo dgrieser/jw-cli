@@ -197,6 +197,36 @@ th { color: var(--muted); font-weight: 600; font-size: 0.85rem; }
 
 .hint { color: var(--muted); font-size: 0.9rem; }
 
+/* what a verse brought: folded away until it is wanted */
+.expansion { margin: 0.5rem 0 1.25rem; }
+details.section {
+  border-left: 2px solid var(--border);
+  padding: 0 0 0 0.9rem;
+  margin: 0.4rem 0;
+}
+details.section > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0.15rem 0;
+  list-style-position: outside;
+}
+details.section > summary:hover { color: inherit; }
+details.section[open] > summary { color: inherit; margin-bottom: 0.3rem; }
+details.section > summary h1, details.section > summary h2,
+details.section > summary h3, details.section > summary h4,
+details.section > summary h5, details.section > summary h6 {
+  display: inline;
+  font-size: 1rem;
+}
+
+a.confirm {
+  display: inline-block;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
 @media (max-width: 40rem) {
   header.site { padding: 0.6rem 1rem; }
   main { padding: 0.75rem 1rem 3rem; }

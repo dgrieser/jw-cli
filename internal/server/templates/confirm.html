@@ -1,0 +1,14 @@
+{{define "content"}}
+<h1>That expansion is expensive</h1>
+<p class="error">{{.Message}}</p>
+<p>
+  Unfolding level {{.Level}} of this page needs up to {{.Requests}} requests to
+  wol.jw.org. Nobody is at a terminal to be asked, so it is not spent unless you
+  say so.
+</p>
+<p>
+  <a class="confirm" href="{{.ForceURL}}">Unfold it anyway</a>
+  ·
+  <a href="{{.BackURL}}">Show it without unfolding</a>
+</p>
+{{end}}
