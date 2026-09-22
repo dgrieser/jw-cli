@@ -119,7 +119,6 @@ var de = Messages{
 	UIDownload:         "Herunterladen",
 	UISubtitles:        "Untertitel",
 	UIUnfold:           "Aufklappen",
-	UIUnfoldCitations:  "Zitate aufklappen",
 	UIUnfoldHint:       "die Studienanmerkungen und den Text hinter jeder Referenz so viele Ebenen tief ausgeben",
 	UIUnfoldHintArt:    "den Text hinter jedem Zitat so viele Ebenen tief ausgeben",
 	UIEdition:          "Ausgabe",

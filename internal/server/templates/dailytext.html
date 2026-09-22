@@ -2,12 +2,14 @@
 <h1>{{.T.UINavDailyText}}</h1>
 <form class="form" method="get" action="/dailytext">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  {{- if .Unfold}}<input type="hidden" name="unfold" value="{{.Unfold}}">{{end}}
   <div class="query compact">
     <input type="date" name="date" value="{{.Date}}" aria-label="{{.T.UINavDailyText}}">
     <button type="submit" class="primary">{{.T.UIShow}}</button>
   </div>
 </form>
 
+{{template "unfold" .}}
 <article class="document">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}

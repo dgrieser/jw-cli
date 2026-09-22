@@ -12,6 +12,7 @@
   </fieldset>
 </form>
 {{- else}}
+{{template "unfold" .}}
 <article class="document">
 {{- if .Heading}}<h1>{{.Heading}}</h1>{{end}}
 {{.Body}}
@@ -45,7 +46,6 @@
 
 <p class="links">
   {{- if .URL}}<a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a>{{end}}
-  {{- if not .Unfold}}<a href="{{.WithLang (printf "/article?target=%s&unfold=1" (urlquery .Target))}}">{{.T.UIUnfoldCitations}}</a>{{end}}
 </p>
 {{- end}}
 {{end}}

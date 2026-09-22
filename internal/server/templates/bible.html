@@ -30,6 +30,7 @@
 </nav>
 
 {{- if eq .View "read"}}
+{{template "unfold" .}}
 <article class="document">
 {{.Body}}
 </article>

@@ -83,3 +83,65 @@ func TestLinksHTTP404(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+// TestLinksBook pins a publication that is no periodical: the API sends its
+// issue as an empty string and its book number as null, which must decode.
+func TestLinksBook(t *testing.T) {
+	c, _ := testClient(t, serveFile(t, "testdata/wcg_X.json"))
+	pm, err := c.Links(context.Background(), Query{Pub: "wcg", Lang: "X"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pm.Pub != "wcg" || pm.Issue != "" || pm.BookNum != 0 || pm.PubName == "" {
+		t.Errorf("unexpected meta: %+v", pm)
+	}
+	if len(pm.Files["X"]["PDF"]) != 1 || len(pm.Files["X"]["MP3"]) != 1 {
+		t.Fatalf("unexpected files: %+v", pm.Files)
+	}
+	if mp3 := pm.Files["X"]["MP3"][0]; mp3.Track != 1 || mp3.URL == "" {
+		t.Errorf("unexpected MP3 entry: %+v", mp3)
+	}
+}
+
+// TestLinksLanguageSuffix: a symbol written like a file name, language
+// attached, is refused upstream and retried bare.
+func TestLinksLanguageSuffix(t *testing.T) {
+	for _, sym := range []string{"wcg-X", "wcg_X", "wcg_x"} {
+		var asked []string
+		c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			pub := r.URL.Query().Get("pub")
+			asked = append(asked, pub)
+			if pub != "wcg" {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+			serveFile(t, "testdata/wcg_X.json")(w, r)
+		})
+		pm, err := c.Links(context.Background(), Query{Pub: sym, Lang: "X"})
+		if err != nil {
+			t.Fatalf("%s: %v", sym, err)
+		}
+		if pm.Pub != "wcg" || len(asked) != 2 || asked[1] != "wcg" {
+			t.Errorf("%s: asked %v, got %+v", sym, asked, pm.Pub)
+		}
+	}
+}
+
+func TestStripLangSuffix(t *testing.T) {
+	cases := []struct {
+		pub, lang, want string
+		ok              bool
+	}{
+		{"wcg-X", "X", "wcg", true},
+		{"wcg_E", "E", "wcg", true},
+		{"S-38", "E", "", false},
+		{"X", "X", "", false},
+		{"wcg", "X", "", false},
+	}
+	for _, tc := range cases {
+		got, ok := stripLangSuffix(tc.pub, tc.lang)
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("stripLangSuffix(%q, %q) = %q, %v; want %q, %v", tc.pub, tc.lang, got, ok, tc.want, tc.ok)
+		}
+	}
+}

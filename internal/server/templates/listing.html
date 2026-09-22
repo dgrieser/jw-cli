@@ -34,3 +34,13 @@
   {{- end}}
 </ol>
 {{end}}
+{{define "unfold"}}
+{{- if .UnfoldLevels}}
+<nav class="tabs unfold" aria-label="{{.T.UIUnfold}}">
+  <span class="label" title="{{.T.UIUnfoldHintArt}}">{{.T.UIUnfold}}</span>
+  {{- range .UnfoldLevels}}
+  <a href="{{.URL}}" rel="nofollow"{{if .Active}} class="active" aria-current="true"{{end}}>{{.Level}}</a>
+  {{- end}}
+</nav>
+{{- end}}
+{{end}}

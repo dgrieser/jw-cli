@@ -486,6 +486,13 @@ endpoints render bodies as sanitized HTML by default; `?format=markdown` and
 `404` (nothing there upstream), `422` (an unfold that would need more upstream
 requests than an unattended server spends), or `502` (upstream failure).
 
+In the web UI, every reading page — an article or publication document, the
+bible reader, the daily text, and the meeting overview, midweek and weekend
+parts — shows an **Unfold 0 1 2 3** switcher above the text. It reloads the
+result already on screen at the chosen level, so an expansion can be deepened
+or folded back without filling in the form again; a level that needs more
+requests than the server spends unasked is offered on a confirmation page first.
+
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |

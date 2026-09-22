@@ -142,3 +142,33 @@ func TestHeadingLevel(t *testing.T) {
 		}
 	}
 }
+
+// TestUnfoldLevels pins the switcher: one link per level to the same page,
+// the page's default level carrying no ?unfold=, and no force= carried along.
+func TestUnfoldLevels(t *testing.T) {
+	r := httptest.NewRequest("GET", "/meetings/weekend?date=2026-08-10&unfold=2&force=1&lang=de", nil)
+	levels := unfoldLevels(r, 2, 0)
+	if len(levels) != maxUnfoldDepth+1 {
+		t.Fatalf("want %d levels, got %d", maxUnfoldDepth+1, len(levels))
+	}
+	for _, l := range levels {
+		if strings.Contains(l.URL, "force=") {
+			t.Errorf("level %d carries force: %s", l.Level, l.URL)
+		}
+		if !strings.HasPrefix(l.URL, "/meetings/weekend?") || !strings.Contains(l.URL, "date=2026-08-10") ||
+			!strings.Contains(l.URL, "lang=de") {
+			t.Errorf("level %d lost the page: %s", l.Level, l.URL)
+		}
+		if l.Active != (l.Level == 2) {
+			t.Errorf("level %d active=%v", l.Level, l.Active)
+		}
+	}
+	if strings.Contains(levels[0].URL, "unfold=") || !strings.Contains(levels[3].URL, "unfold=3") {
+		t.Errorf("unexpected level links: %s / %s", levels[0].URL, levels[3].URL)
+	}
+	// the bible reads at level 1 by default, so level 0 has to be spelled out
+	bible := unfoldLevels(httptest.NewRequest("GET", "/bible?ref=John+3:16", nil), 1, 1)
+	if !strings.Contains(bible[0].URL, "unfold=0") || strings.Contains(bible[1].URL, "unfold=") {
+		t.Errorf("bible levels: %s / %s", bible[0].URL, bible[1].URL)
+	}
+}
