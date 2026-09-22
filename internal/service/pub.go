@@ -43,7 +43,7 @@ func PubFilesToResults(pm model.PubMedia) []model.Result {
 					title = pm.PubName
 				}
 				ctx := format
-				if f.Label != "" {
+				if f.Label != "" && f.Label != "0p" {
 					ctx += " " + f.Label
 				}
 				if len(langs) > 1 {

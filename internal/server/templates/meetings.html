@@ -2,6 +2,7 @@
 <h1>{{.T.UINavMeetings}}</h1>
 <form class="form" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  {{- if .Unfold}}<input type="hidden" name="unfold" value="{{.Unfold}}">{{end}}
   <div class="query compact">
     <input type="date" name="date" value="{{.Date}}" title="{{.T.UIDateHint}}" aria-label="{{.T.UIDateHint}}">
     <button type="submit" class="primary">{{.T.UIShow}}</button>
@@ -14,6 +15,7 @@
   <a href="{{.PartURL "weekend"}}" {{if eq .Part "weekend"}}class="active" aria-current="page"{{end}}>{{.T.UIWeekend}}</a>
 </nav>
 
+{{template "unfold" .}}
 <article class="document">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}

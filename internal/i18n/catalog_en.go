@@ -119,7 +119,6 @@ var en = Messages{
 	UIDownload:         "Download",
 	UISubtitles:        "Subtitles",
 	UIUnfold:           "Unfold",
-	UIUnfoldCitations:  "Unfold citations",
 	UIUnfoldHint:       "print the study notes and the text behind every reference, this many levels deep",
 	UIUnfoldHintArt:    "expand the text behind every citation, this many levels deep",
 	UIEdition:          "Edition",

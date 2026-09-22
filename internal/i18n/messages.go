@@ -191,7 +191,6 @@ type Messages struct {
 	UIDownload        string
 	UISubtitles       string
 	UIUnfold          string
-	UIUnfoldCitations string
 	UIUnfoldHint      string
 	UIUnfoldHintArt   string
 	UIEdition         string

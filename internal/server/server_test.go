@@ -446,6 +446,12 @@ func TestUIArticle(t *testing.T) {
 	if strings.Contains(body[start:end], "<script") {
 		t.Errorf("unexpected script tag inside the article")
 	}
+
+	// the unfold switcher sits above the document, each level a link back here
+	if !strings.Contains(body, `class="tabs unfold"`) ||
+		!strings.Contains(body, `/article?lang=en&amp;target=2024360&amp;unfold=2`) {
+		t.Errorf("missing unfold switcher in:\n%s", body)
+	}
 }
 
 func TestUIBibleRead(t *testing.T) {
@@ -456,6 +462,9 @@ func TestUIBibleRead(t *testing.T) {
 	}
 	if !strings.Contains(body, "John 3:16") {
 		t.Errorf("missing passage heading:\n%s", body)
+	}
+	if !strings.Contains(body, `class="tabs unfold"`) || !strings.Contains(body, "unfold=0") {
+		t.Errorf("missing unfold switcher:\n%s", body)
 	}
 	resp, body = get(t, srv, "/bible?ref=John+3:16&lang=en&view=bogus")
 	if resp.StatusCode != 400 || !strings.Contains(body, "unknown view") {
@@ -494,4 +503,35 @@ func TestConcurrentRequests(t *testing.T) {
 		})
 	}
 	wg.Wait()
+}
+
+// TestUIPubBook: a book is no periodical; its issue comes back as "" and its
+// book number as null, and the page lists its files all the same.
+func TestUIPubBook(t *testing.T) {
+	mux := languagesMux(t)
+	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{
+			"pubName": "Geh mutig deinen Weg mit Gott", "pub": "wcg",
+			"issue": "", "booknum": null, "track": null,
+			"languages": {"X": {"name": "Deutsch", "locale": "de"}},
+			"files": {"X": {"PDF": [{
+				"title": "Geh mutig deinen Weg mit Gott",
+				"file": {"url": "https://cdn.example/wcg_X.pdf", "checksum": ""},
+				"filesize": 11, "label": "0p", "track": 0, "docid": 0, "booknum": 0,
+				"mimetype": "application/pdf"
+			}]}}
+		}`)
+	})
+	srv := newTestServer(t, mux)
+	resp, body := get(t, srv, "/pub?pub=wcg&lang=de")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, "Geh mutig deinen Weg mit Gott") || !strings.Contains(body, "wcg_X.pdf") {
+		t.Errorf("pub page:\n%s", body)
+	}
+	if strings.Contains(body, "0p") {
+		t.Errorf("empty resolution label shown:\n%s", body)
+	}
 }

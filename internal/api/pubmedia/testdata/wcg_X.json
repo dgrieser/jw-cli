@@ -1,0 +1,164 @@
+{
+ "pubName": "Geh mutig deinen Weg mit Gott",
+ "parentPubName": "Geh mutig deinen Weg mit Gott",
+ "booknum": null,
+ "pub": "wcg",
+ "issue": "",
+ "formattedDate": "",
+ "fileformat": [],
+ "track": null,
+ "specialty": "",
+ "pubImage": {
+  "url": "https://cfp2.jw-cdn.org/a/bde931/1/ir/wcg_X_lg.jpg",
+  "modifiedDatetime": "2026-05-26T09:05:58+00:00",
+  "checksum": "01a32edc3783395847a4de8eb3a20b84"
+ },
+ "languages": {
+  "X": {
+   "name": "Deutsch",
+   "direction": "ltr",
+   "locale": "de",
+   "script": "ROMAN"
+  }
+ },
+ "files": {
+  "X": {
+   "PDF": [
+    {
+     "title": "Geh mutig deinen Weg mit Gott",
+     "file": {
+      "url": "https://cfp2.jw-cdn.org/a/af655342/4/o/wcg_X.pdf",
+      "stream": "https://jw.org",
+      "modifiedDatetime": "2026-05-26 09:05:52",
+      "checksum": "2f36c987be7de194d4de382b02856e56"
+     },
+     "filesize": 27942239,
+     "trackImage": {
+      "url": "",
+      "modifiedDatetime": "",
+      "checksum": null
+     },
+     "markers": null,
+     "label": "0p",
+     "track": 0,
+     "hasTrack": false,
+     "pub": "wcg",
+     "docid": 0,
+     "booknum": 0,
+     "mimetype": "application/pdf",
+     "edition": "",
+     "editionDescr": "Regulär",
+     "format": "",
+     "formatDescr": "Regulär",
+     "specialty": "",
+     "specialtyDescr": "",
+     "subtitled": false,
+     "frameWidth": 0,
+     "frameHeight": 0,
+     "frameRate": 0,
+     "duration": 0,
+     "bitRate": 0
+    }
+   ],
+   "MP3": [
+    {
+     "title": "Ein Brief von der Leitenden Körperschaft",
+     "file": {
+      "url": "https://cfp2.jw-cdn.org/a/a8b72a/1/o/wcg_X_01.mp3",
+      "stream": "https://jw.org",
+      "modifiedDatetime": "2025-12-02 16:20:00",
+      "checksum": "66273e910bda5edf9dbd671cda45a2f9"
+     },
+     "filesize": 2971656,
+     "trackImage": {
+      "url": "https://cfp2.jw-cdn.org/a/32e49e/1/ir/wcg_univ_01_lg.jpg",
+      "modifiedDatetime": "2026-04-10T11:26:03+00:00",
+      "checksum": "e9b3a9e028cf32dfc71325b03ebce97f"
+     },
+     "markers": {
+      "mepsLanguageSpoken": "X",
+      "mepsLanguageWritten": "X",
+      "documentId": 1102025970,
+      "markers": [
+       {
+        "duration": "00:00:03.458",
+        "startTime": "00:00:03.809",
+        "mepsParagraphId": 1
+       },
+       {
+        "duration": "00:00:02.774",
+        "startTime": "00:00:07.268",
+        "mepsParagraphId": 2
+       },
+       {
+        "duration": "00:00:38.220",
+        "startTime": "00:00:10.043",
+        "mepsParagraphId": 3
+       },
+       {
+        "duration": "00:00:27.667",
+        "startTime": "00:00:48.264",
+        "mepsParagraphId": 4
+       },
+       {
+        "duration": "00:00:35.077",
+        "startTime": "00:01:15.932",
+        "mepsParagraphId": 5
+       },
+       {
+        "duration": "00:00:16.777",
+        "startTime": "00:01:51.010",
+        "mepsParagraphId": 6
+       },
+       {
+        "duration": "00:00:16.999",
+        "startTime": "00:02:07.788",
+        "mepsParagraphId": 7
+       },
+       {
+        "duration": "00:00:15.732",
+        "startTime": "00:02:24.788",
+        "mepsParagraphId": 8
+       },
+       {
+        "duration": "00:00:16.234",
+        "startTime": "00:02:40.521",
+        "mepsParagraphId": 9
+       },
+       {
+        "duration": "00:00:06.507",
+        "startTime": "00:02:56.756",
+        "mepsParagraphId": 10
+       }
+      ],
+      "type": "publication",
+      "hash": "66273e910bda5edf9dbd671cda45a2f9",
+      "introduction": {
+       "duration": "00:00:03.808",
+       "startTime": "00:00:00.000"
+      }
+     },
+     "label": "0p",
+     "track": 1,
+     "hasTrack": true,
+     "pub": "wcg",
+     "docid": 1102025970,
+     "booknum": 0,
+     "mimetype": "audio/mpeg",
+     "edition": "",
+     "editionDescr": "Regulär",
+     "format": "",
+     "formatDescr": "Regulär",
+     "specialty": "",
+     "specialtyDescr": "",
+     "subtitled": false,
+     "frameWidth": 0,
+     "frameHeight": 0,
+     "frameRate": 0,
+     "duration": 183.272,
+     "bitRate": 126.67544687677332
+    }
+   ]
+  }
+ }
+}

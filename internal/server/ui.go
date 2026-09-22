@@ -223,6 +223,51 @@ func urlWith(r *http.Request, name, value string) string {
 	return u.RequestURI()
 }
 
+// unfoldLevel is one entry of the unfold switcher: the level, and this page
+// again at that level.
+type unfoldLevel struct {
+	Level  int
+	URL    string
+	Active bool
+}
+
+// unfoldLevels lists every level the server unfolds to as a link to the page
+// being shown, so a result already on screen can be unfolded further or folded
+// back without filling in the form again. def is the level the page takes
+// without ?unfold=, left out of its link; a switch never carries a force=
+// along, so a costly level is asked about again.
+func unfoldLevels(r *http.Request, current, def int) []unfoldLevel {
+	out := make([]unfoldLevel, 0, maxUnfoldDepth+1)
+	for n := 0; n <= maxUnfoldDepth; n++ {
+		q := r.URL.Query()
+		q.Del("force")
+		if n == def {
+			q.Del("unfold")
+		} else {
+			q.Set("unfold", fmt.Sprint(n))
+		}
+		u := r.URL.Path
+		if enc := q.Encode(); enc != "" {
+			u += "?" + enc
+		}
+		out = append(out, unfoldLevel{Level: n, URL: u, Active: n == min(current, maxUnfoldDepth)})
+	}
+	return out
+}
+
+// unfoldDocument expands the citations of a document page when a level is
+// asked for, and returns its body sanitized for the page.
+func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.Article, depth int) (template.HTML, error) {
+	if depth > 0 {
+		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth, forceParam(r)), text(lng))
+		if err != nil {
+			return "", err
+		}
+		art.HTML = body
+	}
+	return s.sanitized(art.HTML, s.svc.ArticleBase(art)), nil
+}
+
 // sanitized runs a site HTML fragment through the same sanitizer the CLI
 // renders with, and only then marks it safe for the page.
 func (s *Server) sanitized(fragment, baseURL string) template.HTML {
@@ -424,9 +469,11 @@ type articlePage struct {
 	Heading string
 	URL     string
 	Unfold  int
-	Body    template.HTML
-	Refs    []model.ScriptureAnchor
-	Images  []model.MediaAsset
+	// UnfoldLevels is the level switcher above the document.
+	UnfoldLevels []unfoldLevel
+	Body         template.HTML
+	Refs         []model.ScriptureAnchor
+	Images       []model.MediaAsset
 }
 
 func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
@@ -450,19 +497,16 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	if depth > 0 {
-		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth, forceParam(r)), text(lng))
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		art.HTML = body
+	page.Body, err = s.unfoldDocument(r, lng, art, depth)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
 	}
 	page.Unfold = depth
+	page.UnfoldLevels = unfoldLevels(r, depth, 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
 	page.Heading = art.Title
 	page.URL = art.URL
-	page.Body = s.sanitized(art.HTML, s.svc.ArticleBase(art))
 	page.Refs = art.ScriptureRefs
 	page.Images = art.Images
 	s.render(w, http.StatusOK, "article", page)
@@ -476,7 +520,10 @@ type documentPage struct {
 	URL     string
 	Date    string
 	Part    string // meetings: "", "midweek" or "weekend"
-	Body    template.HTML
+	Unfold  int
+	// UnfoldLevels is the level switcher above the document.
+	UnfoldLevels []unfoldLevel
+	Body         template.HTML
 }
 
 // PartURL addresses one of the meeting tabs, keeping the chosen week and
@@ -489,6 +536,9 @@ func (p documentPage) PartURL(part string) string {
 	q := url.Values{}
 	if p.Date != "" {
 		q.Set("date", p.Date)
+	}
+	if p.Unfold > 0 {
+		q.Set("unfold", fmt.Sprint(p.Unfold))
 	}
 	if p.Lang != "" {
 		q.Set("lang", p.Lang)
@@ -510,17 +560,29 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	depth, err := intParam(r, "unfold", 0)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
 	art, err := s.svc.DailyText(r.Context(), lng, date)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
 	}
+	body, err := s.unfoldDocument(r, lng, art, depth)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
 	s.render(w, http.StatusOK, "dailytext", documentPage{
-		basePage: s.base(r, firstNonEmpty(art.Title, "Daily text")),
-		Heading:  art.Title,
-		URL:      art.URL,
-		Date:     r.FormValue("date"),
-		Body:     s.sanitized(art.HTML, s.svc.ArticleBase(art)),
+		basePage:     s.base(r, firstNonEmpty(art.Title, "Daily text")),
+		Heading:      art.Title,
+		URL:          art.URL,
+		Date:         r.FormValue("date"),
+		Unfold:       depth,
+		UnfoldLevels: unfoldLevels(r, depth, 0),
+		Body:         body,
 	})
 }
 
@@ -540,6 +602,11 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	depth, err := intParam(r, "unfold", 0)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
 	var art model.Article
 	if part == "" {
 		art, err = s.svc.Meetings(r.Context(), lng, date)
@@ -550,13 +617,20 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	body, err := s.unfoldDocument(r, lng, art, depth)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
 	s.render(w, http.StatusOK, "meetings", documentPage{
-		basePage: s.base(r, firstNonEmpty(art.Title, "Meetings")),
-		Heading:  art.Title,
-		URL:      art.URL,
-		Date:     r.FormValue("date"),
-		Part:     part,
-		Body:     s.sanitized(art.HTML, s.svc.ArticleBase(art)),
+		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")),
+		Heading:      art.Title,
+		URL:          art.URL,
+		Date:         r.FormValue("date"),
+		Part:         part,
+		Unfold:       depth,
+		UnfoldLevels: unfoldLevels(r, depth, 0),
+		Body:         body,
 	})
 }
 
@@ -727,6 +801,8 @@ type biblePage struct {
 	View    string
 	Edition string
 	Unfold  int
+	// UnfoldLevels is the level switcher above the reading.
+	UnfoldLevels []unfoldLevel
 	// Editions is the picker's option list.
 	Editions []string
 	// Read
@@ -847,6 +923,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 			s.failUI(w, r, err)
 			return
 		}
+		page.UnfoldLevels = unfoldLevels(r, depth, 1)
 		// FormatPassages already sanitizes each passage through render.Render;
 		// the headings around them are escaped there too.
 		page.Body = template.HTML(foldSections(body)) //nolint:gosec // sanitized per passage above

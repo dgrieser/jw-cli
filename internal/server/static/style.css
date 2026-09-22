@@ -382,6 +382,11 @@ label.check { display: inline-flex; align-items: center; gap: 0.5rem; cursor: po
 .tabs a.active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .tabs a[aria-busy="true"]::after { width: 0.85rem; height: 0.85rem; }
 
+/* the unfold switcher: the same pills, one per level, behind a label */
+.tabs.unfold { align-items: center; margin: 0 0 1rem; }
+.tabs.unfold .label { color: var(--muted); font-size: 0.9rem; margin-right: 0.25rem; cursor: help; }
+.tabs.unfold a { min-width: 2.1rem; justify-content: center; padding: 0 0.6rem; }
+
 /* listings ------------------------------------------------------------ */
 
 .listheader { margin: 1.5rem 0 0.25rem; font-size: 1.1rem; color: var(--muted); font-weight: 500; }

@@ -46,17 +46,49 @@ type wireFile struct {
 		URL      string `json:"url"`
 		Checksum string `json:"checksum"`
 	} `json:"file"`
-	Filesize int64       `json:"filesize"`
-	Label    string      `json:"label"`
-	Track    json.Number `json:"track"`
-	DocID    json.Number `json:"docid"`
-	BookNum  json.Number `json:"booknum"`
-	MimeType string      `json:"mimetype"`
+	Filesize int64   `json:"filesize"`
+	Label    string  `json:"label"`
+	Track    flexNum `json:"track"`
+	DocID    flexNum `json:"docid"`
+	BookNum  flexNum `json:"booknum"`
+	MimeType string  `json:"mimetype"`
 }
 
 // Links queries GETPUBMEDIALINKS and returns the available files grouped by
 // language symbol and format.
+//
+// A symbol written the way the files are named, with the language attached
+// ("wcg_X", "wcg-X"), is not one the API knows; when it is refused and ends in
+// the language asked for, the bare symbol is tried instead.
 func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
+	pm, err := c.links(ctx, q)
+	if err != nil && errors.Is(err, ErrNotFound) {
+		if bare, ok := stripLangSuffix(q.Pub, q.Lang); ok {
+			retry := q
+			retry.Pub = bare
+			if pm, rerr := c.links(ctx, retry); rerr == nil {
+				return pm, nil
+			}
+		}
+	}
+	return pm, err
+}
+
+// stripLangSuffix drops a trailing "_X" or "-X" from a publication symbol when
+// X is the language symbol lang.
+func stripLangSuffix(pub, lang string) (string, bool) {
+	if pub == "" || lang == "" {
+		return "", false
+	}
+	for _, sep := range []string{"_", "-"} {
+		if bare, ok := strings.CutSuffix(strings.ToLower(pub), strings.ToLower(sep+lang)); ok && bare != "" {
+			return pub[:len(bare)], true
+		}
+	}
+	return "", false
+}
+
+func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 	if q.Lang == "" {
 		return model.PubMedia{}, errors.New("pubmedia: language symbol required")
 	}
@@ -95,11 +127,11 @@ func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
 	u := c.hc.Base.CDN + "/apis/pub-media/GETPUBMEDIALINKS?" + v.Encode()
 
 	var resp struct {
-		PubName       string      `json:"pubName"`
-		ParentPubName string      `json:"parentPubName"`
-		Pub           string      `json:"pub"`
-		Issue         json.Number `json:"issue"`
-		BookNum       json.Number `json:"booknum"`
+		PubName       string  `json:"pubName"`
+		ParentPubName string  `json:"parentPubName"`
+		Pub           string  `json:"pub"`
+		Issue         flexNum `json:"issue"`
+		BookNum       flexNum `json:"booknum"`
 		Languages     map[string]struct {
 			Name   string `json:"name"`
 			Locale string `json:"locale"`
@@ -113,7 +145,8 @@ func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
 	}
 	if err := c.hc.GetJSON(ctx, u, nil, &resp); err != nil {
 		var se *httpx.StatusError
-		if errors.As(err, &se) && se.StatusCode == 404 {
+		// an unknown symbol is answered with 400 rather than 404
+		if errors.As(err, &se) && (se.StatusCode == 404 || se.StatusCode == 400) {
 			return model.PubMedia{}, fmt.Errorf("%w: %s", ErrNotFound, describe(q))
 		}
 		return model.PubMedia{}, err
@@ -165,12 +198,42 @@ func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
 	return pm, nil
 }
 
-func atoiNum(n json.Number) (int, error) {
+// flexNum is a numeric field the API sends in whatever shape it likes: a
+// number (202405), a string ("202405"), an empty string or null when the
+// publication has none. json.Number refuses the empty string, which made every
+// non-periodical (wcg, lff, ...) fail to decode.
+type flexNum string
+
+func (n *flexNum) UnmarshalJSON(b []byte) error {
+	s := strings.TrimSpace(string(b))
+	if s == "null" {
+		*n = ""
+		return nil
+	}
+	if strings.HasPrefix(s, `"`) {
+		var str string
+		if err := json.Unmarshal(b, &str); err != nil {
+			return err
+		}
+		*n = flexNum(strings.TrimSpace(str))
+		return nil
+	}
+	var num json.Number
+	if err := json.Unmarshal(b, &num); err != nil {
+		return err
+	}
+	*n = flexNum(num)
+	return nil
+}
+
+func (n flexNum) String() string { return string(n) }
+
+func atoiNum(n flexNum) (int, error) {
 	if n == "" {
 		return 0, nil
 	}
-	i, err := n.Int64()
-	return int(i), err
+	i, err := strconv.Atoi(string(n))
+	return i, err
 }
 
 func describe(q Query) string {
