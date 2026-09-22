@@ -702,7 +702,8 @@ func dropTrailingRule(s string) string {
 // level is the heading level the expansion of a verse is written at, which
 // depends on whether the verses are headed one by one.
 func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref,
-	verses []model.Verse, level int, cfg UnfoldConfig, txt *i18n.Messages) ([]string, string, error) {
+	verses []model.Verse, table *bibleref.Table, level int, cfg UnfoldConfig,
+	txt *i18n.Messages) ([]string, string, error) {
 	studies := make([]unfold.Study, len(verses))
 	cited := make([]unfold.Cited, len(verses))
 	groups := make([]unfold.Group, len(verses))
@@ -737,9 +738,18 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		var b strings.Builder
 		writeStudyNotes(&b, unfold.Node{Notes: studies[i].Notes}, level, txt)
 		writeIndexGroups(&b, studies[i].Links, research, level, txt)
-		// no heading over the marginal references: each one is headed by the
-		// reference it is, beside the indexes rather than under a group name
-		writeUnfoldNodes(&b, marginal, level, "", txt)
+		// the cross references of the verse, under one heading naming it —
+		// each reference then says which verse it belongs to, which is what
+		// tells them from the references of a reference one level deeper
+		verseRef := RefString(bibleref.Ref{
+			Book: ref.Book, Chapter: ref.Chapter,
+			VerseStart: verses[i].ID % 1000, VerseEnd: verses[i].ID % 1000,
+		}, table)
+		if len(marginal) > 0 {
+			b.WriteString(headingHTML(level,
+				html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, verseRef))))
+			writeUnfoldNodes(&b, marginal, level+1, verseRef, txt)
+		}
 		writeCited(&b, unfold.Node{
 			Cited: cited[i].Results, CitedTotal: cited[i].Total, CitedRef: cited[i].Ref,
 		}, level, txt)
@@ -896,7 +906,7 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 		case source == "":
 			return txt.MarginalReference + " " + n.Title
 		}
-		return fmt.Sprintf(txt.MarginalReferenceWithSource, source, n.Title)
+		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source)
 	}
 	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
 		return ref

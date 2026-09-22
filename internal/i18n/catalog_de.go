@@ -60,7 +60,8 @@ var de = Messages{
 	DownloadFailed:   "Herunterladen fehlgeschlagen: %s",
 
 	MarginalReference:           "Querverweis",
-	MarginalReferenceWithSource: "Querverweis %s → %s",
+	MarginalReferencesOf:        "Querverweise %s",
+	MarginalReferenceWithSource: "Querverweis %s von %s",
 
 	UnfoldHeading:  "Referenzen",
 	UnfoldConfirm:  "Ebene %d braucht bis zu %d weitere Abfragen an wol.jw.org. Fortfahren? [j/N] ",

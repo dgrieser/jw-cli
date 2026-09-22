@@ -356,9 +356,10 @@ order, and leaves out whatever the verse does not have:
    two. Every entry an index lists is read, whether it has a passage to unfold
    or only names an article; an entry the first index already listed is left
    out of the second.
-3. **The marginal references**, each headed by the reference it is and standing
-   beside the indexes — no parent heading over them either. What belongs to one
-   of them, its own quotations included, is nested under it.
+3. **The marginal references**, under one heading naming the verse they belong
+   to, each headed by the reference it points at and the verse it came from —
+   which is what tells them from the references of a reference one level
+   deeper. What belongs to one of them is nested under it.
 4. **Quotations of …** — every publication a citation search finds quoting the
    verse, each with the passage it quotes it in: `jw bible cited` for that
    verse, printed where the verse stands. The heading names the reference it
@@ -376,10 +377,9 @@ not what those point at — at any `--unfold` depth.
 ## Jeremia 34:3
 ### Index der Publikationen
 #### w80 1. 3. 24 → Befreiung! Das Ende der Christenheit überleben
-### Querverweis Jeremia 37:17
-#### Zitate von Jeremia 37:17
-### Querverweis 2. Könige 25:6, 7
-#### Zitate von 2. Könige 25:6, 7
+### Querverweise Jeremia 34:3
+#### Querverweis Jeremia 37:17 von Jeremia 34:3
+#### Querverweis 2. Könige 25:6, 7 von Jeremia 34:3
 ### Zitate von Jeremia 34:3
 ```
 

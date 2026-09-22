@@ -36,9 +36,9 @@ func TestUnfoldHeading(t *testing.T) {
 		// passage it sits in and the one it points at
 		{"verse marker names both ends",
 			unfold.Node{Ref: unfold.Ref{Text: "+", Path: "/wol/bc/9/9"}, Title: "Isaiah 2:2"},
-			"Marginal reference Acts 24:15 → Isaiah 2:2"},
+			"Marginal reference Isaiah 2:2 of Acts 24:15"},
 		{"asterisk marker", unfold.Node{Ref: unfold.Ref{Text: "*", Path: "/wol/bc/1/2"}, Title: "Daniel 12:13"},
-			"Marginal reference Acts 24:15 → Daniel 12:13"},
+			"Marginal reference Daniel 12:13 of Acts 24:15"},
 		// not a verse: no marginal reference to speak of, just the title
 		{"publication marker keeps the title alone",
 			unfold.Node{Ref: unfold.Ref{Text: "*", Path: "/wol/pc/1/2"}, Title: "Insight, page 390"}, "Insight, page 390"},
@@ -123,7 +123,7 @@ func TestUnfoldHTML(t *testing.T) {
 		"<h2>References</h2>",
 		"<h3>Matt 24:14</h3>",
 		"<p>this good news</p>",
-		"<h4>Marginal reference Matthew 24:14 → Isaiah 2:2</h4>",
+		"<h4>Marginal reference Isaiah 2:2 of Matthew 24:14</h4>",
 		"<p>the mountain</p>",
 	} {
 		if !strings.Contains(out, want) {
@@ -191,8 +191,8 @@ func TestUnfoldNamesTheVerseAMarkerCameFrom(t *testing.T) {
 	}}}
 	out := unfoldedHTML(res, i18n.EN.Text())
 	for _, want := range []string{
-		"Marginal reference John 3:16 → Romans 5:8",
-		"Marginal reference John 3:17 → 1 John 4:14",
+		"Marginal reference Romans 5:8 of John 3:16",
+		"Marginal reference 1 John 4:14 of John 3:17",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in:\n%s", want, out)
