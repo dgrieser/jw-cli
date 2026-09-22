@@ -1,9 +1,11 @@
 {{define "content"}}
 <h1>{{.T.UINavSearch}}</h1>
-<form class="searchform wide" method="get" action="/search">
+<form class="form" method="get" action="/search" role="search">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UISearchHint}}" autofocus>
-  <button type="submit">{{.T.UINavSearch}}</button>
+  <div class="query">
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UISearchHint}}" aria-label="{{.T.UINavSearch}}" autofocus>
+    <button type="submit" class="primary">{{.T.UINavSearch}}</button>
+  </div>
   <fieldset class="options">
     <label>{{.T.UIEngine}}
       <select name="engine">
@@ -29,16 +31,16 @@
         <option {{if eq .Sort "occ"}}selected{{end}}>occ</option>
       </select>
     </label>
-    <label><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}> {{.T.UIFullExcerpts}}</label>
+    <label class="check"><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}> {{.T.UIFullExcerpts}}</label>
   </fieldset>
 </form>
 
 {{- if .Header}}
 <h2 class="listheader">{{.Header}}</h2>
 {{template "listing" .}}
-<p class="pager">
-  {{if .PrevURL}}<a href="{{.PrevURL}}">← {{.T.UIPrevPage}}</a>{{end}}
-  {{if .NextURL}}<a href="{{.NextURL}}">{{.T.UINextPage}} →</a>{{end}}
-</p>
+<nav class="pager">
+  {{if .PrevURL}}<a class="btn" href="{{.PrevURL}}">{{.T.UIPrevPage}}</a>{{else}}<span></span>{{end}}
+  {{if .NextURL}}<a class="btn" href="{{.NextURL}}">{{.T.UINextPage}}</a>{{end}}
+</nav>
 {{- end}}
 {{end}}

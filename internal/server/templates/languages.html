@@ -1,11 +1,14 @@
 {{define "content"}}
 <h1>{{.T.UINavLanguages}}</h1>
-<form class="searchform" method="get" action="/languages">
+<form class="form" method="get" action="/languages" role="search">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UILangFilterHint}}">
-  <button type="submit">{{.T.UIFilter}}</button>
+  <div class="query">
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UILangFilterHint}}" aria-label="{{.T.UIFilter}}" autofocus>
+    <button type="submit" class="primary">{{.T.UIFilter}}</button>
+  </div>
 </form>
 
+<div class="tablewrap">
 <table class="langs">
   <thead><tr><th>{{.T.ColSymbol}}</th><th>{{.T.ColLocale}}</th><th>{{.T.ColName}}</th><th>{{.T.ColVernacular}}</th></tr></thead>
   <tbody>
@@ -17,8 +20,9 @@
       <td>{{.Vernacular}}</td>
     </tr>
     {{- else}}
-    <tr><td colspan="4">{{.T.UINoLanguages}}</td></tr>
+    <tr><td colspan="4" class="empty">{{.T.UINoLanguages}}</td></tr>
     {{- end}}
   </tbody>
 </table>
+</div>
 {{end}}

@@ -1,20 +1,22 @@
 {{define "content"}}
 <h1>{{.T.UINavMeetings}}</h1>
-<form class="searchform" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
+<form class="form" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="date" name="date" value="{{.Date}}" title="{{.T.UIDateHint}}">
-  <button type="submit">{{.T.UIShow}}</button>
+  <div class="query compact">
+    <input type="date" name="date" value="{{.Date}}" title="{{.T.UIDateHint}}" aria-label="{{.T.UIDateHint}}">
+    <button type="submit" class="primary">{{.T.UIShow}}</button>
+  </div>
 </form>
 
-<nav class="tabs">
-  <a href="{{.PartURL ""}}" {{if eq .Part ""}}class="active"{{end}}>{{.T.UIOverview}}</a>
-  <a href="{{.PartURL "midweek"}}" {{if eq .Part "midweek"}}class="active"{{end}}>{{.T.UIMidweek}}</a>
-  <a href="{{.PartURL "weekend"}}" {{if eq .Part "weekend"}}class="active"{{end}}>{{.T.UIWeekend}}</a>
+<nav class="tabs" aria-label="{{.T.UINavMeetings}}">
+  <a href="{{.PartURL ""}}" {{if eq .Part ""}}class="active" aria-current="page"{{end}}>{{.T.UIOverview}}</a>
+  <a href="{{.PartURL "midweek"}}" {{if eq .Part "midweek"}}class="active" aria-current="page"{{end}}>{{.T.UIMidweek}}</a>
+  <a href="{{.PartURL "weekend"}}" {{if eq .Part "weekend"}}class="active" aria-current="page"{{end}}>{{.T.UIWeekend}}</a>
 </nav>
 
 <article class="document">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}
 </article>
-<p class="links">{{if .URL}}<a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a>{{end}}</p>
+{{- if .URL}}<p class="links"><a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a></p>{{end}}
 {{end}}

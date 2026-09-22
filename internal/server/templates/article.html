@@ -1,11 +1,15 @@
 {{define "content"}}
 {{- if not .Target}}
 <h1>{{.T.UIRead}}</h1>
-<form class="searchform wide" method="get" action="/article">
+<form class="form" method="get" action="/article">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="text" name="target" placeholder="{{.T.UIArticleHint}}" autofocus>
-  <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="0" title="{{.T.UIUnfoldHintArt}}"></label>
-  <button type="submit">{{.T.UIRead}}</button>
+  <div class="query">
+    <input type="text" name="target" placeholder="{{.T.UIArticleHint}}" aria-label="{{.T.UIRead}}" autofocus autocapitalize="off">
+    <button type="submit" class="primary">{{.T.UIRead}}</button>
+  </div>
+  <fieldset class="options">
+    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="0" title="{{.T.UIUnfoldHintArt}}" class="num"></label>
+  </fieldset>
 </form>
 {{- else}}
 <article class="document">

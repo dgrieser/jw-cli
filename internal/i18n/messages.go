@@ -178,6 +178,8 @@ type Messages struct {
 	UINavMedia        string
 	UINavPublications string
 	UINavLanguages    string
+	UIMenu            string
+	UILoading         string
 	UILanguage        string
 	UILanguageHint    string
 	UIGo              string

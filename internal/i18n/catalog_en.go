@@ -106,6 +106,8 @@ var en = Messages{
 	UINavMedia:         "Media",
 	UINavPublications:  "Publications",
 	UINavLanguages:     "Languages",
+	UIMenu:             "Menu",
+	UILoading:          "Loading…",
 	UILanguage:         "Language",
 	UILanguageHint:     "JW symbol (E), ISO code (de), or BCP-47 (de-AT)",
 	UIGo:               "Go",

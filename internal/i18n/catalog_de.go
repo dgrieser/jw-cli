@@ -106,6 +106,8 @@ var de = Messages{
 	UINavMedia:         "Medien",
 	UINavPublications:  "Publikationen",
 	UINavLanguages:     "Sprachen",
+	UIMenu:             "Menü",
+	UILoading:          "Wird geladen…",
 	UILanguage:         "Sprache",
 	UILanguageHint:     "JW-Symbol (X), ISO-Code (de) oder BCP-47 (de-AT)",
 	UIGo:               "Los",

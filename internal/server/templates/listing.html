@@ -1,29 +1,33 @@
 {{define "listing"}}
 <ol class="listing">
   {{- range .Items}}
-  <li>
-    <p class="row">
-      <span class="kind">{{.Kind}}</span>
-      {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
-      {{- if .Context}} <span class="context">— {{.Context}}</span>{{end}}
-      {{- if .Duration}} <span class="meta">({{.Duration}})</span>{{end}}
-      {{- if .Size}} <span class="meta">({{.Size}})</span>{{end}}
-    </p>
+  <li{{if .ImageURL}} class="has-thumb"{{end}}>
     {{- if .ImageURL}}
-    <p class="thumb">{{if .Href}}<a href="{{.Href}}"><img src="{{.ImageURL}}" alt="" loading="lazy"></a>{{else}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{end}}</p>
+    {{if .Href}}<a class="thumb" href="{{.Href}}" tabindex="-1" aria-hidden="true"><img src="{{.ImageURL}}" alt="" loading="lazy"></a>{{else}}<span class="thumb"><img src="{{.ImageURL}}" alt="" loading="lazy"></span>{{end}}
     {{- end}}
-    {{- if .Excerpt}}
-    <blockquote class="excerpt">{{.Excerpt}}</blockquote>
-    {{- else if .Snippet}}
-    <blockquote class="snippet">{{.Snippet}}</blockquote>
-    {{- end}}
-    {{- range .Meta}}
-    <p class="imagemeta">{{.}}</p>
-    {{- end}}
-    <p class="links">
-      {{- if .External}}<a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a>{{end}}
-      {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">{{$.T.UIDownload}}</a>{{end}}
-    </p>
+    <div class="body">
+      <p class="row">
+        <span class="kind">{{.Kind}}</span>
+        {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
+        {{- if .Context}} <span class="context">{{.Context}}</span>{{end}}
+        {{- if .Duration}} <span class="meta">{{.Duration}}</span>{{end}}
+        {{- if .Size}} <span class="meta">{{.Size}}</span>{{end}}
+      </p>
+      {{- if .Excerpt}}
+      <blockquote class="excerpt">{{.Excerpt}}</blockquote>
+      {{- else if .Snippet}}
+      <blockquote class="snippet">{{.Snippet}}</blockquote>
+      {{- end}}
+      {{- range .Meta}}
+      <p class="imagemeta">{{.}}</p>
+      {{- end}}
+      {{- if or .External .FileURL}}
+      <p class="links">
+        {{- if .External}}<a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a>{{end}}
+        {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">{{$.T.UIDownload}}</a>{{end}}
+      </p>
+      {{- end}}
+    </div>
   </li>
   {{- else}}
   <li class="empty">{{$.T.NoResults}}</li>

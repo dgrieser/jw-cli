@@ -369,7 +369,7 @@ func TestUIIndexAndLanguages(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{"<title>jw · jw</title>", "Daily text", "/search", `<html lang="en">`} {
+	for _, want := range []string{"<title>JW · JW</title>", "Daily text", "/search", `<html lang="en">`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index missing %q", want)
 		}
@@ -437,9 +437,14 @@ func TestUIArticle(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	// script injection cannot survive the sanitizer
-	if strings.Contains(body, "<script") {
-		t.Errorf("unexpected script tag in article page")
+	// script injection cannot survive the sanitizer: the page's own script is
+	// outside the article, nothing from upstream may be inside it
+	start, end := strings.Index(body, "<article"), strings.Index(body, "</article>")
+	if start < 0 || end < start {
+		t.Fatalf("no article element in:\n%s", body)
+	}
+	if strings.Contains(body[start:end], "<script") {
+		t.Errorf("unexpected script tag inside the article")
 	}
 }
 

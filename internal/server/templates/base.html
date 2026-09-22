@@ -3,38 +3,53 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{.Title}} · jw</title>
+<meta name="color-scheme" content="light dark">
+<title>{{.Title}} · JW</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
+<script>document.documentElement.classList.add("js")</script>
 </head>
 <body>
-<header class="site">
-  <nav class="nav">
-    <a class="brand" href="{{.WithLang "/"}}">jw</a>
-    <a href="{{.WithLang "/search"}}">{{.T.UINavSearch}}</a>
-    <a href="{{.WithLang "/bible"}}">{{.T.UINavBible}}</a>
-    <a href="{{.WithLang "/dailytext"}}">{{.T.UINavDailyText}}</a>
-    <a href="{{.WithLang "/meetings"}}">{{.T.UINavMeetings}}</a>
-    <a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a>
-    <a href="{{.WithLang "/pub"}}">{{.T.UINavPublications}}</a>
-    <a href="{{.WithLang "/languages"}}">{{.T.UINavLanguages}}</a>
-  </nav>
-  <form class="langform" method="get" action="{{.Path}}">
-    {{- range .Hidden}}
-    <input type="hidden" name="{{.Name}}" value="{{.Value}}">
-    {{- end}}
-    <label for="lang">{{.T.UILanguage}}</label>
-    <input id="lang" name="lang" value="{{.Lang}}" size="6" placeholder="en" title="{{.T.UILanguageHint}}">
-    <button type="submit">{{.T.UIGo}}</button>
-  </form>
+<div class="progress" aria-hidden="true"></div>
+<header class="site-header">
+  <div class="wrap bar">
+    <a class="brand" href="{{.WithLang "/"}}">JW</a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="menu">
+      <span class="menu-icon" aria-hidden="true"></span>{{.T.UIMenu}}
+    </button>
+    <div class="menu" id="menu">
+      <nav class="site-nav" aria-label="{{.T.UIMenu}}">
+        <a class="{{.Active "/search"}}" href="{{.WithLang "/search"}}">{{.T.UINavSearch}}</a>
+        <a class="{{.Active "/bible"}}" href="{{.WithLang "/bible"}}">{{.T.UINavBible}}</a>
+        <a class="{{.Active "/dailytext"}}" href="{{.WithLang "/dailytext"}}">{{.T.UINavDailyText}}</a>
+        <a class="{{.Active "/meetings"}}" href="{{.WithLang "/meetings"}}">{{.T.UINavMeetings}}</a>
+        <a class="{{.Active "/media"}}" href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a>
+        <a class="{{.Active "/pub"}}" href="{{.WithLang "/pub"}}">{{.T.UINavPublications}}</a>
+        <a class="{{.Active "/languages"}}" href="{{.WithLang "/languages"}}">{{.T.UINavLanguages}}</a>
+      </nav>
+      <form class="langform" method="get" action="{{.Path}}">
+        {{- range .Hidden}}
+        <input type="hidden" name="{{.Name}}" value="{{.Value}}">
+        {{- end}}
+        <label for="lang">{{.T.UILanguage}}</label>
+        <input id="lang" name="lang" value="{{.Lang}}" size="5" placeholder="en" title="{{.T.UILanguageHint}}" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button type="submit" class="small">{{.T.UIGo}}</button>
+      </form>
+    </div>
+  </div>
 </header>
-<main>
+<main class="wrap">
 {{- if .Error}}
-<p class="error">{{.Error}}</p>
+<p class="error" role="alert">{{.Error}}</p>
 {{- end}}
 {{template "content" .}}
 </main>
-<footer class="site">
-  <p>{{.T.UIFooter}} {{.T.UIJSONAPI}}: <a href="/api/v1/languages"><code>/api/v1</code></a></p>
+<footer class="site-footer">
+  <div class="wrap">
+    <p>{{.T.UIFooter}} {{.T.UIJSONAPI}}: <a href="/api/v1/languages"><code>/api/v1</code></a></p>
+  </div>
 </footer>
+<div class="loading" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span>{{.T.UILoading}}</div>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

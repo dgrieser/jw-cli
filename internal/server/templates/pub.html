@@ -1,17 +1,19 @@
 {{define "content"}}
 <h1>{{.T.UINavPublications}}</h1>
-<form class="searchform wide" method="get" action="/pub">
+<form class="form" method="get" action="/pub">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <fieldset class="options">
-    <label>{{.T.UISymbol}} <input type="text" name="pub" value="{{.Pub}}" size="8" placeholder="nwt, w, g"></label>
-    <label>{{.T.UIDocID}} <input type="text" name="docid" value="{{.DocID}}" size="10"></label>
-    <label>{{.T.UIIssue}} <input type="text" name="issue" value="{{.Issue}}" size="8" placeholder="202405"></label>
-    <label>{{.T.UIBook}} <input type="text" name="booknum" value="{{.BookNum}}" size="4" placeholder="1-66"></label>
-    <label>{{.T.UITrack}} <input type="text" name="track" value="{{.Track}}" size="4"></label>
-    <label>{{.T.UIFormats}} <input type="text" name="fileformat" value="{{.Formats}}" size="14" placeholder="PDF,EPUB,MP3"></label>
-    <label><input type="checkbox" name="allLangs" value="true" {{if .AllLangs}}checked{{end}}> {{.T.UIAllLanguages}}</label>
-    <button type="submit">{{.T.UIListFiles}}</button>
-  </fieldset>
+  <div class="fields">
+    <label>{{.T.UISymbol}} <input type="text" name="pub" value="{{.Pub}}" placeholder="nwt, w, g" autocapitalize="off" autofocus></label>
+    <label>{{.T.UIDocID}} <input type="text" name="docid" value="{{.DocID}}" inputmode="numeric"></label>
+    <label>{{.T.UIIssue}} <input type="text" name="issue" value="{{.Issue}}" placeholder="202405" inputmode="numeric"></label>
+    <label>{{.T.UIBook}} <input type="text" name="booknum" value="{{.BookNum}}" placeholder="1-66" inputmode="numeric"></label>
+    <label>{{.T.UITrack}} <input type="text" name="track" value="{{.Track}}" inputmode="numeric"></label>
+    <label>{{.T.UIFormats}} <input type="text" name="fileformat" value="{{.Formats}}" placeholder="PDF,EPUB,MP3" autocapitalize="characters"></label>
+  </div>
+  <div class="actions">
+    <button type="submit" class="primary">{{.T.UIListFiles}}</button>
+    <label class="check"><input type="checkbox" name="allLangs" value="true" {{if .AllLangs}}checked{{end}}> {{.T.UIAllLanguages}}</label>
+  </div>
 </form>
 
 {{- if .Heading}}

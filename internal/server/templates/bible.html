@@ -1,10 +1,12 @@
 {{define "content"}}
 <h1>{{.T.UINavBible}}</h1>
-<form class="searchform wide" method="get" action="/bible">
+<form class="form" method="get" action="/bible">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   {{- if ne .View "read"}}<input type="hidden" name="view" value="{{.View}}">{{end}}
-  <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" autofocus>
-  <button type="submit">{{.T.UIGo}}</button>
+  <div class="query">
+    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" autofocus autocapitalize="off">
+    <button type="submit" class="primary">{{.T.UIGo}}</button>
+  </div>
   {{- if eq .View "read"}}
   <fieldset class="options">
     <label>{{.T.UIEdition}}
@@ -14,16 +16,16 @@
         {{- end}}
       </select>
     </label>
-    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="{{.T.UIUnfoldHint}}"></label>
+    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="{{.T.UIUnfoldHint}}" class="num"></label>
   </fieldset>
   {{- end}}
 </form>
 
 {{- if .Ref}}
-<nav class="tabs">
+<nav class="tabs" aria-label="{{.T.UINavBible}}">
   {{- $page := . -}}
   {{- range $v := .Views}}
-  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active"{{end}}>{{$page.ViewLabel $v}}</a>
+  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active" aria-current="page"{{end}}>{{$page.ViewLabel $v}}</a>
   {{- end}}
 </nav>
 
@@ -34,6 +36,7 @@
 {{- end}}
 
 {{- if eq .View "notes"}}
+<div class="entries">
 {{- range .Notes}}
 <section class="entry">
   <h2>{{.Ref}}</h2>
@@ -45,9 +48,11 @@
 {{- else}}
 <p class="empty">{{.T.NoStudyNotes}}</p>
 {{- end}}
+</div>
 {{- end}}
 
 {{- if eq .View "xrefs"}}
+<div class="entries">
 {{- range .XRefs}}
 <section class="entry">
   <h2>{{.Ref}}</h2>
@@ -60,9 +65,11 @@
 {{- else}}
 <p class="empty">{{.T.NoCrossRefs}}</p>
 {{- end}}
+</div>
 {{- end}}
 
 {{- if eq .View "research"}}
+<div class="entries">
 {{- range .Research}}
 <section class="entry">
   <h2>{{.Ref}}</h2>
@@ -80,6 +87,7 @@
 {{- else}}
 <p class="empty">{{.T.NoResearch}}</p>
 {{- end}}
+</div>
 {{- end}}
 
 {{- if or (eq .View "cited") (eq .View "media")}}

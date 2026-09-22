@@ -1,14 +1,16 @@
 {{define "content"}}
 <h1>{{.T.UINavDailyText}}</h1>
-<form class="searchform" method="get" action="/dailytext">
+<form class="form" method="get" action="/dailytext">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="date" name="date" value="{{.Date}}">
-  <button type="submit">{{.T.UIShow}}</button>
+  <div class="query compact">
+    <input type="date" name="date" value="{{.Date}}" aria-label="{{.T.UINavDailyText}}">
+    <button type="submit" class="primary">{{.T.UIShow}}</button>
+  </div>
 </form>
 
 <article class="document">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}
 </article>
-<p class="links">{{if .URL}}<a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a>{{end}}</p>
+{{- if .URL}}<p class="links"><a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a></p>{{end}}
 {{end}}

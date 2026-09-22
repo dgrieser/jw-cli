@@ -1,11 +1,13 @@
 {{define "content"}}
 <p class="crumbs"><a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a></p>
 <h1>{{.Item.Title}}</h1>
+<div class="mediaitem">
 {{- if .Image}}
-<p class="hero"><img src="{{.Image}}" alt="" loading="lazy"></p>
+<p class="hero-image"><img src="{{.Image}}" alt="" loading="lazy"></p>
 {{- end}}
+<div class="mediabody">
 {{- if .Item.Description}}
-<p>{{.Item.Description}}</p>
+<p class="lead">{{.Item.Description}}</p>
 {{- end}}
 <dl class="facts">
   <dt>LANK</dt><dd><code>{{.Item.LANK}}</code></dd>
@@ -15,24 +17,28 @@
   {{- if .Item.PrimaryCategory}}<dt>{{.T.UICategory}}</dt><dd>{{.Item.PrimaryCategory}}</dd>{{end}}
   {{- if .Item.AvailableLanguages}}<dt>{{.T.UINavLanguages}}</dt><dd>{{len .Item.AvailableLanguages}}</dd>{{end}}
 </dl>
+</div>
+</div>
 
 {{- if .Files}}
 <h2>{{.T.UIFiles}}</h2>
+<div class="tablewrap">
 <table class="files">
   <thead><tr><th>{{.T.UIRendition}}</th><th>{{.T.UISize}}</th><th></th></tr></thead>
   <tbody>
     {{- range .Files}}
     <tr>
       <td>{{.Label}}</td>
-      <td>{{.Size}}</td>
-      <td>
-        <a href="{{.URL}}" rel="noopener">{{$.T.UIDownload}}</a>
-        {{- if .Subtitles}} · <a href="{{.Subtitles}}" rel="noopener">{{$.T.UISubtitles}}</a>{{end}}
+      <td class="num">{{.Size}}</td>
+      <td class="actions">
+        <a class="btn small" href="{{.URL}}" rel="noopener">{{$.T.UIDownload}}</a>
+        {{- if .Subtitles}} <a class="btn small" href="{{.Subtitles}}" rel="noopener">{{$.T.UISubtitles}}</a>{{end}}
       </td>
     </tr>
     {{- end}}
   </tbody>
 </table>
+</div>
 <p class="hint">{{.T.UIBestRendition}}: <a href="{{.WithLang (printf "/download/media/%s" .Item.LANK)}}">/download/media/{{.Item.LANK}}</a></p>
 {{- end}}
 {{end}}

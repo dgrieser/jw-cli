@@ -43,6 +43,15 @@ type basePage struct {
 
 type hiddenField struct{ Name, Value string }
 
+// Active marks the navigation entry of the page being shown: "active" when
+// the current path is the entry's path or lies under it, otherwise empty.
+func (p basePage) Active(path string) string {
+	if p.Path == path || (path != "/" && strings.HasPrefix(p.Path, path+"/")) {
+		return "active"
+	}
+	return ""
+}
+
 // WithLang appends the page's language to an internal link.
 func (p basePage) WithLang(path string) string {
 	if p.Lang == "" {
@@ -337,7 +346,7 @@ func humanSize(n int64) string {
 // --- pages ---------------------------------------------------------------
 
 func (s *Server) uiIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, http.StatusOK, "index", struct{ basePage }{s.base(r, "jw")})
+	s.render(w, http.StatusOK, "index", struct{ basePage }{s.base(r, "JW")})
 }
 
 type searchPage struct {

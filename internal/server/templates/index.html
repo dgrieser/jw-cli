@@ -1,20 +1,21 @@
 {{define "content"}}
-<h1>jw</h1>
-<p>{{.T.UILead}}</p>
+<section class="hero">
+  <h1>JW</h1>
+  <p class="lead">{{.T.UILead}}</p>
+  <form class="query large" method="get" action="{{.WithLang "/search"}}" role="search">
+    {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+    <input type="search" name="q" placeholder="{{.T.UISearchHint}}" aria-label="{{.T.UINavSearch}}" autofocus>
+    <button type="submit" class="primary">{{.T.UINavSearch}}</button>
+  </form>
+</section>
 
-<form class="searchform" method="get" action="{{.WithLang "/search"}}">
-  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="search" name="q" placeholder="{{.T.UISearchHint}}" autofocus>
-  <button type="submit">{{.T.UINavSearch}}</button>
-</form>
-
-<ul class="cards">
-  <li><a href="{{.WithLang "/search"}}"><strong>{{.T.UINavSearch}}</strong></a> — {{.T.UICardSearch}}</li>
-  <li><a href="{{.WithLang "/bible"}}"><strong>{{.T.UINavBible}}</strong></a> — {{.T.UICardBible}}</li>
-  <li><a href="{{.WithLang "/dailytext"}}"><strong>{{.T.UINavDailyText}}</strong></a> — {{.T.UICardDailyText}}</li>
-  <li><a href="{{.WithLang "/meetings"}}"><strong>{{.T.UINavMeetings}}</strong></a> — {{.T.UICardMeetings}}</li>
-  <li><a href="{{.WithLang "/media"}}"><strong>{{.T.UINavMedia}}</strong></a> — {{.T.UICardMedia}}</li>
-  <li><a href="{{.WithLang "/pub"}}"><strong>{{.T.UINavPublications}}</strong></a> — {{.T.UICardPublications}}</li>
-  <li><a href="{{.WithLang "/languages"}}"><strong>{{.T.UINavLanguages}}</strong></a> — {{.T.UICardLanguages}}</li>
+<ul class="destinations">
+  <li><a href="{{.WithLang "/search"}}"><strong>{{.T.UINavSearch}}</strong><span>{{.T.UICardSearch}}</span></a></li>
+  <li><a href="{{.WithLang "/bible"}}"><strong>{{.T.UINavBible}}</strong><span>{{.T.UICardBible}}</span></a></li>
+  <li><a href="{{.WithLang "/dailytext"}}"><strong>{{.T.UINavDailyText}}</strong><span>{{.T.UICardDailyText}}</span></a></li>
+  <li><a href="{{.WithLang "/meetings"}}"><strong>{{.T.UINavMeetings}}</strong><span>{{.T.UICardMeetings}}</span></a></li>
+  <li><a href="{{.WithLang "/media"}}"><strong>{{.T.UINavMedia}}</strong><span>{{.T.UICardMedia}}</span></a></li>
+  <li><a href="{{.WithLang "/pub"}}"><strong>{{.T.UINavPublications}}</strong><span>{{.T.UICardPublications}}</span></a></li>
+  <li><a href="{{.WithLang "/languages"}}"><strong>{{.T.UINavLanguages}}</strong><span>{{.T.UICardLanguages}}</span></a></li>
 </ul>
 {{end}}

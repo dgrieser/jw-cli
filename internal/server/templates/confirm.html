@@ -1,10 +1,11 @@
 {{define "content"}}
-<h1>{{.T.UIExpensiveTitle}}</h1>
-<p class="error">{{.Message}}</p>
-<p>{{printf .T.UIExpensiveBody .Level .Requests}}</p>
-<p>
-  <a class="confirm" href="{{.ForceURL}}">{{.T.UIUnfoldAnyway}}</a>
-  ·
-  <a href="{{.BackURL}}">{{.T.UIWithoutUnfolding}}</a>
-</p>
+<div class="notice">
+  <h1>{{.T.UIExpensiveTitle}}</h1>
+  <p class="error">{{.Message}}</p>
+  <p>{{printf .T.UIExpensiveBody .Level .Requests}}</p>
+  <p class="actions">
+    <a class="btn primary" href="{{.BackURL}}">{{.T.UIWithoutUnfolding}}</a>
+    <a class="btn" href="{{.ForceURL}}">{{.T.UIUnfoldAnyway}}</a>
+  </p>
+</div>
 {{end}}
