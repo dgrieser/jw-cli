@@ -1,11 +1,11 @@
 {{define "content"}}
 {{- if not .Target}}
-<h1>Article</h1>
+<h1>{{.T.UIRead}}</h1>
 <form class="searchform wide" method="get" action="/article">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="text" name="target" placeholder="MEPS document id (1102025912) or a wol.jw.org / jw.org URL" autofocus>
-  <label>Unfold <input type="number" name="unfold" min="0" max="3" value="0" title="expand the text behind every citation, this many levels deep"></label>
-  <button type="submit">Read</button>
+  <input type="text" name="target" placeholder="{{.T.UIArticleHint}}" autofocus>
+  <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="0" title="{{.T.UIUnfoldHintArt}}"></label>
+  <button type="submit">{{.T.UIRead}}</button>
 </form>
 {{- else}}
 <article class="document">
@@ -15,7 +15,7 @@
 
 {{- if .Refs}}
 <details class="extras">
-  <summary>Scripture references ({{len .Refs}})</summary>
+  <summary>{{.T.UIScriptureRefs}} ({{len .Refs}})</summary>
   <ul>
     {{- range .Refs}}
     <li>{{.Text}}</li>
@@ -26,7 +26,7 @@
 
 {{- if .Images}}
 <details class="extras">
-  <summary>Images ({{len .Images}})</summary>
+  <summary>{{.T.UIImages}} ({{len .Images}})</summary>
   <ul class="gallery">
     {{- range .Images}}
     <li>
@@ -40,8 +40,8 @@
 {{- end}}
 
 <p class="links">
-  {{- if .URL}}<a href="{{.URL}}" rel="noopener">Open on site</a>{{end}}
-  {{- if not .Unfold}}<a href="{{.WithLang (printf "/article?target=%s&unfold=1" (urlquery .Target))}}">Unfold citations</a>{{end}}
+  {{- if .URL}}<a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a>{{end}}
+  {{- if not .Unfold}}<a href="{{.WithLang (printf "/article?target=%s&unfold=1" (urlquery .Target))}}">{{.T.UIUnfoldCitations}}</a>{{end}}
 </p>
 {{- end}}
 {{end}}

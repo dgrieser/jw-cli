@@ -365,14 +365,32 @@ func TestAPIPubAndDownload(t *testing.T) {
 
 func TestUIIndexAndLanguages(t *testing.T) {
 	srv := newTestServer(t, languagesMux(t))
-	resp, body := get(t, srv, "/")
+	resp, body := get(t, srv, "/?lang=en")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{"<title>jw · jw</title>", "Daily text", "/search"} {
+	for _, want := range []string{"<title>jw · jw</title>", "Daily text", "/search", `<html lang="en">`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("index missing %q", want)
 		}
+	}
+
+	// the chrome is written in the language the content is read in
+	resp, body = get(t, srv, "/?lang=de")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	for _, want := range []string{"Tagestext", "Zusammenkünfte", `<html lang="de">`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("German index missing %q", want)
+		}
+	}
+	if strings.Contains(body, ">Daily text<") {
+		t.Errorf("English chrome on a German page:\n%s", body)
+	}
+	// and the choice is remembered, so a link without one comes back in it
+	if cookie := resp.Header.Get("Set-Cookie"); !strings.Contains(cookie, "lang=de") {
+		t.Errorf("language not remembered: %q", cookie)
 	}
 
 	resp, body = get(t, srv, "/languages?q=german")

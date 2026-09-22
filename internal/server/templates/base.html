@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{.Locale}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,21 +10,21 @@
 <header class="site">
   <nav class="nav">
     <a class="brand" href="{{.WithLang "/"}}">jw</a>
-    <a href="{{.WithLang "/search"}}">Search</a>
-    <a href="{{.WithLang "/bible"}}">Bible</a>
-    <a href="{{.WithLang "/dailytext"}}">Daily text</a>
-    <a href="{{.WithLang "/meetings"}}">Meetings</a>
-    <a href="{{.WithLang "/media"}}">Media</a>
-    <a href="{{.WithLang "/pub"}}">Publications</a>
-    <a href="{{.WithLang "/languages"}}">Languages</a>
+    <a href="{{.WithLang "/search"}}">{{.T.UINavSearch}}</a>
+    <a href="{{.WithLang "/bible"}}">{{.T.UINavBible}}</a>
+    <a href="{{.WithLang "/dailytext"}}">{{.T.UINavDailyText}}</a>
+    <a href="{{.WithLang "/meetings"}}">{{.T.UINavMeetings}}</a>
+    <a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a>
+    <a href="{{.WithLang "/pub"}}">{{.T.UINavPublications}}</a>
+    <a href="{{.WithLang "/languages"}}">{{.T.UINavLanguages}}</a>
   </nav>
   <form class="langform" method="get" action="{{.Path}}">
     {{- range .Hidden}}
     <input type="hidden" name="{{.Name}}" value="{{.Value}}">
     {{- end}}
-    <label for="lang">Language</label>
-    <input id="lang" name="lang" value="{{.Lang}}" size="6" placeholder="en" title="JW symbol (E), ISO code (de), or BCP-47 (de-AT)">
-    <button type="submit">Go</button>
+    <label for="lang">{{.T.UILanguage}}</label>
+    <input id="lang" name="lang" value="{{.Lang}}" size="6" placeholder="en" title="{{.T.UILanguageHint}}">
+    <button type="submit">{{.T.UIGo}}</button>
   </form>
 </header>
 <main>
@@ -34,7 +34,7 @@
 {{template "content" .}}
 </main>
 <footer class="site">
-  <p>Served by <code>jw serve</code> — the same features as the <code>jw</code> CLI. JSON API under <a href="/api/v1/languages"><code>/api/v1</code></a>.</p>
+  <p>{{.T.UIFooter}} {{.T.UIJSONAPI}}: <a href="/api/v1/languages"><code>/api/v1</code></a></p>
 </footer>
 </body>
 </html>

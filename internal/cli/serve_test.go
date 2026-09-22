@@ -85,7 +85,9 @@ func TestServeSmoke(t *testing.T) {
 		t.Errorf("api: status %d body %.200s", resp.StatusCode, body)
 	}
 
-	resp, err = http.Get(base + "/")
+	// the chrome follows the content language, so the page has to be asked for
+	// one rather than left to the machine's locale
+	resp, err = http.Get(base + "/?lang=en")
 	if err != nil {
 		t.Fatal(err)
 	}

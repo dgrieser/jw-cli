@@ -92,7 +92,16 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub", s.uiPub)
 	mux.HandleFunc("GET /languages", s.uiLanguages)
 
-	return s.logged(mux)
+	return s.logged(remembersLanguage(mux))
+}
+
+// remembersLanguage keeps the language a reader picks, so it survives the next
+// link that carries no ?lang= of its own.
+func remembersLanguage(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rememberLanguage(w, r)
+		next.ServeHTTP(w, r)
+	})
 }
 
 // statusWriter remembers the status a handler sent, for the request log.

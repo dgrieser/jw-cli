@@ -166,6 +166,91 @@ type Messages struct {
 	Months   [12]string
 	// FullDate assembles a weekday, day, month name and year.
 	FullDate func(weekday string, day int, month string, year int) string
+
+	// --- the web UI (jw serve) ----------------------------------------------
+	// The chrome of the server's own pages. It follows the content language the
+	// same way the command line's does: German for a German reading, English
+	// for everything else.
+	UINavSearch       string
+	UINavBible        string
+	UINavDailyText    string
+	UINavMeetings     string
+	UINavMedia        string
+	UINavPublications string
+	UINavLanguages    string
+	UILanguage        string
+	UILanguageHint    string
+	UIGo              string
+	UIShow            string
+	UIRead            string
+	UIFilter          string
+	UIListFiles       string
+	UIOpenOnSite      string
+	UIDownload        string
+	UISubtitles       string
+	UIUnfold          string
+	UIUnfoldCitations string
+	UIUnfoldHint      string
+	UIUnfoldHintArt   string
+	UIEdition         string
+	UIEngine          string
+	UIType            string
+	UISort            string
+	UIFullExcerpts    string
+	UIAllLanguages    string
+	UIPrevPage        string
+	UINextPage        string
+	UIScriptureRefs   string
+	UIImages          string
+	UIUntitled        string
+	UINoLanguages     string
+	UIBackToStart     string
+	UILead            string
+	UIFooter          string
+	UIJSONAPI         string
+	UISearchHint      string
+	UIRefHint         string
+	UIArticleHint     string
+	UILangFilterHint  string
+	UIDateHint        string
+	UISymbol          string
+	UIDocID           string
+	UIIssue           string
+	UIBook            string
+	UITrack           string
+	UIFormats         string
+	UIDuration        string
+	UIPublished       string
+	UICategory        string
+	UIFiles           string
+	UIRendition       string
+	UISize            string
+	UIBestRendition   string
+	UIOverview        string
+	UIMidweek         string
+	UIWeekend         string
+	// UICard* describe the sections on the start page.
+	UICardSearch       string
+	UICardBible        string
+	UICardDailyText    string
+	UICardMeetings     string
+	UICardMedia        string
+	UICardPublications string
+	UICardLanguages    string
+	// UIView* label the tabs of the bible page, whose values are the query
+	// parameter and so stay as they are.
+	UIViewRead     string
+	UIViewNotes    string
+	UIViewXRefs    string
+	UIViewResearch string
+	UIViewCited    string
+	UIViewMedia    string
+	// UIExpensive* are the web's form of the confirmation the terminal asks
+	// for. UIExpensiveBody takes the level and the number of requests.
+	UIExpensiveTitle   string
+	UIExpensiveBody    string
+	UIUnfoldAnyway     string
+	UIWithoutUnfolding string
 }
 
 // Date renders t as a full date in the language's own word order.

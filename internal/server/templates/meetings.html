@@ -1,20 +1,20 @@
 {{define "content"}}
-<h1>Meetings</h1>
+<h1>{{.T.UINavMeetings}}</h1>
 <form class="searchform" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="date" name="date" value="{{.Date}}" title="any date inside the wanted week">
-  <button type="submit">Show</button>
+  <input type="date" name="date" value="{{.Date}}" title="{{.T.UIDateHint}}">
+  <button type="submit">{{.T.UIShow}}</button>
 </form>
 
 <nav class="tabs">
-  <a href="{{.PartURL ""}}" {{if eq .Part ""}}class="active"{{end}}>overview</a>
-  <a href="{{.PartURL "midweek"}}" {{if eq .Part "midweek"}}class="active"{{end}}>midweek</a>
-  <a href="{{.PartURL "weekend"}}" {{if eq .Part "weekend"}}class="active"{{end}}>weekend</a>
+  <a href="{{.PartURL ""}}" {{if eq .Part ""}}class="active"{{end}}>{{.T.UIOverview}}</a>
+  <a href="{{.PartURL "midweek"}}" {{if eq .Part "midweek"}}class="active"{{end}}>{{.T.UIMidweek}}</a>
+  <a href="{{.PartURL "weekend"}}" {{if eq .Part "weekend"}}class="active"{{end}}>{{.T.UIWeekend}}</a>
 </nav>
 
 <article class="document">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}
 </article>
-<p class="links">{{if .URL}}<a href="{{.URL}}" rel="noopener">Open on site</a>{{end}}</p>
+<p class="links">{{if .URL}}<a href="{{.URL}}" rel="noopener">{{.T.UIOpenOnSite}}</a>{{end}}</p>
 {{end}}

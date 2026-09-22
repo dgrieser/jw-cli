@@ -1,10 +1,10 @@
 {{define "listing"}}
 <ol class="listing">
-  {{- range .}}
+  {{- range .Items}}
   <li>
     <p class="row">
       <span class="kind">{{.Kind}}</span>
-      {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title "(untitled)"}}</a>{{else}}<span class="title">{{or .Title "(untitled)"}}</span>{{end}}
+      {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
       {{- if .Context}} <span class="context">— {{.Context}}</span>{{end}}
       {{- if .Duration}} <span class="meta">({{.Duration}})</span>{{end}}
       {{- if .Size}} <span class="meta">({{.Size}})</span>{{end}}
@@ -21,12 +21,12 @@
     <p class="imagemeta">{{.}}</p>
     {{- end}}
     <p class="links">
-      {{- if .External}}<a href="{{.External}}" rel="noopener">Open on site</a>{{end}}
-      {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">Download</a>{{end}}
+      {{- if .External}}<a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a>{{end}}
+      {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">{{$.T.UIDownload}}</a>{{end}}
     </p>
   </li>
   {{- else}}
-  <li class="empty">No results.</li>
+  <li class="empty">{{$.T.NoResults}}</li>
   {{- end}}
 </ol>
 {{end}}

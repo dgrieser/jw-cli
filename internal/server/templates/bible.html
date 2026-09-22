@@ -1,20 +1,20 @@
 {{define "content"}}
-<h1>Bible</h1>
+<h1>{{.T.UINavBible}}</h1>
 <form class="searchform wide" method="get" action="/bible">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   {{- if ne .View "read"}}<input type="hidden" name="view" value="{{.View}}">{{end}}
-  <input type="text" name="ref" value="{{.Ref}}" placeholder='Matthew 24:14 — also "Pr 8-9", "Joh 3:16; Ro 5:8"' autofocus>
-  <button type="submit">Go</button>
+  <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" autofocus>
+  <button type="submit">{{.T.UIGo}}</button>
   {{- if eq .View "read"}}
   <fieldset class="options">
-    <label>Edition
+    <label>{{.T.UIEdition}}
       <select name="bible">
         {{- range $e := .Editions}}
         <option value="{{$e}}" {{if eq $.Edition $e}}selected{{end}}>{{$e}}</option>
         {{- end}}
       </select>
     </label>
-    <label>Unfold <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="print the study notes and the text behind every reference, this many levels deep"></label>
+    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="{{.T.UIUnfoldHint}}"></label>
   </fieldset>
   {{- end}}
 </form>
@@ -23,7 +23,7 @@
 <nav class="tabs">
   {{- $page := . -}}
   {{- range $v := .Views}}
-  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active"{{end}}>{{$v}}</a>
+  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active"{{end}}>{{$page.ViewLabel $v}}</a>
   {{- end}}
 </nav>
 
@@ -43,7 +43,7 @@
   {{- end}}
 </section>
 {{- else}}
-<p class="empty">No study notes.</p>
+<p class="empty">{{.T.NoStudyNotes}}</p>
 {{- end}}
 {{- end}}
 
@@ -58,7 +58,7 @@
   </ul>
 </section>
 {{- else}}
-<p class="empty">No cross references.</p>
+<p class="empty">{{.T.NoCrossRefs}}</p>
 {{- end}}
 {{- end}}
 
@@ -78,13 +78,13 @@
   </ul>
 </section>
 {{- else}}
-<p class="empty">No research-guide entries.</p>
+<p class="empty">{{.T.NoResearch}}</p>
 {{- end}}
 {{- end}}
 
 {{- if or (eq .View "cited") (eq .View "media")}}
 {{- if .Header}}<h2 class="listheader">{{.Header}}</h2>{{end}}
-{{template "listing" .Items}}
+{{template "listing" .}}
 {{- end}}
 {{- end}}
 {{end}}

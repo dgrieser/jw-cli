@@ -1,23 +1,23 @@
 {{define "content"}}
-<h1>Languages</h1>
+<h1>{{.T.UINavLanguages}}</h1>
 <form class="searchform" method="get" action="/languages">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <input type="search" name="q" value="{{.Query}}" placeholder="Filter by name, symbol, or locale">
-  <button type="submit">Filter</button>
+  <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UILangFilterHint}}">
+  <button type="submit">{{.T.UIFilter}}</button>
 </form>
 
 <table class="langs">
-  <thead><tr><th>Symbol</th><th>Locale</th><th>Name</th><th>Vernacular</th></tr></thead>
+  <thead><tr><th>{{.T.ColSymbol}}</th><th>{{.T.ColLocale}}</th><th>{{.T.ColName}}</th><th>{{.T.ColVernacular}}</th></tr></thead>
   <tbody>
     {{- range .Languages}}
     <tr>
       <td><code>{{.Symbol}}</code></td>
       <td><code>{{.Locale}}</code></td>
-      <td>{{.Name}}{{if .IsSignLanguage}} (sign language){{end}}</td>
+      <td>{{.Name}}{{if .IsSignLanguage}} ({{$.T.SignLanguage}}){{end}}</td>
       <td>{{.Vernacular}}</td>
     </tr>
     {{- else}}
-    <tr><td colspan="4">No languages match.</td></tr>
+    <tr><td colspan="4">{{.T.UINoLanguages}}</td></tr>
     {{- end}}
   </tbody>
 </table>

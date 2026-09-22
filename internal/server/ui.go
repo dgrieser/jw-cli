@@ -14,6 +14,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -33,6 +34,11 @@ type basePage struct {
 	Hidden []hiddenField
 	// Error is the banner an upstream failure renders above the page.
 	Error string
+	// Locale is the resolved content language, for the document's lang
+	// attribute; T is the catalog the chrome is written in, which follows the
+	// same language wherever one exists.
+	Locale string
+	T      *i18n.Messages
 }
 
 type hiddenField struct{ Name, Value string }
@@ -65,7 +71,11 @@ func (s *Server) base(r *http.Request, title string) basePage {
 		}
 		return hidden[i].Value < hidden[j].Value
 	})
-	return basePage{Title: title, Lang: lang, Path: r.URL.Path, Hidden: hidden}
+	page := basePage{Title: title, Lang: lang, Path: r.URL.Path, Hidden: hidden, Locale: "en", T: i18n.EN.Text()}
+	if lng, err := s.language(r); err == nil {
+		page.Locale, page.T = lng.Locale, text(lng)
+	}
+	return page
 }
 
 // render executes one page template into a buffer first, so a template error
@@ -745,6 +755,26 @@ type researchItemView struct {
 var bibleViews = []string{"read", "notes", "xrefs", "research", "cited", "media"}
 
 // TabURL is the address of one tab with the page's current reference.
+// ViewLabel names a tab in the reader's own language; the value behind it is
+// the query parameter and stays as it is.
+func (p biblePage) ViewLabel(view string) string {
+	switch view {
+	case "read":
+		return p.T.UIViewRead
+	case "notes":
+		return p.T.UIViewNotes
+	case "xrefs":
+		return p.T.UIViewXRefs
+	case "research":
+		return p.T.UIViewResearch
+	case "cited":
+		return p.T.UIViewCited
+	case "media":
+		return p.T.UIViewMedia
+	}
+	return view
+}
+
 func (p biblePage) TabURL(view string) string {
 	q := url.Values{}
 	if p.Ref != "" {
@@ -786,7 +816,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	depth, err := intParam(r, "unfold", 0)
+	depth, err := intParam(r, "unfold", 1)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
