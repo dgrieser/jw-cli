@@ -16,8 +16,12 @@ import (
 func chapterClient(t *testing.T) *Client {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/en/wol/b/r1/lp-e/nwtsty/43/3", serveFile(t, "testdata/chapter_john3.html"))
-	mux.HandleFunc("/en/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<ul><li><span class="v">For God so loved... (Ge 22:2)</span></li></ul>`))
+	// a marginal reference answers with JSON, and only without the locale
+	// segment: asked with it, the whole page comes back
+	mux.HandleFunc("/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"title":"Genesis 22:2","content":"<p class=\"sl\"><span class=\"v\">` +
+			`<a class=\"vl\" href=\"/wol/dx/r1/lp-e/1001070105/788\">2 </a>For God so loved the world</span></p>"}]`))
 	})
 	// the citation JSON lives at the locale-less path; /en/wol/pc/... is a
 	// navigation redirect to the target page
@@ -27,10 +31,12 @@ func chapterClient(t *testing.T) *Client {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		// asked without a locale, wol answers without one — in the passage's
+		// own links as much as in its url
 		w.Write([]byte(`{"did": 1204433, "items": [{
-			"content": "<p>Jehovah loved the world of redeemable mankind...</p>",
+			"content": "<p>Jehovah loved the world of <a href=\"/wol/bc/r1/lp-e/2014486/1/0\">redeemable</a> mankind...</p>",
 			"title": "God So Loved the World",
-			"url": "/en/wol/d/r1/lp-e/2014486",
+			"url": "/wol/d/r1/lp-e/2014486",
 			"publicationTitle": "The Watchtower, 7/1/2014"
 		}]}`))
 	})
@@ -152,15 +158,23 @@ func TestMarginalReferenceAndTooltip(t *testing.T) {
 	if !strings.Contains(html, "For God so loved") {
 		t.Errorf("marginal html: %s", html)
 	}
+	// the locale-less endpoint answers with locale-less links, which lead
+	// nowhere; the locale the caller asked with goes back in
+	if !strings.Contains(html, `href="/en/wol/dx/r1/lp-e/1001070105/788"`) {
+		t.Errorf("the links of a marginal reference lost their locale: %s", html)
+	}
 	tip, err := c.Tooltip(ctx, c.hc.Base.WOL+"/en/wol/pc/r1/lp-e/1204433/5/0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tip.Title != "God So Loved the World" || !strings.Contains(tip.ContentHTML, "redeemable mankind") {
+	if tip.Title != "God So Loved the World" || !strings.Contains(tip.ContentHTML, "loved the world of") {
 		t.Errorf("tooltip = %+v", tip)
 	}
-	if !strings.HasPrefix(tip.URL, c.hc.Base.WOL) {
-		t.Errorf("tooltip url not absolutized: %s", tip.URL)
+	if want := c.hc.Base.WOL + "/en/wol/d/r1/lp-e/2014486"; tip.URL != want {
+		t.Errorf("tooltip url = %s, want it absolute and localized as %s", tip.URL, want)
+	}
+	if !strings.Contains(tip.ContentHTML, `href="/en/wol/bc/r1/lp-e/2014486/1/0"`) {
+		t.Errorf("the links of a citation lost their locale: %s", tip.ContentHTML)
 	}
 }
 

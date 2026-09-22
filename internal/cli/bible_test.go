@@ -32,8 +32,12 @@ func bibleMux(t *testing.T) *http.ServeMux {
 		}
 		w.Write(b)
 	})
-	mux.HandleFunc("/en/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<ul><li>For God so loved... (Ge 22:2)</li></ul>`))
+	// a marginal reference answers with JSON, and only without the locale
+	// segment: asked with it, the whole page comes back
+	mux.HandleFunc("/wol/marginalreference/r1/lp-e/nwtsty/43/3/96", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`[{"title":"Genesis 22:2","content":"<p class=\"sl\"><span class=\"v\">` +
+			`<a class=\"vl\" href=\"/wol/dx/r1/lp-e/1001070105/788\">2 </a>For God so loved the world</span></p>"}]`))
 	})
 	// the citation JSON lives at the locale-less path; /en/wol/pc/... is a
 	// navigation redirect to the target page

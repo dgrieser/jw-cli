@@ -186,14 +186,16 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
 				for _, x := range e.XRefs {
-					fmt.Fprintf(&b, "- %s\n", escapeListMarker(x.Citation))
-					if x.ResolvedHTML != "" {
-						body, err := render.Render(x.ResolvedHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
-						if err != nil {
-							return err
-						}
-						fmt.Fprintf(&b, "\n%s\n\n", indent(strings.TrimSpace(body), "  "))
+					if x.ResolvedHTML == "" {
+						fmt.Fprintf(&b, "- %s\n", escapeListMarker(x.Citation))
+						continue
 					}
+					body, err := render.Render(x.ResolvedHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
+					if err != nil {
+						return err
+					}
+					writeSubHeading(&b, format, x.Citation)
+					fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(body))
 				}
 				b.WriteString("\n")
 			}
@@ -275,18 +277,23 @@ shown, including a link to the full article.`,
 					return err
 				}
 				for _, it := range e.Items {
-					fmt.Fprintf(&b, "- %s", mdLinked(it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath))))
+					label := mdLinked(it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath)))
 					if it.Source != "" {
-						fmt.Fprintf(&b, " (%s)", it.Source)
+						label += fmt.Sprintf(" (%s)", it.Source)
 					}
-					b.WriteString("\n")
+					var body string
 					if it.ExcerptHTML != "" {
-						body, err := render.Render(it.ExcerptHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
+						out, err := render.Render(it.ExcerptHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 						if err == nil {
-							fmt.Fprintf(&b, "\n%s\n", indent(strings.TrimSpace(body), "  "))
+							body = strings.TrimSpace(out)
 						}
 					}
-					b.WriteString("\n")
+					if body == "" {
+						fmt.Fprintf(&b, "- %s\n\n", label)
+						continue
+					}
+					writeSubHeading(&b, format, label)
+					fmt.Fprintf(&b, "%s\n\n", body)
 				}
 			}
 			return a.WriteMarkdown(b.String())
@@ -349,14 +356,19 @@ func writeHeading(b *strings.Builder, f render.Format, text string) {
 	}
 }
 
-func indent(s, prefix string) string {
-	lines := strings.Split(s, "\n")
-	for i, l := range lines {
-		if l != "" {
-			lines[i] = prefix + l
-		}
+// writeSubHeading heads one entry under a verse. An entry that brings a passage
+// with it is headed rather than bulleted: a list item holding several
+// paragraphs is legal markdown, but the terminal renderer runs them into the
+// bullet's own line, and the passage then reads as part of the citation.
+func writeSubHeading(b *strings.Builder, f render.Format, text string) {
+	switch f {
+	case render.Markdown, render.Raw:
+		fmt.Fprintf(b, "### %s\n\n", text)
+	case render.HTML:
+		fmt.Fprintf(b, "<h3>%s</h3>\n", text)
+	default:
+		fmt.Fprintf(b, "%s\n\n", text)
 	}
-	return strings.Join(lines, "\n")
 }
 
 func firstNonEmpty(vals ...string) string {

@@ -269,17 +269,27 @@ func researchKind(li *goquery.Selection) string {
 }
 
 // MarginalReference fetches the full text of one cross-reference group (the
-// lazy-loaded data-src of a marginal item).
+// lazy-loaded data-src of a marginal item). Like a citation, it answers with
+// the passage only when asked without the locale segment — with it, the whole
+// page comes back — and it answers with JSON: one entry per verse the group
+// refers to.
 func (c *Client) MarginalReference(ctx context.Context, srcURL string) (string, error) {
-	doc, err := c.hc.GetHTML(ctx, srcURL)
-	if err != nil {
+	var items []struct {
+		Title   string `json:"title"`
+		Content string `json:"content"`
+	}
+	u := absURL(c.hc.Base.WOL, citationAPI(srcURL))
+	if err := c.hc.GetJSON(ctx, u, xhrHeaders(), &items); err != nil {
 		return "", err
 	}
-	html, err := doc.Find("body").Html()
-	if err != nil {
-		return "", err
+	var b strings.Builder
+	for _, it := range items {
+		b.WriteString(it.Content)
 	}
-	return strings.TrimSpace(html), nil
+	if b.Len() == 0 {
+		return "", fmt.Errorf("no marginal reference content at %s", u)
+	}
+	return relocalize(strings.TrimSpace(b.String()), citationLocaleOf(srcURL)), nil
 }
 
 // Tooltip fetches a wol bc/pc citation endpoint as JSON (publication
@@ -297,6 +307,7 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 	}
 	// citation paths taken straight out of a document are relative, and carry a
 	// locale segment that has to come off first
+	locale := citationLocaleOf(tcURL)
 	tcURL = absURL(c.hc.Base.WOL, citationAPI(tcURL))
 	if err := c.hc.GetJSON(ctx, tcURL, xhrHeaders(), &resp); err != nil {
 		return model.Tooltip{}, err
@@ -305,12 +316,14 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 		return model.Tooltip{}, fmt.Errorf("no citation content at %s", tcURL)
 	}
 	it := resp.Items[0]
+	// asked without a locale, the endpoint answers without one too — in the
+	// passage's own links as much as in its URL
 	return model.Tooltip{
 		Title:            it.Title,
 		Caption:          it.Caption,
-		ContentHTML:      it.Content,
-		URL:              absURL(c.hc.Base.WOL, it.URL),
-		ImageURL:         absURL(c.hc.Base.WOL, it.ImageURL),
+		ContentHTML:      relocalize(it.Content, locale),
+		URL:              absURL(c.hc.Base.WOL, relocalizeURL(it.URL, locale)),
+		ImageURL:         absURL(c.hc.Base.WOL, relocalizeURL(it.ImageURL, locale)),
 		PublicationTitle: it.PublicationTitle,
 	}, nil
 }
@@ -427,7 +440,7 @@ func xhrHeaders() map[string][]string {
 
 // citationLocale matches the locale segment wol puts in the citation links of a
 // document, as in "/de/wol/pc/r10/lp-x/1204408/577/0".
-var citationLocale = regexp.MustCompile(`/[\w-]+/wol/`)
+var citationLocale = regexp.MustCompile(`/([\w-]+)/wol/`)
 
 // citationAPI turns a citation link into its JSON endpoint by dropping the
 // locale segment: /de/wol/pc/... answers with a 307 to the target page, while
@@ -439,6 +452,36 @@ func citationAPI(path string) string {
 		return path[:loc[0]] + "/wol/" + path[loc[1]:]
 	}
 	return path
+}
+
+// citationLocaleOf is the locale a citation link carries, empty when it has
+// none. It has to be put back into whatever the locale-less endpoint answers.
+func citationLocaleOf(path string) string {
+	if m := citationLocale.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// wolLink matches a link the content endpoints write: they answer the
+// locale-less request with locale-less links, which lead nowhere.
+var wolLink = regexp.MustCompile(`((?:href|src)=")/wol/`)
+
+// relocalize puts the locale back into the links of a fetched passage, so a
+// reader can follow them.
+func relocalize(fragment, locale string) string {
+	if locale == "" || fragment == "" {
+		return fragment
+	}
+	return wolLink.ReplaceAllString(fragment, "${1}/"+locale+"/wol/")
+}
+
+// relocalizeURL is relocalize for a bare path rather than markup.
+func relocalizeURL(path, locale string) string {
+	if locale == "" || !strings.HasPrefix(path, "/wol/") {
+		return path
+	}
+	return "/" + locale + path
 }
 
 func absURL(base, path string) string {

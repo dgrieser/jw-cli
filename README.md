@@ -225,7 +225,7 @@ jw bible read "Joh 3:16" --bible-all         # every edition of the language, co
 jw bible read John 3:16 --unfold 1           # verse + study notes + its references
 jw bible read -l de "Matthäus 24:14"         # localized book names
 jw bible notes John 3:16                     # study notes (nwtsty)
-jw bible xrefs John 3:16 -r                  # cross references + full text
+jw bible xrefs John 3:16 -r                  # cross references + full text, each headed
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
 jw bible research John 3:16 -x               # research guide + excerpts
 jw bible cited "Jer 31:15"                   # publications citing that verse
@@ -530,8 +530,14 @@ requests queue against the same polite rate limit the CLI keeps.
 | `b.jw-cdn.org/apis/mediator/v1` | media categories, items, language list |
 | `b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS` | publication download links |
 | `b.jw-cdn.org/apis/search` + `/tokens/jworg.jwt` | unified search (anonymous JWT, auto-refreshed on 401) |
-| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations (`/bc/`, `/pc/` JSON via XHR headers), daily text, meetings, media gallery pages (image metadata) |
+| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations and marginal references (`/bc/`, `/pc/`, `/marginalreference/` JSON, requested without the locale segment), daily text, meetings, media gallery pages (image metadata) |
 | `www.jw.org` | article pages reached by URL |
+
+Those three endpoints answer with the passage itself only when asked **without**
+the locale segment — `/wol/bc/…` rather than `/de/wol/bc/…`, which redirects to
+the whole page — and they answer in kind, with locale-less links. The locale the
+caller asked with is put back into what comes out, or every link in an unfolded
+passage would lead nowhere.
 
 The client sends a browser-like User-Agent, keeps a cookie jar, and paces
 wol.jw.org requests at 50 a second (`requestsPerSecond` in
