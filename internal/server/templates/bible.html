@@ -10,13 +10,13 @@
   {{- if eq .View "read"}}
   <fieldset class="options">
     <label>{{.T.UIEdition}}
-      <select name="bible">
+      <select name="bible" class="edition">
         {{- range $e := .Editions}}
-        <option value="{{$e}}" {{if eq $.Edition $e}}selected{{end}}>{{$e}}</option>
+        <option value="{{$e.Symbol}}" {{if eq $.Edition $e.Symbol}}selected{{end}}>{{$e.Label}}</option>
         {{- end}}
       </select>
     </label>
-    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{or .AutoUnfold .Unfold}}" title="{{.T.UIUnfoldHint}}" class="num" inputmode="numeric"></label>
+    {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
   </fieldset>
   {{- end}}
 </form>

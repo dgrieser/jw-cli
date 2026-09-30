@@ -4,6 +4,7 @@
 package httpx
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,6 +45,11 @@ type Client struct {
 	UserAgent string
 	limiters  map[string]*rate.Limiter // keyed by host
 	verbose   func(format string, args ...any)
+	// responses keeps the bodies of successful reads on disk for responseTTL,
+	// so a page read once is not read again the same day — by the next
+	// command, or by jw serve after a restart. Nil keeps nothing.
+	responses   *Cache
+	responseTTL time.Duration
 }
 
 type Option func(*Client)
@@ -57,6 +63,23 @@ func WithUserAgent(ua string) Option { return func(c *Client) { c.UserAgent = ua
 func WithVerbose(f func(format string, args ...any)) Option {
 	return func(c *Client) { c.verbose = f }
 }
+
+// WithResponseCache keeps the body of every successful GetJSON, GetHTML and
+// GetText in cache for ttl. Get and Do stay uncached: they hand the caller a
+// live response, which is what a download streams. A zero ttl or a nil cache
+// turns it off.
+func WithResponseCache(cache *Cache, ttl time.Duration) Option {
+	return func(c *Client) {
+		if cache != nil && ttl > 0 {
+			c.responses, c.responseTTL = cache, ttl
+		}
+	}
+}
+
+// ResponseTTL is how long response bodies are kept, the default for the CLI
+// and jw serve alike: the library's pages change rarely, and a day is what a
+// reader asks the same thing again within.
+const ResponseTTL = 24 * time.Hour
 
 func New(opts ...Option) *Client {
 	jar, _ := cookiejar.New(nil)
@@ -143,15 +166,56 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 	if hdr.Get("Accept") == "" {
 		hdr.Set("Accept", "application/json")
 	}
-	resp, err := c.Get(ctx, rawURL, hdr)
+	body, key, err := c.read(ctx, rawURL, hdr)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := json.Unmarshal(body, out); err != nil {
 		return fmt.Errorf("decode %s: %w", rawURL, err)
 	}
+	// only a body that decoded is worth keeping
+	c.keep(key, body)
 	return nil
+}
+
+// read fetches a body, from the response cache when it holds one. key is what
+// to keep the body under once the caller has seen it is good, empty when it is
+// not to be kept.
+func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) ([]byte, string, error) {
+	key := c.responseKey(rawURL, hdr)
+	if key != "" {
+		if body, ok := c.responses.GetBytes(key, c.responseTTL); ok {
+			c.verbose("GET %s (cached)", rawURL)
+			return body, "", nil
+		}
+	}
+	resp, err := c.Get(ctx, rawURL, hdr)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	return body, key, nil
+}
+
+func (c *Client) keep(key string, body []byte) {
+	if key != "" {
+		c.responses.PutBytes(key, body)
+	}
+}
+
+// responseKey is what a request's body is kept under: the URL and the headers
+// that change what the server answers with. A request carrying credentials is
+// not kept, and neither is the token that credentials are made from: both
+// expire on their own schedule, not the cache's.
+func (c *Client) responseKey(rawURL string, hdr http.Header) string {
+	if c.responses == nil || hdr.Get("Authorization") != "" || strings.Contains(rawURL, "/tokens/") {
+		return ""
+	}
+	return "GET " + rawURL + "\n" + hdr.Get("Accept") + "\n" + hdr.Get("X-Requested-With") + "\n" + hdr.Get("Accept-Language")
 }
 
 // XHRHeader mimics the site's AJAX requests; wol's bc/pc/dt endpoints return
@@ -165,30 +229,29 @@ func XHRHeader() http.Header {
 
 // GetHTML fetches rawURL and parses the body as an HTML document.
 func (c *Client) GetHTML(ctx context.Context, rawURL string) (*goquery.Document, error) {
-	resp, err := c.Get(ctx, rawURL, nil)
+	body, key, err := c.read(ctx, rawURL, http.Header{})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("parse HTML %s: %w", rawURL, err)
 	}
+	c.keep(key, body)
 	return doc, nil
 }
 
 // GetText fetches rawURL and returns the body as a string.
 func (c *Client) GetText(ctx context.Context, rawURL string, hdr http.Header) (string, error) {
-	resp, err := c.Get(ctx, rawURL, hdr)
+	if hdr == nil {
+		hdr = http.Header{}
+	}
+	body, key, err := c.read(ctx, rawURL, hdr)
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	c.keep(key, body)
+	return string(body), nil
 }
 
 type StatusError struct {

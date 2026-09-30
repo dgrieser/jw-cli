@@ -163,9 +163,12 @@
 
   var items = [];
 
-  function addItem(el, host, params) {
+  // addItem makes el unfoldable. A nested item sits inside what another item
+  // brought: it unfolds on its own, and is left out of "unfold all".
+  function addItem(el, host, params, nested) {
     var item = { el: el, host: host, params: params, level: 0, state: "idle", exp: null, ctrl: null };
     el.classList.add("unfold-item");
+    if (nested) el.classList.add("nested");
     var b = button("unfold-btn", T.unfoldItem || "Unfold");
     b.innerHTML = ICON + '<span class="lvl" aria-hidden="true"></span>';
     b.setAttribute("aria-haspopup", "true");
@@ -183,7 +186,7 @@
       item.exp = exp;
       setLevel(item, parseInt(el.getAttribute("data-level"), 10) || pageLevel || 1);
     }
-    items.push(item);
+    if (!nested) items.push(item);
     return item;
   }
 
@@ -217,11 +220,20 @@
       });
     });
   } else {
+    citingBlocks(doc, false);
+  }
+
+  // citingBlocks makes every block of root that cites something an item of
+  // its own: a paragraph of the document, or — nested — a paragraph of a
+  // passage an unfold brought, so what that cites unfolds in turn.
+  function citingBlocks(root, nested) {
     var byBlock = new Map();
-    doc.querySelectorAll('a[href*="/bc/"], a[href*="/pc/"]').forEach(function (a) {
-      if (a.closest(".expansion, .sections, [data-ui]")) return;
+    root.querySelectorAll('a[href*="/bc/"], a[href*="/pc/"]').forEach(function (a) {
+      if (a.closest("summary, [data-ui]")) return;
+      if (!nested && a.closest(".expansion, .sections")) return;
       var block = a.closest(BLOCKS);
-      if (!block || !doc.contains(block) || block.closest(".expansion")) return;
+      if (!block || !root.contains(block) || block.classList.contains("unfold-item")) return;
+      if (!nested && block.closest(".expansion")) return;
       var refs = byBlock.get(block);
       if (!refs) {
         refs = [];
@@ -234,9 +246,12 @@
     byBlock.forEach(function (refs, block) {
       // a list item carries its expansion inside itself, any other block
       // right after it
-      addItem(block, block.tagName === "LI" ? block : null, { kind: "refs", refs: refs });
+      addItem(block, block.tagName === "LI" ? block : null, { kind: "refs", refs: refs }, nested);
     });
   }
+
+  // what the server already unfolded can be unfolded further, too
+  doc.querySelectorAll(".expansion").forEach(function (exp) { citingBlocks(exp, true); });
 
   if (!items.length) return;
   doc.classList.add("has-unfold");
@@ -434,6 +449,7 @@
             var inner = node.querySelector('.sections[data-key="' + ev.key + '"]');
             if (inner) groups[ev.key] = { list: inner, section: node };
           }
+          citingBlocks(node, true);
           count++;
           break;
         case "expensive":
