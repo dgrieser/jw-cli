@@ -716,9 +716,12 @@ func dropTrailingRule(s string) string {
 // about the run as a whole, not about one verse.
 // level is the heading level the expansion of a verse is written at, which
 // depends on whether the verses are headed one by one.
+//
+// translations are the verses as the other bibles of the language render them,
+// by verse number; nil prints none.
 func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref,
 	verses []model.Verse, table *bibleref.Table, level int, cfg UnfoldConfig,
-	txt *i18n.Messages) ([]string, string, error) {
+	translations map[int][]EditionVerse, txt *i18n.Messages) ([]string, string, error) {
 	studies := make([]unfold.Study, len(verses))
 	cited := make([]unfold.Cited, len(verses))
 	groups := make([]unfold.Group, len(verses))
@@ -752,6 +755,7 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		research, marginal := splitRootRefs(expanded[i], studies[i].Research)
 		var b strings.Builder
 		writeStudyNotes(&b, unfold.Node{Notes: studies[i].Notes}, level, txt)
+		writeFootnotes(ctx, &b, r, verses[i].HTML, level, txt)
 		writeIndexGroups(&b, studies[i].Links, research, level, txt)
 		// the cross references of the verse, under one heading naming it —
 		// each reference then says which verse it belongs to, which is what
@@ -765,6 +769,7 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 				html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, verseRef))))
 			writeUnfoldNodes(&b, marginal, level+1, verseRef, txt)
 		}
+		writeTranslations(&b, translations[verses[i].ID%1000], level, txt)
 		writeCited(&b, unfold.Node{
 			Cited: cited[i].Results, CitedTotal: cited[i].Total, CitedRef: cited[i].Ref,
 		}, level, txt)

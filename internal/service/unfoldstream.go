@@ -36,16 +36,39 @@ type UnfoldSection struct {
 	// always the order they read in: a verse's handful of marginal references
 	// is out long before its indexes, which can run to a hundred entries.
 	Order int
+	// Ref is what the page finds the section by when a link to what it holds
+	// is followed: the path of the reference (RefPath), or a name of its own
+	// (FootnotesRef, TranslationsRef).
+	Ref string
+	// Lazy names what the section loads once it is opened rather than now —
+	// LazyTranslations — empty for a section that comes with its body.
+	Lazy string
+	// Open shows the section opened rather than as a closed chip.
+	Open bool
+	// Base absolutizes the links of Body, when it came from somewhere else than
+	// the library (an article on jw.org); empty is the library itself.
+	Base string
 }
+
+// The names a page finds a verse's sections by, beside the paths of its
+// references.
+const (
+	FootnotesRef    = "footnotes"
+	TranslationsRef = "translations"
+	// LazyTranslations is the Lazy of a verse's translations section.
+	LazyTranslations = "translations"
+)
 
 // The order the sections of a verse read in, whenever they arrive: what it
 // says about itself, what the indexes point at, what its own margin points at,
 // and only then who else quotes it.
 const (
-	orderNotes    = 10
-	orderIndexes  = 20
-	orderMarginal = 50
-	orderCited    = 60
+	orderNotes        = 10
+	orderFootnotes    = 15
+	orderIndexes      = 20
+	orderMarginal     = 50
+	orderTranslations = 55
+	orderCited        = 60
 )
 
 // UnfoldStream is where a streamed expansion reports to. Section is required;
@@ -84,12 +107,9 @@ const (
 // before any of it is spent.
 func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edition string, verseID int,
 	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (note string, requests int, err error) {
-	ref := bibleref.Ref{
-		Book: verseID / 1_000_000, Chapter: verseID / 1_000 % 1_000,
-		VerseStart: verseID % 1_000, VerseEnd: verseID % 1_000,
-	}
-	if ref.Book < 1 || ref.Book > 66 || ref.Chapter < 1 || ref.VerseStart < 1 {
-		return "", 0, fmt.Errorf("invalid verse id %d", verseID)
+	ref, err := verseRef(verseID)
+	if err != nil {
+		return "", 0, err
 	}
 	if edition == "" {
 		edition = studyEdition
@@ -141,6 +161,24 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 		})
 	}
 
+	// the footnotes: a request each, and a verse has one or two
+	body, n := footnotesHTML(ctx, r, footnoteLinks(verses[0].HTML))
+	sess.Spend(n)
+	if body != "" {
+		out.Section(UnfoldSection{
+			Title: html.EscapeString(txt.FootnotesHeading), Body: body,
+			Ref: FootnotesRef, Order: orderFootnotes,
+		})
+	}
+
+	// the other bibles of the language, loaded only once the section is opened
+	if len(s.otherEditionsFor(ctx, lng, edition)) > 0 {
+		out.Section(UnfoldSection{
+			Title: html.EscapeString(txt.TranslationsHeading),
+			Ref:   TranslationsRef, Lazy: LazyTranslations, Order: orderTranslations,
+		})
+	}
+
 	// the marginal references first, one at a time, under a section naming the
 	// verse: a handful of requests, where the indexes can take a hundred
 	out.stage(StageReferences)
@@ -179,7 +217,9 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 				label := marginalLabel(n, txt)
 				var b strings.Builder
 				writeUnfoldNode(&b, n, SectionLevel, label, txt)
-				out.Section(UnfoldSection{Title: html.EscapeString(label), Body: b.String(), In: key})
+				out.Section(UnfoldSection{
+					Title: html.EscapeString(label), Body: b.String(), In: key, Ref: RefPath(n.Ref.Path),
+				})
 			}
 		}
 	}
@@ -285,7 +325,9 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 			label := unfoldHeading(n, "", txt)
 			var b strings.Builder
 			writeUnfoldNode(&b, n, SectionLevel, label, txt)
-			out.Section(UnfoldSection{Title: html.EscapeString(label), Body: b.String(), Order: i})
+			out.Section(UnfoldSection{
+				Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
+			})
 		}
 	}
 	return joinNotes(notes), spent(), ctx.Err()

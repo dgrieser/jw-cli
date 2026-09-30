@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/render"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func TestClassify(t *testing.T) {
@@ -211,5 +212,27 @@ func TestUnfoldLevels(t *testing.T) {
 	bible := unfoldLevels(httptest.NewRequest("GET", "/bible?ref=John+3:16", nil), 1, 1)
 	if !strings.Contains(bible[0].URL, "unfold=0") || strings.Contains(bible[1].URL, "unfold=") {
 		t.Errorf("bible levels: %s / %s", bible[0].URL, bible[1].URL)
+	}
+}
+
+// A link to an article is only ever read from the site it belongs to, put back
+// on that site's own base; anything else is refused.
+func TestArticleTarget(t *testing.T) {
+	s := &Server{svc: &service.Service{HTTP: httpx.New()}}
+	for raw, want := range map[string]string{
+		"https://wol.jw.org/de/wol/d/r10/lp-x/1102010144#h=43:0-48:0": "https://wol.jw.org/de/wol/d/r10/lp-x/1102010144#h=43:0-48:0",
+		"https://evil.example/de/wol/d/r10/lp-x/1":                    "https://wol.jw.org/de/wol/d/r10/lp-x/1",
+		"https://www.jw.org/de/bibliothek/artikel/x/":                 "https://www.jw.org/de/bibliothek/artikel/x/",
+	} {
+		if got, ok := s.articleTarget(raw); !ok || got != want {
+			t.Errorf("articleTarget(%q) = %q, %v; want %q", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{
+		"https://evil.example/x", "https://wol.jw.org/de/wol/bc/r10/lp-x/1/2", "javascript:alert(1)", "",
+	} {
+		if got, ok := s.articleTarget(raw); ok {
+			t.Errorf("articleTarget(%q) accepted as %q", raw, got)
+		}
 	}
 }

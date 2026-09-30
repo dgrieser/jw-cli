@@ -506,6 +506,16 @@ side as chips; an opened one takes the whole row, and each reference inside it
 opens on its own. Every paragraph of an unfolded passage that cites something
 has a button of its own, so an expansion can be followed as deep as wanted.
 
+Links open in place instead of leaving the page: a marginal reference (`+`), a
+footnote (`*`), a bible reference or a link to an article opens its section
+under the verse or paragraph it is in and scrolls to it, loading just that one
+reference when it is not there yet; a verse number opens the verse in the
+other bibles of the language. Ctrl/Cmd-click still follows the link itself.
+An unfolded verse also brings its **footnotes** (only when it has any) and the
+same verse in the **other translations** of the language — the New World
+Translation once, as the study edition where it exists — which the web UI
+loads only when that section is opened.
+
 The bible, meeting, media and publication pages remember, in the browser, what
 the reader had in front of them. Per section and language, the menu and the
 start page lead back to the last page read, so going back to **Bible** brings
@@ -523,7 +533,10 @@ newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse: study notes,
 indexes, marginal references, quotations) and
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
-wol citation paths are followed). Everything one request unfolds shares one
+wol citation paths are followed), plus `GET /unfold/footnote?path=…`,
+`GET /unfold/translations?vid=…&bible=…` and `GET /unfold/article?url=…` (a
+library document or a jw.org page; only its path is kept and read from that
+site). Everything one request unfolds shares one
 request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports
 what the request spent, and **Unfold all** passes the running total of its run

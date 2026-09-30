@@ -126,7 +126,14 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				if len(verses) > 1 {
 					level = verseUnfoldLevel
 				}
-				unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, expander, r, verses, table, level, req.Unfold, txt)
+				// the other bibles of the language, unless every one of them is
+				// being read anyway
+				var translations map[int][]EditionVerse
+				if !req.AllBibles {
+					translations = s.translationsOf(ctx, lng, ed.Symbol, r, chapters)
+				}
+				unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, expander, r, verses, table, level,
+					req.Unfold, translations, txt)
 				if err != nil {
 					return ReadResult{}, err
 				}

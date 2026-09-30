@@ -145,6 +145,11 @@ type Messages struct {
 	UnfoldConfirm string
 	// StudyNotesHeading labels the study notes printed with an unfolded verse.
 	StudyNotesHeading string
+	// FootnotesHeading labels the footnotes of an unfolded verse.
+	FootnotesHeading string
+	// TranslationsHeading labels the same verse as the other bibles of the
+	// language render it.
+	TranslationsHeading string
 	// ResearchHeading labels the research-guide entries of an unfolded verse
 	// that point at a whole article, which has no passage to unfold.
 	ResearchHeading string
