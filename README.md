@@ -504,7 +504,16 @@ button; the level is kept in the address (`?unfold=N&lazy=1`), so a reload or a
 shared link unfolds the same way. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
 opens on its own. Every paragraph of an unfolded passage that cites something
-has a button of its own, so an expansion can be followed as deep as wanted. Without JavaScript the switcher reloads the page unfolded
+has a button of its own, so an expansion can be followed as deep as wanted.
+
+The bible, meeting, media and publication pages remember, in the browser, what
+the reader had in front of them. Per section and language, the menu and the
+start page lead back to the last page read, so going back to **Bible** brings
+back the last reading instead of an empty form. Per page, everything that was
+unfolded, what was open or closed, and how far down the page was scrolled come
+back at once on return, without asking the server again. It is all kept in this
+browser only (`localStorage` and IndexedDB), and pages not revisited for a
+month are forgotten. Without JavaScript the switcher reloads the page unfolded
 server-side, and a level that needs more requests than the server spends
 unasked is offered on a confirmation page first (with JavaScript, a prompt).
 

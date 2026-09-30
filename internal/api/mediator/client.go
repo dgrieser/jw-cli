@@ -5,8 +5,10 @@ package mediator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -120,8 +122,35 @@ type wireCategory struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description"`
 	Type          string          `json:"type"`
-	Subcategories []wireCategory  `json:"subcategories"`
+	Subcategories wireCategories  `json:"subcategories"`
 	Media         []wireMediaItem `json:"media"`
+}
+
+// wireCategories is a list of subcategories as the mediator writes it: an
+// array, or — for a category without any, in some languages — an empty
+// object. An object with entries is read as its values, in key order.
+type wireCategories []wireCategory
+
+func (w *wireCategories) UnmarshalJSON(b []byte) error {
+	var list []wireCategory
+	if err := json.Unmarshal(b, &list); err == nil {
+		*w = list
+		return nil
+	}
+	var byKey map[string]wireCategory
+	if err := json.Unmarshal(b, &byKey); err != nil {
+		return err
+	}
+	keys := make([]string, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	*w = make(wireCategories, 0, len(keys))
+	for _, k := range keys {
+		*w = append(*w, byKey[k])
+	}
+	return nil
 }
 
 func (w wireCategory) toModel() model.Category {

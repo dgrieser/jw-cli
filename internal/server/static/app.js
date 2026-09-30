@@ -2,8 +2,11 @@
 // screens, a visible "loading" state while the server talks to jw.org, and the
 // unfolding of a document after it is on screen: every verse or paragraph that
 // cites something gets a button that loads what it references, section by
-// section, as the server finds it. Every page works without it; this only
-// makes reading, waiting and navigating nicer.
+// section, as the server finds it. The bible, meeting, media and publication
+// pages remember what the reader had in front of them — which page, what was
+// unfolded, what was open, how far down — and bring it back on their return.
+// Every page works without it; this only makes reading, waiting and
+// navigating nicer.
 (function () {
   "use strict";
 
@@ -101,26 +104,225 @@
   // --- sections -----------------------------------------------------------
 
   // an opened section takes a row of its own; keep its title in sight when
-  // that moves it
+  // that moves it. Only for a section the reader opened: one opened by the
+  // page putting back what it had must not move the page from where it was
+  var touched = 0;
+  ["pointerdown", "keydown"].forEach(function (type) {
+    document.addEventListener(type, function (e) {
+      if (e.target && e.target.closest && e.target.closest("summary")) touched = Date.now();
+    }, true);
+  });
   document.addEventListener("toggle", function (e) {
     var d = e.target;
     if (!(d instanceof HTMLElement) || !d.matches("details.section") || !d.open) return;
+    if (Date.now() - touched > 1500) return;
     var s = d.querySelector(":scope > summary");
     if (!s || !s.getBoundingClientRect) return;
     var r = s.getBoundingClientRect();
     if (r.top < 0 || r.bottom > window.innerHeight) s.scrollIntoView({ block: "nearest" });
   }, true);
 
-  // --- unfolding ----------------------------------------------------------
-
-  var doc = document.querySelector(".document[data-unfold]");
-  if (!doc || !window.fetch) return;
-
   var T = {};
   try {
     T = JSON.parse(document.getElementById("ui-text").textContent) || {};
   } catch (err) {
     T = {};
+  }
+
+  // --- remembering where the reader was -------------------------------------
+  //
+  // Per section and language, the last page read: the menu and the start page
+  // lead back to it. Per page, what was on screen — the verses and paragraphs
+  // unfolded and what they brought, what was open, how far down — kept in
+  // IndexedDB, so coming back shows it at once instead of asking the server
+  // again. All of it stays in this browser; storage that is unavailable or
+  // full only means nothing is remembered.
+
+  var SECTIONS = [
+    ["bible", /^\/bible$/, function (q) { return !!(q.get("ref") || "").trim(); }],
+    ["meetings", /^\/meetings(\/(midweek|weekend))?$/, function () { return true; }],
+    ["media", /^\/media(\/(category|item)\/[^/]+)?$/, function () { return true; }],
+    ["pub", /^\/pub$/, function (q) { return !!(q.get("pub") || q.get("docid")); }]
+  ];
+
+  function sectionOf(path) {
+    for (var i = 0; i < SECTIONS.length; i++) {
+      if (SECTIONS[i][1].test(path)) return SECTIONS[i];
+    }
+    return null;
+  }
+
+  function storageGet(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function storageSet(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (err) {
+      // private mode or full: nothing is remembered
+    }
+  }
+
+  // pageKey names a page whatever level it was asked at: the level is part of
+  // what is remembered about it, not of which page it is
+  function pageKey(u) {
+    var q = new URLSearchParams(u.search);
+    ["lazy", "force", "unfold"].forEach(function (k) { q.delete(k); });
+    var pairs = [];
+    q.forEach(function (v, k) { pairs.push([k, v]); });
+    pairs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
+    return u.pathname + "?" + pairs.map(function (p) { return p[0] + "=" + p[1]; }).join("&");
+  }
+
+  function lastKey(section, lang) {
+    return "jw:last:" + section + ":" + (lang || "");
+  }
+
+  var here = sectionOf(location.pathname);
+  var pageLang = new URLSearchParams(location.search).get("lang") || "";
+  // a page that failed, or asks before spending, is not a place to come back to
+  var failed = !!document.querySelector("main .notice, main > .error");
+  var PS = { key: null, restoreScroll: function () {} };
+
+  if (here && !failed && here[2](new URLSearchParams(location.search))) {
+    PS.key = pageKey(location);
+    var scrollKey = "jw:scroll:" + PS.key;
+    PS.remember = function () {
+      var u = new URL(location.href);
+      u.searchParams.delete("force");
+      storageSet(lastKey(here[0], pageLang), u.pathname + u.search);
+    };
+    PS.remember();
+
+    // the page puts its own content back first, then its scroll position
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    var scrollTimer = null;
+    var saveScroll = function () {
+      storageSet(scrollKey, String(Math.round(window.scrollY)));
+    };
+    window.addEventListener("scroll", function () {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(saveScroll, 250);
+    }, { passive: true });
+    window.addEventListener("pagehide", saveScroll);
+    PS.restoreScroll = function () {
+      if (location.hash) return;
+      var y = parseInt(storageGet(scrollKey), 10);
+      if (y > 0) window.scrollTo(0, y);
+    };
+  }
+
+  // the menu and the start page lead back to the last page of each section
+  document.querySelectorAll(".site-nav a[href], .destinations a[href]").forEach(function (a) {
+    var u;
+    try {
+      u = new URL(a.href, location.href);
+    } catch (err) {
+      return;
+    }
+    var sec = sectionOf(u.pathname);
+    if (!sec || u.origin !== location.origin) return;
+    var q = new URLSearchParams(u.search);
+    var linkLang = q.get("lang") || "";
+    q.delete("lang");
+    if (q.toString() !== "") return;
+    var last = storageGet(lastKey(sec[0], linkLang));
+    if (last && last.charAt(0) === "/") a.href = last;
+  });
+
+  // page states: one record per page, dropped after a month unvisited
+  var STATE_MAX_AGE = 30 * 24 * 3600 * 1000;
+  var dbPromise = null;
+  // the open database, once it is: the last save of a page that is being left
+  // has to start before the page goes, with no promise to wait on first
+  var dbHandle = null;
+
+  function openDB() {
+    if (!dbPromise) {
+      dbPromise = new Promise(function (resolve) {
+        try {
+          var req = window.indexedDB.open("jw-serve", 1);
+          req.onupgradeneeded = function () { req.result.createObjectStore("pages"); };
+          req.onsuccess = function () {
+            dbHandle = req.result;
+            resolve(req.result);
+          };
+          req.onerror = function () { resolve(null); };
+          req.onblocked = function () { resolve(null); };
+        } catch (err) {
+          resolve(null);
+        }
+      });
+    }
+    return dbPromise;
+  }
+
+  PS.load = function () {
+    if (!PS.key) return Promise.resolve(null);
+    return openDB().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          var req = db.transaction("pages").objectStore("pages").get(PS.key);
+          req.onsuccess = function () {
+            var v = req.result;
+            resolve(v && Date.now() - v.t < STATE_MAX_AGE ? v : null);
+          };
+          req.onerror = function () { resolve(null); };
+        } catch (err) {
+          resolve(null);
+        }
+      });
+    });
+  };
+
+  PS.save = function (value) {
+    if (!PS.key) return;
+    value.t = Date.now();
+    var put = function (db) {
+      if (!db) return;
+      try {
+        db.transaction("pages", "readwrite").objectStore("pages").put(value, PS.key);
+      } catch (err) {
+        // quota or a closed database: this page is simply not remembered
+      }
+    };
+    if (dbHandle) put(dbHandle);
+    else openDB().then(put);
+  };
+
+  // once per page load, the records of pages not seen for a month go
+  if (PS.key) {
+    openDB();
+    setTimeout(function () {
+      openDB().then(function (db) {
+        if (!db) return;
+        try {
+          var req = db.transaction("pages", "readwrite").objectStore("pages").openCursor();
+          req.onsuccess = function () {
+            var c = req.result;
+            if (!c) return;
+            if (!c.value || Date.now() - c.value.t > STATE_MAX_AGE) c.delete();
+            c.continue();
+          };
+        } catch (err) {
+          // nothing to sweep
+        }
+      });
+    }, 3000);
+  }
+
+  // --- unfolding ----------------------------------------------------------
+
+  var doc = document.querySelector(".document[data-unfold]");
+  if (!doc || !window.fetch) {
+    PS.restoreScroll();
+    return;
   }
 
   // fmt fills %d and %s in order, as the catalogs write them
@@ -253,7 +455,10 @@
   // what the server already unfolded can be unfolded further, too
   doc.querySelectorAll(".expansion").forEach(function (exp) { citingBlocks(exp, true); });
 
-  if (!items.length) return;
+  if (!items.length) {
+    PS.restoreScroll();
+    return;
+  }
   doc.classList.add("has-unfold");
 
   // spent is what the run this item is part of already cost, so the server
@@ -341,6 +546,9 @@
   function setState(item, state) {
     item.state = state;
     syncTools();
+    // what an item brought is written at once: a reader may leave the moment
+    // it is there, and a write begun as the page goes is not always kept
+    if (state !== "loading") writeState();
     item.el.setAttribute("data-state", state);
     if (state === "loading") item.btn.setAttribute("aria-busy", "true");
     else item.btn.removeAttribute("aria-busy");
@@ -679,6 +887,7 @@
       u.searchParams.delete("lazy");
     }
     history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    if (PS.remember) PS.remember();
     document.querySelectorAll('form input[name="unfold"]').forEach(function (input) {
       input.value = String(level);
     });
@@ -764,11 +973,116 @@
     form.appendChild(lazy);
   });
 
+  // --- what this page had on screen ---------------------------------------
+
+  // cleanCopy is an expansion as it is kept: what it brought, with the
+  // controls this script added taken off again — they are added anew when it
+  // comes back. What each nested item was unfolded to stays on it.
+  function cleanCopy(exp) {
+    var copy = exp.cloneNode(true);
+    copy.querySelectorAll("[data-ui], .unfold-menu, .unfold-hint, .unfold-loader").forEach(function (el) { el.remove(); });
+    copy.querySelectorAll(".unfold-item").forEach(function (el) {
+      el.classList.remove("unfold-item", "nested");
+      el.removeAttribute("data-state");
+    });
+    copy.querySelectorAll(".fresh").forEach(function (el) { el.classList.remove("fresh"); });
+    return copy.outerHTML;
+  }
+
+  // the disclosures of the page outside any expansion, whose open state is
+  // kept by position; those inside one carry it in their own markup
+  function pageDetails() {
+    return Array.prototype.filter.call(doc.querySelectorAll("details"), function (d) {
+      return !d.closest(".expansion");
+    });
+  }
+
+  // signature tells this page's items from another page's under the same
+  // address — /meetings is a new week every week — by what they cite
+  function signature() {
+    var parts = items.map(function (item) {
+      return item.params.kind === "verse"
+        ? item.params.vid + "@" + (item.params.bible || "")
+        : item.params.refs.map(function (r) { return r.path; }).join(",");
+    });
+    var h = 0;
+    var str = parts.join("|");
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return items.length + ":" + h;
+  }
+  var sig = signature();
+
+  var restoring = true;
+  var stateTimer = null;
+
+  function saveState() {
+    if (!PS.key || restoring) return;
+    clearTimeout(stateTimer);
+    stateTimer = setTimeout(writeState, 300);
+  }
+
+  function writeState() {
+    clearTimeout(stateTimer);
+    if (!PS.key || restoring) return;
+    PS.save({
+      n: items.length,
+      sig: sig,
+      items: items.map(function (item) {
+        if (!item.exp || item.level <= 0 || item.state === "loading") return null;
+        return { level: item.level, html: cleanCopy(item.exp) };
+      }),
+      open: pageDetails().map(function (d) { return d.open; })
+    });
+  }
+
+  document.addEventListener("toggle", function (e) {
+    if (doc.contains(e.target)) saveState();
+  }, true);
+  window.addEventListener("pagehide", writeState);
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") writeState();
+  });
+
+  // restoreState puts back what the page had: an expansion under every item
+  // that had one, open what was open. Only for the same page as it was — the
+  // same number of items — since a position means nothing on another one.
+  function restoreState(saved) {
+    if (!saved || saved.sig !== sig || !Array.isArray(saved.items)) return 0;
+    var levels = {};
+    saved.items.forEach(function (st, i) {
+      var item = items[i];
+      if (!st || !item || item.exp || !st.html) return;
+      var exp = fromHTML(st.html);
+      if (!exp) return;
+      placeExpansion(item, exp);
+      item.exp = exp;
+      setLevel(item, st.level);
+      setState(item, "done");
+      citingBlocks(exp, true);
+      levels[st.level] = true;
+    });
+    var open = Array.isArray(saved.open) ? saved.open : [];
+    pageDetails().forEach(function (d, i) {
+      if (i < open.length) d.open = !!open[i];
+    });
+    // the switcher shows the level that came back, when there was one
+    var ls = Object.keys(levels);
+    return ls.length === 1 ? parseInt(ls[0], 10) : 0;
+  }
+
   syncTools();
   var auto = parseInt(doc.getAttribute("data-auto"), 10) || 0;
-  if (auto > 0) {
-    unfoldAll(Math.min(auto, MAX_DEPTH));
-  } else {
-    markLevel(pageLevel);
-  }
+  PS.load().then(function (saved) {
+    var restored = restoreState(saved);
+    restoring = false;
+    syncTools();
+    PS.restoreScroll();
+    // what the address asks for goes on from what came back: items already
+    // at that level are left as they are
+    if (auto > 0) {
+      unfoldAll(Math.min(auto, MAX_DEPTH));
+    } else {
+      markLevel(restored || pageLevel);
+    }
+  });
 })();
