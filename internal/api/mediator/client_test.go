@@ -2,6 +2,7 @@ package mediator
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -88,5 +89,26 @@ func TestCategory(t *testing.T) {
 	}
 	if len(cat.Subcategories) != 2 {
 		t.Errorf("got %d subcategories, want 2", len(cat.Subcategories))
+	}
+}
+
+// Some languages write a category without subcategories as an empty object
+// rather than an empty array; either reads as a list.
+func TestSubcategoriesAcceptAnObject(t *testing.T) {
+	for raw, want := range map[string]int{
+		`{"key":"X","subcategories":[]}`:                                0,
+		`{"key":"X","subcategories":{}}`:                                0,
+		`{"key":"X","subcategories":null}`:                              0,
+		`{"key":"X","subcategories":[{"key":"a"},{"key":"b"}]}`:         2,
+		`{"key":"X","subcategories":{"b":{"key":"b"},"a":{"key":"a"}}}`: 2,
+	} {
+		var c wireCategory
+		if err := json.Unmarshal([]byte(raw), &c); err != nil {
+			t.Errorf("%s: %v", raw, err)
+			continue
+		}
+		if len(c.Subcategories) != want {
+			t.Errorf("%s: %d subcategories, want %d", raw, len(c.Subcategories), want)
+		}
 	}
 }
