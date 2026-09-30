@@ -241,7 +241,9 @@
   if (!items.length) return;
   doc.classList.add("has-unfold");
 
-  function streamURL(item, depth, force) {
+  // spent is what the run this item is part of already cost, so the server
+  // weighs its budget over the whole run rather than item by item
+  function streamURL(item, depth, force, spent) {
     var q = new URLSearchParams();
     var path;
     if (item.params.kind === "verse") {
@@ -258,6 +260,7 @@
     q.set("depth", String(depth));
     if (lang) q.set("lang", lang);
     if (force) q.set("force", "1");
+    else if (spent > 0) q.set("spent", String(spent));
     return path + "?" + q.toString();
   }
 
@@ -441,11 +444,12 @@
           break;
         case "done":
           note = ev.text || "";
+          if (opts.batch) opts.batch.spent += ev.requests || 0;
           break;
       }
     }
 
-    return stream(streamURL(item, depth, opts.force), onEvent, ctrl && ctrl.signal)
+    return stream(streamURL(item, depth, opts.force, opts.batch ? opts.batch.spent : 0), onEvent, ctrl && ctrl.signal)
       .catch(function (err) {
         if (err && err.name === "AbortError") return "aborted";
         failure = (err && err.message) || String(err);
@@ -698,7 +702,7 @@
       items.forEach(removeExpansion);
       return;
     }
-    var run = { level: level, done: 0, total: 0, force: false, asked: false, stopped: false };
+    var run = { level: level, done: 0, total: 0, spent: 0, force: false, asked: false, stopped: false };
     queue = items.filter(function (item) { return item.level !== level || item.state === "error"; });
     if (!queue.length) return;
     run.total = queue.length;

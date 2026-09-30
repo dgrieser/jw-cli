@@ -29,7 +29,11 @@ import (
 //	{"type":"section","html":"<details class=\"section\">…","in":"marginal"}
 //	{"type":"expensive","level":2,"requests":2400,"text":"…"}
 //	{"type":"error","text":"…"}
-//	{"type":"done","count":4,"text":"note about an expansion cut short"}
+//	{"type":"done","count":4,"requests":37,"text":"note about an expansion cut short"}
+//
+// A page that unfolds item after item — every verse of a reading — passes what
+// the items before cost as ?spent=, so the request budget an expensive
+// expansion is asked about covers the whole run, not each item on its own.
 
 // streamEvent is one line of a stream.
 type streamEvent struct {
@@ -98,7 +102,7 @@ func (e *eventStream) progress(level, done, total int) {
 
 // finish closes a stream: what went wrong, if anything, then the count of
 // sections sent. A client that went away is not written to again.
-func (e *eventStream) finish(r *http.Request, note string, err error, txt *i18n.Messages) {
+func (e *eventStream) finish(r *http.Request, note string, requests int, err error, txt *i18n.Messages) {
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -116,7 +120,7 @@ func (e *eventStream) finish(r *http.Request, note string, err error, txt *i18n.
 	e.mu.Lock()
 	count := e.sections
 	e.mu.Unlock()
-	e.send(streamEvent{Type: "done", Count: count, Text: note})
+	e.send(streamEvent{Type: "done", Count: count, Requests: requests, Text: note})
 }
 
 // sectionEvent renders a streamed section into the disclosure the page shows:
@@ -150,6 +154,18 @@ func streamDepth(r *http.Request) (int, error) {
 	return min(max(depth, 1), maxUnfoldDepth), nil
 }
 
+// streamConfig is how a stream runs its expansion: as unfoldConfig says, on
+// top of what the page says it already spent (?spent=).
+func streamConfig(r *http.Request, depth int) (service.UnfoldConfig, error) {
+	spent, err := intParam(r, "spent", 0)
+	if err != nil {
+		return service.UnfoldConfig{}, err
+	}
+	cfg := unfoldConfig(depth, forceParam(r))
+	cfg.Spent = max(spent, 0)
+	return cfg, nil
+}
+
 // editionSymbol is what a bible edition symbol looks like, which is all a
 // stream checks before handing it on to wol.
 var editionSymbol = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
@@ -177,15 +193,19 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid bible edition %q", edition)
 		return
 	}
+	cfg, err := streamConfig(r, depth)
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
 	txt := text(lng)
 	ev := startStream(w)
-	cfg := unfoldConfig(depth, forceParam(r))
 	cfg.Progress = ev.progress
-	note, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
+	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
-	ev.finish(r, note, err, txt)
+	ev.finish(r, note, requests, err, txt)
 }
 
 // maxStreamRefs bounds the citations one request may ask about: a paragraph
@@ -233,15 +253,19 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
+	cfg, err := streamConfig(r, depth)
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
 	txt := text(lng)
 	ev := startStream(w)
-	cfg := unfoldConfig(depth, forceParam(r))
 	cfg.Progress = ev.progress
-	note, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
+	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
-	ev.finish(r, note, err, txt)
+	ev.finish(r, note, requests, err, txt)
 }
 
 // citationPath reduces a link to the wol path it names, and reports whether

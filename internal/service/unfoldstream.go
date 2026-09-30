@@ -75,15 +75,21 @@ const (
 // come one at a time, into a section holding them all. verseID is the id wol
 // gives the verse (book*1e6 + chapter*1e3 + verse), and edition the bible its
 // marginal references are read from. The note it returns closes an expansion
-// that was cut short, as ReadPassages' UnfoldNote does.
+// that was cut short, as ReadPassages' UnfoldNote does, and requests is what
+// the expansion spent.
+//
+// Everything the verse brings is one expansion: one budget, weighed together
+// with cfg.Spent, and one set of passages already expanded, however many
+// pieces it is handed out in. What the first level will cost is asked about
+// before any of it is spent.
 func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edition string, verseID int,
-	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (string, error) {
+	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (note string, requests int, err error) {
 	ref := bibleref.Ref{
 		Book: verseID / 1_000_000, Chapter: verseID / 1_000 % 1_000,
 		VerseStart: verseID % 1_000, VerseEnd: verseID % 1_000,
 	}
 	if ref.Book < 1 || ref.Book > 66 || ref.Chapter < 1 || ref.VerseStart < 1 {
-		return "", fmt.Errorf("invalid verse id %d", verseID)
+		return "", 0, fmt.Errorf("invalid verse id %d", verseID)
 	}
 	if edition == "" {
 		edition = studyEdition
@@ -91,11 +97,11 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 	out.stage(StageStudy)
 	doc, err := s.Chapter(ctx, lng, edition, ref)
 	if err != nil {
-		return "", err
+		return "", 1, err
 	}
 	verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 	if err != nil {
-		return "", err
+		return "", 1, err
 	}
 	// the chapter just read is the study pane as well when it is the study
 	// edition, so the pane costs nothing more
@@ -106,14 +112,19 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 	// the verse is what was asked about; the references reached through it are
 	// not looked up, as jw bible read does not
 	cfg.CitedDepth = 0
+	sess := unfold.NewSession(r, unfoldOptions(cfg))
+	// the chapter page, and whatever came before this verse
+	sess.Spend(cfg.Spent + 1)
+	spent := func() int { return sess.Requests() - cfg.Spent }
 	table := s.BookTable(ctx, lng)
 	verseRef := RefString(ref, table)
 
 	var notes []string
 	study, err := r.studyOf(ctx, ref)
+	sess.Spend(study.Requests)
 	if err != nil {
 		if ctx.Err() != nil {
-			return "", ctx.Err()
+			return "", spent(), ctx.Err()
 		}
 		out.Section(UnfoldSection{
 			Title: html.EscapeString(txt.StudyNotesHeading),
@@ -143,6 +154,15 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 			marginal = append(marginal, ref)
 		}
 	}
+	// the whole first level at once — the margin, the indexes and the
+	// quotations — so an expensive verse is asked about before any of it
+	planned := sess.Cost(append(slices.Clone(marginal), study.Research...))
+	if cfg.Cited {
+		planned += citedCostEstimate
+	}
+	if ok, err := sess.Check(1, planned); err != nil || !ok {
+		return joinNotes(notes), spent(), err
+	}
 	if len(marginal) > 0 {
 		const key = "marginal"
 		out.Section(UnfoldSection{
@@ -150,9 +170,9 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 			Key:   key, Order: orderMarginal,
 		})
 		for _, ref := range marginal {
-			expanded, note, err := unfoldGroupNodes(ctx, r, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, cfg, txt)
+			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, txt)
 			if err != nil {
-				return joinNotes(notes), err
+				return joinNotes(notes), spent(), err
 			}
 			notes = appendNote(notes, note)
 			for _, n := range expanded[0] {
@@ -169,9 +189,9 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 		if len(study.Research) > 0 {
 			// one run for both indexes, which is what drops a passage the two
 			// of them point at alike
-			expanded, note, err := unfoldGroupNodes(ctx, r, []unfold.Group{{RootRefs: study.Research}}, cfg, txt)
+			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: study.Research}}, txt)
 			if err != nil {
-				return joinNotes(notes), err
+				return joinNotes(notes), spent(), err
 			}
 			nodes, notes = expanded[0], appendNote(notes, note)
 		}
@@ -183,8 +203,14 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 	}
 
 	if cfg.Cited {
+		// priced up front with the rest, and asked about again should the
+		// references have spent more than they were priced at
+		if ok, err := sess.Check(1, citedCostEstimate); err != nil || !ok {
+			return joinNotes(notes), spent(), err
+		}
 		out.stage(StageCited)
 		c := r.citedFor(ctx, []bibleref.Ref{ref}, "")
+		sess.Spend(c.Requests)
 		if len(c.Results) > 0 && c.Ref != "" {
 			var b strings.Builder
 			writeCitedItems(&b, c.Results, SectionLevel)
@@ -194,7 +220,18 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 			})
 		}
 	}
-	return joinNotes(notes), ctx.Err()
+	return joinNotes(notes), spent(), ctx.Err()
+}
+
+// runSession runs one piece of a streamed expansion as part of its session, and
+// words the note closing a piece that was cut short.
+func runSession(ctx context.Context, sess *unfold.Session, groups []unfold.Group,
+	txt *i18n.Messages) ([][]unfold.Node, string, error) {
+	res, err := sess.Run(ctx, groups)
+	if err != nil {
+		return nil, "", err
+	}
+	return res.Nodes, stoppedNote(res.Stopped, res.Pending, txt), nil
 }
 
 // marginalLabel heads a marginal reference inside the section naming the verse
@@ -216,23 +253,32 @@ type CitationRef struct {
 // StreamRefsUnfold expands the citations of one block of a document — a
 // paragraph of an article, a line of the meeting workbook — and hands out each
 // one as soon as it is resolved, in the order given. The references a document
-// writes are looked up for quotations as UnfoldArticle does.
+// writes are looked up for quotations as UnfoldArticle does. As for a verse,
+// the citations are one expansion — one budget weighed together with
+// cfg.Spent, one set of passages already expanded — and the first level of all
+// of them is asked about before any is spent.
 func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs []CitationRef,
-	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (string, error) {
+	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (note string, requests int, err error) {
 	cfg.CitedDepth = 1
 	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited)
+	sess := unfold.NewSession(r, unfoldOptions(cfg))
+	sess.Spend(cfg.Spent)
+	spent := func() int { return sess.Requests() - cfg.Spent }
+	var plan []unfold.Ref
+	for _, c := range refs {
+		if unfold.IsCitation(c.Path) {
+			plan = append(plan, unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)})
+		}
+	}
+	if ok, err := sess.Check(1, sess.Cost(plan)); err != nil || !ok {
+		return "", 0, err
+	}
 	out.stage(StageReferences)
 	var notes []string
-	seen := map[string]bool{}
-	for i, c := range refs {
-		if seen[c.Path] || !unfold.IsCitation(c.Path) {
-			continue
-		}
-		seen[c.Path] = true
-		ref := unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)}
-		expanded, note, err := unfoldGroupNodes(ctx, r, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, cfg, txt)
+	for i, ref := range plan {
+		expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, txt)
 		if err != nil {
-			return joinNotes(notes), err
+			return joinNotes(notes), spent(), err
 		}
 		notes = appendNote(notes, note)
 		for _, n := range expanded[0] {
@@ -242,7 +288,7 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 			out.Section(UnfoldSection{Title: html.EscapeString(label), Body: b.String(), Order: i})
 		}
 	}
-	return joinNotes(notes), ctx.Err()
+	return joinNotes(notes), spent(), ctx.Err()
 }
 
 // afterHeading drops the heading a writer opened its output with, for a

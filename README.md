@@ -507,7 +507,12 @@ newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse: study notes,
 indexes, marginal references, quotations) and
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
-wol citation paths are followed).
+wol citation paths are followed). Everything one request unfolds shares one
+request budget and one set of passages already shown; the first level is
+priced and, if needed, asked about before anything is spent. `done` reports
+what the request spent, and **Unfold all** passes the running total of its run
+as `spent=`, so the confirmation threshold covers the whole run rather than
+each verse or paragraph on its own.
 
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|

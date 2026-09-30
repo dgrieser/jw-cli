@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -653,5 +654,85 @@ func TestUIArticleLazy(t *testing.T) {
 	_, body = get(t, srv, "/article?target=2024360&lang=en&unfold=1")
 	if !strings.Contains(body, `class="expansion"`) || !strings.Contains(body, `<details class="section">`) {
 		t.Errorf("server-side unfold should come folded:\n%s", body)
+	}
+}
+
+type budgetEvent struct {
+	Type     string
+	Requests int
+	Count    int
+}
+
+// streamEvents fetches a stream and returns its events.
+func streamEvents(t *testing.T, srv *httptest.Server, path string) []budgetEvent {
+	t.Helper()
+	resp, body := get(t, srv, path)
+	if resp.StatusCode != 200 {
+		t.Fatalf("%s: status %d: %s", path, resp.StatusCode, body)
+	}
+	var out []budgetEvent
+	for line := range strings.SplitSeq(strings.TrimSpace(body), "\n") {
+		var ev budgetEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("bad line %q: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+func hasEvent(evs []budgetEvent, typ string) bool {
+	for _, ev := range evs {
+		if ev.Type == typ {
+			return true
+		}
+	}
+	return false
+}
+
+// Citations that are each cheap are still one expansion: two dozen verse
+// citations, each priced at its text, its chapter page and a quotation lookup,
+// add up to more than the server spends unasked, and are asked about before
+// any of them is spent.
+func TestUnfoldRefsSharesTheBudget(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	q := url.Values{"lang": {"en"}, "depth": {"1"}}
+	for i := range 24 {
+		q.Add("path", fmt.Sprintf("/en/wol/bc/r1/lp-e/2024360/%d/0", i))
+		q.Add("text", "v")
+	}
+	evs := streamEvents(t, srv, "/unfold/refs?"+q.Encode())
+	if !hasEvent(evs, "expensive") || hasEvent(evs, "section") {
+		t.Errorf("24 cheap citations should be asked about as one: %+v", evs)
+	}
+	// one of them alone goes through, and says what it spent
+	one := "/unfold/refs?lang=en&depth=1&path=%2Fen%2Fwol%2Fbc%2Fr1%2Flp-e%2F2024360%2F0%2F0&text=Joh+3%3A16"
+	evs = streamEvents(t, srv, one)
+	if hasEvent(evs, "expensive") || evs[len(evs)-1].Requests == 0 {
+		t.Errorf("a single citation should go through and report its cost: %+v", evs)
+	}
+	// but not on top of what the run before it already spent
+	evs = streamEvents(t, srv, one+"&spent=1990")
+	if !hasEvent(evs, "expensive") {
+		t.Errorf("?spent= should count towards the budget: %+v", evs)
+	}
+	if evs = streamEvents(t, srv, one+"&spent=1990&force=1"); hasEvent(evs, "expensive") {
+		t.Errorf("force should spend it: %+v", evs)
+	}
+	if resp, _ := get(t, srv, one+"&spent=lots"); resp.StatusCode != 400 {
+		t.Errorf("bad spent: status %d", resp.StatusCode)
+	}
+}
+
+// A verse is weighed together with the run it is part of as well.
+func TestUnfoldVerseCountsWhatWasSpent(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	evs := streamEvents(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en&spent=1999")
+	if !hasEvent(evs, "expensive") {
+		t.Errorf("want the verse asked about on top of ?spent=: %+v", evs)
+	}
+	evs = streamEvents(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
+	if hasEvent(evs, "expensive") || evs[len(evs)-1].Requests == 0 {
+		t.Errorf("alone the verse goes through and reports its cost: %+v", evs)
 	}
 }

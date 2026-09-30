@@ -45,6 +45,11 @@ type UnfoldConfig struct {
 	Confirm func(level, requests int) (bool, error)
 	// Progress reports each completed request within a level. Nil is silent.
 	Progress func(level, done, total int)
+	// Spent is what was already spent towards the same budget before this
+	// expansion began: a web page unfolding every verse of a reading, one
+	// request per verse, is one expansion as far as the budget goes. Only the
+	// streamed expansions read it.
+	Spent int
 }
 
 // studyEdition is the only edition that carries a study pane, matching what
