@@ -238,14 +238,6 @@ type Messages struct {
 	UICardMedia        string
 	UICardPublications string
 	UICardLanguages    string
-	// UIView* label the tabs of the bible page, whose values are the query
-	// parameter and so stay as they are.
-	UIViewRead     string
-	UIViewNotes    string
-	UIViewXRefs    string
-	UIViewResearch string
-	UIViewCited    string
-	UIViewMedia    string
 	// UIExpensive* are the web's form of the confirmation the terminal asks
 	// for. UIExpensiveBody takes the level and the number of requests.
 	UIExpensiveTitle   string

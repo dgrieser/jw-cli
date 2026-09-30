@@ -2,98 +2,22 @@
 <h1>{{.T.UINavBible}}</h1>
 <form class="form" method="get" action="/bible">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  {{- if ne .View "read"}}<input type="hidden" name="view" value="{{.View}}">{{end}}
   <div class="query">
     <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" autofocus autocapitalize="off">
     <button type="submit" class="primary">{{.T.UIGo}}</button>
   </div>
-  {{- if eq .View "read"}}
-  <fieldset class="options">
-    <label>{{.T.UIEdition}}
-      <select name="bible" class="edition">
-        {{- range $e := .Editions}}
-        <option value="{{$e.Symbol}}" {{if eq $.Edition $e.Symbol}}selected{{end}}>{{$e.Label}}</option>
-        {{- end}}
-      </select>
-    </label>
-    {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
-  </fieldset>
-  {{- end}}
+  <select name="bible" class="edition" aria-label="{{.T.UIEdition}}">
+    {{- range $e := .Editions}}
+    <option value="{{$e.Symbol}}" {{if eq $.Edition $e.Symbol}}selected{{end}}>{{$e.Label}}</option>
+    {{- end}}
+  </select>
+  {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
 </form>
 
 {{- if .Ref}}
-<nav class="tabs" aria-label="{{.T.UINavBible}}">
-  {{- $page := . -}}
-  {{- range $v := .Views}}
-  <a href="{{$page.TabURL $v}}" {{if eq $page.View $v}}class="active" aria-current="page"{{end}}>{{$page.ViewLabel $v}}</a>
-  {{- end}}
-</nav>
-
-{{- if eq .View "read"}}
 {{template "unfold" .}}
 <article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}
 </article>
-{{- end}}
-
-{{- if eq .View "notes"}}
-<div class="entries">
-{{- range .Notes}}
-<section class="entry">
-  <h2>{{.Ref}}</h2>
-  {{- if .Verse}}<div class="verse">{{.Verse}}</div>{{end}}
-  {{- range .Notes}}
-  <div class="note">{{.}}</div>
-  {{- end}}
-</section>
-{{- else}}
-<p class="empty">{{.T.NoStudyNotes}}</p>
-{{- end}}
-</div>
-{{- end}}
-
-{{- if eq .View "xrefs"}}
-<div class="entries">
-{{- range .XRefs}}
-<section class="entry">
-  <h2>{{.Ref}}</h2>
-  <ul>
-    {{- range .XRefs}}
-    <li>{{.Citation}}</li>
-    {{- end}}
-  </ul>
-</section>
-{{- else}}
-<p class="empty">{{.T.NoCrossRefs}}</p>
-{{- end}}
-</div>
-{{- end}}
-
-{{- if eq .View "research"}}
-<div class="entries">
-{{- range .Research}}
-<section class="entry">
-  <h2>{{.Ref}}</h2>
-  {{- if .Verse}}<div class="verse">{{.Verse}}</div>{{end}}
-  <ul>
-    {{- range .Items}}
-    <li>
-      {{if .URL}}<a href="{{.URL}}" rel="noopener">{{.Title}}</a>{{else}}{{.Title}}{{end}}
-      {{- if .Source}} <span class="meta">({{.Source}})</span>{{end}}
-      {{- if .Excerpt}}<blockquote class="excerpt">{{.Excerpt}}</blockquote>{{end}}
-    </li>
-    {{- end}}
-  </ul>
-</section>
-{{- else}}
-<p class="empty">{{.T.NoResearch}}</p>
-{{- end}}
-</div>
-{{- end}}
-
-{{- if or (eq .View "cited") (eq .View "media")}}
-{{- if .Header}}<h2 class="listheader">{{.Header}}</h2>{{end}}
-{{template "listing" .}}
-{{- end}}
 {{- end}}
 {{end}}

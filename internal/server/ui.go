@@ -790,7 +790,6 @@ func (s *Server) uiLanguages(w http.ResponseWriter, r *http.Request) {
 type biblePage struct {
 	basePage
 	Ref     string
-	View    string
 	Edition string
 	Unfold  int
 	// AutoUnfold is the level the browser unfolds the reading to once it is
@@ -800,76 +799,7 @@ type biblePage struct {
 	UnfoldLevels []unfoldLevel
 	// Editions is the picker's option list.
 	Editions []editionOption
-	// Read
-	Body template.HTML
-	// Notes / Research
-	Notes    []notesEntryView
-	Research []researchEntryView
-	// XRefs
-	XRefs []service.XRefsEntry
-	// Cited / Media listings
-	Header string
-	Items  []resultView
-}
-
-type notesEntryView struct {
-	Ref   string
-	Verse template.HTML
-	Notes []template.HTML
-}
-
-type researchEntryView struct {
-	Ref   string
-	Verse template.HTML
-	Items []researchItemView
-}
-
-type researchItemView struct {
-	Title   string
-	URL     string
-	Source  string
-	Excerpt template.HTML
-}
-
-// bibleViews are the tabs of the bible page.
-var bibleViews = []string{"read", "notes", "xrefs", "research", "cited", "media"}
-
-// TabURL is the address of one tab with the page's current reference.
-// ViewLabel names a tab in the reader's own language; the value behind it is
-// the query parameter and stays as it is.
-func (p biblePage) ViewLabel(view string) string {
-	switch view {
-	case "read":
-		return p.T.UIViewRead
-	case "notes":
-		return p.T.UIViewNotes
-	case "xrefs":
-		return p.T.UIViewXRefs
-	case "research":
-		return p.T.UIViewResearch
-	case "cited":
-		return p.T.UIViewCited
-	case "media":
-		return p.T.UIViewMedia
-	}
-	return view
-}
-
-func (p biblePage) TabURL(view string) string {
-	q := url.Values{}
-	if p.Ref != "" {
-		q.Set("ref", p.Ref)
-	}
-	if view != "read" {
-		q.Set("view", view)
-	}
-	if p.Lang != "" {
-		q.Set("lang", p.Lang)
-	}
-	if enc := q.Encode(); enc != "" {
-		return "/bible?" + enc
-	}
-	return "/bible"
+	Body     template.HTML
 }
 
 // editionOption is one entry of the edition picker: the symbol the form sends,
@@ -908,21 +838,17 @@ func (s *Server) editionOptions(r *http.Request, current string) []editionOption
 	return out
 }
 
-// Views lists the tabs, for the template.
-func (p biblePage) Views() []string { return bibleViews }
-
+// uiBible is the bible reader: the verses first, what they reference unfolded
+// verse by verse or all at once. The study material of a verse — its notes,
+// cross references, research guide, quotations and media — is what an unfold
+// brings, so the reader is the only view; the JSON API keeps the others.
 func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page := biblePage{
 		basePage: s.base(r, "Bible"),
 		Ref:      strings.TrimSpace(r.FormValue("ref")),
-		View:     valueOr(r, "view", "read"),
 		Edition:  valueOr(r, "bible", "nwtsty"),
 	}
 	page.Editions = s.editionOptions(r, page.Edition)
-	if !slices.Contains(bibleViews, page.View) {
-		s.failUI(w, r, fmt.Errorf("unknown view %q", page.View))
-		return
-	}
 	if page.Ref == "" {
 		s.render(w, http.StatusOK, "bible", page)
 		return
@@ -932,94 +858,22 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	// a reading shows the text first; what the verses reference is unfolded
-	// when it is asked for, verse by verse or all at once
 	depth, auto, err := unfoldRequest(r, 0)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
 	}
 	page.Unfold, page.AutoUnfold = depth, auto
-	wolBase := s.svc.HTTP.Base.WOL
-	switch page.View {
-	case "read":
-		res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
-			Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
-			Unfold: unfoldConfig(depth, forceParam(r)),
-		}, text(lng))
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
-		page.Body = s.passagesHTML(res, page.Edition, depth)
-	case "notes":
-		entries, err := s.svc.Notes(r.Context(), lng, page.Ref)
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		for _, e := range entries {
-			view := notesEntryView{Ref: e.Ref, Verse: s.sanitized(e.Verse.HTML, wolBase)}
-			for _, n := range e.Notes {
-				view.Notes = append(view.Notes, s.sanitized(n.HTML, wolBase))
-			}
-			page.Notes = append(page.Notes, view)
-		}
-	case "xrefs":
-		page.XRefs, err = s.svc.XRefs(r.Context(), lng, page.Ref, false)
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-	case "research":
-		entries, err := s.svc.Research(r.Context(), lng, page.Ref, boolParam(r, "excerpts"))
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		for _, e := range entries {
-			view := researchEntryView{Ref: e.Ref, Verse: s.sanitized(e.Verse.HTML, wolBase)}
-			for _, it := range e.Items {
-				view.Items = append(view.Items, researchItemView{
-					Title:   it.Title,
-					URL:     absoluteWOL(firstNonEmpty(it.ArticleURL, it.PCPath), wolBase),
-					Source:  it.Source,
-					Excerpt: s.sanitized(it.ExcerptHTML, wolBase),
-				})
-			}
-			page.Research = append(page.Research, view)
-		}
-	case "cited":
-		query, label, err := s.svc.CitationQuery(r.Context(), lng, page.Ref)
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		p := service.SearchParams{
-			Engine: "wol", Query: query, Sort: valueOr(r, "sort", "newest"),
-			Scope: "par", Excerpts: boolParamOr(r, "excerpts", true),
-		}
-		if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		out, err := s.svc.CitedListing(r.Context(), lng, &p, nil)
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		page.Header = text(lng).CitedResults(out.Total, label)
-		page.Items = s.resultViews(out.Items, page.Lang)
-	case "media":
-		items, err := s.svc.BibleMedia(r.Context(), lng, page.Ref, true)
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		page.Header = fmt.Sprintf(text(lng).MediaOn, page.Ref)
-		page.Items = s.resultViews(items, page.Lang)
+	res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
+		Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
+		Unfold: unfoldConfig(depth, forceParam(r)),
+	}, text(lng))
+	if err != nil {
+		s.failUI(w, r, err)
+		return
 	}
+	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
+	page.Body = s.passagesHTML(res, page.Edition, depth)
 	s.render(w, http.StatusOK, "bible", page)
 }
 
