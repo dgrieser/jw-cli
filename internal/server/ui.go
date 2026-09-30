@@ -799,7 +799,7 @@ type biblePage struct {
 	// UnfoldLevels is the level switcher above the reading.
 	UnfoldLevels []unfoldLevel
 	// Editions is the picker's option list.
-	Editions []string
+	Editions []editionOption
 	// Read
 	Body template.HTML
 	// Notes / Research
@@ -872,6 +872,42 @@ func (p biblePage) TabURL(view string) string {
 	return "/bible"
 }
 
+// editionOption is one entry of the edition picker: the symbol the form sends,
+// and the name the reader knows the translation by.
+type editionOption struct {
+	Symbol string
+	Label  string
+}
+
+// editionOptions lists the bibles the library carries in the page's language,
+// each by its own title with the symbol after it — "Neue-Welt-Übersetzung der
+// Heiligen Schrift (Studienausgabe) (nwtsty)". When the list cannot be read
+// the well-known symbols stand in. The edition asked for is always among them,
+// so the picker never shows another one than the page read.
+func (s *Server) editionOptions(r *http.Request, current string) []editionOption {
+	var out []editionOption
+	if lng, err := s.language(r); err == nil {
+		if eds, err := s.svc.ReadEditions(r.Context(), lng, "", true); err == nil {
+			for _, e := range eds {
+				label := e.Symbol
+				if e.Title != "" {
+					label = e.Title + " (" + e.Symbol + ")"
+				}
+				out = append(out, editionOption{Symbol: e.Symbol, Label: label})
+			}
+		}
+	}
+	if len(out) == 0 {
+		for _, sym := range wol.BibleEditions {
+			out = append(out, editionOption{Symbol: sym, Label: sym})
+		}
+	}
+	if !slices.ContainsFunc(out, func(o editionOption) bool { return o.Symbol == current }) {
+		out = append(out, editionOption{Symbol: current, Label: current})
+	}
+	return out
+}
+
 // Views lists the tabs, for the template.
 func (p biblePage) Views() []string { return bibleViews }
 
@@ -881,8 +917,8 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		Ref:      strings.TrimSpace(r.FormValue("ref")),
 		View:     valueOr(r, "view", "read"),
 		Edition:  valueOr(r, "bible", "nwtsty"),
-		Editions: wol.BibleEditions,
 	}
+	page.Editions = s.editionOptions(r, page.Edition)
 	if !slices.Contains(bibleViews, page.View) {
 		s.failUI(w, r, fmt.Errorf("unknown view %q", page.View))
 		return

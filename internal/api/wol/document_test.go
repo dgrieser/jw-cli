@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -109,5 +110,36 @@ func TestDocument(t *testing.T) {
 	img := art.Images[0]
 	if img.URL != "https://cms-imgp.example/caleb_lg.jpg" || img.Caption != "Caleb receives Hebron as an inheritance" {
 		t.Errorf("img = %+v", img)
+	}
+}
+
+// A citation wol answers without content is read from the paragraphs its link
+// names on the document: the outermost of them only, so a box brings its
+// paragraphs once.
+func TestPassageReadsTheNamedParagraphs(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/d/r10/lp-x/1102010144", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><div id="article">
+		<p data-pid="42">before</p>
+		<div class="boxContent" data-pid="43"><p data-pid="44">in the box</p></div>
+		<p data-pid="45">after the box</p>
+		<p data-pid="49">past the end</p>
+		</div></body></html>`))
+	})
+	c := testClient(t, mux)
+	got, err := c.Passage(context.Background(), c.hc.Base.WOL+"/de/wol/d/r10/lp-x/1102010144#h=43:0-48:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"in the box", "after the box"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	if strings.Contains(got, "before") || strings.Contains(got, "past the end") || strings.Count(got, "in the box") != 1 {
+		t.Errorf("wrong extent: %s", got)
+	}
+	if got, _ := c.Passage(context.Background(), c.hc.Base.WOL+"/de/wol/d/r10/lp-x/1102010144"); got != "" {
+		t.Errorf("a link without an extent names nothing: %s", got)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/api/jworg"
 	"github.com/dgrieser/jw-cli/internal/api/mediator"
@@ -37,6 +38,9 @@ type Flags struct {
 	BaseJWOrg string
 	BaseWOL   string
 	CacheDir  string
+	// CacheTTL is how long the bodies of upstream reads are kept on disk;
+	// zero keeps none.
+	CacheTTL time.Duration
 }
 
 type App struct {
@@ -85,12 +89,15 @@ func (a *App) init() {
 				fmt.Fprintf(a.Stderr, format+"\n", args...)
 			}))
 		}
-		a.http = httpx.New(opts...)
 		if a.Flags.CacheDir != "" {
 			a.cache = httpx.OpenCacheAt(a.Flags.CacheDir)
 		} else {
 			a.cache = httpx.OpenCache()
 		}
+		// what upstream answered is kept on disk, so the next command — or
+		// jw serve after a restart — does not ask again the same day
+		opts = append(opts, httpx.WithResponseCache(a.cache, a.Flags.CacheTTL))
+		a.http = httpx.New(opts...)
 		a.mediator = mediator.New(a.http)
 		a.pubmedia = pubmedia.New(a.http)
 		a.search = search.New(a.http)

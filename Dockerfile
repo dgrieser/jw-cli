@@ -30,7 +30,8 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
 FROM gcr.io/distroless/static-debian12:nonroot
 
 COPY --from=build /out/jw /jw
-# /data holds the on-disk cache (language lists, wol config, documents).
+# /data holds the on-disk cache (language lists, wol config, documents, and
+# every upstream response for 24h), so a restart does not start cold.
 # Mount a volume to keep it across container restarts; without one the cache
 # simply lives and dies with the container.
 COPY --from=build --chown=nonroot:nonroot /out/data /data

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/version"
 )
 
@@ -50,6 +51,8 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	pf.StringVar(&a.Flags.BaseJWOrg, "base-jworg", "", "override www.jw.org base URL")
 	pf.StringVar(&a.Flags.BaseWOL, "base-wol", "", "override wol.jw.org base URL")
 	pf.StringVar(&a.Flags.CacheDir, "cache-dir", "", "override cache directory")
+	pf.DurationVar(&a.Flags.CacheTTL, "cache-ttl", httpx.ResponseTTL,
+		"keep what jw.org and wol.jw.org answered on disk this long and reuse it (0 turns it off)")
 	for _, hidden := range []string{"base-cdn", "base-jworg", "base-wol", "cache-dir"} {
 		_ = pf.MarkHidden(hidden)
 	}

@@ -478,6 +478,12 @@ publish the port to localhost (`-p 127.0.0.1:8080:8080`) or put an
 authenticating reverse proxy in front for anything internet-facing. `/data`
 holds the on-disk cache; mount a volume to keep it across restarts.
 
+What jw.org and wol.jw.org answer is kept on disk (in the user cache
+directory, `/data` in the image) for 24 hours and reused — by the next
+command, and by `jw serve` across restarts. `--cache-ttl 1h` changes how long,
+`--cache-ttl 0` turns it off; downloads and signed-in search requests are never
+kept.
+
 `--lang` sets the default content language; every page and endpoint takes a
 `?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
 endpoints render bodies as sanitized HTML by default; `?format=markdown` and
@@ -497,7 +503,8 @@ in place (nothing is added when there is nothing to unfold). **Unfold all
 button; the level is kept in the address (`?unfold=N&lazy=1`), so a reload or a
 shared link unfolds the same way. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
-opens on its own. Without JavaScript the switcher reloads the page unfolded
+opens on its own. Every paragraph of an unfolded passage that cites something
+has a button of its own, so an expansion can be followed as deep as wanted. Without JavaScript the switcher reloads the page unfolded
 server-side, and a level that needs more requests than the server spends
 unasked is offered on a confirmation page first (with JavaScript, a prompt).
 

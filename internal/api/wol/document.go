@@ -138,3 +138,49 @@ func docIDFromURL(u string) int {
 func cleanSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
+
+// passageRange matches the extent a citation's link names on its document:
+// "#h=43:0-48:0", from paragraph 43 to paragraph 48.
+var passageRange = regexp.MustCompile(`[#&]h=(\d+):\d+-(\d+):\d+`)
+
+// Passage reads the paragraphs a citation link names out of the document it
+// points at. wol answers some citations — a box of a book, a sidebar — with a
+// title and a link but no content; the paragraphs are on the document all the
+// same. Empty when the link names no extent or the document has none of it.
+func (c *Client) Passage(ctx context.Context, passageURL string) (string, error) {
+	m := passageRange.FindStringSubmatch(passageURL)
+	if m == nil {
+		return "", nil
+	}
+	from, _ := strconv.Atoi(m[1])
+	to, _ := strconv.Atoi(m[2])
+	if to < from {
+		return "", nil
+	}
+	page := passageURL
+	if i := strings.IndexByte(page, '#'); i >= 0 {
+		page = page[:i]
+	}
+	doc, err := c.documentPage(ctx, page)
+	if err != nil {
+		return "", err
+	}
+	inRange := func(s *goquery.Selection) bool {
+		pid, err := strconv.Atoi(s.AttrOr("data-pid", ""))
+		return err == nil && pid >= from && pid <= to
+	}
+	var b strings.Builder
+	doc.Find("[data-pid]").Each(func(_ int, s *goquery.Selection) {
+		// the outermost element of the extent only: a paragraph inside a box
+		// that is itself in the extent comes with the box
+		if !inRange(s) || s.ParentsFiltered("[data-pid]").FilterFunction(func(_ int, p *goquery.Selection) bool {
+			return inRange(p)
+		}).Length() > 0 {
+			return
+		}
+		if html, err := goquery.OuterHtml(s); err == nil {
+			b.WriteString(html)
+		}
+	})
+	return b.String(), nil
+}
