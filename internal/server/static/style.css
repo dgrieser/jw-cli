@@ -490,11 +490,11 @@ blockquote.snippet p:last-child, blockquote.excerpt p:last-child { margin-bottom
 
 /* what wol ships along that is not reading matter: its image viewer's
    buttons and the hidden fields of its page */
-.document :is(button, input, [class^="pswp"]) { display: none; }
+.document :is(button, input, [class^="pswp"]):not([data-ui]) { display: none; }
 
 /* what wol marks in a verse: the verse number, and the marker to its
    marginal references, as quiet superscripts */
-.document a.vl, .document > a.b, .verse > a.b, .verse a.vl, .document a.fn, .document a.fn-symbol {
+.document a.vl, .document > a.b, .verse > a.b, .verse a.vl, .item-text > a.b, .document a.fn, .document a.fn-symbol {
   font-size: 0.72em;
   line-height: 0;
   vertical-align: 0.5em;
@@ -503,40 +503,258 @@ blockquote.snippet p:last-child, blockquote.excerpt p:last-child { margin-bottom
   margin-right: 0.15em;
 }
 .document a.vl, .verse a.vl { margin-right: 0.25em; }
-.document > a.b, .verse > a.b { margin-left: 0.05em; }
+.document > a.b, .verse > a.b, .item-text > a.b { margin-left: 0.05em; }
 .document .pageNum { display: none; }
 .document .parNum { color: var(--muted); }
 .document .parNum sup { font-weight: 600; }
 
-/* what a verse brought: folded away until it is wanted */
-.expansion { margin: 0.75rem 0 1.5rem; }
+/* a reading: one verse per row, so each can be unfolded on its own */
+.reading .passage { margin-bottom: 2rem; }
+.reading .passage > h2 { margin-top: 0.5rem; }
+.reading .items { display: flex; flex-direction: column; gap: 0.15rem; }
+.reading .item { padding: 0.2rem 0; border-radius: var(--r-small); }
+.reading .item-text { min-width: 0; }
+.note { color: var(--muted); font-style: italic; font-size: 0.95rem; }
+
+/* sections: what a verse or a paragraph brought, folded away until it is
+   wanted. Closed ones sit side by side as chips; an open one takes the whole
+   row, and goes back in line once closed. */
+.sections {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+}
+.sections:empty { display: none; }
+.expansion { margin: 0.1rem 0 0.9rem; }
+.expansion > .sections { margin-top: 0.25rem; }
 details.section {
-  border-left: 2px solid var(--line);
-  padding: 0 0 0 0.9rem;
-  margin: 0.4rem 0;
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 1.1rem;
+  background: var(--paper);
+  transition: border-color 120ms, background-color 120ms;
+}
+details.section:hover { border-color: var(--muted); }
+details.section[open] {
+  flex-basis: 100%;
+  border-radius: var(--r);
+  border-color: var(--line-strong);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
 }
 details.section > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.1rem;
+  padding: 0.25rem 0.8rem 0.25rem 0.6rem;
   cursor: pointer;
-  color: var(--muted);
-  font-weight: 600;
-  font-size: 0.95rem;
-  padding: 0.2rem 0;
-  list-style-position: outside;
+  list-style: none;
+  color: var(--ink);
+  font-weight: 550;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
-details.section > summary:hover { color: var(--ink); }
-details.section[open] { border-left-color: var(--accent); }
-details.section[open] > summary { color: var(--ink); margin-bottom: 0.4rem; }
-details.section > summary h1, details.section > summary h2,
-details.section > summary h3, details.section > summary h4,
-details.section > summary h5, details.section > summary h6 {
-  display: inline;
-  font-size: inherit;
-  margin: 0;
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::before {
+  content: "";
+  flex: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  background: var(--chevron) center / 0.9rem no-repeat;
+  transform: rotate(-90deg);
+  transition: transform 140ms;
 }
+details.section[open] > summary::before { transform: none; }
+details.section > summary:hover { color: var(--accent); }
+details.section[open] > summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-radius: var(--r) var(--r) 0 0;
+  border-bottom: 1px solid var(--line);
+  padding-block: 0.4rem;
+}
+details.section > summary :is(h1, h2, h3, h4, h5, h6, p) { display: inline; font-size: inherit; margin: 0; }
+details.section > summary a { color: inherit; }
+details.section .count {
+  flex: none;
+  min-width: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35rem;
+  text-align: center;
+}
+.section-body {
+  padding: 0.6rem 0.9rem 0.4rem;
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+.section-body > :first-child { margin-top: 0; }
+.section-body .sections { margin: 0.6rem 0 0.4rem; }
+.section-body details.section { background: var(--paper); }
+.section-body details.section[open] { background: var(--paper); border-left-color: var(--line-strong); }
+.section-body details.section[open] > summary { background: var(--paper); }
+.sections + hr, .section-body > hr:last-child { display: none; }
+details.section.fresh { animation: pop 260ms ease-out; }
+@keyframes pop { from { opacity: 0; transform: translateY(3px) scale(0.98); } }
 
-details.extras { margin: 1.25rem 0; max-width: var(--measure); }
-details.extras summary { cursor: pointer; color: var(--accent); font-weight: 500; padding: 0.25rem 0; }
-details.extras ul { margin-top: 0.5rem; }
+.document > .sections.extras, .sections.extras { margin: 1.5rem 0; max-width: var(--measure); }
+
+/* unfolding one item: a button in the right-hand gutter, a menu of depths */
+.js .document.has-unfold { padding-right: 2.6rem; }
+.unfold-item { position: relative; }
+.unfold-btn {
+  position: absolute;
+  top: 0.05rem;
+  right: -2.6rem;
+  width: 2.1rem;
+  min-height: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  gap: 0;
+  border-radius: 999px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.unfold-btn:hover, .unfold-btn[aria-expanded="true"] { background: var(--accent-soft); border-color: transparent; color: var(--accent); }
+.unfold-item[data-level]:not([data-level="0"]) > .unfold-btn { color: var(--accent); background: var(--accent-soft); }
+.unfold-btn .lvl:not(:empty) {
+  position: absolute;
+  right: -0.1rem;
+  bottom: -0.1rem;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0 0.2rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1rem;
+}
+.unfold-item[data-state="empty"] > .unfold-btn { opacity: 0.4; }
+.unfold-item[data-state="loading"] { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.unfold-btn[aria-busy="true"] { color: transparent; }
+.unfold-btn[aria-busy="true"]::after { border-color: var(--accent) var(--accent) transparent transparent; }
+:is(h1, h2, h3, h4, h5, h6).unfold-item > .unfold-btn { top: -0.2rem; }
+
+.unfold-menu {
+  position: absolute;
+  top: 2.3rem;
+  right: -2.6rem;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.35);
+  font-size: 0.85rem;
+  line-height: 1;
+  animation: pop 140ms ease-out;
+}
+.unfold-menu[hidden] { display: none; }
+.unfold-menu .label { color: var(--muted); padding: 0 0.3rem 0 0.5rem; font-weight: 500; }
+.unfold-menu button {
+  min-width: 2.4rem;
+  min-height: 2.4rem;
+  padding: 0 0.6rem;
+  border-radius: 999px;
+  font-size: 0.95rem;
+}
+.unfold-menu button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.unfold-menu .remove { color: var(--danger); font-size: 1.15rem; }
+.unfold-menu .remove[hidden] { display: none; }
+
+.unfold-hint {
+  position: absolute;
+  top: 0.35rem;
+  right: 0;
+  z-index: 5;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: opacity 400ms;
+}
+.unfold-hint.gone { opacity: 0; }
+
+/* what is still on its way: a chip in line with the sections that came */
+.unfold-loader {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.1rem;
+  max-width: 100%;
+  padding: 0.25rem 0.8rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 1.1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.unfold-loader .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meter {
+  flex: none;
+  position: relative;
+  width: 3rem;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.meter i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 2px; transition: width 200ms; }
+.unfold-msg { margin: 0.5rem 0 0.75rem; font-size: 0.9rem; color: var(--muted); }
+.unfold-msg.error { max-width: none; color: var(--danger); padding: 0.5rem 0.75rem; }
+.unfold-msg button { margin-left: 0.25rem; }
+
+/* the unfold-all bar: levels, how far a run got, and open/close for all */
+.unfold-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin: 0 0 1rem;
+  max-width: calc(var(--measure) + 2.6rem);
+}
+.unfold-bar .tabs.unfold { margin: 0; }
+.unfold-bar.busy {
+  position: sticky;
+  top: 0;
+  z-index: 7;
+  background: var(--paper);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.unfold-status { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.875rem; }
+.unfold-status[hidden] { display: none; }
+.unfold-tools { display: inline-flex; gap: 0.35rem; margin-left: auto; }
+.unfold-tools[hidden] { display: none; }
+html:not(.js) .unfold-tools { display: none; }
+button.ghost { background: transparent; border-color: transparent; color: var(--muted); font-weight: 500; }
+button.ghost:hover { background: var(--field); color: var(--ink); border-color: transparent; }
 
 .entries { max-width: var(--measure); }
 section.entry { margin: 1.5rem 0 2rem; }
@@ -551,6 +769,8 @@ section.entry .verse {
 section.entry .note { margin: 0.6rem 0; line-height: 1.65; }
 section.entry ul { padding-left: 1.3rem; }
 section.entry li { margin-bottom: 0.4rem; }
+
+.sections.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
 
 ul.gallery {
   list-style: none;
@@ -710,7 +930,35 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
   animation: spin 700ms linear infinite;
 }
 
+/* phones: tabs scroll rather than stack, fields never zoom the page, the
+   gutter for the unfold buttons stays narrow */
+@media (max-width: 40rem) {
+  .tabs:not(.unfold) {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-inline: calc(-1 * var(--gutter));
+    padding-inline: var(--gutter);
+  }
+  .tabs:not(.unfold)::-webkit-scrollbar { display: none; }
+  .tabs a { white-space: nowrap; flex: none; }
+  :where(input, select, textarea) { font-size: max(16px, 1em); }
+  .document { font-size: 1.03rem; line-height: 1.65; }
+  .js .document.has-unfold { padding-right: 2.35rem; }
+  .unfold-btn { right: -2.4rem; }
+  .unfold-menu { right: -2.4rem; }
+  .section-body { padding: 0.5rem 0.7rem 0.3rem; }
+  .unfold-tools { margin-left: 0; }
+  .loading { left: 1rem; right: 1rem; justify-content: center; bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+
+@media (hover: none) {
+  details.section > summary:hover { color: inherit; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  details.section.fresh, .unfold-menu { animation: none; }
   *, *::before, *::after { transition: none !important; }
   html.is-loading .progress::before { animation: none; transform: none; width: 100%; opacity: 0.6; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }

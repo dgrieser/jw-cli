@@ -663,3 +663,81 @@ func TestRefIsVerse(t *testing.T) {
 		}
 	}
 }
+
+// A session weighs its runs together: pieces that are each well under the
+// threshold still add up to the question, which is asked with what they add up
+// to — and, once agreed to, not again for what was already agreed.
+func TestSessionSharesTheBudget(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{}}
+	for i := range 5 {
+		r.content[fmt.Sprintf("/wol/bc/%d", i)] = model.Tooltip{Title: "t", ContentHTML: fmt.Sprintf("<p>%d</p>", i)}
+	}
+	var asked []int
+	s := NewSession(r, Options{
+		Depth: 1, Threshold: 3,
+		Confirm: func(_, requests int) (bool, error) { asked = append(asked, requests); return true, nil },
+	})
+	for i := range 5 {
+		if _, err := s.Run(context.Background(), []Group{{RootRefs: []Ref{{Path: fmt.Sprintf("/wol/bc/%d", i)}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// runs 1-3 fit in the budget of 3; the fourth brings it to 4 and is asked
+	// about; the fifth starts a fresh allowance after the answer
+	if !slices.Equal(asked, []int{4}) {
+		t.Errorf("asked %v, want once for the run that crossed the threshold", asked)
+	}
+	if s.Requests() != 5 {
+		t.Errorf("session spent %d, want 5", s.Requests())
+	}
+}
+
+// What was spent before a session began counts, and a refusal comes back as
+// the error Confirm returned, before anything more is spent.
+func TestSessionCarriesWhatWasSpentBefore(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{"/wol/bc/1": {Title: "t", ContentHTML: "<p>x</p>"}}}
+	refused := errors.New("too expensive")
+	s := NewSession(r, Options{
+		Depth: 1, Threshold: 10,
+		Confirm: func(_, requests int) (bool, error) { return false, refused },
+	})
+	s.Spend(10)
+	if _, err := s.Run(context.Background(), []Group{{RootRefs: []Ref{{Path: "/wol/bc/1"}}}}); !errors.Is(err, refused) {
+		t.Fatalf("err = %v, want the refusal", err)
+	}
+	if len(r.asked) != 0 {
+		t.Errorf("resolved %v after the budget was refused", r.asked)
+	}
+	if ok, err := s.Check(1, 1); ok || !errors.Is(err, refused) {
+		t.Errorf("Check = %v, %v; want the refusal", ok, err)
+	}
+}
+
+// Two runs of a session never expand a path twice, and a passage an earlier
+// run printed is not printed again under another path.
+func TestSessionDeduplicatesAcrossRuns(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/pc/a": {Title: "A", ContentHTML: "<p>the same passage</p>", URL: "/d/1#h=1"},
+		"/wol/pc/b": {Title: "A", ContentHTML: "<p>the same passage</p>", URL: "/d/1#h=2"},
+	}}
+	s := NewSession(r, Options{Depth: 1})
+	run := func(path string) []Node {
+		res, err := s.Run(context.Background(), []Group{{RootRefs: []Ref{{Path: path}}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Nodes[0]
+	}
+	if n := run("/wol/pc/a"); len(n) != 1 {
+		t.Fatalf("first run: %d nodes", len(n))
+	}
+	if n := run("/wol/pc/a"); len(n) != 0 {
+		t.Errorf("a path expanded again: %+v", n)
+	}
+	if n := run("/wol/pc/b"); len(n) != 0 {
+		t.Errorf("the same passage printed again under another path: %+v", n)
+	}
+	if !slices.Equal(r.asked, []string{"/wol/pc/a", "/wol/pc/b"}) {
+		t.Errorf("asked %v", r.asked)
+	}
+}

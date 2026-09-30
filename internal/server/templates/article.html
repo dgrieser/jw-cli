@@ -8,30 +8,35 @@
     <button type="submit" class="primary">{{.T.UIRead}}</button>
   </div>
   <fieldset class="options">
-    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="0" title="{{.T.UIUnfoldHintArt}}" class="num"></label>
+    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="0" title="{{.T.UIUnfoldHintArt}}" class="num" inputmode="numeric"></label>
   </fieldset>
 </form>
 {{- else}}
 {{template "unfold" .}}
-<article class="document">
+<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{- if .Heading}}<h1>{{.Heading}}</h1>{{end}}
 {{.Body}}
 </article>
 
+{{- if or .Refs .Images}}
+<div class="sections extras">
 {{- if .Refs}}
-<details class="extras">
-  <summary>{{.T.UIScriptureRefs}} ({{len .Refs}})</summary>
+<details class="section">
+  <summary>{{.T.UIScriptureRefs}} <span class="count">{{len .Refs}}</span></summary>
+  <div class="section-body">
   <ul>
     {{- range .Refs}}
     <li>{{.Text}}</li>
     {{- end}}
   </ul>
+  </div>
 </details>
 {{- end}}
 
 {{- if .Images}}
-<details class="extras">
-  <summary>{{.T.UIImages}} ({{len .Images}})</summary>
+<details class="section">
+  <summary>{{.T.UIImages}} <span class="count">{{len .Images}}</span></summary>
+  <div class="section-body">
   <ul class="gallery">
     {{- range .Images}}
     <li>
@@ -41,7 +46,10 @@
     </li>
     {{- end}}
   </ul>
+  </div>
 </details>
+{{- end}}
+</div>
 {{- end}}
 
 <p class="links">

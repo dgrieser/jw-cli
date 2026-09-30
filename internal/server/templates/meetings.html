@@ -2,7 +2,7 @@
 <h1>{{.T.UINavMeetings}}</h1>
 <form class="form" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  {{- if .Unfold}}<input type="hidden" name="unfold" value="{{.Unfold}}">{{end}}
+  {{- if or .Unfold .AutoUnfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
   <div class="query compact">
     <input type="date" name="date" value="{{.Date}}" title="{{.T.UIDateHint}}" aria-label="{{.T.UIDateHint}}">
     <button type="submit" class="primary">{{.T.UIShow}}</button>
@@ -16,7 +16,7 @@
 </nav>
 
 {{template "unfold" .}}
-<article class="document">
+<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}
 </article>

@@ -11,8 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/PuerkitoBio/goquery"
-
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -50,6 +48,36 @@ func (p basePage) Active(path string) string {
 		return "active"
 	}
 	return ""
+}
+
+// UIText is what the page's script says, in the language of the page, and the
+// language it asks the server in.
+func (p basePage) UIText() map[string]string {
+	t := p.T
+	return map[string]string{
+		"lang":           p.Lang,
+		"unfold":         t.UIUnfold,
+		"unfoldItem":     t.UIUnfoldItem,
+		"unfoldAll":      t.UIUnfoldAll,
+		"depth":          t.UIUnfoldDepth,
+		"depthN":         t.UIUnfoldDepthN,
+		"foldAway":       t.UIFoldAway,
+		"openAll":        t.UIOpenAll,
+		"closeAll":       t.UICloseAll,
+		"stop":           t.UIStop,
+		"nothing":        t.UINothingToUnfold,
+		"error":          t.UIUnfoldError,
+		"retry":          t.UIRetry,
+		"stageStudy":     t.UIStageStudy,
+		"stageRefs":      t.UIStageReferences,
+		"stageCited":     t.UIStageCited,
+		"progressLevel":  t.UIProgressLevel,
+		"progressItems":  t.UIProgressItems,
+		"unfolding":      t.UIUnfolding,
+		"loading":        t.UILoading,
+		"expensiveTitle": t.UIExpensiveTitle,
+		"unfoldAnyway":   t.UIUnfoldAnyway,
+	}
 }
 
 // WithLang appends the page's language to an internal link.
@@ -143,72 +171,6 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 	})
 }
 
-// foldSections turns every section a verse brought with it — the study bible's
-// indexes, each marginal reference, the publications quoting it — into a
-// disclosure of its own. A reading then reads as a reading, and what hangs off
-// a verse is opened when it is wanted rather than pushing the next verse off
-// the screen.
-func foldSections(fragment string) string {
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
-	if err != nil {
-		return fragment
-	}
-	doc.Find("div.expansion").Each(func(_ int, div *goquery.Selection) {
-		foldChildren(div)
-	})
-	out, err := doc.Find("body").Html()
-	if err != nil {
-		return fragment
-	}
-	return out
-}
-
-// foldChildren wraps each run of an expansion under its own heading. The
-// sections are the shallowest headings it holds; what they head — an index
-// entry, a quoting publication — stays inside the section it belongs to.
-func foldChildren(div *goquery.Selection) {
-	level := 0
-	div.Children().Each(func(_ int, s *goquery.Selection) {
-		if n := headingLevel(goquery.NodeName(s)); n > 0 && (level == 0 || n < level) {
-			level = n
-		}
-	})
-	if level == 0 {
-		return
-	}
-	var out strings.Builder
-	open := false
-	div.Children().Each(func(_ int, s *goquery.Selection) {
-		if headingLevel(goquery.NodeName(s)) == level {
-			if open {
-				out.WriteString("</details>")
-			}
-			summary, err := s.Html()
-			if err != nil {
-				return
-			}
-			out.WriteString(`<details class="section"><summary>` + summary + "</summary>")
-			open = true
-			return
-		}
-		if html, err := goquery.OuterHtml(s); err == nil {
-			out.WriteString(html)
-		}
-	})
-	if open {
-		out.WriteString("</details>")
-	}
-	div.SetHtml(out.String())
-}
-
-// headingLevel is the depth of a heading element, or zero for anything else.
-func headingLevel(name string) int {
-	if len(name) == 2 && name[0] == 'h' && name[1] >= '1' && name[1] <= '6' {
-		return int(name[1] - '0')
-	}
-	return 0
-}
-
 // urlWith is this request's own URL with one parameter set, or dropped when
 // the value is empty.
 func urlWith(r *http.Request, name, value string) string {
@@ -241,6 +203,9 @@ func unfoldLevels(r *http.Request, current, def int) []unfoldLevel {
 	for n := 0; n <= maxUnfoldDepth; n++ {
 		q := r.URL.Query()
 		q.Del("force")
+		// the page with JavaScript asks for its levels lazily on its own; a
+		// link has to work without it
+		q.Del("lazy")
 		if n == def {
 			q.Del("unfold")
 		} else {
@@ -265,7 +230,26 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 		}
 		art.HTML = body
 	}
-	return s.sanitized(art.HTML, s.svc.ArticleBase(art)), nil
+	out := s.sanitized(art.HTML, s.svc.ArticleBase(art))
+	if depth > 0 {
+		out = template.HTML(foldSections(string(out))) //nolint:gosec // sanitized above
+	}
+	return out, nil
+}
+
+// unfoldRequest reads the level a page is asked to unfold to. With ?lazy=1 the
+// page is rendered without it and the browser loads the expansion afterwards,
+// piece by piece, once the document itself is on screen: depth is then zero and
+// auto the level asked for.
+func unfoldRequest(r *http.Request, def int) (depth, auto int, err error) {
+	depth, err = intParam(r, "unfold", def)
+	if err != nil {
+		return 0, 0, err
+	}
+	if boolParam(r, "lazy") {
+		return 0, min(max(depth, 0), maxUnfoldDepth), nil
+	}
+	return depth, 0, nil
 }
 
 // sanitized runs a site HTML fragment through the same sanitizer the CLI
@@ -469,6 +453,9 @@ type articlePage struct {
 	Heading string
 	URL     string
 	Unfold  int
+	// AutoUnfold is the level the browser unfolds the page to once it is
+	// shown, zero for none.
+	AutoUnfold int
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
@@ -487,7 +474,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	depth, err := intParam(r, "unfold", 0)
+	depth, auto, err := unfoldRequest(r, 0)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
@@ -502,8 +489,8 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	page.Unfold = depth
-	page.UnfoldLevels = unfoldLevels(r, depth, 0)
+	page.Unfold, page.AutoUnfold = depth, auto
+	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
 	page.Heading = art.Title
 	page.URL = art.URL
@@ -521,6 +508,9 @@ type documentPage struct {
 	Date    string
 	Part    string // meetings: "", "midweek" or "weekend"
 	Unfold  int
+	// AutoUnfold is the level the browser unfolds the page to once it is
+	// shown, zero for none.
+	AutoUnfold int
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
@@ -537,8 +527,8 @@ func (p documentPage) PartURL(part string) string {
 	if p.Date != "" {
 		q.Set("date", p.Date)
 	}
-	if p.Unfold > 0 {
-		q.Set("unfold", fmt.Sprint(p.Unfold))
+	if level := max(p.Unfold, p.AutoUnfold); level > 0 {
+		q.Set("unfold", fmt.Sprint(level))
 	}
 	if p.Lang != "" {
 		q.Set("lang", p.Lang)
@@ -560,7 +550,7 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	depth, err := intParam(r, "unfold", 0)
+	depth, auto, err := unfoldRequest(r, 0)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
@@ -581,7 +571,8 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		URL:          art.URL,
 		Date:         r.FormValue("date"),
 		Unfold:       depth,
-		UnfoldLevels: unfoldLevels(r, depth, 0),
+		AutoUnfold:   auto,
+		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
 	})
 }
@@ -602,7 +593,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	depth, err := intParam(r, "unfold", 0)
+	depth, auto, err := unfoldRequest(r, 0)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
@@ -629,7 +620,8 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		Date:         r.FormValue("date"),
 		Part:         part,
 		Unfold:       depth,
-		UnfoldLevels: unfoldLevels(r, depth, 0),
+		AutoUnfold:   auto,
+		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
 	})
 }
@@ -801,6 +793,9 @@ type biblePage struct {
 	View    string
 	Edition string
 	Unfold  int
+	// AutoUnfold is the level the browser unfolds the reading to once it is
+	// shown, zero for none.
+	AutoUnfold int
 	// UnfoldLevels is the level switcher above the reading.
 	UnfoldLevels []unfoldLevel
 	// Editions is the picker's option list.
@@ -901,12 +896,14 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	depth, err := intParam(r, "unfold", 1)
+	// a reading shows the text first; what the verses reference is unfolded
+	// when it is asked for, verse by verse or all at once
+	depth, auto, err := unfoldRequest(r, 0)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
 	}
-	page.Unfold = depth
+	page.Unfold, page.AutoUnfold = depth, auto
 	wolBase := s.svc.HTTP.Base.WOL
 	switch page.View {
 	case "read":
@@ -918,15 +915,8 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 			s.failUI(w, r, err)
 			return
 		}
-		body, err := service.FormatPassages(res, render.HTML, render.Options{BaseURL: wolBase})
-		if err != nil {
-			s.failUI(w, r, err)
-			return
-		}
-		page.UnfoldLevels = unfoldLevels(r, depth, 1)
-		// FormatPassages already sanitizes each passage through render.Render;
-		// the headings around them are escaped there too.
-		page.Body = template.HTML(foldSections(body)) //nolint:gosec // sanitized per passage above
+		page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
+		page.Body = s.passagesHTML(res, page.Edition, depth)
 	case "notes":
 		entries, err := s.svc.Notes(r.Context(), lng, page.Ref)
 		if err != nil {
@@ -1004,4 +994,40 @@ func absoluteWOL(path, base string) string {
 		return path
 	}
 	return base + path
+}
+
+// passagesHTML lays a reading out for the page: every passage under its
+// heading, and every verse an item of its own, which is what the page unfolds
+// one at a time. A verse the server already unfolded carries its expansion
+// folded under it, and says to what level.
+func (s *Server) passagesHTML(res service.ReadResult, edition string, depth int) template.HTML {
+	wolBase := s.svc.HTTP.Base.WOL
+	var b strings.Builder
+	for _, p := range res.Passages {
+		fmt.Fprintf(&b, `<section class="passage" data-bible="%s"><h2>%s</h2><div class="items">`,
+			template.HTMLEscapeString(firstNonEmpty(p.Bible, edition)), template.HTMLEscapeString(p.Heading()))
+		for _, v := range p.Verses {
+			level := ""
+			if depth > 0 {
+				level = fmt.Sprintf(` data-level="%d"`, min(depth, maxUnfoldDepth))
+			}
+			fmt.Fprintf(&b, `<div class="item verse" data-vid="%d"%s><div class="item-text">%s</div>`,
+				v.ID, level, s.sanitized(v.HTML, wolBase))
+			if strings.TrimSpace(v.Unfold) != "" {
+				exp := strings.TrimSpace(string(s.sanitized(v.Unfold, wolBase)))
+				exp = strings.TrimSuffix(strings.TrimSuffix(exp, "<hr/>"), "<hr>")
+				b.WriteString(foldSections(`<div class="expansion">` + exp + `</div>`))
+			}
+			b.WriteString(`</div>`)
+		}
+		b.WriteString(`</div>`)
+		if p.UnfoldNote != "" {
+			fmt.Fprintf(&b, `<p class="note">%s</p>`, template.HTMLEscapeString(p.UnfoldNote))
+		}
+		b.WriteString(`</section>`)
+	}
+	for _, note := range res.Missing {
+		fmt.Fprintf(&b, `<p class="note">%s</p>`, template.HTMLEscapeString(note))
+	}
+	return template.HTML(b.String()) //nolint:gosec // every fragment sanitized above, the rest escaped
 }

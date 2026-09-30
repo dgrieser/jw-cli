@@ -45,6 +45,11 @@ type UnfoldConfig struct {
 	Confirm func(level, requests int) (bool, error)
 	// Progress reports each completed request within a level. Nil is silent.
 	Progress func(level, done, total int)
+	// Spent is what was already spent towards the same budget before this
+	// expansion began: a web page unfolding every verse of a reading, one
+	// request per verse, is one expansion as far as the budget goes. Only the
+	// streamed expansions read it.
+	Spent int
 }
 
 // studyEdition is the only edition that carries a study pane, matching what
@@ -591,8 +596,10 @@ func unfoldInline(ctx context.Context, r unfold.Resolver, fragment string,
 			continue
 		}
 		// the rule parts what the block brought from the document going on
-		// after it
-		inlineUnder(b.sel, part+"<hr/>")
+		// after it. The expansion is marked as its own, as a verse's is, so a
+		// reader of the rendered page can fold it away; the markdown and text
+		// renderers pass a plain div through untouched
+		inlineUnder(b.sel, `<div class="expansion">`+part+"</div><hr/>")
 	}
 	body := doc.Find("body")
 	if note := unfoldNoteHTML(stoppedNote(res.Stopped, res.Pending, txt)); note != "" {
@@ -1059,6 +1066,15 @@ type indexGroup struct {
 // are parted here, by the document they name.
 func writeIndexGroups(b *strings.Builder, links []model.ResearchItem, nodes []unfold.Node,
 	level int, txt *i18n.Messages) {
+	for _, g := range indexGroups(links, nodes, txt) {
+		b.WriteString(headingHTML(level, html.EscapeString(g.name)))
+		writeIndexGroup(b, g, level, txt)
+	}
+}
+
+// indexGroups sorts the entries of a verse's indexes into one group per index,
+// in the order the page lists them.
+func indexGroups(links []model.ResearchItem, nodes []unfold.Node, txt *i18n.Messages) []*indexGroup {
 	var groups []*indexGroup
 	find := func(name string, rank int) *indexGroup {
 		if name == "" {
@@ -1092,11 +1108,14 @@ func writeIndexGroups(b *strings.Builder, links []model.ResearchItem, nodes []un
 	// the research guide before the publications index, which is the order
 	// their ranks already put them in
 	slices.SortStableFunc(groups, func(a, b *indexGroup) int { return a.rank - b.rank })
-	for _, g := range groups {
-		b.WriteString(headingHTML(level, html.EscapeString(g.name)))
-		writeResearchLinks(b, g.links, g.name)
-		writeUnfoldNodes(b, g.nodes, level+1, "", txt)
-	}
+	return groups
+}
+
+// writeIndexGroup prints what one index lists under a verse, below a heading
+// the caller has written at level.
+func writeIndexGroup(b *strings.Builder, g *indexGroup, level int, txt *i18n.Messages) {
+	writeResearchLinks(b, g.links, g.name)
+	writeUnfoldNodes(b, g.nodes, level+1, "", txt)
 }
 
 // splitRootRefs parts the expansion of a verse into what its research guide
@@ -1135,7 +1154,13 @@ func writeCited(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages
 	}
 	b.WriteString(headingHTML(level,
 		html.EscapeString(fmt.Sprintf(txt.CitedInHeading, n.CitedRef))))
-	for _, item := range n.Cited {
+	writeCitedItems(b, n.Cited, level)
+}
+
+// writeCitedItems prints the quoting publications themselves, below a heading
+// the caller has written at level.
+func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
+	for _, item := range items {
 		// each publication heads the passage it quotes the verse in, the way
 		// every other reference of an expansion heads its own text
 		label := fmt.Sprintf(`<a href="%s">%s</a>`,
@@ -1162,22 +1187,29 @@ func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source
 	for _, n := range nodes {
 		label := unfoldHeading(n, source, txt)
 		b.WriteString(headingHTML(level, html.EscapeString(label)))
-		// what the passage cites is read inside the passage, at the block citing
-		// it; what it does not cite itself follows the passage
-		rest := n.Children
-		switch {
-		case n.Err != nil:
-			fmt.Fprintf(b, "<p><em>%s</em></p>",
-				html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, n.Err)))
-		case strings.TrimSpace(n.HTML) != "":
-			var content string
-			content, rest = inlineChildren(demoteHeadings(n.HTML, level), rest,
-				level+1, unfoldSource(n, label), txt)
-			b.WriteString(content)
-		}
-		writeStudy(b, n, level+1, txt)
-		writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)
+		writeUnfoldNode(b, n, level, label, txt)
 	}
+}
+
+// writeUnfoldNode renders what follows the heading of one expanded reference,
+// written at level under the label it was headed with: its text, its study
+// material, and whatever it cites in turn.
+func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string, txt *i18n.Messages) {
+	// what the passage cites is read inside the passage, at the block citing
+	// it; what it does not cite itself follows the passage
+	rest := n.Children
+	switch {
+	case n.Err != nil:
+		fmt.Fprintf(b, "<p><em>%s</em></p>",
+			html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, n.Err)))
+	case strings.TrimSpace(n.HTML) != "":
+		var content string
+		content, rest = inlineChildren(demoteHeadings(n.HTML, level), rest,
+			level+1, unfoldSource(n, label), txt)
+		b.WriteString(content)
+	}
+	writeStudy(b, n, level+1, txt)
+	writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)
 }
 
 // inlineChildren puts the expansion of every citation of a passage under the

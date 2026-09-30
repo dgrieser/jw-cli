@@ -198,14 +198,97 @@ func Run(ctx context.Context, r Resolver, fragment string, o Options) (Result, e
 // document as far as the expansion is concerned, only their output is kept
 // apart. Options.RootRefs is ignored; every group carries its own.
 func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grouped, error) {
-	res := Grouped{Nodes: make([][]Node, len(groups))}
+	return NewSession(r, o).Run(ctx, groups)
+}
+
+// Session is several expansions that count as one: one budget Confirm is asked
+// about, and one set of paths and passages already expanded, across every run.
+// It is how a caller hands out an expansion piece by piece — one marginal
+// reference at a time, as each is ready — without every piece starting a budget
+// of its own, and without a passage two pieces point at being expanded twice.
+// A Session is not safe for concurrent use.
+type Session struct {
+	r     Resolver
+	o     Options
+	seen  map[string]bool
+	shown map[string][]passage
+	// run numbers the runs, so a passage an earlier run already printed is
+	// never displaced by one found later
+	run int
+	// carried is what was spent since Confirm last agreed: by earlier runs,
+	// through Spend, or before the session began. A level is weighed together
+	// with it, so pieces that are each cheap still add up to the question.
+	carried int
+	// total is everything the session spent.
+	total int
+}
+
+// NewSession starts a session. o.Depth and the rest apply to every run;
+// o.RootRefs is ignored, as by RunGroups.
+func NewSession(r Resolver, o Options) *Session {
+	return &Session{r: r, o: o, seen: map[string]bool{}, shown: map[string][]passage{}}
+}
+
+// Spend counts requests made outside the engine against the session's budget:
+// what reading the material an expansion starts from cost, or what the caller
+// already spent before the session began.
+func (s *Session) Spend(n int) {
+	s.carried += n
+	s.total += n
+}
+
+// Requests is how many requests the session has spent, Spend included.
+func (s *Session) Requests() int { return s.total }
+
+// Check asks Confirm about requests the caller is about to spend outside the
+// engine, on the terms a level is asked on. It reports whether to go ahead.
+func (s *Session) Check(level, cost int) (bool, error) {
+	if s.o.Confirm == nil || s.carried+cost <= s.o.Threshold {
+		return true, nil
+	}
+	ok, err := s.o.Confirm(level, s.carried+cost)
+	if err != nil || !ok {
+		return false, err
+	}
+	s.carried = 0
+	return true, nil
+}
+
+// Cost is what the first level of expanding refs would cost, priced as a level
+// of a run is, without counting paths the session already expanded. It lets a
+// caller ask about everything it is going to hand out before handing out any.
+func (s *Session) Cost(refs []Ref) int {
+	_, withStudy := s.r.(StudyResolver)
+	_, withCited := s.r.(CitedResolver)
+	var frontier []*Node
+	planned := map[string]bool{}
+	for _, ref := range refs {
+		if s.seen[ref.Path] || planned[ref.Path] {
+			continue
+		}
+		planned[ref.Path] = true
+		frontier = append(frontier, &Node{Ref: ref})
+	}
+	return requestCost(frontier, withStudy, s.o.citedCostAt(1, withCited))
+}
+
+// Run expands groups as RunGroups does, as part of the session: paths expanded
+// by an earlier run are not expanded again, and what earlier runs spent counts
+// towards the budget of every level of this one.
+func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err error) {
+	r, o := s.r, s.o
+	res = Grouped{Nodes: make([][]Node, len(groups))}
 	if o.Depth <= 0 {
 		return res, nil
 	}
+	s.run++
+	defer func() {
+		s.carried += res.Requests
+		s.total += res.Requests
+	}()
 	study, _ := r.(StudyResolver)
 	cited, _ := r.(CitedResolver)
-	seen := map[string]bool{}
-	shown := map[string][]passage{}
+	seen, shown := s.seen, s.shown
 	// the node lists of the level being expanded: the roots of every group to
 	// start with, the children of what those resolved to after that. Nodes are
 	// reached through their list rather than kept as pointers, because dropping
@@ -222,16 +305,14 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 			break
 		}
 		if o.Confirm != nil {
-			if cost := requestCost(frontier, study != nil, o.citedCostAt(level, cited != nil)); cost > o.Threshold {
-				ok, err := o.Confirm(level, cost)
-				if err != nil {
-					return res, err
-				}
-				if !ok {
-					res.Pending += len(frontier)
-					res.Stopped = true
-					return res, nil
-				}
+			ok, err := s.Check(level, requestCost(frontier, study != nil, o.citedCostAt(level, cited != nil)))
+			if err != nil {
+				return res, err
+			}
+			if !ok {
+				res.Pending += len(frontier)
+				res.Stopped = true
+				return res, nil
 			}
 		}
 		// the research-guide passages each verse turned out to have, kept aside
@@ -269,7 +350,7 @@ func RunGroups(ctx context.Context, r Resolver, groups []Group, o Options) (Grou
 				o.Progress(level, i+1, len(frontier))
 			}
 		}
-		if dropped := duplicates(frontier, shown, level); len(dropped) > 0 {
+		if dropped := duplicates(frontier, shown, s.run, level); len(dropped) > 0 {
 			for _, tier := range tiers {
 				*tier = without(*tier, dropped)
 			}
@@ -303,6 +384,7 @@ type passage struct {
 	path  string
 	text  string
 	rank  int
+	run   int
 	level int
 }
 
@@ -313,9 +395,9 @@ type passage struct {
 // their own, and each cuts the passage where it likes, so the duplication is
 // only visible once both are resolved and the same article comes back twice. The
 // lower rank wins, and equal ranks leave the reference that came first standing;
-// a passage already shown at an earlier level keeps its place, since the output
-// above it is written by then.
-func duplicates(frontier []*Node, shown map[string][]passage, level int) map[string]bool {
+// a passage already shown at an earlier level, or by an earlier run of the
+// session, keeps its place, since the output above it is written by then.
+func duplicates(frontier []*Node, shown map[string][]passage, run, level int) map[string]bool {
 	dropped := map[string]bool{}
 	for _, n := range frontier {
 		text := plainText(n)
@@ -325,12 +407,12 @@ func duplicates(frontier []*Node, shown map[string][]passage, level int) map[str
 		}
 		doc := document(n)
 		i := saidAlready(shown[doc], text, n.Ref.Rank)
-		here := passage{path: n.Ref.Path, text: text, rank: n.Ref.Rank, level: level}
+		here := passage{path: n.Ref.Path, text: text, rank: n.Ref.Rank, run: run, level: level}
 		if i < 0 {
 			shown[doc] = append(shown[doc], here)
 			continue
 		}
-		if prev := shown[doc][i]; prev.level == level && n.Ref.Rank < prev.rank {
+		if prev := shown[doc][i]; prev.run == run && prev.level == level && n.Ref.Rank < prev.rank {
 			dropped[prev.path] = true
 			shown[doc][i] = here
 			continue
