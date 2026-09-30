@@ -471,9 +471,14 @@ func TestUIBibleRead(t *testing.T) {
 	if !strings.Contains(body, `data-vid="43003016"`) || strings.Contains(body, `class="expansion"`) {
 		t.Errorf("want the verse as an unexpanded item:\n%s", body)
 	}
-	resp, body = get(t, srv, "/bible?ref=John+3:16&lang=en&view=bogus")
-	if resp.StatusCode != 400 || !strings.Contains(body, "unknown view") {
-		t.Errorf("bad view: status %d", resp.StatusCode)
+	// the reader is the only view: no tabs, and a link from before, still
+	// carrying ?view=, shows the reading
+	if strings.Contains(body, "view=notes") {
+		t.Errorf("the bible page still offers other views:\n%s", body)
+	}
+	resp, body = get(t, srv, "/bible?ref=John+3:16&lang=en&view=notes")
+	if resp.StatusCode != 200 || !strings.Contains(body, `data-vid="43003016"`) {
+		t.Errorf("an old ?view= link: status %d", resp.StatusCode)
 	}
 }
 
