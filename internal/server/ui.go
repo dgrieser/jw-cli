@@ -77,6 +77,8 @@ func (p basePage) UIText() map[string]string {
 		"loading":        t.UILoading,
 		"expensiveTitle": t.UIExpensiveTitle,
 		"unfoldAnyway":   t.UIUnfoldAnyway,
+		"translations":   t.TranslationsHeading,
+		"footnotes":      t.FootnotesHeading,
 	}
 }
 

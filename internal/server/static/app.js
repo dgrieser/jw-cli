@@ -369,6 +369,7 @@
   // brought: it unfolds on its own, and is left out of "unfold all".
   function addItem(el, host, params, nested) {
     var item = { el: el, host: host, params: params, level: 0, state: "idle", exp: null, ctrl: null };
+    el._unfold = item;
     el.classList.add("unfold-item");
     if (nested) el.classList.add("nested");
     var b = button("unfold-btn", T.unfoldItem || "Unfold");
@@ -587,39 +588,24 @@
     badge.textContent = String(list.children.length);
   }
 
-  // unfold loads what one item references, to depth levels, into a fresh
-  // expansion under it. opts.force spends an expensive level without asking;
-  // opts.batch is the unfold-all run it is part of.
-  function unfold(item, depth, opts) {
-    opts = opts || {};
-    closeMenu();
-    if (item.ctrl) item.ctrl.abort();
-    var ctrl = window.AbortController ? new AbortController() : null;
-    item.ctrl = ctrl;
-    if (item.exp) item.exp.remove();
-
-    var exp = make("div", "expansion");
-    exp.setAttribute("aria-live", "polite");
-    var list = make("div", "sections");
+  function makeLoader() {
     var loader = make("div", "unfold-loader");
     loader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="text"></span>' +
       '<span class="meter" aria-hidden="true"><i></i></span>';
     loader.querySelector(".text").textContent = T.loading || "…";
-    list.appendChild(loader);
-    exp.appendChild(list);
-    placeExpansion(item, exp);
-    item.exp = exp;
-    setState(item, "loading");
+    return loader;
+  }
 
+  // streamSections reads a stream into list, in front of loader: each section
+  // as it arrives, in the order the sections read in, the ones streamed into
+  // a group into that group. It settles with what the stream said: how many
+  // sections came, and whether it was expensive, failed or aborted.
+  function streamSections(url, list, loader, signal) {
+    var res = { count: 0, expensive: null, failure: "", note: "", requests: 0, aborted: false };
     var groups = {};
-    var count = 0;
     var stage = "";
-    var expensive = null;
-    var failure = "";
-    var note = "";
-
     function onEvent(ev) {
-      if (ctrl && ctrl.signal.aborted) return;
+      if (signal && signal.aborted) return;
       switch (ev.type) {
         case "stage":
           stage = stageText(ev.stage);
@@ -644,7 +630,7 @@
             // in the order the sections read in, whenever they arrive
             var order = ev.order || 0;
             node.setAttribute("data-order", String(order));
-            var before = loader;
+            var before = loader.parentNode === list ? loader : null;
             for (var c = list.firstElementChild; c && c !== loader; c = c.nextElementSibling) {
               if ((parseInt(c.getAttribute("data-order"), 10) || 0) > order) {
                 before = c;
@@ -658,60 +644,88 @@
             if (inner) groups[ev.key] = { list: inner, section: node };
           }
           citingBlocks(node, true);
-          count++;
+          res.count++;
           break;
         case "expensive":
-          expensive = ev;
+          res.expensive = ev;
           break;
         case "error":
-          failure = ev.text || "";
+          res.failure = ev.text || "";
           break;
         case "done":
-          note = ev.text || "";
-          if (opts.batch) opts.batch.spent += ev.requests || 0;
+          res.note = ev.text || "";
+          res.requests = ev.requests || 0;
           break;
       }
     }
-
-    return stream(streamURL(item, depth, opts.force, opts.batch ? opts.batch.spent : 0), onEvent, ctrl && ctrl.signal)
+    return stream(url, onEvent, signal)
       .catch(function (err) {
-        if (err && err.name === "AbortError") return "aborted";
-        failure = (err && err.message) || String(err);
+        if (err && err.name === "AbortError") res.aborted = true;
+        else res.failure = (err && err.message) || String(err);
       })
-      .then(function (outcome) {
-        if (outcome === "aborted" || item.ctrl !== ctrl) return;
-        item.ctrl = null;
+      .then(function () {
+        if (res.aborted) return res;
         loader.remove();
         // empty groups that never got an entry say nothing
         Object.keys(groups).forEach(function (k) {
           if (!groups[k].list.children.length) {
             groups[k].section.remove();
-            count--;
+            res.count--;
           }
         });
-        if (expensive) return settleExpensive(item, depth, opts, expensive, list, count);
-        if (failure) {
-          var msg = make("div", "unfold-msg error", fmt(T.error, failure) + " ");
-          var retry = button("small", null, T.retry || "Retry");
-          retry.addEventListener("click", function () { unfold(item, depth, opts); });
-          msg.appendChild(retry);
-          exp.appendChild(msg);
-          setState(item, "error");
-          setLevel(item, 0);
-          return;
-        }
-        if (note) exp.appendChild(make("p", "note", note));
-        if (count <= 0 && !note) {
-          exp.remove();
-          item.exp = null;
-          setLevel(item, 0);
-          setState(item, "empty");
-          if (!opts.batch) hint(item, T.nothing || "∅");
-          return;
-        }
-        setLevel(item, depth);
-        setState(item, "done");
+        return res;
       });
+  }
+
+  // unfold loads what one item references, to depth levels, into a fresh
+  // expansion under it. opts.force spends an expensive level without asking;
+  // opts.batch is the unfold-all run it is part of.
+  function unfold(item, depth, opts) {
+    opts = opts || {};
+    closeMenu();
+    if (item.ctrl) item.ctrl.abort();
+    var ctrl = window.AbortController ? new AbortController() : null;
+    item.ctrl = ctrl;
+    if (item.exp) item.exp.remove();
+
+    var exp = make("div", "expansion");
+    exp.setAttribute("aria-live", "polite");
+    var list = make("div", "sections");
+    var loader = makeLoader();
+    list.appendChild(loader);
+    exp.appendChild(list);
+    placeExpansion(item, exp);
+    item.exp = exp;
+    setState(item, "loading");
+
+    var url = streamURL(item, depth, opts.force, opts.batch ? opts.batch.spent : 0);
+    return streamSections(url, list, loader, ctrl && ctrl.signal).then(function (res) {
+      if (res.aborted || item.ctrl !== ctrl) return;
+      item.ctrl = null;
+      if (opts.batch) opts.batch.spent += res.requests;
+      if (res.expensive) return settleExpensive(item, depth, opts, res.expensive, list, res.count);
+      if (res.failure) {
+        var msg = make("div", "unfold-msg error", fmt(T.error, res.failure) + " ");
+        var retry = button("small", null, T.retry || "Retry");
+        retry.addEventListener("click", function () { unfold(item, depth, opts); });
+        msg.appendChild(retry);
+        exp.appendChild(msg);
+        setState(item, "error");
+        setLevel(item, 0);
+        return;
+      }
+      if (res.note) exp.appendChild(make("p", "note", res.note));
+      if (res.count <= 0 && !res.note) {
+        exp.remove();
+        item.exp = null;
+        setLevel(item, 0);
+        setState(item, "empty");
+        if (!opts.batch) hint(item, T.nothing || "∅");
+        return;
+      }
+      setLevel(item, depth);
+      setState(item, "done");
+    });
   }
 
   // an expensive level is spent only when the reader says so: once for a whole
@@ -973,6 +987,224 @@
     form.appendChild(lazy);
   });
 
+  // --- sections that load once they are opened -------------------------------
+
+  // a lazy section — a verse's other translations — reads its body the first
+  // time it is opened, and again after a failure
+  function loadLazy(d) {
+    var url = d.getAttribute("data-lazy");
+    if (!url || d.getAttribute("data-loaded")) return Promise.resolve();
+    d.setAttribute("data-loaded", "1");
+    var body = d.querySelector(":scope > .section-body");
+    if (!body) {
+      body = make("div", "section-body");
+      d.appendChild(body);
+    }
+    var list = body.querySelector(":scope > .sections");
+    if (!list) list = body.appendChild(make("div", "sections"));
+    var loader = makeLoader();
+    list.appendChild(loader);
+    return streamSections(url, list, loader, null).then(function (res) {
+      if (res.failure) {
+        d.removeAttribute("data-loaded");
+        body.appendChild(make("div", "unfold-msg error", fmt(T.error, res.failure)));
+      } else if (res.count <= 0) {
+        body.appendChild(make("p", "note", T.nothing || "∅"));
+      }
+      saveState();
+    });
+  }
+
+  doc.addEventListener("toggle", function (e) {
+    var d = e.target;
+    if (d instanceof HTMLElement && d.matches("details.section[data-lazy]") && d.open) loadLazy(d);
+  }, true);
+
+  // --- following a link: open what it points at, here ---------------------
+  //
+  // A marginal reference (+), a footnote (*), a verse number, a bible
+  // reference or a link to an article leads to its section under the verse or
+  // paragraph it is in rather than away from the page: the section is opened
+  // and scrolled to, and loaded — that one reference alone — when it is not
+  // there yet. A modified click (a new tab) still follows the link itself.
+
+  function cssString(v) {
+    return '"' + String(v).replace(/["\\]/g, "\\$&") + '"';
+  }
+
+  // linkTarget says what a link points at, and the key its section carries
+  function linkTarget(a) {
+    var u;
+    try {
+      u = new URL(a.getAttribute("href"), location.href);
+    } catch (err) {
+      return null;
+    }
+    var path = u.pathname;
+    if (/\/wol\/fn\//.test(path)) return { kind: "footnote", key: path, url: u };
+    if (/\/wol\/(bc|pc)\//.test(path)) return { kind: "ref", key: path, url: u };
+    // a verse number — the chapter number, on a chapter's first verse
+    if ((a.classList.contains("vl") || a.classList.contains("cl")) && a.closest(".item[data-vid] > .item-text")) {
+      return { kind: "translations", key: "translations", url: u };
+    }
+    var host = u.hostname.toLowerCase();
+    if (/\/wol\/d\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
+      return { kind: "article", key: path, url: u };
+    }
+    return null;
+  }
+
+  // ownerOf is what a link's section goes under: the verse it is in, the item
+  // (a citing paragraph) it is in, the section whose heading it is, or the
+  // block it is in
+  function ownerOf(a) {
+    var verse = a.closest(".item[data-vid]");
+    if (verse && verse._unfold && a.closest(".item-text")) return { item: verse._unfold };
+    var summary = a.closest("summary");
+    if (summary) return { details: summary.parentElement };
+    var block = a.closest(BLOCKS);
+    if (!block || !doc.contains(block)) return null;
+    if (block._unfold) return { item: block._unfold };
+    return { block: block };
+  }
+
+  // scopeOf is where an owner's sections are, if it has any yet
+  function scopeOf(owner) {
+    if (owner.item) return owner.item.exp;
+    if (owner.details) return owner.details.querySelector(":scope > .section-body");
+    var b = owner.block;
+    if (b.tagName === "LI") return b.querySelector(":scope > .expansion");
+    var next = b.nextElementSibling;
+    return next && next.classList.contains("expansion") ? next : null;
+  }
+
+  // listOf is the list an owner's sections go into, made when there is none
+  function listOf(owner) {
+    var scope = scopeOf(owner);
+    if (owner.details) {
+      var body = scope || owner.details.appendChild(make("div", "section-body"));
+      return body.querySelector(":scope > .sections.linked") || body.appendChild(make("div", "sections linked"));
+    }
+    if (scope) {
+      return scope.querySelector(":scope > .sections") || scope.appendChild(make("div", "sections"));
+    }
+    var exp = make("div", "expansion");
+    var list = exp.appendChild(make("div", "sections"));
+    if (owner.item) {
+      placeExpansion(owner.item, exp);
+      owner.item.exp = exp;
+    } else if (owner.block.tagName === "LI") {
+      owner.block.appendChild(exp);
+    } else {
+      owner.block.insertAdjacentElement("afterend", exp);
+    }
+    return list;
+  }
+
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // reveal opens el and every section around it, and brings it into view
+  function reveal(el) {
+    for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) {
+      if (!d.open) d.open = true;
+    }
+    var at = el.matches("details") ? el.querySelector(":scope > summary") || el : el;
+    el.classList.remove("flash");
+    void el.offsetWidth;
+    el.classList.add("flash");
+    at.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  function findRef(scope, key) {
+    return scope ? scope.querySelector("[data-ref=" + cssString(key) + "]") : null;
+  }
+
+  // translationsSection is a verse's lazy translations section, made here
+  // when the verse was not unfolded: it loads once it is opened
+  function translationsSection(item) {
+    var q = new URLSearchParams({ vid: item.params.vid, bible: item.params.bible || "nwtsty" });
+    if (lang) q.set("lang", lang);
+    var d = make("details", "section");
+    d.setAttribute("data-ref", "translations");
+    d.setAttribute("data-lazy", "/unfold/translations?" + q.toString());
+    d.setAttribute("data-order", "55");
+    d.appendChild(make("summary", null, T.translations || "…"));
+    d.appendChild(make("div", "section-body"));
+    return d;
+  }
+
+  function streamOne(url, list) {
+    var loader = makeLoader();
+    list.appendChild(loader);
+    return streamSections(url, list, loader, null);
+  }
+
+  function follow(a, target) {
+    var owner = ownerOf(a);
+    if (!owner) return false;
+    if (owner.details) owner.details.open = true;
+    var found = findRef(scopeOf(owner), target.key);
+    if (found) {
+      reveal(found);
+      return true;
+    }
+    var list = listOf(owner);
+    var done = function () {
+      if (owner.item) setState(owner.item, "done");
+      var el = findRef(scopeOf(owner), target.key);
+      if (el) reveal(el);
+      else hint(owner.item || { el: a.closest(BLOCKS) || a.parentElement }, T.nothing || "∅");
+      saveState();
+    };
+    var q = new URLSearchParams();
+    if (lang) q.set("lang", lang);
+    switch (target.kind) {
+      case "translations":
+        var d = translationsSection(owner.item);
+        list.appendChild(d);
+        reveal(d);
+        setState(owner.item, "done");
+        return true;
+      case "ref":
+        q.set("path", target.url.pathname);
+        q.set("text", (a.textContent || "").replace(/\s+/g, " ").trim());
+        q.set("depth", "1");
+        streamOne("/unfold/refs?" + q.toString(), list).then(done);
+        return true;
+      case "footnote":
+        q.set("path", target.url.pathname);
+        var existing = findRef(scopeOf(owner), "footnotes");
+        if (existing) {
+          // another footnote of a verse whose footnotes are out already:
+          // into the same section
+          var tmp = make("div", "sections");
+          var body = existing.querySelector(":scope > .section-body");
+          streamOne("/unfold/footnote?" + q.toString(), tmp).then(function () {
+            tmp.querySelectorAll(".footnote").forEach(function (f) { body.appendChild(f); });
+            done();
+          });
+        } else {
+          streamOne("/unfold/footnote?" + q.toString(), list).then(done);
+        }
+        return true;
+      case "article":
+        q.set("url", target.url.href);
+        streamOne("/unfold/article?" + q.toString(), list).then(done);
+        return true;
+    }
+    return false;
+  }
+
+  doc.addEventListener("click", function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || !doc.contains(a) || a.closest("[data-ui]")) return;
+    var target = linkTarget(a);
+    if (!target) return;
+    e.preventDefault();
+    follow(a, target);
+  });
+
   // --- what this page had on screen ---------------------------------------
 
   // cleanCopy is an expansion as it is kept: what it brought, with the
@@ -985,7 +1217,12 @@
       el.classList.remove("unfold-item", "nested");
       el.removeAttribute("data-state");
     });
-    copy.querySelectorAll(".fresh").forEach(function (el) { el.classList.remove("fresh"); });
+    copy.querySelectorAll(".fresh, .flash").forEach(function (el) { el.classList.remove("fresh", "flash"); });
+    // a lazy section caught loading loads again when it comes back
+    copy.querySelectorAll("details[data-lazy][data-loaded]").forEach(function (d) {
+      var list = d.querySelector(":scope > .section-body > .sections");
+      if (list && !list.children.length) d.removeAttribute("data-loaded");
+    });
     return copy.outerHTML;
   }
 
@@ -1028,7 +1265,7 @@
       n: items.length,
       sig: sig,
       items: items.map(function (item) {
-        if (!item.exp || item.level <= 0 || item.state === "loading") return null;
+        if (!item.exp || item.state === "loading" || !item.exp.isConnected) return null;
         return { level: item.level, html: cleanCopy(item.exp) };
       }),
       open: pageDetails().map(function (d) { return d.open; })

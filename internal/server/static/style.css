@@ -634,6 +634,20 @@ details.section .count {
 }
 .sections + hr, .section-body > hr:last-child { display: none; }
 details.section.fresh { animation: pop 260ms ease-out; }
+
+/* what a followed link led to: clear of the sticky bar, and marked for a
+   moment so the eye finds it */
+[data-ref] { scroll-margin-top: 4.5rem; }
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash {
+  0%, 30% { box-shadow: 0 0 0 3px var(--accent); background-color: var(--accent-soft); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+.footnote { margin: 0 0 0.6rem; }
+.footnote p { margin: 0; }
+.footnote + .footnote { padding-top: 0.6rem; border-top: 1px solid var(--line); }
+/* a link that opens here rather than leaving the page */
+.document a.b, .document a.fn, .document .item-text a.vl, .document .item-text a.cl { cursor: pointer; }
 @keyframes pop { from { opacity: 0; transform: translateY(3px) scale(0.98); } }
 
 .document > .sections.extras, .sections.extras { margin: 1.5rem 0; max-width: var(--measure); }
@@ -989,7 +1003,7 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  details.section.fresh, .unfold-menu { animation: none; }
+  details.section.fresh, .unfold-menu, .flash { animation: none; }
   *, *::before, *::after { transition: none !important; }
   html.is-loading .progress::before { animation: none; transform: none; width: 100%; opacity: 0.6; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dgrieser/jw-cli/internal/api/wol"
+
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -619,5 +621,44 @@ func TestWriteIndexGroups(t *testing.T) {
 	writeIndexGroups(&empty, nil, nil, 3, i18n.EN.Text())
 	if empty.String() != "" {
 		t.Errorf("nothing listed should print nothing: %q", empty.String())
+	}
+}
+
+// The other bibles of a verse: every one but the one read, and the New World
+// Translation once — as the study edition, which renders the same text.
+func TestOtherEditions(t *testing.T) {
+	all := []wol.BibleEdition{{Symbol: "nwtsty"}, {Symbol: "nwt"}, {Symbol: "Rbi8"}, {Symbol: "bi10"}}
+	symbols := func(eds []wol.BibleEdition) string {
+		var out []string
+		for _, e := range eds {
+			out = append(out, e.Symbol)
+		}
+		return strings.Join(out, ",")
+	}
+	for current, want := range map[string]string{
+		"nwtsty": "Rbi8,bi10",
+		"nwt":    "Rbi8,bi10",
+		"Rbi8":   "nwtsty,bi10",
+	} {
+		if got := symbols(OtherEditions(all, current)); got != want {
+			t.Errorf("OtherEditions(%s) = %s, want %s", current, got, want)
+		}
+	}
+	// without the study edition, the plain one stands for the translation
+	if got := symbols(OtherEditions([]wol.BibleEdition{{Symbol: "nwt"}, {Symbol: "Rbi8"}}, "Rbi8")); got != "nwt" {
+		t.Errorf("without nwtsty: %s", got)
+	}
+}
+
+// A footnote marker is found by the path of its link, whatever host it was
+// absolutized to.
+func TestFootnoteLinksAndRefPath(t *testing.T) {
+	links := footnoteLinks(`<a class="b" href="/de/wol/bc/r10/lp-x/1/2">+</a>` +
+		`<a class="fn" href="/de/wol/fn/r10/lp-x/1001070128/362">*</a><a class="fn" href="/de/wol/fn/r10/lp-x/1001070128/362">*</a>`)
+	if len(links) != 1 || links[0] != "/de/wol/fn/r10/lp-x/1001070128/362" {
+		t.Errorf("footnoteLinks = %v", links)
+	}
+	if got := RefPath("https://wol.jw.org/de/wol/fn/r10/lp-x/1001070128/362"); got != links[0] {
+		t.Errorf("RefPath = %s", got)
 	}
 }

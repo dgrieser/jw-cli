@@ -127,13 +127,28 @@ func (e *eventStream) finish(r *http.Request, note string, requests int, err err
 // the title as the summary, the body sanitized like every other fragment and
 // folded, so each reference inside it opens on its own. A section others are
 // streamed into carries the empty list they go into.
+//
+// A section says what it holds (data-ref) so a link to it opens it rather than
+// leaving the page, and a lazy one where its body loads from (data-lazy) once
+// it is opened.
 func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
-	body, err := render.Render(sec.Body, render.HTML, render.Options{BaseURL: s.svc.HTTP.Base.WOL})
+	base := firstNonEmpty(sec.Base, s.svc.HTTP.Base.WOL)
+	body, err := render.Render(sec.Body, render.HTML, render.Options{BaseURL: base})
 	if err != nil {
 		body = ""
 	}
 	var b strings.Builder
-	b.WriteString(`<details class="section"><summary>`)
+	b.WriteString(`<details class="section"`)
+	if sec.Ref != "" {
+		fmt.Fprintf(&b, ` data-ref="%s"`, html.EscapeString(sec.Ref))
+	}
+	if sec.Lazy != "" {
+		fmt.Fprintf(&b, ` data-lazy="%s"`, html.EscapeString(sec.Lazy))
+	}
+	if sec.Open {
+		b.WriteString(` open`)
+	}
+	b.WriteString(`><summary>`)
 	b.WriteString(sec.Title)
 	b.WriteString(`</summary><div class="section-body">`)
 	b.WriteString(foldFragment(body))
@@ -201,9 +216,19 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
+	// where the translations of this verse load from, once they are opened
+	lazy := url.Values{"vid": {fmt.Sprint(vid)}, "bible": {edition}}
+	if l := r.FormValue("lang"); l != "" {
+		lazy.Set("lang", l)
+	}
 	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
-		Stage:   ev.stage,
+		Section: func(sec service.UnfoldSection) {
+			if sec.Lazy == service.LazyTranslations {
+				sec.Lazy = "/unfold/translations?" + lazy.Encode()
+			}
+			ev.send(s.sectionEvent(sec))
+		},
+		Stage: ev.stage,
 	})
 	ev.finish(r, note, requests, err, txt)
 }
@@ -284,4 +309,131 @@ func citationPath(raw string) (string, bool) {
 		path += "?" + u.RawQuery
 	}
 	return path, unfold.IsCitation(path)
+}
+
+// unfoldTranslations streams one verse in the other bibles of the language:
+// GET /unfold/translations?vid=24039014&bible=nwtsty. What a page loads when
+// the translations section of a verse is opened.
+func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	vid, err := intParam(r, "vid", 0)
+	if err != nil || vid <= 0 {
+		badRequest(w, "missing or invalid parameter %q", "vid")
+		return
+	}
+	edition := valueOr(r, "bible", "nwtsty")
+	if !editionSymbol.MatchString(edition) {
+		badRequest(w, "invalid bible edition %q", edition)
+		return
+	}
+	txt := text(lng)
+	ev := startStream(w)
+	requests, err := s.svc.StreamTranslations(r.Context(), lng, edition, vid, service.UnfoldStream{
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Stage:   ev.stage,
+	})
+	ev.finish(r, "", requests, err, txt)
+}
+
+// unfoldFootnote streams one footnote: GET /unfold/footnote?path=… What a page
+// loads when a "*" is followed before its verse was unfolded. Only a footnote
+// path is followed, and only its path: it is always asked of wol itself.
+func (s *Server) unfoldFootnote(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	path, ok := libraryPath(r.FormValue("path"))
+	if !ok || !service.IsFootnote(path) {
+		badRequest(w, "parameter %q is not a footnote", "path")
+		return
+	}
+	txt := text(lng)
+	ev := startStream(w)
+	requests, err := s.svc.StreamFootnote(r.Context(), lng, path, txt, service.UnfoldStream{
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Stage:   ev.stage,
+	})
+	ev.finish(r, "", requests, err, txt)
+}
+
+// unfoldArticle streams a linked document as one section: GET
+// /unfold/article?url=… A document of the library (/wol/d/…) is read from the
+// library, a jw.org page from jw.org; either way only the path of the link is
+// kept and put on the site's own base, so nothing else is ever asked.
+func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	target, ok := s.articleTarget(r.FormValue("url"))
+	if !ok {
+		badRequest(w, "parameter %q is not a document of wol.jw.org or jw.org", "url")
+		return
+	}
+	txt := text(lng)
+	ev := startStream(w)
+	sec, err := s.svc.ArticleSection(r.Context(), lng, target)
+	if err == nil {
+		ev.send(s.sectionEvent(sec))
+	}
+	ev.finish(r, "", 1, err, txt)
+}
+
+// libraryPath is the path (and query) of a link, whatever host it named.
+func libraryPath(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false
+	}
+	path := u.EscapedPath()
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return "", false
+	}
+	if u.RawQuery != "" {
+		path += "?" + u.RawQuery
+	}
+	return path, true
+}
+
+// articleTarget puts a link to a document back on the base it belongs to: a
+// library document (/wol/d/) on wol.jw.org, anything else of jw.org on
+// www.jw.org. The fragment is kept, since it names the passage a link means.
+// Anything else is refused.
+func (s *Server) articleTarget(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false
+	}
+	path := u.EscapedPath()
+	if !strings.HasPrefix(path, "/") || strings.HasPrefix(path, "//") {
+		return "", false
+	}
+	var base string
+	host := strings.ToLower(u.Hostname())
+	switch {
+	case strings.Contains(path, "/wol/d/"):
+		base = s.svc.HTTP.Base.WOL
+	case strings.Contains(path, "/wol/") || host == "wol.jw.org":
+		// the library's other endpoints are citations, not documents
+		return "", false
+	case host == "jw.org" || strings.HasSuffix(host, ".jw.org"):
+		base = s.svc.HTTP.Base.JWOrg
+	default:
+		return "", false
+	}
+	out := base + path
+	if u.RawQuery != "" {
+		out += "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		out += "#" + u.EscapedFragment()
+	}
+	return out, true
 }

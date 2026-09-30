@@ -741,3 +741,25 @@ func TestUnfoldVerseCountsWhatWasSpent(t *testing.T) {
 		t.Errorf("alone the verse goes through and reports its cost: %+v", evs)
 	}
 }
+
+// Only a footnote marker is followed by the footnote stream, and only an
+// article of the library or of jw.org by the article stream.
+func TestUnfoldFootnoteAndArticleRefuseOthers(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	for _, path := range []string{
+		"/unfold/footnote?lang=en&path=%2Fen%2Fwol%2Fbc%2Fr1%2Flp-e%2F2024360%2F0%2F0",
+		"/unfold/article?lang=en&url=https%3A%2F%2Fevil.example%2Fx",
+		"/unfold/translations?lang=en&vid=0",
+	} {
+		if resp, _ := get(t, srv, path); resp.StatusCode != 400 {
+			t.Errorf("%s: status %d, want 400", path, resp.StatusCode)
+		}
+	}
+	// the article stream reads a library document into one section, keyed by
+	// its path
+	resp, body := get(t, srv, "/unfold/article?lang=en&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
+	if resp.StatusCode != 200 || !strings.Contains(body, `data-ref=\"/en/wol/d/r1/lp-e/2024360\"`) ||
+		!strings.Contains(body, "CALEB trusted in Jehovah") {
+		t.Errorf("article stream: status %d:\n%s", resp.StatusCode, body)
+	}
+}

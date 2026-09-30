@@ -69,9 +69,11 @@ var de = Messages{
 	UnfoldStopped:  "Hier abgebrochen: %d weitere Referenzen wurden nicht aufgeklappt.",
 	UnfoldFailed:   "konnte nicht aufgeklappt werden: %s",
 
-	StudyNotesHeading: "Studienanmerkungen",
-	ResearchHeading:   "Forschungsverzeichnis",
-	StudyFailed:       "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
+	StudyNotesHeading:   "Studienanmerkungen",
+	ResearchHeading:     "Forschungsverzeichnis",
+	FootnotesHeading:    "Fußnoten",
+	TranslationsHeading: "Andere Übersetzungen",
+	StudyFailed:         "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
 
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",

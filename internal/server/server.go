@@ -81,6 +81,9 @@ func (s *Server) Handler() http.Handler {
 	// verse or of one paragraph, streamed section by section
 	mux.HandleFunc("GET /unfold/verse", s.unfoldVerse)
 	mux.HandleFunc("GET /unfold/refs", s.unfoldRefs)
+	mux.HandleFunc("GET /unfold/footnote", s.unfoldFootnote)
+	mux.HandleFunc("GET /unfold/translations", s.unfoldTranslations)
+	mux.HandleFunc("GET /unfold/article", s.unfoldArticle)
 
 	// web UI
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
