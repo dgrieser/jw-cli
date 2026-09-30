@@ -77,6 +77,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /download/media/{lank}", s.downloadMedia)
 	mux.HandleFunc("GET /download/pub", s.downloadPub)
 
+	// what the web UI loads once a page is on screen: the expansion of one
+	// verse or of one paragraph, streamed section by section
+	mux.HandleFunc("GET /unfold/verse", s.unfoldVerse)
+	mux.HandleFunc("GET /unfold/refs", s.unfoldRefs)
+
 	// web UI
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /{$}", s.uiIndex)
@@ -114,6 +119,10 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap lets http.ResponseController reach the connection underneath, so a
+// stream can flush through the request log.
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // logged writes one line per request: method, path, status, duration.
 func (s *Server) logged(next http.Handler) http.Handler {

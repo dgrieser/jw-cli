@@ -16,7 +16,7 @@
         {{- end}}
       </select>
     </label>
-    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{.Unfold}}" title="{{.T.UIUnfoldHint}}" class="num"></label>
+    <label>{{.T.UIUnfold}} <input type="number" name="unfold" min="0" max="3" value="{{or .AutoUnfold .Unfold}}" title="{{.T.UIUnfoldHint}}" class="num" inputmode="numeric"></label>
   </fieldset>
   {{- end}}
 </form>
@@ -31,7 +31,7 @@
 
 {{- if eq .View "read"}}
 {{template "unfold" .}}
-<article class="document">
+<article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}
 </article>
 {{- end}}

@@ -99,7 +99,8 @@ func TestBoolParam(t *testing.T) {
 }
 
 // A verse's sections fold away so a reading reads as a reading: each section
-// becomes a disclosure, and the verse text and its heading stay in the open.
+// becomes a disclosure, every entry inside one a disclosure of its own, and the
+// verse text and its heading stay in the open.
 func TestFoldSections(t *testing.T) {
 	const body = `<h2>Jeremia 34:3</h2><p>the verse</p>` +
 		`<div class="expansion">` +
@@ -108,8 +109,8 @@ func TestFoldSections(t *testing.T) {
 		`<h3>Zitate von Jeremia 34:3</h3><h4>Zedekia</h4><p>a quotation</p>` +
 		`</div>`
 	out := foldSections(body)
-	if n := strings.Count(out, "<details"); n != 3 {
-		t.Fatalf("%d disclosures, want one per section:\n%s", n, out)
+	if n := strings.Count(out, "<details"); n != 5 {
+		t.Fatalf("%d disclosures, want one per section and entry:\n%s", n, out)
 	}
 	for _, want := range []string{
 		"<summary>Index der Publikationen</summary>",
@@ -120,8 +121,13 @@ func TestFoldSections(t *testing.T) {
 			t.Errorf("missing %q:\n%s", want, out)
 		}
 	}
-	// what a section heads stays inside it
-	if !strings.Contains(out, "<h4>w80 1. 3. 24</h4><p>a passage</p></details>") {
+	// the sections side by side share one list, and an entry sits folded
+	// inside the section it belongs to
+	if strings.Count(out, `<div class="sections">`) != 3 {
+		t.Errorf("want one list of sections and one per section with entries:\n%s", out)
+	}
+	if !strings.Contains(out, `<summary>Index der Publikationen</summary><div class="section-body"><div class="sections">`+
+		`<details class="section"><summary>w80 1. 3. 24</summary><div class="section-body"><p>a passage</p></div></details>`) {
 		t.Errorf("an entry escaped its section:\n%s", out)
 	}
 	// the verse and its heading are not folded
@@ -132,6 +138,41 @@ func TestFoldSections(t *testing.T) {
 	if got := foldSections("<h2>Jeremia 34:3</h2><p>the verse</p>"); !strings.Contains(got, "<p>the verse</p>") ||
 		strings.Contains(got, "<details") {
 		t.Errorf("a verse without sections should be left alone: %s", got)
+	}
+}
+
+// A streamed section is folded all the way down: text before the first
+// heading stays open, every heading opens on its own.
+func TestFoldFragment(t *testing.T) {
+	out := foldFragment(`<p>intro</p><h3>a</h3><p>one</p><h4>a.1</h4><p>deep</p><h3>b</h3><p>two</p>`)
+	if !strings.HasPrefix(out, `<p>intro</p><div class="sections">`) {
+		t.Errorf("intro folded or list missing:\n%s", out)
+	}
+	if n := strings.Count(out, "<details"); n != 3 {
+		t.Errorf("%d disclosures, want 3:\n%s", n, out)
+	}
+	if got := foldFragment("<p>plain</p>"); got != "<p>plain</p>" {
+		t.Errorf("headingless fragment changed: %s", got)
+	}
+}
+
+// A stream only ever follows a citation path on wol, whatever host the link
+// it was given named.
+func TestCitationPath(t *testing.T) {
+	for raw, want := range map[string]string{
+		"https://wol.jw.org/en/wol/bc/r1/lp-e/2024360/0/0": "/en/wol/bc/r1/lp-e/2024360/0/0",
+		"/en/wol/pc/r1/lp-e/1102024360/1/0":                "/en/wol/pc/r1/lp-e/1102024360/1/0",
+		"https://evil.example/wol/bc/1":                    "/wol/bc/1",
+		"//evil.example/wol/bc/1":                          "/wol/bc/1",
+	} {
+		if got, ok := citationPath(raw); !ok || got != want {
+			t.Errorf("citationPath(%q) = %q, %v; want %q", raw, got, ok, want)
+		}
+	}
+	for _, raw := range []string{"/en/wol/d/r1/lp-e/2024360", "javascript:alert(1)", ""} {
+		if _, ok := citationPath(raw); ok {
+			t.Errorf("citationPath(%q) accepted", raw)
+		}
 	}
 }
 

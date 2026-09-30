@@ -488,10 +488,26 @@ requests than an unattended server spends), or `502` (upstream failure).
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
-parts — shows an **Unfold 0 1 2 3** switcher above the text. It reloads the
-result already on screen at the chosen level, so an expansion can be deepened
-or folded back without filling in the form again; a level that needs more
-requests than the server spends unasked is offered on a confirmation page first.
+parts — shows the text first and unfolds afterwards. Every verse of a reading,
+and every paragraph that cites something, gets a small button in the right
+margin: pick a depth (1–3) and what it references streams in right under it,
+one collapsible section at a time, with the progress of the slow parts shown
+in place (nothing is added when there is nothing to unfold). **Unfold all
+0 1 2 3** above the text does the same for every item in turn, with a Stop
+button; the level is kept in the address (`?unfold=N&lazy=1`), so a reload or a
+shared link unfolds the same way. Sections start collapsed and sit side by
+side as chips; an opened one takes the whole row, and each reference inside it
+opens on its own. Without JavaScript the switcher reloads the page unfolded
+server-side, and a level that needs more requests than the server spends
+unasked is offered on a confirmation page first (with JavaScript, a prompt).
+
+The page loads those expansions from two streaming endpoints, answered as
+newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
+`error`, `done`) flushed as they happen:
+`GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse: study notes,
+indexes, marginal references, quotations) and
+`GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
+wol citation paths are followed).
 
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|

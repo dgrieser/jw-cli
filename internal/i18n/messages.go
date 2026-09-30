@@ -252,6 +252,28 @@ type Messages struct {
 	UIExpensiveBody    string
 	UIUnfoldAnyway     string
 	UIWithoutUnfolding string
+	// UIUnfold* and the rest are what the page says while it unfolds a verse
+	// or a paragraph after it was shown: the buttons, and how far it got.
+	// UIUnfoldDepthN takes the depth, UIUnfoldError the error,
+	// UIProgressLevel the level and the requests done and planned,
+	// UIProgressItems the items done and planned.
+	UIUnfoldItem      string
+	UIUnfoldAll       string
+	UIUnfoldDepth     string
+	UIUnfoldDepthN    string
+	UIFoldAway        string
+	UIOpenAll         string
+	UICloseAll        string
+	UIStop            string
+	UINothingToUnfold string
+	UIUnfoldError     string
+	UIRetry           string
+	UIStageStudy      string
+	UIStageReferences string
+	UIStageCited      string
+	UIProgressLevel   string
+	UIProgressItems   string
+	UIUnfolding       string
 }
 
 // Date renders t as a full date in the language's own word order.

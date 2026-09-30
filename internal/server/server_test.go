@@ -463,8 +463,12 @@ func TestUIBibleRead(t *testing.T) {
 	if !strings.Contains(body, "John 3:16") {
 		t.Errorf("missing passage heading:\n%s", body)
 	}
-	if !strings.Contains(body, `class="tabs unfold"`) || !strings.Contains(body, "unfold=0") {
+	// the text comes first, every verse an item the page can unfold on its own
+	if !strings.Contains(body, `class="tabs unfold"`) || !strings.Contains(body, "unfold=1") {
 		t.Errorf("missing unfold switcher:\n%s", body)
+	}
+	if !strings.Contains(body, `data-vid="43003016"`) || strings.Contains(body, `class="expansion"`) {
+		t.Errorf("want the verse as an unexpanded item:\n%s", body)
 	}
 	resp, body = get(t, srv, "/bible?ref=John+3:16&lang=en&view=bogus")
 	if resp.StatusCode != 400 || !strings.Contains(body, "unknown view") {
@@ -533,5 +537,121 @@ func TestUIPubBook(t *testing.T) {
 	}
 	if strings.Contains(body, "0p") {
 		t.Errorf("empty resolution label shown:\n%s", body)
+	}
+}
+
+// studyMux adds what an unfolded verse walks through on top of wolMux: the
+// verse's citation endpoint and the research-guide passage its pane points at.
+func studyMux(t *testing.T) *http.ServeMux {
+	mux := wolMux(t)
+	mux.HandleFunc("/wol/bc/r1/lp-e/2024360/0/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"title": "John 3:16",
+			"content": "<p>For God loved the world so much</p>", "url": "/en/wol/b/r1/lp-e/nwtsty/43/3"}]}`))
+	})
+	mux.HandleFunc("/wol/pc/r1/lp-e/1204433/5/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"content": "<p>Jehovah loved the world of redeemable mankind.</p>",
+			"title": "God So Loved the World", "url": "/en/wol/d/r1/lp-e/2014486"}]}`))
+	})
+	return mux
+}
+
+type event struct {
+	Type, HTML, Key, In, Stage, Text string
+	Count                            int
+}
+
+// events reads a stream line by line.
+func events(t *testing.T, body string) []event {
+	t.Helper()
+	var out []event
+	for line := range strings.SplitSeq(strings.TrimSpace(body), "\n") {
+		var ev event
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("bad line %q: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+func TestUnfoldVerseStream(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	resp, body := get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
+	if resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "application/x-ndjson") {
+		t.Fatalf("status %d, type %q: %s", resp.StatusCode, resp.Header.Get("Content-Type"), body)
+	}
+	evs := events(t, body)
+	var sections []event
+	for _, ev := range evs {
+		if ev.Type == "section" {
+			sections = append(sections, ev)
+		}
+	}
+	if len(sections) == 0 {
+		t.Fatalf("no sections in:\n%s", body)
+	}
+	// the study notes come first, as a disclosure of their own
+	if !strings.Contains(sections[0].HTML, `<details class="section"><summary>Study notes</summary>`) {
+		t.Errorf("first section is not the study notes: %s", sections[0].HTML)
+	}
+	last := evs[len(evs)-1]
+	if last.Type != "done" || last.Count != len(sections) {
+		t.Errorf("stream should close with done and the count of sections: %+v", last)
+	}
+	for _, s := range sections {
+		if strings.Contains(s.HTML, "<script") {
+			t.Errorf("script in a section: %s", s.HTML)
+		}
+	}
+
+	resp, _ = get(t, srv, "/unfold/verse?vid=0&lang=en")
+	if resp.StatusCode != 400 {
+		t.Errorf("missing vid: status %d", resp.StatusCode)
+	}
+}
+
+func TestUnfoldRefsStream(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	resp, body := get(t, srv, "/unfold/refs?lang=en&depth=1&path="+
+		"https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fbc%2Fr1%2Flp-e%2F2024360%2F0%2F0&text=Joh+3%3A16")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	evs := events(t, body)
+	found := false
+	for _, ev := range evs {
+		if ev.Type == "section" && strings.Contains(ev.HTML, "<summary>Joh 3:16</summary>") &&
+			strings.Contains(ev.HTML, "For God loved the world so much") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("the citation did not come back as a section:\n%s", body)
+	}
+
+	// nothing but a citation is followed
+	resp, _ = get(t, srv, "/unfold/refs?lang=en&path=%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
+	if resp.StatusCode != 400 {
+		t.Errorf("non-citation path: status %d", resp.StatusCode)
+	}
+}
+
+// With ?lazy=1 the page is the document alone; the browser unfolds it to the
+// level asked for once it is shown.
+func TestUIArticleLazy(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	resp, body := get(t, srv, "/article?target=2024360&lang=en&unfold=2&lazy=1")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, `data-auto="2"`) || strings.Contains(body, `class="expansion"`) {
+		t.Errorf("lazy page should defer the expansion:\n%s", body)
+	}
+	// without lazy the server unfolds, and folds what it brought
+	_, body = get(t, srv, "/article?target=2024360&lang=en&unfold=1")
+	if !strings.Contains(body, `class="expansion"`) || !strings.Contains(body, `<details class="section">`) {
+		t.Errorf("server-side unfold should come folded:\n%s", body)
 	}
 }
