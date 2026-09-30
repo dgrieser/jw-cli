@@ -877,15 +877,6 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "bible", page)
 }
 
-// absoluteWOL roots a wol path at the library, so links in listings leave the
-// server for the real page.
-func absoluteWOL(path, base string) string {
-	if path == "" || strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
-		return path
-	}
-	return base + path
-}
-
 // passagesHTML lays a reading out for the page: every passage under its
 // heading, and every verse an item of its own, which is what the page unfolds
 // one at a time. A verse the server already unfolded carries its expansion
