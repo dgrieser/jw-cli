@@ -789,8 +789,8 @@ func TestUIBibleNav(t *testing.T) {
 	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
 		t.Errorf("missing the Matthew tile:\n%s", body)
 	}
-	if strings.Contains(body, `data-reset`) {
-		t.Errorf("the start page offers a reset:\n%s", body)
+	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
+		t.Errorf("the start page has no reset:\n%s", body)
 	}
 
 	// a book opens its chapter grid, every chapter a reading

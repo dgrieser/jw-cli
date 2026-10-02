@@ -10,9 +10,7 @@
   <div class="query">
     <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}"autofocus autocapitalize="off">
     <button type="submit" class="primary">{{.T.UIGo}}</button>
-    {{- if or .Ref .BookNav}}
     <a class="btn reset" href="{{.WithLang "/bible"}}" data-reset="bible" title="{{.T.UIReset}}" aria-label="{{.T.UIReset}}"><span class="reset-icon" aria-hidden="true">↺</span><span class="reset-label">{{.T.UIReset}}</span></a>
-    {{- end}}
   </div>
   {{- if .BookNav}}<input type="hidden" name="book" value="{{.BookNav.Book}}" data-nav-only>{{end}}
   {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
