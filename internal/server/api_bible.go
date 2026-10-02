@@ -127,3 +127,30 @@ func (s *Server) apiBibleBooks(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, s.svc.Books(r.Context(), lng))
 }
+
+// apiBibleNav is the book grid of an edition (?bible=), or with ?book= the
+// chapter grid of one book — the library's own bible navigation.
+func (s *Server) apiBibleNav(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	book, err := intParam(r, "book", 0)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	edition := valueOr(r, "bible", "nwtsty")
+	var out any
+	if book == 0 {
+		out, err = s.svc.BibleNav(r.Context(), lng, edition)
+	} else {
+		out, err = s.svc.BookNav(r.Context(), lng, edition, book)
+	}
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

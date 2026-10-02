@@ -509,3 +509,24 @@ func (s *Service) Books(ctx context.Context, lng model.Language) []Book {
 	}
 	return books
 }
+
+// BibleNav is the book grid of an edition, as the library lays it out.
+func (s *Service) BibleNav(ctx context.Context, lng model.Language, edition string) (wol.BibleNav, error) {
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return wol.BibleNav{}, err
+	}
+	return s.WOL.BibleNav(ctx, cfg, edition)
+}
+
+// BookNav is the chapter grid of one book in an edition.
+func (s *Service) BookNav(ctx context.Context, lng model.Language, edition string, book int) (wol.BookNav, error) {
+	if book < 1 || book > 66 {
+		return wol.BookNav{}, fmt.Errorf("invalid book %d (want 1-66)", book)
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return wol.BookNav{}, err
+	}
+	return s.WOL.BookNav(ctx, cfg, edition, book)
+}

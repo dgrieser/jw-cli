@@ -64,6 +64,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/bible/media", s.apiBibleMedia)
 	mux.HandleFunc("GET /api/v1/bible/cited", s.apiBibleCited)
 	mux.HandleFunc("GET /api/v1/bible/books", s.apiBibleBooks)
+	mux.HandleFunc("GET /api/v1/bible/nav", s.apiBibleNav)
 	mux.HandleFunc("GET /api/v1/media/categories", s.apiMediaCategories)
 	mux.HandleFunc("GET /api/v1/media/categories/{key}", s.apiMediaCategory)
 	mux.HandleFunc("GET /api/v1/media/items/{lank}", s.apiMediaItem)

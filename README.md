@@ -555,6 +555,7 @@ each verse or paragraph on its own.
 | `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
 | `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
+| `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
