@@ -97,7 +97,7 @@ func (c *Client) BibleNav(ctx context.Context, cfg Config, edition string) (Bibl
 				Abbreviation: cleanSpace(a.Find(".abbreviation").First().Text()),
 				Official:     cleanSpace(a.Find(".official").First().Text()),
 			}
-			for _, class := range strings.Fields(li.AttrOr("class", "")) {
+			for class := range strings.FieldsSeq(li.AttrOr("class", "")) {
 				switch class {
 				case "book":
 				case "study":
