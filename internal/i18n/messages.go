@@ -188,6 +188,9 @@ type Messages struct {
 	UILanguage        string
 	UILanguageHint    string
 	UIGo              string
+	UIReset           string
+	UIChapters        string
+	UIAllBooks        string
 	UIShow            string
 	UIRead            string
 	UIFilter          string

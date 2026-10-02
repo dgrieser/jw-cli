@@ -17,6 +17,10 @@
   --surface: #f8f8fa;
   --danger: #b3261e;
   --danger-soft: #fbeceb;
+  /* the bible navigation's book tiles, as wol colours them */
+  --book-dark: #3e6aa3;
+  --book-mid: #4b7cbf;
+  --book-light: #6c97c8;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23676b74' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 
   --gutter: clamp(1rem, 3vw, 2.5rem);
@@ -45,6 +49,9 @@
     --surface: #1c1d21;
     --danger: #f28b82;
     --danger-soft: #3a2422;
+    --book-dark: #2f548a;
+    --book-mid: #3a67a6;
+    --book-light: #5079ad;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239b9fa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   }
 }
@@ -330,8 +337,68 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 }
 .options label { display: inline-flex; align-items: center; gap: 0.5rem; }
 .options select { color: var(--ink); }
-/* the edition picker spans the form, under the reference */
-.form select.edition { display: block; width: 100%; min-width: 0; margin-top: 0.6rem; text-overflow: ellipsis; }
+/* the edition picker spans the form, above the reference */
+.form select.edition { display: block; width: 100%; min-width: 0; margin-bottom: 0.6rem; text-overflow: ellipsis; }
+.query input { min-width: 0; }
+.query .reset { flex: none; }
+.reset-icon { font-size: 1.1rem; line-height: 1; }
+@media (max-width: 30rem) {
+  .reset-label { display: none; }
+}
+
+/* the bible's books and chapters, laid out as the library's own navigation:
+   one tile per book, coloured by the kind of book it is */
+.bible-nav { max-width: 56rem; margin-top: 1.5rem; }
+.bible-nav-heading {
+  margin: 1.5rem 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.bible-nav h2 + .bible-nav-heading { margin-top: 0.75rem; }
+.bible-nav-back { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.bible-nav-back a { text-decoration: none; }
+.book-grid, .chapter-grid {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.book-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.chapter-grid { grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr)); }
+.book-grid a, .chapter-grid a {
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+  padding: 0.35rem 0.6rem;
+  background: var(--book, var(--book-dark));
+  color: #fff;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow: hidden;
+}
+.chapter-grid a { justify-content: center; background: var(--book-dark); font-weight: 550; }
+.book-grid a:hover, .chapter-grid a:hover, .book-grid a:focus-visible, .chapter-grid a:focus-visible {
+  filter: brightness(1.12);
+  color: #fff;
+}
+.book-grid .name, .book-grid .abbr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.book-grid .abbr { display: none; }
+/* on a phone the tiles are narrow: a slightly smaller name, cut with "…" */
+@media (max-width: 36rem) {
+  .book-grid a { padding-inline: 0.45rem; font-size: 0.875rem; }
+}
+@media (max-width: 20rem) {
+  .book-grid .name { display: none; }
+  .book-grid .abbr { display: inline; }
+}
+.book.pentateuch, .book.prophetic, .book.gospels, .book.revelation { --book: var(--book-dark); }
+.book.poetic, .book.letters { --book: var(--book-mid); }
+.book.historical, .book.acts { --book: var(--book-light); }
 
 label.check { display: inline-flex; align-items: center; gap: 0.5rem; cursor: pointer; }
 

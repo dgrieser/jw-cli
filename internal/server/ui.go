@@ -802,6 +802,28 @@ type biblePage struct {
 	// Editions is the picker's option list.
 	Editions []editionOption
 	Body     template.HTML
+	// Nav is the book grid shown before anything is read, BookNav the chapter
+	// grid of the book picked from it (?book=); BookName is that book as a
+	// reference names it, so a chapter link reads like one typed.
+	Nav      *wol.BibleNav
+	BookNav  *wol.BookNav
+	BookName string
+}
+
+// BookLink leads from the book grid to the chapter grid of one book.
+func (p biblePage) BookLink(book int) string {
+	return p.WithLang(fmt.Sprintf("/bible?bible=%s&book=%d", url.QueryEscape(p.Edition), book))
+}
+
+// ChapterLink reads one chapter of the book whose chapter grid is shown.
+func (p biblePage) ChapterLink(chapter int) string {
+	q := url.Values{"bible": {p.Edition}, "ref": {fmt.Sprintf("%s %d", p.BookName, chapter)}}
+	return p.WithLang("/bible?" + q.Encode())
+}
+
+// BooksLink leads from a chapter grid back to the book grid.
+func (p biblePage) BooksLink() string {
+	return p.WithLang("/bible?bible=" + url.QueryEscape(p.Edition))
 }
 
 // editionOption is one entry of the edition picker: the symbol the form sends,
@@ -852,6 +874,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Editions = s.editionOptions(r, page.Edition)
 	if page.Ref == "" {
+		s.bibleNav(r, &page)
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -877,6 +900,34 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, page.Edition, depth)
 	s.render(w, http.StatusOK, "bible", page)
+}
+
+// bibleNav fills in the grid the page opens with: the books of the edition, or
+// with ?book= the chapters of one of them, as the library's own bible
+// navigation lays them out. The grid is a way in, not the page: when it cannot
+// be read the reference field still works, so a failure is only a banner.
+func (s *Server) bibleNav(r *http.Request, page *biblePage) {
+	lng, err := s.language(r)
+	if err != nil {
+		page.Error = err.Error()
+		return
+	}
+	if book, _ := intParam(r, "book", 0); book != 0 {
+		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
+		if err == nil {
+			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
+			return
+		}
+		page.Error = err.Error()
+	}
+	nav, err := s.svc.BibleNav(r.Context(), lng, page.Edition)
+	if err != nil {
+		if page.Error == "" {
+			page.Error = err.Error()
+		}
+		return
+	}
+	page.Nav = &nav
 }
 
 // passagesHTML lays a reading out for the page: every passage under its

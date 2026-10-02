@@ -763,3 +763,61 @@ func TestUnfoldFootnoteAndArticleRefuseOthers(t *testing.T) {
 		t.Errorf("article stream: status %d:\n%s", resp.StatusCode, body)
 	}
 }
+
+// binavMux adds the library's bible navigation: the book grid of nwtsty and the
+// chapter grid of Matthew (the fixtures are the German pages; the layout is the
+// same in every language).
+func binavMux(t *testing.T) *http.ServeMux {
+	mux := wolMux(t)
+	mux.HandleFunc("/en/wol/binav/r1/lp-e/nwtsty", wolFixture(t, "binav_de.html"))
+	mux.HandleFunc("/en/wol/binav/r1/lp-e/nwtsty/40", wolFixture(t, "binav_de_40.html"))
+	return mux
+}
+
+func TestUIBibleNav(t *testing.T) {
+	srv := newTestServer(t, binavMux(t))
+
+	// the page opens on the book grid, under the edition and the reference
+	resp, body := get(t, srv, "/bible?lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	edition, query, grid := strings.Index(body, `class="edition"`), strings.Index(body, `name="ref"`), strings.Index(body, `class="bible-nav"`)
+	if edition < 0 || query < edition || grid < query {
+		t.Errorf("want edition, then reference, then the book grid:\n%s", body)
+	}
+	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
+		t.Errorf("missing the Matthew tile:\n%s", body)
+	}
+	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
+		t.Errorf("the start page has no reset:\n%s", body)
+	}
+
+	// a book opens its chapter grid, every chapter a reading
+	resp, body = get(t, srv, "/bible?bible=nwtsty&book=40&lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	if !strings.Contains(body, "Das Evangelium nach Matthäus") ||
+		!strings.Contains(body, `href="/bible?bible=nwtsty&amp;ref=Matthew&#43;28&amp;lang=en">28</a>`) {
+		t.Errorf("missing the chapter grid:\n%s", body)
+	}
+	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
+		t.Errorf("missing the reset:\n%s", body)
+	}
+
+	// a reading shows no grid, and resets back to it
+	_, body = get(t, srv, "/bible?ref=John+3:16&lang=en")
+	if strings.Contains(body, `bible-nav`) || !strings.Contains(body, `data-reset="bible"`) {
+		t.Errorf("a reading with a grid, or without a reset:\n%s", body)
+	}
+
+	resp, body = get(t, srv, "/api/v1/bible/nav?book=40&lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"chapters": [`) {
+		t.Errorf("api: status %d: %s", resp.StatusCode, body)
+	}
+	resp, _ = get(t, srv, "/api/v1/bible/nav?book=99&lang=en")
+	if resp.StatusCode != 400 {
+		t.Errorf("api: book 99: status %d", resp.StatusCode)
+	}
+}

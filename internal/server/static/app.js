@@ -235,6 +235,47 @@
     if (last && last.charAt(0) === "/") a.href = last;
   });
 
+  // --- bible navigation ----------------------------------------------------
+
+  // reset starts the bible over: the book grid, and the menu leading back to
+  // it rather than to the reading that was left
+  document.querySelectorAll("a[data-reset]").forEach(function (a) {
+    a.addEventListener("click", function () {
+      try {
+        window.localStorage.removeItem(lastKey(a.getAttribute("data-reset"), pageLang));
+      } catch (err) {
+        // nothing was remembered
+      }
+    });
+  });
+
+  var bibleForm = document.querySelector("form.bible-form");
+  if (bibleForm) {
+    var bibleRef = bibleForm.querySelector('input[name="ref"]');
+    // on the grid, another edition is another grid: show it at once
+    var autoEdition = bibleForm.querySelector("select.edition[data-autosubmit]");
+    if (autoEdition) {
+      autoEdition.addEventListener("change", function () {
+        if (bibleRef && bibleRef.value.trim() !== "") return;
+        if (bibleForm.requestSubmit) bibleForm.requestSubmit();
+        else bibleForm.submit();
+      });
+    }
+    // a reference asked for replaces the grid: it goes as soon as it is sent,
+    // and the book it was opened on does not ride along
+    bibleForm.addEventListener("submit", function () {
+      if (!bibleRef || bibleRef.value.trim() === "") return;
+      bibleForm.querySelectorAll("[data-nav-only]").forEach(function (el) { el.disabled = true; });
+      document.querySelectorAll(".bible-nav").forEach(function (el) { el.hidden = true; });
+    });
+    // back to this page out of the browser's cache: the grid is still the page
+    window.addEventListener("pageshow", function (e) {
+      if (!e.persisted) return;
+      bibleForm.querySelectorAll("[data-nav-only]").forEach(function (el) { el.disabled = false; });
+      document.querySelectorAll(".bible-nav").forEach(function (el) { el.hidden = false; });
+    });
+  }
+
   // page states: one record per page, dropped after a month unvisited
   var STATE_MAX_AGE = 30 * 24 * 3600 * 1000;
   var dbPromise = null;

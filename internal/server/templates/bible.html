@@ -1,16 +1,18 @@
 {{define "content"}}
 <h1>{{.T.UINavBible}}</h1>
-<form class="form" method="get" action="/bible">
+<form class="form bible-form" method="get" action="/bible">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <div class="query">
-    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" autofocus autocapitalize="off">
-    <button type="submit" class="primary">{{.T.UIGo}}</button>
-  </div>
-  <select name="bible" class="edition" aria-label="{{.T.UIEdition}}">
+  <select name="bible" class="edition" aria-label="{{.T.UIEdition}}"{{if not .Ref}} data-autosubmit{{end}}>
     {{- range $e := .Editions}}
     <option value="{{$e.Symbol}}" {{if eq $.Edition $e.Symbol}}selected{{end}}>{{$e.Label}}</option>
     {{- end}}
   </select>
+  <div class="query">
+    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}"autofocus autocapitalize="off">
+    <button type="submit" class="primary">{{.T.UIGo}}</button>
+    <a class="btn reset" href="{{.WithLang "/bible"}}" data-reset="bible" title="{{.T.UIReset}}" aria-label="{{.T.UIReset}}"><span class="reset-icon" aria-hidden="true">↺</span><span class="reset-label">{{.T.UIReset}}</span></a>
+  </div>
+  {{- if .BookNav}}<input type="hidden" name="book" value="{{.BookNav.Book}}" data-nav-only>{{end}}
   {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
 </form>
 
@@ -19,5 +21,27 @@
 <article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}
 </article>
+{{- else if .BookNav}}
+<nav class="bible-nav chapters-nav" aria-label="{{.T.UIChapters}}">
+  <p class="bible-nav-back"><a href="{{.BooksLink}}">‹ {{.T.UIAllBooks}}</a></p>
+  <h2>{{.BookNav.Title}}</h2>
+  <h3 class="bible-nav-heading">{{.T.UIChapters}}</h3>
+  <ul class="chapter-grid">
+    {{- range $c := .BookNav.Chapters}}
+    <li><a href="{{$.ChapterLink $c}}">{{$c}}</a></li>
+    {{- end}}
+  </ul>
+</nav>
+{{- else if .Nav}}
+<nav class="bible-nav" aria-label="{{.T.UIBook}}">
+  {{- range $sec := .Nav.Sections}}
+  {{- if $sec.Heading}}<h2 class="bible-nav-heading">{{$sec.Heading}}</h2>{{end}}
+  <ul class="book-grid {{$sec.Key}}">
+    {{- range $b := $sec.Books}}
+    <li class="book {{$b.Group}}"><a href="{{$.BookLink $b.Number}}"{{if $b.Abbreviation}} title="{{$b.Name}}"{{end}}><span class="name">{{$b.Name}}</span>{{if $b.Abbreviation}}<span class="abbr">{{$b.Abbreviation}}</span>{{end}}</a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
+</nav>
 {{- end}}
 {{end}}
