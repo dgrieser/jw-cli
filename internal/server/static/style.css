@@ -388,10 +388,9 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 }
 .book-grid .name, .book-grid .abbr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-grid .abbr { display: none; }
-/* on a phone a name takes two lines rather than losing its end */
+/* on a phone the tiles are narrow: a slightly smaller name, cut with "…" */
 @media (max-width: 36rem) {
-  .book-grid a { padding-inline: 0.35rem; font-size: 0.8rem; }
-  .book-grid .name { white-space: normal; text-overflow: clip; -webkit-hyphens: auto; hyphens: auto; overflow-wrap: break-word; }
+  .book-grid a { padding-inline: 0.45rem; font-size: 0.875rem; }
 }
 @media (max-width: 20rem) {
   .book-grid .name { display: none; }
