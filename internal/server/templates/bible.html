@@ -8,7 +8,7 @@
     {{- end}}
   </select>
   <div class="query">
-    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}"autofocus autocapitalize="off">
+    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" data-autofocus autocapitalize="off">
     <button type="submit" class="primary">{{.T.UIGo}}</button>
     <a class="btn reset" href="{{.WithLang "/bible"}}" data-reset="bible" title="{{.T.UIReset}}" aria-label="{{.T.UIReset}}"><span class="reset-icon" aria-hidden="true">↺</span><span class="reset-label">{{.T.UIReset}}</span></a>
   </div>

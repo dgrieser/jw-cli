@@ -3,7 +3,7 @@
 <form class="form" method="get" action="/languages" role="search">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   <div class="query">
-    <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UILangFilterHint}}" aria-label="{{.T.UIFilter}}" autofocus>
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UILangFilterHint}}" aria-label="{{.T.UIFilter}}" data-autofocus>
     <button type="submit" class="primary">{{.T.UIFilter}}</button>
   </div>
 </form>

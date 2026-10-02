@@ -3,7 +3,7 @@
 <form class="form" method="get" action="/pub">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   <div class="fields">
-    <label>{{.T.UISymbol}} <input type="text" name="pub" value="{{.Pub}}" placeholder="nwt, w, g" autocapitalize="off" autofocus></label>
+    <label>{{.T.UISymbol}} <input type="text" name="pub" value="{{.Pub}}" placeholder="nwt, w, g" autocapitalize="off" data-autofocus></label>
     <label>{{.T.UIDocID}} <input type="text" name="docid" value="{{.DocID}}" inputmode="numeric"></label>
     <label>{{.T.UIIssue}} <input type="text" name="issue" value="{{.Issue}}" placeholder="202405" inputmode="numeric"></label>
     <label>{{.T.UIBook}} <input type="text" name="booknum" value="{{.BookNum}}" placeholder="1-66" inputmode="numeric"></label>

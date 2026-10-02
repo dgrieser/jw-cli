@@ -4,7 +4,7 @@
   <p class="lead">{{.T.UILead}}</p>
   <form class="query large" method="get" action="{{.WithLang "/search"}}" role="search">
     {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-    <input type="search" name="q" placeholder="{{.T.UISearchHint}}" aria-label="{{.T.UINavSearch}}" autofocus>
+    <input type="search" name="q" placeholder="{{.T.UISearchHint}}" aria-label="{{.T.UINavSearch}}" data-autofocus>
     <button type="submit" class="primary">{{.T.UINavSearch}}</button>
   </form>
 </section>

@@ -38,6 +38,20 @@
     });
   }
 
+  // --- focus ---------------------------------------------------------------
+
+  // the page's main field takes the focus where typing needs no keyboard to
+  // open: with a mouse or trackpad. On a touch screen a focused field pops the
+  // keyboard up over the page, so there it waits to be tapped.
+  var autofocus = document.querySelector("[data-autofocus]");
+  if (autofocus && window.matchMedia && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    try {
+      autofocus.focus({ preventScroll: true });
+    } catch (err) {
+      autofocus.focus();
+    }
+  }
+
   // --- loading ------------------------------------------------------------
 
   var status = document.querySelector(".loading");
