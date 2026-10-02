@@ -374,6 +374,29 @@
 
   // --- unfolding ----------------------------------------------------------
 
+  // carousels on the media start page: the track scrolls on its own (swipe,
+  // trackpad, keyboard); the buttons page it for a mouse and show only while
+  // there is somewhere to go
+  document.querySelectorAll("[data-carousel]").forEach(function (car) {
+    var track = car.querySelector(".car-track");
+    var prev = car.querySelector(".car-btn.prev");
+    var next = car.querySelector(".car-btn.next");
+    if (!track || !prev || !next) return;
+    function sync() {
+      var max = track.scrollWidth - track.clientWidth;
+      prev.hidden = track.scrollLeft <= 1;
+      next.hidden = track.scrollLeft >= max - 1;
+    }
+    function page(dir) {
+      track.scrollBy({ left: dir * track.clientWidth * 0.9, behavior: "smooth" });
+    }
+    prev.addEventListener("click", function () { page(-1); });
+    next.addEventListener("click", function () { page(1); });
+    track.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync);
+    sync();
+  });
+
   var doc = document.querySelector(".document[data-unfold]");
   if (!doc || !window.fetch) {
     PS.restoreScroll();

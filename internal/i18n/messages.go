@@ -234,7 +234,8 @@ type Messages struct {
 	UIFiles           string
 	UIRendition       string
 	UISize            string
-	UIBestRendition   string
+	UIScrollBack      string
+	UIScrollForward   string
 	UIOverview        string
 	UIMidweek         string
 	UIWeekend         string
