@@ -398,9 +398,10 @@
   var pageLevel = parseInt(doc.getAttribute("data-level"), 10) || 0;
   var lang = T.lang || new URLSearchParams(location.search).get("lang") || "";
 
-  var ICON = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">' +
-    '<path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ' +
-    'd="M4 4.5l4 3.5 4-3.5M4 8.5l4 3.5 4-3.5"/></svg>';
+  // the diamond wol marks its study material with: a cut gem, outline and facets
+  var ICON = '<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" focusable="false">' +
+    '<path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" ' +
+    'd="M4.2 2.5h7.6L15 6.2 8 14 1 6.2zM1 6.2h14M5.9 2.5 5 6.2 8 14l3-7.8-.9-3.7M5 6.2 8 2.5l3 3.7"/></svg>';
 
   // --- the items: a verse, or a block of a document citing something -----
 
