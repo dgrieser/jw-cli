@@ -662,3 +662,21 @@ func TestFootnoteLinksAndRefPath(t *testing.T) {
 		t.Errorf("RefPath = %s", got)
 	}
 }
+
+func TestUnfoldFailedCitationCanBeRetried(t *testing.T) {
+	var b strings.Builder
+	nodes := []unfold.Node{
+		{Ref: unfold.Ref{Text: "Ps. 25:12-15", Path: "/wol/bc/r10/lp-x/2026485/23/0"}, Err: fmt.Errorf("HTTP 403")},
+		{Ref: unfold.Ref{Text: "elsewhere", Path: "/wol/d/r10/lp-x/1"}, Err: fmt.Errorf("HTTP 403")},
+	}
+	writeUnfoldNodes(&b, nodes, 2, "", i18n.TextFor("en"))
+	got := b.String()
+	// a citation says which, so the page can ask for it again
+	if !strings.Contains(got, `<p class="unfold-failed" data-path="/wol/bc/r10/lp-x/2026485/23/0" data-text="Ps. 25:12-15"><em>`) {
+		t.Errorf("failed citation not marked for a retry:\n%s", got)
+	}
+	// anything else could not be asked of /unfold/refs: no retry
+	if strings.Count(got, "unfold-failed") != 1 {
+		t.Errorf("only citations are retried:\n%s", got)
+	}
+}

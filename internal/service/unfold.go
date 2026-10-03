@@ -1213,7 +1213,13 @@ func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string,
 	rest := n.Children
 	switch {
 	case n.Err != nil:
-		fmt.Fprintf(b, "<p><em>%s</em></p>",
+		// a citation that failed says which, so a page can ask for it again
+		attrs := ""
+		if unfold.IsCitation(n.Ref.Path) {
+			attrs = fmt.Sprintf(` class="unfold-failed" data-path="%s" data-text="%s"`,
+				html.EscapeString(n.Ref.Path), html.EscapeString(n.Ref.Text))
+		}
+		fmt.Fprintf(b, "<p%s><em>%s</em></p>", attrs,
 			html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, n.Err)))
 	case strings.TrimSpace(n.HTML) != "":
 		var content string
