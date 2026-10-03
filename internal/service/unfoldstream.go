@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
@@ -42,7 +44,10 @@ type UnfoldSection struct {
 	Ref string
 	// Lazy names what the section loads once it is opened rather than now —
 	// LazyTranslations — empty for a section that comes with its body.
-	Lazy string
+	// VerseID and Edition say which verse, in which bible, it loads for.
+	Lazy    string
+	VerseID int
+	Edition string
 	// Open shows the section opened rather than as a closed chip.
 	Open bool
 	// Base absolutizes the links of Body, when it came from somewhere else than
@@ -176,6 +181,7 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 		out.Section(UnfoldSection{
 			Title: html.EscapeString(txt.TranslationsHeading),
 			Ref:   TranslationsRef, Lazy: LazyTranslations, Order: orderTranslations,
+			VerseID: verseID, Edition: edition,
 		})
 	}
 
@@ -316,6 +322,20 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 	out.stage(StageReferences)
 	var notes []string
 	for i, ref := range plan {
+		// a single verse unfolds as it does in the bible: its notes, the
+		// indexes, its marginal references, the other bibles and who quotes it
+		if ref.IsVerse() {
+			tip, err := r.Resolve(ctx, ref.Path)
+			sess.Spend(1)
+			if vid := singleVerseID(tip.ContentHTML); err == nil && vid != 0 {
+				note, err := s.streamCitedVerse(ctx, lng, i, ref, tip, vid, sess, cfg, txt, out)
+				if err != nil {
+					return joinNotes(notes), spent(), err
+				}
+				notes = appendNote(notes, note)
+				continue
+			}
+		}
 		expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, txt)
 		if err != nil {
 			return joinNotes(notes), spent(), err
@@ -331,6 +351,62 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 		}
 	}
 	return joinNotes(notes), spent(), ctx.Err()
+}
+
+// streamCitedVerse hands out a citation of a single verse as a section holding
+// its text, with what the bible unfolds a verse to streamed into it. The verse
+// expansion runs on the budget of the citations' session.
+func (s *Service) streamCitedVerse(ctx context.Context, lng model.Language, i int, ref unfold.Ref,
+	tip model.Tooltip, verseID int, sess *unfold.Session, cfg UnfoldConfig, txt *i18n.Messages,
+	out UnfoldStream) (string, error) {
+	n := unfold.Node{Ref: ref, Title: tip.Title, HTML: tip.ContentHTML, URL: tip.URL}
+	label := unfoldHeading(n, "", txt)
+	var b strings.Builder
+	writeUnfoldNode(&b, n, SectionLevel, label, txt)
+	key := fmt.Sprintf("verse%d", i)
+	out.Section(UnfoldSection{
+		Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(ref.Path), Key: key,
+	})
+	vcfg := cfg
+	vcfg.Spent = sess.Requests()
+	note, requests, err := s.StreamVerseUnfold(ctx, lng, "", verseID, vcfg, txt, UnfoldStream{
+		Section: func(sec UnfoldSection) {
+			// the verse's sections go into the citation's, and its own groups
+			// are named apart from those of any other verse of the stream
+			if sec.Key != "" {
+				sec.Key = key + "-" + sec.Key
+			}
+			if sec.In != "" {
+				sec.In = key + "-" + sec.In
+			} else {
+				sec.In = key
+			}
+			out.Section(sec)
+		},
+		Stage: out.Stage,
+	})
+	sess.Spend(requests)
+	return note, err
+}
+
+// verseSpanID finds the ids verseSpan reads in a passage's markup.
+var verseSpanID = regexp.MustCompile(`\bid="v(\d+)-(\d+)-(\d+)-\d+"`)
+
+// singleVerseID is the wol verse id of a passage holding exactly one verse,
+// zero for a passage of several or none.
+func singleVerseID(passage string) int {
+	id := 0
+	for _, m := range verseSpanID.FindAllStringSubmatch(passage, -1) {
+		book, _ := strconv.Atoi(m[1])
+		chapter, _ := strconv.Atoi(m[2])
+		verse, _ := strconv.Atoi(m[3])
+		v := book*1_000_000 + chapter*1_000 + verse
+		if id != 0 && v != id {
+			return 0
+		}
+		id = v
+	}
+	return id
 }
 
 // afterHeading drops the heading a writer opened its output with, for a
