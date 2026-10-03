@@ -65,7 +65,9 @@ func translateClient(t *testing.T) *Client {
 		libCard{"all-publications/books/reasoning-rs", "Reasoning (rs)", "bk", ""})
 	de("/alle-publikationen/bücher", "Bücher", "alle-publikationen",
 		libCard{"alle-publikationen/b%C3%BCcher/schlussfolgern-rs", "Schlussfolgern (rs)", "bk", ""},
-		libCard{"alle-publikationen/b%C3%BCcher/die-ganze-schrift-si", "„Die ganze Schrift“ (si)", "bk", ""})
+		libCard{"alle-publikationen/b%C3%BCcher/die-ganze-schrift-si", "„Die ganze Schrift“ (si)", "bk", ""},
+		libCard{"alle-publikationen/b%C3%BCcher/geheimnis-buch-fm", "„Geheimnis“-Buch (fm)", "bk", ""})
+	de("/alle-publikationen/bücher/geheimnis-buch-fm", "„Geheimnis“-Buch", "alle-publikationen/b%C3%BCcher")
 	en("/all-publications/watchtower", "Watchtower", "all-publications",
 		libCard{"all-publications/watchtower/the-watchtower-2025", "The Watchtower—2025", "w", ""},
 		libCard{"all-publications/watchtower/the-watchtower-2024", "The Watchtower—2024", "w", ""})
@@ -89,7 +91,7 @@ func translateClient(t *testing.T) *Client {
 	return testClient(t, mux)
 }
 
-func TestTranslateLibraryPath(t *testing.T) {
+func TestResolveLibrary(t *testing.T) {
 	c := translateClient(t)
 	ctx := context.Background()
 	for en, de := range map[string]string{
@@ -99,21 +101,25 @@ func TestTranslateLibraryPath(t *testing.T) {
 		"all-publications/books/reasoning-rs":                               "alle-publikationen/bücher/schlussfolgern-rs",
 		"all-publications/watchtower/the-watchtower-2024/public-edition":    "alle-publikationen/wachtturm/der-wachtturm-2024/öffentlichkeitsausgabe",
 		"all-publications/watchtower/the-watchtower-2024/study-edition/may": "alle-publikationen/wachtturm/der-wachtturm-2024/studienausgabe/mai",
+		// a book the English library does not carry, by its symbol
+		"all-publications/books/fm": "alle-publikationen/bücher/geheimnis-buch-fm",
 	} {
-		got, err := c.TranslateLibraryPath(ctx, cfgEn1, cfgDe1, en)
-		if err != nil || got != de {
-			t.Errorf("en→de %s = %q, %v; want %s", en, got, err, de)
+		kind, got, _, err := c.resolveLibrary(ctx, cfgEn1, cfgDe1, en)
+		if err != nil || kind != LibraryKind || got != de {
+			t.Errorf("resolve %s = %s %q, %v; want %s", en, kind, got, err, de)
 		}
-		back, err := c.TranslateLibraryPath(ctx, cfgDe1, cfgEn1, de)
+		back, err := c.canonicalLibraryPath(ctx, cfgDe1, cfgEn1, de)
 		if err != nil || back != en {
-			t.Errorf("de→en %s = %q, %v; want %s", de, back, err, en)
+			t.Errorf("canonical %s = %q, %v; want %s", de, back, err, en)
 		}
 	}
-	if kind, p, err := c.translateLibrary(ctx, cfgEn1, cfgDe1, "all-publications/tracts/enjoy-family-life-t-21"); err != nil || kind != PublicationKind || p != "T-21" {
+	if kind, p, _, err := c.resolveLibrary(ctx, cfgEn1, cfgDe1, "all-publications/tracts/enjoy-family-life-t-21"); err != nil || kind != PublicationKind || p != "T-21" {
 		t.Errorf("tract = %s %q, %v", kind, p, err)
 	}
-	if _, err := c.TranslateLibraryPath(ctx, cfgEn1, cfgDe1, "all-publications/glossary"); err == nil {
-		t.Error("a page without a counterpart translated")
+	for _, missing := range []string{"all-publications/glossary", "all-publications/books/xx", "alle-publikationen/bücher"} {
+		if _, _, _, err := c.resolveLibrary(ctx, cfgEn1, cfgDe1, missing); !errors.Is(err, ErrNoTranslation) {
+			t.Errorf("%s: err = %v", missing, err)
+		}
 	}
 }
 
@@ -140,6 +146,25 @@ func TestCanonicalLibrary(t *testing.T) {
 		t.Errorf("own-language path: err = %v", err)
 	}
 
+	// a book only the German library carries, under the English shelf
+	books, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/books")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := books.Cards()[len(books.Cards())-1]; last.Title != "„Geheimnis“-Buch (fm)" || last.Path != "all-publications/books/fm" {
+		t.Errorf("German-only book = %+v", last)
+	}
+	fm, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/books/fm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fm.Title != "„Geheimnis“-Buch" || fm.Path != "all-publications/books/fm" || fm.Parent == nil || fm.Parent.Path != "all-publications/books" {
+		t.Errorf("fm page = %q at %q, parent %+v", fm.Title, fm.Path, fm.Parent)
+	}
+	if _, err := c.CanonicalLibrary(ctx, cfgEn1, cfgEn1, LibraryKind, "all-publications/books/fm"); err == nil {
+		t.Error("the English library read a book it does not carry")
+	}
+
 	// the root keeps English paths for its categories
 	root, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "")
 	if err != nil {
@@ -164,6 +189,20 @@ func TestCardKey(t *testing.T) {
 	} {
 		if got := cardKey(tc.card); got != tc.want {
 			t.Errorf("cardKey(%q) = %q, want %q", tc.card.Title, got, tc.want)
+		}
+	}
+}
+
+func TestKeySegment(t *testing.T) {
+	for key, want := range map[string]string{
+		"sym:fm#0":          "fm",
+		"sym:w24/2024/5#0":  "w24-2024-5",
+		"library:dx:1945#0": "dx-1945",
+		"library:mwb:#0":    "mwb",
+		"library:w:#1":      "w-1",
+	} {
+		if got := keySegment(key); got != want {
+			t.Errorf("keySegment(%q) = %q, want %q", key, got, want)
 		}
 	}
 }

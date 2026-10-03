@@ -532,9 +532,11 @@ wol names its pages in each language's own words and orders them by their
 titles, so the counterpart is found by what the languages share — the
 publication and issue a cover shows, a symbol in the title, the kind of
 publication and its year, and, among editions alike in that, their order.  Only
-English paths are addresses: one with no counterpart in the language asked
-for leads back to the start page, and a page that exists only in another
-language is not listed. A publication is named by its symbol
+English paths are addresses. A page the English library does not carry — an
+older book kept in German and French only — is named below its nearest English
+page by its symbol (`/pub/library/all-publications/books/fm`), or by its kind
+and year where it has none (`.../publications-index/dx-1945`). An address with
+no counterpart in the language asked for leads back to the start page. A publication is named by its symbol
 (`/pub/publication/lff`). Looking a
 publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.

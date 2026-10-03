@@ -13,9 +13,14 @@ import (
 // language to another, and wol has no link between the two. A page is told
 // apart from its siblings by what is the same in every language instead: the
 // publication its cover shows (w24/2024/5) or its title ends with ("(si)"),
-// else the kind of publication it
-// holds and the year in its title (w 2024), and among siblings alike in both,
-// their order (the public before the study edition).
+// else the kind of publication it holds and the year in its title (w 2024),
+// and among siblings alike in both, their order (the public before the study
+// edition).
+//
+// Addresses are English paths. A page that the English library does not
+// carry — an older book kept in German and French only — is addressed below
+// its nearest English page by that same name: its symbol
+// (all-publications/books/fm), or its kind and year (…/dx-1945).
 
 var (
 	titleYear   = regexp.MustCompile(`(?:^|\D)((?:18|19|20)\d\d)(?:\D|$)`)
@@ -67,62 +72,148 @@ func libraryKeys(page LibraryPage) (byPath map[string]string, byKey map[string]L
 	return byPath, byKey
 }
 
-// TranslateLibraryPath finds the page of the library in to that a library
-// path of from names, by walking both trees down side by side.
-func (c *Client) TranslateLibraryPath(ctx context.Context, from, to Config, path string) (string, error) {
-	kind, p, err := c.translateLibrary(ctx, from, to, path)
-	if err == nil && kind != LibraryKind {
-		err = fmt.Errorf("%w: library path %q is a publication there", ErrNoTranslation, path)
+// keySegment writes a card's key as a path segment, for a page with no
+// English counterpart: "sym:fm#0" is fm, "library:dx:1945#0" dx-1945, the
+// second of two alike -2.
+func keySegment(key string) string {
+	base, n, _ := strings.Cut(key, "#")
+	var seg string
+	if sym, ok := strings.CutPrefix(base, "sym:"); ok {
+		seg = strings.ReplaceAll(sym, "/", "-")
+	} else {
+		var parts []string
+		for _, p := range strings.Split(base, ":")[1:] {
+			if p != "" {
+				parts = append(parts, p)
+			}
+		}
+		seg = strings.Join(parts, "-")
 	}
-	return p, err
+	if n != "" && n != "0" {
+		seg += "-" + n
+	}
+	if seg == "" {
+		seg = "page"
+	}
+	return seg
 }
 
-// translateLibrary is TranslateLibraryPath for a page that may be a
-// publication in the other language: it says which kind of page it found.
-func (c *Client) translateLibrary(ctx context.Context, from, to Config, path string) (kind, out string, err error) {
+// resolveLibrary finds the page of cfg's library that a canonical path names,
+// walking both trees down side by side: an English segment by its English
+// counterpart, and below the last page the English library carries, a key
+// segment among cfg's own pages. It says which kind of page it found — a shelf
+// in English may be one publication in cfg — and whether the English library
+// carries the page.
+func (c *Client) resolveLibrary(ctx context.Context, canon, cfg Config, path string) (kind, local string, inCanon bool, err error) {
 	path = strings.Trim(path, "/")
-	if path == "" || from == to {
-		return LibraryKind, path, nil
+	if path == "" {
+		return LibraryKind, "", true, nil
 	}
 	none := fmt.Errorf("%w: library path %q", ErrNoTranslation, path)
 	segs := strings.Split(path, "/")
-	src, err := c.Library(ctx, from, LibraryKind, "")
+	src, err := c.Library(ctx, canon, LibraryKind, "")
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
-	dst, err := c.Library(ctx, to, LibraryKind, "")
+	dst, err := c.Library(ctx, cfg, LibraryKind, "")
 	if err != nil {
-		return "", "", err
+		return "", "", false, err
 	}
 	if rootSlug(src) != segs[0] || rootSlug(dst) == "" {
-		return "", "", none
+		return "", "", false, none
 	}
-	srcPath, at := segs[0], LibraryCard{Kind: LibraryKind, Path: rootSlug(dst)}
+	srcPath, at, inCanon := segs[0], LibraryCard{Kind: LibraryKind, Path: rootSlug(dst)}, true
 	for i, seg := range segs[1:] {
 		if at.Kind != LibraryKind {
-			return "", "", none // nothing below a publication
+			return "", "", false, none // nothing below a publication
 		}
 		if i > 0 {
-			if src, err = c.Library(ctx, from, LibraryKind, srcPath); err != nil {
-				return "", "", err
+			if inCanon {
+				if src, err = c.Library(ctx, canon, LibraryKind, srcPath); err != nil {
+					return "", "", false, err
+				}
 			}
-			if dst, err = c.Library(ctx, to, LibraryKind, at.Path); err != nil {
-				return "", "", err
+			if dst, err = c.Library(ctx, cfg, LibraryKind, at.Path); err != nil {
+				return "", "", false, err
+			}
+		}
+		want := srcPath + "/" + seg
+		dstKeys, dstCards := libraryKeys(dst)
+		var key string
+		if inCanon {
+			srcKeys, _ := libraryKeys(src)
+			if k, ok := srcKeys[want]; ok {
+				key = k
+			} else {
+				inCanon = false
+			}
+		}
+		if !inCanon {
+			for _, k := range dstKeys {
+				if keySegment(k) == seg {
+					key = k
+					break
+				}
+			}
+		}
+		next, ok := dstCards[key]
+		if key == "" || !ok {
+			return "", "", false, none
+		}
+		at, srcPath = next, want
+	}
+	return at.Kind, at.Path, inCanon, nil
+}
+
+// canonicalLibraryPath names a page of cfg's library by its canonical path,
+// the way resolveLibrary reads it back.
+func (c *Client) canonicalLibraryPath(ctx context.Context, cfg, canon Config, local string) (string, error) {
+	local = strings.Trim(local, "/")
+	if local == "" {
+		return "", nil
+	}
+	none := fmt.Errorf("%w: library path %q", ErrNoTranslation, local)
+	segs := strings.Split(local, "/")
+	src, err := c.Library(ctx, cfg, LibraryKind, "")
+	if err != nil {
+		return "", err
+	}
+	dst, err := c.Library(ctx, canon, LibraryKind, "")
+	if err != nil {
+		return "", err
+	}
+	if rootSlug(src) != segs[0] || rootSlug(dst) == "" {
+		return "", none
+	}
+	srcPath, out, inCanon := segs[0], rootSlug(dst), true
+	for i, seg := range segs[1:] {
+		if i > 0 {
+			if src, err = c.Library(ctx, cfg, LibraryKind, srcPath); err != nil {
+				return "", err
+			}
+			if inCanon {
+				if dst, err = c.Library(ctx, canon, LibraryKind, out); err != nil {
+					return "", err
+				}
 			}
 		}
 		want := srcPath + "/" + seg
 		srcKeys, _ := libraryKeys(src)
-		_, dstCards := libraryKeys(dst)
 		key, ok := srcKeys[want]
 		if !ok {
-			return "", "", none
+			return "", none
 		}
-		if at, ok = dstCards[key]; !ok {
-			return "", "", none
+		if inCanon {
+			_, dstCards := libraryKeys(dst)
+			if cc, ok := dstCards[key]; ok && cc.Kind == LibraryKind {
+				out, srcPath = cc.Path, want
+				continue
+			}
+			inCanon = false
 		}
-		srcPath = want
+		out, srcPath = out+"/"+keySegment(key), want
 	}
-	return at.Kind, at.Path, nil
+	return out, nil
 }
 
 // ErrNoTranslation: a library page of one language has no counterpart in
@@ -142,14 +233,20 @@ func rootSlug(root LibraryPage) string {
 }
 
 // CanonicalLibrary reads a page of the library in cfg while naming it, and
-// every library page it leads to, by the paths of canon — the English tree —
-// so an address is the same in every language. path is canonical: one with no
-// counterpart in cfg's tree is ErrNoTranslation, and a page of cfg's tree
-// with none in canon is left out of the page that leads to it, since no
-// address names it.
+// every library page it leads to, by its canonical path — the path of canon,
+// the English tree, or below the last page that tree carries, the key
+// segments of cfg's own pages — so an address is the same in every language.
+// A path that names no page of cfg's tree is ErrNoTranslation.
 func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
 	path = strings.Trim(path, "/")
 	if cfg == canon {
+		// wol answers a library path it does not know with a page above
+		// it rather than an error; walking the tree tells
+		if kind == LibraryKind {
+			if _, _, _, err := c.resolveLibrary(ctx, canon, cfg, path); err != nil {
+				return LibraryPage{}, err
+			}
+		}
 		return c.Library(ctx, cfg, kind, path)
 	}
 	if kind != LibraryKind {
@@ -161,7 +258,7 @@ func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 		}
 		if page.Parent != nil && page.Parent.Kind == LibraryKind {
 			parent := *page.Parent
-			if p, err := c.TranslateLibraryPath(ctx, cfg, canon, parent.Path); err == nil {
+			if p, err := c.canonicalLibraryPath(ctx, cfg, canon, parent.Path); err == nil {
 				parent.Path = p
 				page.Parent = &parent
 			} else {
@@ -171,7 +268,7 @@ func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 		return page, nil
 	}
 
-	localKind, local, err := c.translateLibrary(ctx, canon, cfg, path)
+	localKind, local, inCanon, err := c.resolveLibrary(ctx, canon, cfg, path)
 	if err != nil {
 		return LibraryPage{}, err
 	}
@@ -183,35 +280,52 @@ func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 	if err != nil {
 		return LibraryPage{}, err
 	}
-	canonPage, err := c.Library(ctx, canon, LibraryKind, path)
-	if err != nil {
-		return LibraryPage{}, err
-	}
-	page.Path = canonPage.Path
-	page.Parent = nil
-	if canonPage.Parent != nil {
-		parent := *canonPage.Parent
-		page.Parent = &parent
+	var canonCards map[string]LibraryCard
+	page.Path, page.Parent = path, nil
+	below := path // where a page without an English counterpart is named
+	if inCanon {
+		canonPage, err := c.Library(ctx, canon, LibraryKind, path)
+		if err != nil {
+			return LibraryPage{}, err
+		}
+		page.Path = canonPage.Path
+		if canonPage.Parent != nil {
+			parent := *canonPage.Parent
+			page.Parent = &parent
+		}
+		_, canonCards = libraryKeys(canonPage)
+		if below == "" {
+			below = rootSlug(canonPage)
+		}
+	} else if up, _, ok := cutLast(path); ok {
+		page.Parent = &LibraryCard{Kind: LibraryKind, Path: up}
 	}
 	localKeys, _ := libraryKeys(page)
-	_, canonCards := libraryKeys(canonPage)
-	groups := make([]LibraryGroup, 0, len(page.Groups))
-	for _, g := range page.Groups {
-		cards := make([]LibraryCard, 0, len(g.Cards))
-		for _, card := range g.Cards {
+	groups := make([]LibraryGroup, len(page.Groups))
+	for gi, g := range page.Groups {
+		cards := make([]LibraryCard, len(g.Cards))
+		for ci, card := range g.Cards {
 			if card.Kind == LibraryKind {
-				cc, ok := canonCards[localKeys[card.Path]]
-				if !ok {
-					continue
+				key := localKeys[card.Path]
+				if cc, ok := canonCards[key]; ok {
+					card.Kind, card.Path = cc.Kind, cc.Path
+				} else {
+					card.Path = below + "/" + keySegment(key)
 				}
-				card.Kind, card.Path = cc.Kind, cc.Path
 			}
-			cards = append(cards, card)
+			cards[ci] = card
 		}
-		if len(cards) > 0 {
-			groups = append(groups, LibraryGroup{Title: g.Title, Cards: cards})
-		}
+		groups[gi] = LibraryGroup{Title: g.Title, Cards: cards}
 	}
 	page.Groups = groups
 	return page, nil
+}
+
+// cutLast splits the last segment off a path.
+func cutLast(path string) (up, last string, ok bool) {
+	i := strings.LastIndexByte(path, '/')
+	if i < 0 {
+		return "", "", false
+	}
+	return path[:i], path[i+1:], true
 }

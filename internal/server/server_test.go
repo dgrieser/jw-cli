@@ -618,10 +618,18 @@ func libraryMux(t *testing.T) *http.ServeMux {
 	})
 	mux.HandleFunc("/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024/study-edition/may",
 		wolFixture(t, "library_w_202405.html"))
-	mux.HandleFunc("/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024/study-edition", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`<html><body><article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024">Study Edition</a></h1>
-		</article></body></html>`))
-	})
+	// the shelves above the issue, which an address is checked against
+	shelf := func(path, title, back, child, childTitle string) {
+		mux.HandleFunc("/en/wol/library/r1/lp-e/"+path, func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `<html><body><article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/%s">%s</a></h1>
+			<ul class="directory"><li class="row card"><a class="cardContainer" href="/en/wol/library/r1/lp-e/%s/%s">
+			<span class="cardThumbnailImage icon-w"></span><div class="cardLine1">%s</div></a></li></ul>
+			</article></body></html>`, back, title, path, child, childTitle)
+		})
+	}
+	shelf("all-publications/watchtower", "Watchtower", "all-publications", "the-watchtower-2024", "The Watchtower—2024")
+	shelf("all-publications/watchtower/the-watchtower-2024", "The Watchtower—2024", "all-publications/watchtower", "study-edition", "Study Edition")
+	shelf("all-publications/watchtower/the-watchtower-2024/study-edition", "Study Edition", "all-publications/watchtower/the-watchtower-2024", "may", "May")
 	mux.HandleFunc("/en/wol/publication/r1/lp-e/nwt", wolFixture(t, "publication_nwt.html"))
 	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query(); q.Get("pub") != "w" || q.Get("issue") != "202405" || q.Get("langwritten") != "E" {
@@ -719,6 +727,12 @@ func TestUIPubRedirects(t *testing.T) {
 		t.Errorf("bible: status %d location %q", resp.StatusCode, loc)
 	}
 	// a library path of another language leads back to the start
+	// wol answers a page it does not carry with the shelf above it; the
+	// address leads back to the start all the same
+	resp, _ = get(t, srv, "/pub/library/all-publications/books/fm?lang=en")
+	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/pub?lang=en" {
+		t.Errorf("unknown book: status %d location %q", resp.StatusCode, loc)
+	}
 	resp, _ = get(t, srv, "/pub/library/alle-publikationen/wachtturm?lang=en")
 	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/pub?lang=en" {
 		t.Errorf("unknown path: status %d location %q", resp.StatusCode, loc)
