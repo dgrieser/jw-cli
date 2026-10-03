@@ -597,34 +597,154 @@ func TestConcurrentRequests(t *testing.T) {
 	wg.Wait()
 }
 
-// TestUIPubBook: a book is no periodical; its issue comes back as "" and its
-// book number as null, and the page lists its files all the same.
-func TestUIPubBook(t *testing.T) {
-	mux := languagesMux(t)
+// libraryMux serves the publication tree: the categories, a category with
+// covers, an issue with its articles and the edition above it, a bible, and
+// the files of the issue.
+func libraryMux(t *testing.T) *http.ServeMux {
+	mux := wolMux(t)
+	mux.HandleFunc("/en/wol/library/r1/lp-e", wolFixture(t, "library_en.html"))
+	mux.HandleFunc("/en/wol/library/r1/lp-e/all-publications/books", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/all-publications">Books</a></h1>
+		<ul class="directory">
+		  <li class="row card"><a class="cardContainer" href="/en/wol/publication/r1/lp-e/lff">
+		    <img class="cardThumbnailImage" src="/en/wol/publication/r1/lp-e/lff/thumbnail"/>
+		    <div class="cardLine1">Enjoy Life Forever! (lff)</div></a></li>
+		  <li class="row card"><a class="cardContainer" href="/en/wol/publication/r1/lp-e/wcg">
+		    <img class="cardThumbnailImage" src="/en/wol/publication/r1/lp-e/wcg/thumbnail"/>
+		    <div class="cardLine1">Courage (wcg)</div></a></li>
+		  <li class="row card"><a class="cardContainer" href="/en/wol/publication/r1/lp-e/ad">
+		    <span class="cardThumbnailImage"></span><div class="cardLine1">Aid (ad)</div></a></li>
+		</ul></article></body></html>`))
+	})
+	mux.HandleFunc("/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024/study-edition/may",
+		wolFixture(t, "library_w_202405.html"))
+	mux.HandleFunc("/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024/study-edition", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/all-publications/watchtower/the-watchtower-2024">Study Edition</a></h1>
+		</article></body></html>`))
+	})
+	mux.HandleFunc("/en/wol/publication/r1/lp-e/nwt", wolFixture(t, "publication_nwt.html"))
 	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
+		if q := r.URL.Query(); q.Get("pub") != "w" || q.Get("issue") != "202405" || q.Get("langwritten") != "E" {
+			http.NotFound(w, r)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{
-			"pubName": "Geh mutig deinen Weg mit Gott", "pub": "wcg",
-			"issue": "", "booknum": null, "track": null,
-			"languages": {"X": {"name": "Deutsch", "locale": "de"}},
-			"files": {"X": {"PDF": [{
-				"title": "Geh mutig deinen Weg mit Gott",
-				"file": {"url": "https://cdn.example/wcg_X.pdf", "checksum": ""},
-				"filesize": 11, "label": "0p", "track": 0, "docid": 0, "booknum": 0,
-				"mimetype": "application/pdf"
-			}]}}
+			"pubName": "Watchtower (Study)", "pub": "w", "issue": "202405",
+			"languages": {"E": {"name": "English", "locale": "en"}},
+			"files": {"E": {
+				"PDF": [{"title": "Regular", "file": {"url": "https://cdn.example/w_E_202405.pdf"},
+				         "filesize": 1667374, "label": "0p", "mimetype": "application/pdf"}],
+				"MP3": [
+				  {"title": "Article 1", "file": {"url": "https://cdn.example/w_E_202405_01.mp3"}, "filesize": 10, "track": 1},
+				  {"title": "Article 2", "file": {"url": "https://cdn.example/w_E_202405_02.mp3"}, "filesize": 10, "track": 2},
+				  {"title": "Article 3", "file": {"url": "https://cdn.example/w_E_202405_03.mp3"}, "filesize": 10, "track": 3},
+				  {"title": "Article 4", "file": {"url": "https://cdn.example/w_E_202405_04.mp3"}, "filesize": 10, "track": 4}
+				]
+			}}
 		}`)
 	})
-	srv := newTestServer(t, mux)
-	resp, body := get(t, srv, "/pub?pub=wcg&lang=de")
+	return mux
+}
+
+// TestUIPubStart: the start page lists the categories, and a row of covers
+// for a category that has them.
+func TestUIPubStart(t *testing.T) {
+	srv := newTestServer(t, libraryMux(t))
+	resp, body := get(t, srv, "/pub?lang=en")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, "Geh mutig deinen Weg mit Gott") || !strings.Contains(body, "wcg_X.pdf") {
-		t.Errorf("pub page:\n%s", body)
+	for _, want := range []string{
+		`href="/pub/library/all-publications/watchtower?lang=en">Watchtower</a>`,
+		`href="/pub/library/all-publications/meeting-workbooks?lang=en">Meeting Workbooks</a>`,
+		// the books row, with the book that has no cover left out of it
+		`<h2><a href="/pub/library/all-publications/books?lang=en">Books</a></h2>`,
+		`href="/pub/publication/lff?lang=en"`,
+		`/en/wol/publication/r1/lp-e/wcg/thumbnail`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("start page lacks %s", want)
+		}
 	}
-	if strings.Contains(body, "0p") {
-		t.Errorf("empty resolution label shown:\n%s", body)
+	if strings.Contains(body, "/pub/publication/ad?") {
+		t.Errorf("a book without a cover is on the row")
+	}
+	if strings.Contains(body, `name="pub"`) {
+		t.Errorf("the start page still carries the symbol form")
+	}
+
+	_, body = get(t, srv, "/pub/library/all-publications/books?lang=en")
+	if !strings.Contains(body, `class="pubgrid"`) || !strings.Contains(body, `<span class="blank">Aid (ad)</span>`) {
+		t.Errorf("category page should show the books as a grid of covers:\n%s", body)
+	}
+}
+
+// TestUIPubIssue: an issue lists its articles, the files of the issue, and the
+// trail up to the start page.
+func TestUIPubIssue(t *testing.T) {
+	srv := newTestServer(t, libraryMux(t))
+	resp, body := get(t, srv, "/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	for _, want := range []string{
+		"<h1>May</h1>",
+		`<span class="label">STUDY ARTICLE 18</span><span class="title">Trust in the Merciful “Judge of All the Earth”!</span>`,
+		`href="/article?lang=en&amp;target=2024404"`,
+		"https://cdn.example/w_E_202405.pdf",
+		"1.6 MiB",
+		"<dd>2024-05</dd>",
+		// four tracks fold away
+		`<details class="filegroup">`,
+		"4 files",
+		// the trail: the start page and the edition above the issue
+		`<a href="/pub?lang=en">Publications</a>`,
+		`<a href="/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition?lang=en">Study Edition</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("issue page lacks %s", want)
+		}
+	}
+	if strings.Contains(body, ">0p<") {
+		t.Errorf("empty resolution label shown")
+	}
+}
+
+func TestUIPubRedirects(t *testing.T) {
+	srv := newTestServer(t, libraryMux(t))
+	// a bible is read on the bible page
+	resp, _ := get(t, srv, "/pub/publication/nwt?lang=en")
+	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/bible?bible=nwt&lang=en" {
+		t.Errorf("bible: status %d location %q", resp.StatusCode, loc)
+	}
+	// a library path of another language leads back to the start
+	resp, _ = get(t, srv, "/pub/library/alle-publikationen/wachtturm?lang=en")
+	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/pub?lang=en" {
+		t.Errorf("unknown path: status %d location %q", resp.StatusCode, loc)
+	}
+}
+
+func TestAPIPubLibrary(t *testing.T) {
+	srv := newTestServer(t, libraryMux(t))
+	resp, body := get(t, srv, "/api/v1/pub/library?lang=en")
+	var root struct {
+		Kind   string `json:"kind"`
+		Groups []struct {
+			Cards []struct{ Kind, Title, Path string } `json:"cards"`
+		} `json:"groups"`
+	}
+	if resp.StatusCode != 200 || json.Unmarshal([]byte(body), &root) != nil || root.Kind != "library" ||
+		len(root.Groups) == 0 || root.Groups[0].Cards[0].Path != "all-publications/bibles" {
+		t.Errorf("library root: status %d body %.300s", resp.StatusCode, body)
+	}
+	resp, body = get(t, srv, "/api/v1/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"symbol": "w"`) || !strings.Contains(body, `"issue": "202405"`) {
+		t.Errorf("issue: status %d body %.300s", resp.StatusCode, body)
+	}
+	resp, body = get(t, srv, "/api/v1/pub/publication/nwt?lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"bible": true`) {
+		t.Errorf("publication: status %d body %.300s", resp.StatusCode, body)
 	}
 }
 

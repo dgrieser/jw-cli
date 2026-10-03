@@ -516,6 +516,18 @@ same verse in the **other translations** of the language — the New World
 Translation once, as the study edition where it exists — which the web UI
 loads only when that section is opened.
 
+The **Publications** page browses the library the way wol lays it out: the
+categories (Bibles, Watchtower, Awake!, Books, Meeting Workbooks, ...), then a
+category's years, a year's editions and months, down to an issue or a
+publication. The start page leads with the categories and a row of the latest
+covers of each — the issues of the current year for a periodical, the
+publications themselves for books. An issue or a publication shows its cover,
+its table of contents (each article opens in the reader, sections of a long
+publication as tabs) and its files in every format the publication media API
+has, the audio tracks folded under their format; a bible opens in the bible
+reader. Looking a publication up by symbol, document id, issue, book or track
+stays with `jw pub` and `GET /api/v1/pub`.
+
 The bible, meeting, media and publication pages remember, in the browser, what
 the reader had in front of them. Per section and language, the menu and the
 start page lead back to the last page read, so going back to **Bible** brings
@@ -559,6 +571,8 @@ each verse or paragraph on its own.
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
+| `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at `path`) |
+| `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents) |
 | `GET /api/v1/dailytext` | `date`, `format`, `unfold` | `jw dailytext` |
 | `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold` | `jw meetings ...` |
 | `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` |
@@ -602,7 +616,7 @@ it is opened, so the verses stay readable however much hangs off them.
 | `b.jw-cdn.org/apis/mediator/v1` | media categories, items, language list |
 | `b.jw-cdn.org/apis/pub-media/GETPUBMEDIALINKS` | publication download links |
 | `b.jw-cdn.org/apis/search` + `/tokens/jworg.jwt` | unified search (anonymous JWT, auto-refreshed on 401) |
-| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations and marginal references (`/bc/`, `/pc/`, `/marginalreference/` JSON, requested without the locale segment), daily text, meetings, media gallery pages (image metadata) |
+| `wol.jw.org` | articles, bible chapters + study pane, wol search, citations and marginal references (`/bc/`, `/pc/`, `/marginalreference/` JSON, requested without the locale segment), daily text, meetings, media gallery pages (image metadata), the publication tree (`/library/`, `/publication/`) |
 | `www.jw.org` | article pages reached by URL |
 
 Those three endpoints answer with the passage itself only when asked **without**

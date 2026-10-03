@@ -194,7 +194,6 @@ type Messages struct {
 	UIShow            string
 	UIRead            string
 	UIFilter          string
-	UIListFiles       string
 	UIOpenOnSite      string
 	UIDownload        string
 	UISubtitles       string
@@ -206,7 +205,6 @@ type Messages struct {
 	UIType            string
 	UISort            string
 	UIFullExcerpts    string
-	UIAllLanguages    string
 	UIPrevPage        string
 	UINextPage        string
 	UIScriptureRefs   string
@@ -223,23 +221,24 @@ type Messages struct {
 	UILangFilterHint  string
 	UIDateHint        string
 	UISymbol          string
-	UIDocID           string
 	UIIssue           string
-	UIBook            string
-	UITrack           string
-	UIFormats         string
-	UIDuration        string
-	UIPublished       string
-	UICategory        string
-	UIFiles           string
-	UIRendition       string
-	UISize            string
-	UIScrollBack      string
-	UIScrollForward   string
-	UIShowAll         string
-	UIOverview        string
-	UIMidweek         string
-	UIWeekend         string
+	UIYear            string
+	UIFormat          string
+	// UIFileCount takes the number of files a format comes in.
+	UIFileCount     string
+	UIBook          string
+	UIDuration      string
+	UIPublished     string
+	UICategory      string
+	UIFiles         string
+	UIRendition     string
+	UISize          string
+	UIScrollBack    string
+	UIScrollForward string
+	UIShowAll       string
+	UIOverview      string
+	UIMidweek       string
+	UIWeekend       string
 	// UICard* describe the sections on the start page.
 	UICardSearch       string
 	UICardBible        string
