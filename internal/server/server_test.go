@@ -788,9 +788,16 @@ func TestUnfoldRefsSharesTheBudget(t *testing.T) {
 		q.Add("path", fmt.Sprintf("/en/wol/bc/r1/lp-e/2024360/%d/0", i))
 		q.Add("text", "v")
 	}
+	// who quotes a verse loads only once opened, so 24 citations are cheap
+	// alone; on top of a run that spent most of the budget they are asked
+	// about as one, before any of them is spent
 	evs := streamEvents(t, srv, "/unfold/refs?"+q.Encode())
+	if hasEvent(evs, "expensive") {
+		t.Errorf("24 citations without their citation searches should be cheap: %+v", evs)
+	}
+	evs = streamEvents(t, srv, "/unfold/refs?"+q.Encode()+"&spent=1980")
 	if !hasEvent(evs, "expensive") || hasEvent(evs, "section") {
-		t.Errorf("24 cheap citations should be asked about as one: %+v", evs)
+		t.Errorf("24 citations should be asked about as one: %+v", evs)
 	}
 	// one of them alone goes through, and says what it spent
 	one := "/unfold/refs?lang=en&depth=1&path=%2Fen%2Fwol%2Fbc%2Fr1%2Flp-e%2F2024360%2F0%2F0&text=Joh+3%3A16"
@@ -799,11 +806,11 @@ func TestUnfoldRefsSharesTheBudget(t *testing.T) {
 		t.Errorf("a single citation should go through and report its cost: %+v", evs)
 	}
 	// but not on top of what the run before it already spent
-	evs = streamEvents(t, srv, one+"&spent=1990")
+	evs = streamEvents(t, srv, one+"&spent=1999")
 	if !hasEvent(evs, "expensive") {
 		t.Errorf("?spent= should count towards the budget: %+v", evs)
 	}
-	if evs = streamEvents(t, srv, one+"&spent=1990&force=1"); hasEvent(evs, "expensive") {
+	if evs = streamEvents(t, srv, one+"&spent=1999&force=1"); hasEvent(evs, "expensive") {
 		t.Errorf("force should spend it: %+v", evs)
 	}
 	if resp, _ := get(t, srv, one+"&spent=lots"); resp.StatusCode != 400 {
@@ -901,5 +908,24 @@ func TestUIBibleNav(t *testing.T) {
 	resp, _ = get(t, srv, "/api/v1/bible/nav?book=99&lang=en")
 	if resp.StatusCode != 400 {
 		t.Errorf("api: book 99: status %d", resp.StatusCode)
+	}
+}
+
+// Who quotes a verse is a heading the page loads once it is opened, never part
+// of the verse's own stream.
+func TestUnfoldVerseCitedIsLazy(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	_, body := get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
+	if !strings.Contains(body, `data-lazy=\"/unfold/cited?lang=en\u0026amp;vid=43003016\"`) {
+		t.Errorf("want a lazy citations section: %s", body)
+	}
+	if strings.Contains(body, `"stage":"cited"`) {
+		t.Errorf("the citation search should not run with the verse: %s", body)
+	}
+	if resp, _ := get(t, srv, "/unfold/cited?vid=0"); resp.StatusCode != 400 {
+		t.Errorf("bad vid: status %d", resp.StatusCode)
+	}
+	if resp, _ := get(t, srv, "/unfold/cited?vid=43003016&to=2"); resp.StatusCode != 400 {
+		t.Errorf("a range ending before it starts: status %d", resp.StatusCode)
 	}
 }

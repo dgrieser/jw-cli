@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -681,17 +682,21 @@ func TestUnfoldFailedCitationCanBeRetried(t *testing.T) {
 	}
 }
 
-func TestSingleVerseID(t *testing.T) {
+func TestPassageRefs(t *testing.T) {
 	for _, tc := range []struct {
 		passage string
-		want    int
+		want    []bibleref.Ref
 	}{
-		{`<p><span id="v43-14-31-1" class="v">31 Damit</span> <span id="v43-14-31-2">die Welt</span></p>`, 43014031},
-		{`<p><span id="v19-25-12-1">12</span></p><p><span id="v19-25-13-1">13</span></p>`, 0},
-		{`<p>no verse at all</p>`, 0},
+		{`<p><span id="v43-14-31-1" class="v">31 Damit</span> <span id="v43-14-31-2">die Welt</span></p>`,
+			[]bibleref.Ref{{Book: 43, Chapter: 14, VerseStart: 31, VerseEnd: 31}}},
+		{`<p><span id="v19-25-12-1">12</span></p><p><span id="v19-25-15-1">15</span></p>`,
+			[]bibleref.Ref{{Book: 19, Chapter: 25, VerseStart: 12, VerseEnd: 15}}},
+		{`<p><span id="v18-38-40-1">40</span><span id="v18-38-41-1">41</span><span id="v18-39-1-1">1</span></p>`,
+			[]bibleref.Ref{{Book: 18, Chapter: 38, VerseStart: 40, VerseEnd: 41}, {Book: 18, Chapter: 39, VerseStart: 1, VerseEnd: 1}}},
+		{`<p>no verse at all</p>`, nil},
 	} {
-		if got := singleVerseID(tc.passage); got != tc.want {
-			t.Errorf("singleVerseID(%q) = %d, want %d", tc.passage, got, tc.want)
+		if got := passageRefs(tc.passage); !slices.Equal(got, tc.want) {
+			t.Errorf("passageRefs(%q) = %v, want %v", tc.passage, got, tc.want)
 		}
 	}
 }

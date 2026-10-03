@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -218,9 +219,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) {
-			if sec.Lazy == service.LazyTranslations {
-				sec.Lazy = translationsURL(r, sec.VerseID, sec.Edition)
-			}
+			sec.Lazy = lazyURL(r, sec)
 			ev.send(s.sectionEvent(sec))
 		},
 		Stage: ev.stage,
@@ -228,14 +227,67 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	ev.finish(r, note, requests, err, txt)
 }
 
-// translationsURL is where the other translations of a verse load from, once
-// its section is opened.
-func translationsURL(r *http.Request, vid int, edition string) string {
-	q := url.Values{"vid": {fmt.Sprint(vid)}, "bible": {edition}}
+// lazyURL is where the body of a lazy section loads from once it is opened:
+// the other translations of a passage, or the publications quoting it.
+func lazyURL(r *http.Request, sec service.UnfoldSection) string {
+	var path string
+	switch sec.Lazy {
+	case service.LazyTranslations:
+		path = "/unfold/translations"
+	case service.LazyCited:
+		path = "/unfold/cited"
+	default:
+		return sec.Lazy
+	}
+	p := sec.Passage
+	q := url.Values{"vid": {fmt.Sprint(p.Book*1_000_000 + p.Chapter*1_000 + p.VerseStart)}}
+	if p.VerseEnd > p.VerseStart {
+		q.Set("to", fmt.Sprint(p.VerseEnd))
+	}
+	if sec.Edition != "" {
+		q.Set("bible", sec.Edition)
+	}
 	if l := r.FormValue("lang"); l != "" {
 		q.Set("lang", l)
 	}
-	return "/unfold/translations?" + q.Encode()
+	return path + "?" + q.Encode()
+}
+
+// passageParam reads the passage a lazy section loads for: ?vid= the wol id of
+// its first verse, ?to= the number of its last when it has more than one.
+func passageParam(r *http.Request) (bibleref.Ref, error) {
+	vid, err := intParam(r, "vid", 0)
+	if err != nil || vid <= 0 {
+		return bibleref.Ref{}, fmt.Errorf("missing or invalid parameter %q", "vid")
+	}
+	to, err := intParam(r, "to", 0)
+	if err != nil {
+		return bibleref.Ref{}, err
+	}
+	return service.PassageRef(vid, to)
+}
+
+// unfoldCited streams the publications quoting a passage: GET
+// /unfold/cited?vid=43014031&to=33. What a page loads when the citations of a
+// verse are opened.
+func (s *Server) unfoldCited(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	ref, err := passageParam(r)
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
+	txt := text(lng)
+	ev := startStream(w)
+	requests, err := s.svc.StreamCited(r.Context(), lng, ref, service.UnfoldStream{
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Stage:   ev.stage,
+	})
+	ev.finish(r, "", requests, err, txt)
 }
 
 // maxStreamRefs bounds the citations one request may ask about: a paragraph
@@ -294,9 +346,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) {
 			// a cited verse's other translations, as the verse stream has them
-			if sec.Lazy == service.LazyTranslations {
-				sec.Lazy = translationsURL(r, sec.VerseID, sec.Edition)
-			}
+			sec.Lazy = lazyURL(r, sec)
 			ev.send(s.sectionEvent(sec))
 		},
 		Stage: ev.stage,
@@ -331,9 +381,9 @@ func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	vid, err := intParam(r, "vid", 0)
-	if err != nil || vid <= 0 {
-		badRequest(w, "missing or invalid parameter %q", "vid")
+	ref, err := passageParam(r)
+	if err != nil {
+		badRequest(w, "%v", err)
 		return
 	}
 	edition := valueOr(r, "bible", "nwtsty")
@@ -343,7 +393,7 @@ func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
 	}
 	txt := text(lng)
 	ev := startStream(w)
-	requests, err := s.svc.StreamTranslations(r.Context(), lng, edition, vid, service.UnfoldStream{
+	requests, err := s.svc.StreamTranslations(r.Context(), lng, edition, ref, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
