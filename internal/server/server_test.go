@@ -153,6 +153,19 @@ func mediaMux(t *testing.T) *http.ServeMux {
 			}]
 		}}`)
 	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/VODChildren", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {
+			"key": "VODChildren", "name": "Children", "type": "container",
+			"subcategories": [
+				{"key": "BJF", "name": "Become Jehovah's Friend", "type": "ondemand", "media": [{
+					"languageAgnosticNaturalKey": "pub-pk_1_VIDEO", "type": "video", "title": "Caleb Video",
+					"images": {"lss": {"lg": "https://cdn.example/c.jpg"}}, "files": []
+				}]},
+				{"key": "ChildrenMore", "name": "More For Children", "type": "container", "media": []}
+			]
+		}}`)
+	})
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-abc_1_VIDEO", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"media": [{
@@ -342,6 +355,23 @@ func TestUIMedia(t *testing.T) {
 	}
 	if strings.Contains(body, `href="/download/media/`) {
 		t.Errorf("item page still links the best rendition")
+	}
+}
+
+func TestUIMediaCategoryCarousels(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	resp, body := get(t, srv, "/media/category/VODChildren?lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	// the leaf category is a carousel under a heading linking to it
+	if !strings.Contains(body, `class="car-track"`) || !strings.Contains(body, "Caleb Video") ||
+		!strings.Contains(body, `<h2><a href="/media/category/BJF?lang=en">`) {
+		t.Errorf("leaf category should be a carousel: %.3000s", body)
+	}
+	// a category holding further categories stays a link in the list
+	if !strings.Contains(body, `class="title" href="/media/category/ChildrenMore?lang=en"`) {
+		t.Errorf("container category should stay a link: %.3000s", body)
 	}
 }
 

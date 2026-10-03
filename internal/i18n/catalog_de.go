@@ -161,6 +161,7 @@ var de = Messages{
 	UISize:             "Größe",
 	UIScrollBack:       "Zurück",
 	UIScrollForward:    "Weiter",
+	UIShowAll:          "Alle anzeigen",
 	UIOverview:         "Übersicht",
 	UIMidweek:          "unter der Woche",
 	UIWeekend:          "am Wochenende",

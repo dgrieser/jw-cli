@@ -646,6 +646,8 @@ type mediaPage struct {
 // large, carousel rows, or both under one heading.
 type mediaSection struct {
 	Heading string
+	Href    string // the section's own category page, when it has one
+	More    bool   // the row shows only the first videos of that category
 	Hero    *resultView
 	Rows    [][]resultView
 }
@@ -742,7 +744,23 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, cat.Name),
 		Heading:  cat.Name,
 	}
-	items := append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
+	// a subcategory that holds videos itself — the lowest level of the tree —
+	// comes with them, and shows as a carousel rather than as a link
+	var subs []model.Category
+	for _, sub := range cat.Subcategories {
+		if len(sub.Media) == 0 {
+			subs = append(subs, sub)
+			continue
+		}
+		media := sub.Media[:min(len(sub.Media), mediaShelfLimit)]
+		page.Sections = append(page.Sections, mediaSection{
+			Heading: sub.Name,
+			Href:    page.WithLang("/media/category/" + url.PathEscape(sub.Key)),
+			More:    len(sub.Media) > len(media),
+			Rows:    [][]resultView{s.resultViews(service.MediaToResults(media), page.Lang)},
+		})
+	}
+	items := append(service.CategoriesToResults(subs), service.MediaToResults(cat.Media)...)
 	page.Items = s.resultViews(items, page.Lang)
 	s.render(w, http.StatusOK, "media_category", page)
 }
