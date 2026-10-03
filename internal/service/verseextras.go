@@ -183,15 +183,12 @@ func writeTranslations(b *strings.Builder, list []EditionVerse, level int, txt *
 	}
 }
 
-// StreamTranslations reads one verse in every other bible of the language and
-// hands out each as a section of its own as soon as it is read: what a page
-// loads when the reader opens the translations of a verse.
-func (s *Service) StreamTranslations(ctx context.Context, lng model.Language, current string, verseID int,
+// StreamTranslations reads a passage — a verse, or a range of verses of one
+// chapter — in every other bible of the language and hands out each as a
+// section of its own as soon as it is read: what a page loads when the reader
+// opens the translations of a verse.
+func (s *Service) StreamTranslations(ctx context.Context, lng model.Language, current string, ref bibleref.Ref,
 	out UnfoldStream) (int, error) {
-	ref, err := verseRef(verseID)
-	if err != nil {
-		return 0, err
-	}
 	requests := 0
 	for i, e := range s.otherEditionsFor(ctx, lng, current) {
 		if err := ctx.Err(); err != nil {
@@ -206,13 +203,34 @@ func (s *Service) StreamTranslations(ctx context.Context, lng model.Language, cu
 		if err != nil || len(verses) == 0 {
 			continue
 		}
-		v := EditionVerse{Edition: e, HTML: verses[0].HTML}
+		var body strings.Builder
+		for _, v := range verses {
+			body.WriteString(paragraph(v.HTML))
+		}
+		v := EditionVerse{Edition: e}
 		out.Section(UnfoldSection{
-			Title: html.EscapeString(v.Label()), Body: paragraph(v.HTML),
+			Title: html.EscapeString(v.Label()), Body: body.String(),
 			Order: i, Open: true, Ref: "edition:" + e.Symbol,
 		})
 	}
 	return requests, nil
+}
+
+// PassageRef is the passage a page names by the wol id of its first verse
+// (book*1e6 + chapter*1e3 + verse) and the number of its last; to is zero for
+// a single verse.
+func PassageRef(verseID, to int) (bibleref.Ref, error) {
+	ref, err := verseRef(verseID)
+	if err != nil {
+		return ref, err
+	}
+	if to > 0 {
+		if to < ref.VerseStart || to > bibleref.LastVerse {
+			return ref, fmt.Errorf("invalid last verse %d", to)
+		}
+		ref.VerseEnd = to
+	}
+	return ref, nil
 }
 
 // StreamFootnote resolves one footnote marker into a footnotes section holding
