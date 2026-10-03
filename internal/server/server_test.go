@@ -526,6 +526,10 @@ func TestUIArticle(t *testing.T) {
 	if start < 0 || end < start {
 		t.Fatalf("no article element in:\n%s", body)
 	}
+	// the document brings its own title; the page does not repeat it
+	if n := strings.Count(body[start:end], "<h1"); n != 1 {
+		t.Errorf("article has %d headings, want 1", n)
+	}
 	if strings.Contains(body[start:end], "<script") {
 		t.Errorf("unexpected script tag inside the article")
 	}
@@ -631,6 +635,12 @@ func libraryMux(t *testing.T) *http.ServeMux {
 	shelf("all-publications/watchtower/the-watchtower-2024", "The Watchtower—2024", "all-publications/watchtower", "study-edition", "Study Edition")
 	shelf("all-publications/watchtower/the-watchtower-2024/study-edition", "Study Edition", "all-publications/watchtower/the-watchtower-2024", "may", "May")
 	mux.HandleFunc("/en/wol/publication/r1/lp-e/nwt", wolFixture(t, "publication_nwt.html"))
+	// two books: lff of 2021, wcg of 2025
+	mux.HandleFunc("/en/wol/publication/r1/lp-e/lff", wolFixture(t, "publication_lff.html"))
+	mux.HandleFunc("/en/wol/publication/r1/lp-e/wcg", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><input type="hidden" id="englishSym" value="wcg"/><input type="hidden" id="pubYear" value="2025"/>
+		<article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/all-publications/books">Courage</a></h1></article></body></html>`))
+	})
 	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query(); q.Get("pub") != "w" || q.Get("issue") != "202405" || q.Get("langwritten") != "E" {
 			http.NotFound(w, r)
@@ -655,6 +665,49 @@ func libraryMux(t *testing.T) *http.ServeMux {
 	return mux
 }
 
+// TestUIPubPeriodicalRow: a periodical's row gathers its issues across its
+// years, newest first, each named with its year.
+func TestUIPubPeriodicalRow(t *testing.T) {
+	mux := libraryMux(t)
+	page := func(path, title, back, cards string) {
+		mux.HandleFunc("/en/wol/library/r1/lp-e/"+path, func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `<html><body><article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/%s">%s</a></h1>
+			<ul class="directory">%s</ul></article></body></html>`, back, title, cards)
+		})
+	}
+	card := func(path, title, cover string) string {
+		thumb := `<span class="cardThumbnailImage icon-g"></span>`
+		if cover != "" {
+			thumb = `<img class="cardThumbnailImage icon-g" src="/en/wol/publication/r1/lp-e/` + cover + `/thumbnail"/>`
+		}
+		return `<li class="row card"><a class="cardContainer" href="/en/wol/library/r1/lp-e/` + path + `">` +
+			thumb + `<div class="cardLine1">` + title + `</div></a></li>`
+	}
+	page("all-publications/awake", "Awake!", "all-publications",
+		card("all-publications/awake/awake-2026", "Awake!—2026", "")+
+			card("all-publications/awake/awake-2025", "Awake!—2025", ""))
+	page("all-publications/awake/awake-2026", "Awake!—2026", "all-publications/awake",
+		card("all-publications/awake/awake-2026/no-1", "No. 1", "g26/2026/11"))
+	page("all-publications/awake/awake-2025", "Awake!—2025", "all-publications/awake",
+		card("all-publications/awake/awake-2025/no-1", "No. 1", "g25/2025/5")+
+			card("all-publications/awake/awake-2025/no-2", "No. 2", "g25/2025/11"))
+	srv := newTestServer(t, mux)
+	_, body := get(t, srv, "/pub?lang=en")
+	i := strings.Index(body, `<h2><a href="/pub/library/all-publications/awake?lang=en">Awake!</a></h2>`)
+	if i < 0 {
+		t.Fatalf("no Awake! row:\n%s", body)
+	}
+	row := body[i:]
+	row = row[:strings.Index(row, "</section>")]
+	var names []string
+	for _, part := range strings.Split(row, `<span class="name">`)[1:] {
+		names = append(names, part[:strings.Index(part, "<")])
+	}
+	if want := []string{"No. 1 2026", "No. 2 2025", "No. 1 2025"}; strings.Join(names, "|") != strings.Join(want, "|") {
+		t.Errorf("row = %q, want %q", names, want)
+	}
+}
+
 // TestUIPubStart: the start page lists the categories, and a row of covers
 // for a category that has them.
 func TestUIPubStart(t *testing.T) {
@@ -677,6 +730,10 @@ func TestUIPubStart(t *testing.T) {
 	}
 	if strings.Contains(body, "/pub/publication/ad?") {
 		t.Errorf("a book without a cover is on the row")
+	}
+	// books run by their release, newest first: wcg (2025) before lff (2021)
+	if wcg, lff := strings.Index(body, "/pub/publication/wcg?"), strings.Index(body, "/pub/publication/lff?"); wcg < 0 || lff < 0 || wcg > lff {
+		t.Errorf("books row not newest first: wcg at %d, lff at %d", wcg, lff)
 	}
 	if strings.Contains(body, `name="pub"`) {
 		t.Errorf("the start page still carries the symbol form")

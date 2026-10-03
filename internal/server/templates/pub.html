@@ -118,7 +118,7 @@
 {{- end}}
 {{end}}
 
-{{define "pubtile"}}<a class="tile cover" href="{{.Href}}">
+{{define "pubtile"}}<a class="tile cover" href="{{.Href}}" title="{{.Title}}{{if .Subtitle}} – {{.Subtitle}}{{end}}">
   <span class="poster">{{if .Image}}<img src="{{.Image}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{else}}<span class="blank">{{.Title}}</span>{{end}}</span>
-  <span class="cap">{{.Title}}{{if .Subtitle}} <span class="sub">{{.Subtitle}}</span>{{end}}</span>
+  <span class="cap"><span class="name">{{.Title}}</span>{{if .Subtitle}} <span class="sub">{{.Subtitle}}</span>{{end}}</span>
 </a>{{end}}
