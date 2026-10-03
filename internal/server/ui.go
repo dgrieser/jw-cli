@@ -683,13 +683,11 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		if key == mediaHeroCategory {
 			limit = 1
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, limit, 0); err == nil {
 				featured[i] = cat
 			}
-		}()
+		})
 	}
 	cats, err := s.svc.Mediator.RootCategories(r.Context(), lng.Symbol)
 	wg.Wait()
