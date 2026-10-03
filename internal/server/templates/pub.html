@@ -1,23 +1,124 @@
 {{define "content"}}
-<h1>{{.T.UINavPublications}}</h1>
-<form class="form" method="get" action="/pub">
-  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <div class="fields">
-    <label>{{.T.UISymbol}} <input type="text" name="pub" value="{{.Pub}}" placeholder="nwt, w, g" autocapitalize="off" data-autofocus></label>
-    <label>{{.T.UIDocID}} <input type="text" name="docid" value="{{.DocID}}" inputmode="numeric"></label>
-    <label>{{.T.UIIssue}} <input type="text" name="issue" value="{{.Issue}}" placeholder="202405" inputmode="numeric"></label>
-    <label>{{.T.UIBook}} <input type="text" name="booknum" value="{{.BookNum}}" placeholder="1-66" inputmode="numeric"></label>
-    <label>{{.T.UITrack}} <input type="text" name="track" value="{{.Track}}" inputmode="numeric"></label>
-    <label>{{.T.UIFormats}} <input type="text" name="fileformat" value="{{.Formats}}" placeholder="PDF,EPUB,MP3" autocapitalize="characters"></label>
-  </div>
-  <div class="actions">
-    <button type="submit" class="primary">{{.T.UIListFiles}}</button>
-    <label class="check"><input type="checkbox" name="allLangs" value="true" {{if .AllLangs}}checked{{end}}> {{.T.UIAllLanguages}}</label>
-  </div>
-</form>
+{{- if .Crumbs}}{{template "crumbs" .}}{{end}}
+<h1>{{.Heading}}</h1>
 
-{{- if .Heading}}
-<h2 class="listheader">{{.Heading}}</h2>
-{{template "listing" .}}
+{{- if .Publication}}
+<div class="mediaitem pubitem">
+  {{- if .Cover}}
+  <p class="cover"><img src="{{.Cover}}" alt="" loading="lazy" referrerpolicy="no-referrer"></p>
+  {{- end}}
+  <div class="mediabody">
+    {{- if .Facts}}
+    <dl class="facts">
+      {{- range .Facts}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+    </dl>
+    {{- end}}
+    {{- if .External}}
+    <p class="links"><a href="{{.External}}" rel="noopener">{{.T.UIOpenOnSite}}</a></p>
+    {{- end}}
+  </div>
+</div>
+{{- end}}
+
+{{- if .Files}}
+<section class="pubfiles">
+<h2>{{.T.UIFiles}}</h2>
+{{- range .Files}}
+{{- if .Many}}
+<details class="filegroup">
+  <summary><span class="format">{{.Format}}</span> <span class="meta">{{.Count}}</span></summary>
+{{- end}}
+<div class="tablewrap">
+<table class="files">
+  <colgroup><col><col class="size"><col class="action"></colgroup>
+  <tbody>
+    {{- $format := .Format}}
+    {{- range .Files}}
+    <tr>
+      <td><span class="format">{{$format}}</span> {{.Title}}{{if .Label}} <span class="meta">{{.Label}}</span>{{end}}</td>
+      <td class="num">{{.Size}}</td>
+      <td class="actions"><a class="btn small" href="{{.URL}}" rel="noopener">{{$.T.UIDownload}}</a></td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+</div>
+{{- if .Many}}
+</details>
+{{- end}}
+{{- end}}
+</section>
+{{- end}}
+
+{{- if .Categories}}
+<ul class="pubchips">
+  {{- range .Categories}}
+  <li><a href="{{.Href}}">{{.Title}}</a></li>
+  {{- end}}
+</ul>
+{{- end}}
+
+{{- range .Shelves}}
+<section class="shelf">
+  <h2><a href="{{.Href}}">{{.Heading}}</a></h2>
+  {{- if .Context}}<p class="shelf-context">{{.Context}}</p>{{end}}
+  <div class="carousel" data-carousel>
+    <button type="button" class="car-btn prev" aria-label="{{$.T.UIScrollBack}}" hidden>‹</button>
+    <ul class="car-track covers">
+      {{- range .Tiles}}
+      <li>{{template "pubtile" .}}</li>
+      {{- end}}
+    </ul>
+    <button type="button" class="car-btn next" aria-label="{{$.T.UIScrollForward}}" hidden>›</button>
+  </div>
+</section>
+{{- end}}
+
+{{- if .Tabs}}
+<nav class="tabs pubtabs" aria-label="{{.Heading}}">
+  {{- range .Tabs}}
+  <a href="{{.Href}}"{{if .Active}} class="active" aria-current="page"{{end}}>{{.Title}}</a>
+  {{- end}}
+</nav>
+{{- end}}
+
+{{- range .Groups}}
+<section class="pubgroup">
+  {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
+  {{- if .Chips}}
+  <ul class="pubchips">
+    {{- range .Chips}}
+    <li><a href="{{.Href}}">{{.Title}}{{if .Subtitle}} <span class="sub">{{.Subtitle}}</span>{{end}}</a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
+  {{- if .Tiles}}
+  <ul class="pubgrid">
+    {{- range .Tiles}}
+    <li>{{template "pubtile" .}}</li>
+    {{- end}}
+  </ul>
+  {{- end}}
+  {{- if .Docs}}
+  <ol class="toc">
+    {{- range .Docs}}
+    <li>
+      <a href="{{.Href}}">
+        <span class="thumb">{{if .Image}}<img src="{{.Image}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{end}}</span>
+        <span class="text">
+          {{- if .Subtitle}}<span class="label">{{.Title}}</span><span class="title">{{.Subtitle}}</span>
+          {{- else}}<span class="title">{{.Title}}</span>{{end -}}
+        </span>
+      </a>
+    </li>
+    {{- end}}
+  </ol>
+  {{- end}}
+</section>
 {{- end}}
 {{end}}
+
+{{define "pubtile"}}<a class="tile cover" href="{{.Href}}">
+  <span class="poster">{{if .Image}}<img src="{{.Image}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{else}}<span class="blank">{{.Title}}</span>{{end}}</span>
+  <span class="cap">{{.Title}}{{if .Subtitle}} <span class="sub">{{.Subtitle}}</span>{{end}}</span>
+</a>{{end}}

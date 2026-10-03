@@ -858,53 +858,6 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 	s.render(w, http.StatusOK, "media_item", page)
 }
 
-type pubPage struct {
-	basePage
-	Pub, DocID, Issue, BookNum, Track, Formats string
-	AllLangs                                   bool
-	Heading                                    string
-	Items                                      []resultView
-}
-
-func (s *Server) uiPub(w http.ResponseWriter, r *http.Request) {
-	page := pubPage{
-		basePage: s.base(r, "Publications"),
-		Pub:      r.FormValue("pub"),
-		DocID:    r.FormValue("docid"),
-		Issue:    r.FormValue("issue"),
-		BookNum:  r.FormValue("booknum"),
-		Track:    r.FormValue("track"),
-		Formats:  r.FormValue("fileformat"),
-		AllLangs: boolParam(r, "allLangs"),
-	}
-	if page.Pub == "" && page.DocID == "" {
-		s.render(w, http.StatusOK, "pub", page)
-		return
-	}
-	lng, err := s.language(r)
-	if err != nil {
-		s.failUI(w, r, err)
-		return
-	}
-	q, err := pubQuery(r, lng)
-	if err != nil {
-		page.Error = err.Error()
-		s.render(w, http.StatusBadRequest, "pub", page)
-		return
-	}
-	pm, err := s.svc.PubMedia.Links(r.Context(), q)
-	if err != nil {
-		s.failUI(w, r, err)
-		return
-	}
-	page.Heading = pm.PubName
-	if pm.ParentPubName != "" && pm.ParentPubName != pm.PubName {
-		page.Heading = pm.ParentPubName + " — " + pm.PubName
-	}
-	page.Items = s.resultViews(service.PubFilesToResults(pm), page.Lang)
-	s.render(w, http.StatusOK, "pub", page)
-}
-
 type languagesPage struct {
 	basePage
 	Query     string

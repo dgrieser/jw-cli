@@ -156,7 +156,7 @@
     ["bible", /^\/bible$/, function (q) { return !!(q.get("ref") || "").trim(); }],
     ["meetings", /^\/meetings(\/(midweek|weekend))?$/, function () { return true; }],
     ["media", /^\/media(\/(category|item)\/[^/]+)?$/, function () { return true; }],
-    ["pub", /^\/pub$/, function (q) { return !!(q.get("pub") || q.get("docid")); }]
+    ["pub", /^\/pub(\/(library|publication)\/.+)?$/, function () { return true; }]
   ];
 
   function sectionOf(path) {

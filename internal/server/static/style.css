@@ -1040,6 +1040,125 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
   .car-btn { display: none; }
 }
 
+/* publications: categories, covers, a table of contents, files ------ */
+
+.pubchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  max-width: 60rem;
+  margin: 0 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+.pubchips a {
+  display: block;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1.35;
+}
+.pubchips a:hover { border-color: var(--accent); color: var(--accent); background: var(--field); }
+.pubchips .sub { color: var(--muted); font-size: 0.9rem; }
+
+.shelf-context { margin: -0.5rem 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
+
+.car-track.covers { grid-auto-columns: minmax(8rem, calc((100% - 5rem) / 6)); }
+.tile.cover .poster { aspect-ratio: 1 / 1; }
+.tile .poster .blank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.3;
+  text-align: center;
+  overflow: hidden;
+}
+.tile .cap .sub { display: block; color: var(--muted); font-size: 0.875rem; }
+
+.pubgroup { max-width: 60rem; margin: 0 0 2rem; }
+.pubgroup > h2 { margin: 0 0 0.75rem; }
+.pubgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 1.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pubgrid > li { min-width: 0; }
+
+.toc { list-style: none; margin: 0; padding: 0; }
+.toc > li { border-bottom: 1px solid var(--line); }
+.toc a {
+  display: grid;
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+  gap: 0.9rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+.toc a:hover .title { color: var(--accent); }
+.toc .thumb {
+  display: block;
+  width: 3.5rem;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: var(--r-small);
+  background: var(--field);
+}
+.toc .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.toc .text { min-width: 0; }
+.toc .label { display: block; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.02em; }
+.toc .title { display: block; font-weight: 600; line-height: 1.35; }
+
+.pubtabs { margin: 0 0 1.5rem; }
+
+.pubitem { grid-template-columns: minmax(0, 1fr); }
+.pubitem .cover { margin: 0; }
+.pubitem .cover img {
+  display: block;
+  width: 100%;
+  max-width: 12rem;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--r);
+  background: var(--field);
+}
+@media (min-width: 48rem) {
+  .pubitem { grid-template-columns: 12rem minmax(0, 1fr); }
+}
+
+.pubfiles { max-width: 60rem; margin: 0 0 2rem; }
+.pubfiles .format {
+  display: inline-block;
+  min-width: 3.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+.pubfiles .meta { color: var(--muted); font-size: 0.9rem; }
+.pubfiles table { table-layout: fixed; }
+.pubfiles col.size { width: 6.5rem; }
+.pubfiles col.action { width: 7.5rem; }
+.filegroup { border-bottom: 1px solid var(--line); }
+.filegroup > summary { padding: 0.55rem 0; cursor: pointer; }
+.filegroup > summary:hover { color: var(--accent); }
+.filegroup[open] > summary { border-bottom: 1px solid var(--line); }
+.filegroup table td { padding-left: 1rem; }
+
+@media (max-width: 40rem) {
+  .car-track.covers { grid-auto-columns: 40%; }
+  .pubgrid { grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); }
+}
+
 dl.facts {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
