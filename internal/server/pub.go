@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -213,7 +214,7 @@ func pubGroupOf(g wol.LibraryGroup, page basePage) pubGroup {
 	covers := slices.ContainsFunc(g.Cards, func(c wol.LibraryCard) bool {
 		return c.Kind != wol.DocumentKind && c.Thumbnail != ""
 	})
-	for _, c := range g.Cards {
+	for _, c := range latestFirst(g.Cards) {
 		t := cardTile(c, page)
 		switch {
 		case c.Kind == wol.DocumentKind || c.Kind == "link":
@@ -223,6 +224,47 @@ func pubGroupOf(g wol.LibraryGroup, page basePage) pubGroup {
 		default:
 			out.Chips = append(out.Chips, t)
 		}
+	}
+	return out
+}
+
+// issueCover reads the year and issue off the cover of a periodical's issue:
+// .../publication/r1/lp-e/w24/2024/5/thumbnail.
+var issueCover = regexp.MustCompile(`/publication/[^/]+/[^/]+/[^/]+/(\d{4})/(\d+)/thumbnail$`)
+
+// latestFirst puts the issues of a periodical newest first, the way they are
+// read, where wol lists them from January on. Cards that are not all issues
+// keep wol's order.
+func latestFirst(cards []wol.LibraryCard) []wol.LibraryCard {
+	type dated struct {
+		card        wol.LibraryCard
+		year, issue int
+	}
+	var issues []dated
+	for _, c := range cards {
+		if c.Kind == wol.DocumentKind {
+			return cards
+		}
+		m := issueCover.FindStringSubmatch(c.Thumbnail)
+		if m == nil {
+			return cards
+		}
+		year, _ := strconv.Atoi(m[1])
+		issue, _ := strconv.Atoi(m[2])
+		issues = append(issues, dated{c, year, issue})
+	}
+	if len(issues) < 2 {
+		return cards
+	}
+	slices.SortStableFunc(issues, func(a, b dated) int {
+		if a.year != b.year {
+			return b.year - a.year
+		}
+		return b.issue - a.issue
+	})
+	out := make([]wol.LibraryCard, len(issues))
+	for i, d := range issues {
+		out[i] = d.card
 	}
 	return out
 }
@@ -278,7 +320,7 @@ func (s *Server) pubCovers(ctx context.Context, lng model.Language, at wol.Libra
 	}
 	var tiles []pubTile
 	var below []wol.LibraryCard
-	for _, c := range lib.Cards() {
+	for _, c := range latestFirst(lib.Cards()) {
 		if c.Kind != wol.LibraryKind && c.Kind != wol.PublicationKind {
 			continue
 		}
