@@ -664,10 +664,10 @@ func TestUIPubStart(t *testing.T) {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
 	for _, want := range []string{
-		`href="/pub/library/all-publications/watchtower?lang=en">Watchtower</a>`,
-		`href="/pub/library/all-publications/meeting-workbooks?lang=en">Meeting Workbooks</a>`,
+		`href="/pub/library/publications/watchtower?lang=en">Watchtower</a>`,
+		`href="/pub/library/publications/meeting-workbooks?lang=en">Meeting Workbooks</a>`,
 		// the books row, with the book that has no cover left out of it
-		`<h2><a href="/pub/library/all-publications/books?lang=en">Books</a></h2>`,
+		`<h2><a href="/pub/library/publications/books?lang=en">Books</a></h2>`,
 		`href="/pub/publication/lff?lang=en"`,
 		`/en/wol/publication/r1/lp-e/wcg/thumbnail`,
 	} {
@@ -682,7 +682,7 @@ func TestUIPubStart(t *testing.T) {
 		t.Errorf("the start page still carries the symbol form")
 	}
 
-	_, body = get(t, srv, "/pub/library/all-publications/books?lang=en")
+	_, body = get(t, srv, "/pub/library/publications/books?lang=en")
 	if !strings.Contains(body, `class="pubgrid"`) || !strings.Contains(body, `<span class="blank">Aid (ad)</span>`) {
 		t.Errorf("category page should show the books as a grid of covers:\n%s", body)
 	}
@@ -692,7 +692,7 @@ func TestUIPubStart(t *testing.T) {
 // trail up to the start page.
 func TestUIPubIssue(t *testing.T) {
 	srv := newTestServer(t, libraryMux(t))
-	resp, body := get(t, srv, "/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
+	resp, body := get(t, srv, "/pub/library/publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
@@ -708,7 +708,7 @@ func TestUIPubIssue(t *testing.T) {
 		"4 files",
 		// the trail: the start page and the edition above the issue
 		`<a href="/pub?lang=en">Publications</a>`,
-		`<a href="/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition?lang=en">Study Edition</a>`,
+		`<a href="/pub/library/publications/watchtower/the-watchtower-2024/study-edition?lang=en">Study Edition</a>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("issue page lacks %s", want)
@@ -729,7 +729,7 @@ func TestUIPubRedirects(t *testing.T) {
 	// a library path of another language leads back to the start
 	// wol answers a page it does not carry with the shelf above it; the
 	// address leads back to the start all the same
-	resp, _ = get(t, srv, "/pub/library/all-publications/books/fm?lang=en")
+	resp, _ = get(t, srv, "/pub/library/publications/books/fm?lang=en")
 	if loc := resp.Header.Get("Location"); resp.StatusCode != http.StatusSeeOther || loc != "/pub?lang=en" {
 		t.Errorf("unknown book: status %d location %q", resp.StatusCode, loc)
 	}
@@ -749,10 +749,10 @@ func TestAPIPubLibrary(t *testing.T) {
 		} `json:"groups"`
 	}
 	if resp.StatusCode != 200 || json.Unmarshal([]byte(body), &root) != nil || root.Kind != "library" ||
-		len(root.Groups) == 0 || root.Groups[0].Cards[0].Path != "all-publications/bibles" {
+		len(root.Groups) == 0 || root.Groups[0].Cards[0].Path != "publications/bibles" {
 		t.Errorf("library root: status %d body %.300s", resp.StatusCode, body)
 	}
-	resp, body = get(t, srv, "/api/v1/pub/library/all-publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
+	resp, body = get(t, srv, "/api/v1/pub/library/publications/watchtower/the-watchtower-2024/study-edition/may?lang=en")
 	if resp.StatusCode != 200 || !strings.Contains(body, `"symbol": "w"`) || !strings.Contains(body, `"issue": "202405"`) {
 		t.Errorf("issue: status %d body %.300s", resp.StatusCode, body)
 	}
