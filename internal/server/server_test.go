@@ -324,6 +324,27 @@ func TestAPIMedia(t *testing.T) {
 	}
 }
 
+func TestUIMedia(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	// LatestVideos is a carousel, not a link in the category list
+	resp, body := get(t, srv, "/media?lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `class="car-track"`) || !strings.Contains(body, "A New Video") {
+		t.Errorf("start page: status %d body %.2000s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, `/media/category/LatestVideos`) || strings.Contains(body, ">category<") ||
+		strings.Contains(body, "VideoOnDemand<") {
+		t.Errorf("start page shows internal names: %.3000s", body)
+	}
+	resp, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `<source src="https://cdn.example/v_r720P.mp4"`) ||
+		!strings.Contains(body, `<track kind="subtitles" src="https://cdn.example/v.vtt"`) {
+		t.Errorf("item page should play the video: status %d body %.3000s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, `href="/download/media/`) {
+		t.Errorf("item page still links the best rendition")
+	}
+}
+
 func TestDownloadMediaRedirect(t *testing.T) {
 	srv := newTestServer(t, mediaMux(t))
 	resp, _ := get(t, srv, "/download/media/pub-abc_1_VIDEO?lang=en")

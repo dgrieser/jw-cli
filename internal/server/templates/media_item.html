@@ -1,8 +1,25 @@
 {{define "content"}}
 <p class="crumbs"><a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a></p>
 <h1>{{.Item.Title}}</h1>
-<div class="mediaitem">
-{{- if .Image}}
+<div class="mediaitem{{if .Stream}} has-player{{end}}">
+{{- if .Stream}}{{with .Stream}}
+{{- if eq $.Item.Type "audio"}}
+<div class="player audio">
+  {{- if $.Image}}<img src="{{$.Image}}" alt="" loading="lazy">{{end}}
+  <audio controls preload="metadata" src="{{.URL}}"></audio>
+</div>
+{{- else}}
+<div class="player">
+  <video controls playsinline preload="metadata" crossorigin="anonymous"{{if $.Image}} poster="{{$.Image}}"{{end}}>
+    <source src="{{.URL}}"{{if .MimeType}} type="{{.MimeType}}"{{end}}>
+    {{- if .SubtitlesURL}}
+    <track kind="subtitles" src="{{.SubtitlesURL}}" label="{{$.T.UISubtitles}}">
+    {{- end}}
+  </video>
+</div>
+{{- end}}
+{{- end}}
+{{- else if .Image}}
 <p class="hero-image"><img src="{{.Image}}" alt="" loading="lazy"></p>
 {{- end}}
 <div class="mediabody">
@@ -39,6 +56,5 @@
   </tbody>
 </table>
 </div>
-<p class="hint">{{.T.UIBestRendition}}: <a href="{{.WithLang (printf "/download/media/%s" .Item.LANK)}}">/download/media/{{.Item.LANK}}</a></p>
 {{- end}}
 {{end}}

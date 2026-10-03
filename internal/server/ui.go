@@ -10,8 +10,10 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -314,6 +316,9 @@ func (s *Server) resultViews(items []model.Result, lang string) []resultView {
 					v.Meta = append(v.Meta, line)
 				}
 			}
+		}
+		if r.Kind == "category" {
+			v.Context = "" // the category key: an internal name
 		}
 		switch {
 		case r.Kind == "category" && r.CategoryKey != "":
@@ -632,6 +637,34 @@ type mediaPage struct {
 	basePage
 	Heading string
 	Items   []resultView
+	// the start page leads with a featured video and rows of videos to
+	// browse, before the categories
+	Sections []mediaSection
+}
+
+// mediaSection is one block of the media start page: a featured video shown
+// large, carousel rows, or both under one heading.
+type mediaSection struct {
+	Heading string
+	Hero    *resultView
+	Rows    [][]resultView
+}
+
+// The categories the media start page shows as a featured video and as
+// carousels rather than as links in the category list. The mediator hands out
+// FeaturedLibraryVideos one item at a time, whatever the limit: it is the
+// single big video, as on jw.org.
+const (
+	mediaHeroCategory = "FeaturedLibraryVideos"
+	mediaShelfLimit   = 24
+)
+
+var mediaShelfCategories = []string{"FeaturedLibraryLanding", "LatestVideos"}
+
+// featuredCategory reports whether a root category is one of the curated
+// rows (and their variants) rather than a library to browse.
+func featuredCategory(key string) bool {
+	return strings.HasPrefix(key, "Featured") || key == "LatestVideos"
 }
 
 func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
@@ -640,12 +673,46 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	// the featured rows come along with the category tree; one that fails
+	// leaves its row out rather than the whole page
+	keys := append([]string{mediaHeroCategory}, mediaShelfCategories...)
+	featured := make([]model.Category, len(keys))
+	var wg sync.WaitGroup
+	for i, key := range keys {
+		limit := mediaShelfLimit
+		if key == mediaHeroCategory {
+			limit = 1
+		}
+		wg.Go(func() {
+			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, limit, 0); err == nil {
+				featured[i] = cat
+			}
+		})
+	}
 	cats, err := s.svc.Mediator.RootCategories(r.Context(), lng.Symbol)
+	wg.Wait()
 	if err != nil {
 		s.failUI(w, r, err)
 		return
 	}
-	page := mediaPage{basePage: s.base(r, "Media"), Heading: text(lng).MediaCategories}
+	page := mediaPage{basePage: s.base(r, text(lng).UINavMedia), Heading: text(lng).MediaCategories}
+	if hero := featured[0]; len(hero.Media) > 0 {
+		v := s.resultViews(service.MediaToResults(hero.Media[:1]), page.Lang)[0]
+		page.Sections = append(page.Sections, mediaSection{Heading: hero.Name, Hero: &v})
+	}
+	for _, cat := range featured[1:] {
+		if len(cat.Media) == 0 {
+			continue
+		}
+		row := s.resultViews(service.MediaToResults(cat.Media), page.Lang)
+		// a row named like the section before it carries that section on
+		if n := len(page.Sections); n > 0 && page.Sections[n-1].Heading == cat.Name {
+			page.Sections[n-1].Rows = append(page.Sections[n-1].Rows, row)
+			continue
+		}
+		page.Sections = append(page.Sections, mediaSection{Heading: cat.Name, Rows: [][]resultView{row}})
+	}
+	cats = slices.DeleteFunc(cats, func(c model.Category) bool { return featuredCategory(c.Key) })
 	page.Items = s.resultViews(service.CategoriesToResults(cats), page.Lang)
 	s.render(w, http.StatusOK, "media", page)
 }
@@ -673,7 +740,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 	}
 	page := mediaPage{
 		basePage: s.base(r, cat.Name),
-		Heading:  fmt.Sprintf("%s (%s)", cat.Name, cat.Key),
+		Heading:  cat.Name,
 	}
 	items := append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
 	page.Items = s.resultViews(items, page.Lang)
@@ -685,7 +752,12 @@ type mediaItemPage struct {
 	Item  model.MediaItem
 	Image string
 	Files []mediaFileView
+	// Stream is the rendition the page plays: up to 720p, which is plenty
+	// for a phone and spares its data plan
+	Stream *model.MediaFile
 }
+
+const streamQuality = "720p"
 
 type mediaFileView struct {
 	Label     string
@@ -709,6 +781,9 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, item.Title),
 		Item:     item,
 		Image:    service.BestImage(item.Images),
+	}
+	if f, err := download.PickVideo(item.Files, streamQuality); err == nil {
+		page.Stream = &f
 	}
 	for _, f := range item.Files {
 		label := f.Label

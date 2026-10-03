@@ -7,8 +7,12 @@
     {{- end}}
     <div class="body">
       <p class="row">
+        {{- $media := or (eq .Kind "video") (eq .Kind "audio")}}
+        {{- if not (or $media (eq .Kind "category"))}}
         <span class="kind">{{.Kind}}</span>
+        {{- end}}
         {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
+        {{- if $media}} <span class="kind after">{{.Kind}}</span>{{end}}
         {{- if .Context}} <span class="context">{{.Context}}</span>{{end}}
         {{- if .Duration}} <span class="meta">{{.Duration}}</span>{{end}}
         {{- if .Size}} <span class="meta">{{.Size}}</span>{{end}}
