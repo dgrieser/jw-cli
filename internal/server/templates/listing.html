@@ -81,3 +81,8 @@
 {{- end}}
 {{end}}
 {{define "playbadge"}}<span class="badge"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>{{if .Duration}}<span>{{.Duration}}</span>{{end}}</span>{{end}}
+{{define "crumbs"}}
+<nav class="crumbs" aria-label="Breadcrumb">
+  {{- range $i, $c := .Crumbs}}{{if $i}}<span class="sep" aria-hidden="true">›</span>{{end}}<a href="{{$c.Href}}">{{$c.Label}}</a>{{end -}}
+</nav>
+{{end}}

@@ -180,7 +180,7 @@ func mediaMux(t *testing.T) *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"media": [{
 			"languageAgnosticNaturalKey": "pub-abc_1_VIDEO", "type": "video",
-			"title": "A New Video", "description": "About something.",
+			"title": "A New Video", "description": "About something.", "primaryCategory": "BJF",
 			"durationFormattedMinSec": "5:00", "availableLanguages": ["E","X"],
 			"files": [
 				{"progressiveDownloadURL": "https://cdn.example/v_r240P.mp4", "label": "240p", "frameHeight": 240, "mimetype": "video/mp4", "filesize": 5},
@@ -393,6 +393,16 @@ func TestUIMediaCategoryCrumbs(t *testing.T) {
 		`<a href="/media/category/VODChildren?lang=en">Children</a>`
 	if !strings.Contains(body, want) {
 		t.Errorf("breadcrumb trail missing: %.1500s", body)
+	}
+}
+
+func TestUIMediaItemCrumbs(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	_, body := get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
+	want := `<a href="/media/category/VODChildren?lang=en">Children</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/BJF?lang=en">Become Jehovah&#39;s Friend</a>`
+	if !strings.Contains(body, want) || !strings.Contains(body, `<a href="/media?lang=en">Media</a>`) {
+		t.Errorf("item breadcrumb should end in its primary category: %.1500s", body)
 	}
 }
 

@@ -652,14 +652,22 @@ type crumb struct {
 // maxCrumbs bounds the walk up the category tree, which is a few levels deep.
 const maxCrumbs = 6
 
-// categoryCrumbs is the trail from the media start page down to a category's
-// parent. The mediator names only the direct parent, so each level above
-// takes a small lookup; one that fails cuts the trail short there.
-func (s *Server) categoryCrumbs(ctx context.Context, lng model.Language, cat model.Category, page basePage) []crumb {
+// mediaCrumbs is the trail from the media start page down to the category
+// start, start included. The mediator names only a category's direct parent,
+// so each level takes a small lookup; one that fails cuts the trail short
+// there.
+func (s *Server) mediaCrumbs(ctx context.Context, lng model.Language, start *model.CategoryRef, page basePage) []crumb {
 	var trail []crumb
-	for p := cat.Parent; p != nil && len(trail) < maxCrumbs; {
-		trail = append(trail, crumb{Label: p.Name, Href: page.WithLang("/media/category/" + url.PathEscape(p.Key))})
+	for p := start; p != nil && len(trail) < maxCrumbs; {
 		up, err := s.svc.Mediator.CategoryInfo(ctx, lng.Symbol, p.Key)
+		name := p.Name
+		if err == nil && up.Name != "" {
+			name = up.Name
+		}
+		if name == "" {
+			break // only an internal key to show
+		}
+		trail = append(trail, crumb{Label: name, Href: page.WithLang("/media/category/" + url.PathEscape(p.Key))})
 		if err != nil {
 			break
 		}
@@ -772,7 +780,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, cat.Name),
 		Heading:  cat.Name,
 	}
-	page.Crumbs = s.categoryCrumbs(r.Context(), lng, cat, page.basePage)
+	page.Crumbs = s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage)
 	// a subcategory that holds videos itself — the lowest level of the tree —
 	// comes with them, and shows as a carousel rather than as a link
 	var subs []model.Category
@@ -796,9 +804,10 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 
 type mediaItemPage struct {
 	basePage
-	Item  model.MediaItem
-	Image string
-	Files []mediaFileView
+	Crumbs []crumb // the item's primary category and those above it
+	Item   model.MediaItem
+	Image  string
+	Files  []mediaFileView
 	// Stream is the rendition the page plays: up to 720p, which is plenty
 	// for a phone and spares its data plan
 	Stream *model.MediaFile
@@ -829,6 +838,11 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		Item:     item,
 		Image:    service.BestImage(item.Images),
 	}
+	var primary *model.CategoryRef
+	if item.PrimaryCategory != "" {
+		primary = &model.CategoryRef{Key: item.PrimaryCategory}
+	}
+	page.Crumbs = s.mediaCrumbs(r.Context(), lng, primary, page.basePage)
 	if f, err := download.PickVideo(item.Files, streamQuality); err == nil {
 		page.Stream = &f
 	}

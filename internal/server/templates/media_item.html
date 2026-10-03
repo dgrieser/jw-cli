@@ -1,5 +1,5 @@
 {{define "content"}}
-<p class="crumbs"><a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a></p>
+{{template "crumbs" .}}
 <h1>{{.Item.Title}}</h1>
 <div class="mediaitem{{if .Stream}} has-player{{end}}">
 {{- if .Stream}}{{with .Stream}}
@@ -31,7 +31,6 @@
   <dt>{{.T.UIType}}</dt><dd>{{.Item.Type}}</dd>
   {{- if .Item.DurationFormatted}}<dt>{{.T.UIDuration}}</dt><dd>{{.Item.DurationFormatted}}</dd>{{end}}
   {{- if .Item.FirstPublished}}<dt>{{.T.UIPublished}}</dt><dd>{{.Item.FirstPublished}}</dd>{{end}}
-  {{- if .Item.PrimaryCategory}}<dt>{{.T.UICategory}}</dt><dd>{{.Item.PrimaryCategory}}</dd>{{end}}
   {{- if .Item.AvailableLanguages}}<dt>{{.T.UINavLanguages}}</dt><dd>{{len .Item.AvailableLanguages}}</dd>{{end}}
 </dl>
 </div>
