@@ -519,9 +519,10 @@ loads only when that section is opened.
 The **Publications** page browses the library the way wol lays it out: the
 categories (Bibles, Watchtower, Awake!, Books, Meeting Workbooks, ...), then a
 category's years, a year's editions and months, down to an issue or a
-publication. The start page leads with the categories and a row of the latest
-covers of each — the issues of the current year for a periodical, the
-publications themselves for books. An issue or a publication shows its cover,
+publication. The start page leads with the categories and rows of covers: for a
+periodical its latest issues gathered across years until the row holds 24,
+newest first and one row per edition (the Watchtower's public and study
+editions); for books and brochures the publications themselves. An issue or a publication shows its cover,
 its table of contents (each article opens in the reader, sections of a long
 publication as tabs) and its files in every format the publication media API
 has, the audio tracks folded under their format; a bible opens in the bible
