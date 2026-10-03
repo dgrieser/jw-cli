@@ -126,46 +126,42 @@ func TestResolveLibrary(t *testing.T) {
 func TestCanonicalLibrary(t *testing.T) {
 	c := translateClient(t)
 	ctx := context.Background()
-	page, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "publications/watchtower/the-watchtower-2024/study-edition")
+	page, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/watchtower/the-watchtower-2024/study-edition")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if page.Title != "Studienausgabe" || page.Path != "publications/watchtower/the-watchtower-2024/study-edition" {
+	if page.Title != "Studienausgabe" || page.Path != "all-publications/watchtower/the-watchtower-2024/study-edition" {
 		t.Errorf("page = %q at %q", page.Title, page.Path)
 	}
-	if p := page.Parent; p == nil || p.Path != "publications/watchtower/the-watchtower-2024" {
+	if p := page.Parent; p == nil || p.Path != "all-publications/watchtower/the-watchtower-2024" {
 		t.Errorf("parent = %+v", p)
 	}
 	cards := page.Cards()
-	if len(cards) != 2 || cards[0].Title != "März" || cards[0].Path != "publications/watchtower/the-watchtower-2024/study-edition/march" {
+	if len(cards) != 2 || cards[0].Title != "März" || cards[0].Path != "all-publications/watchtower/the-watchtower-2024/study-edition/march" {
 		t.Errorf("cards = %+v", cards)
 	}
 
-	// wol's own name for the top is no address
-	if _, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/books"); !errors.Is(err, ErrNoTranslation) {
-		t.Errorf("all-publications path: err = %v", err)
-	}
 	// a path in the page's own language names no page
 	if _, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "alle-publikationen/bücher"); !errors.Is(err, ErrNoTranslation) {
 		t.Errorf("own-language path: err = %v", err)
 	}
 
 	// a book only the German library carries, under the English shelf
-	books, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "publications/books")
+	books, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/books")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if last := books.Cards()[len(books.Cards())-1]; last.Title != "„Geheimnis“-Buch (fm)" || last.Path != "publications/books/fm" {
+	if last := books.Cards()[len(books.Cards())-1]; last.Title != "„Geheimnis“-Buch (fm)" || last.Path != "all-publications/books/fm" {
 		t.Errorf("German-only book = %+v", last)
 	}
-	fm, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "publications/books/fm")
+	fm, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "all-publications/books/fm")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fm.Title != "„Geheimnis“-Buch" || fm.Path != "publications/books/fm" || fm.Parent == nil || fm.Parent.Path != "publications/books" {
+	if fm.Title != "„Geheimnis“-Buch" || fm.Path != "all-publications/books/fm" || fm.Parent == nil || fm.Parent.Path != "all-publications/books" {
 		t.Errorf("fm page = %q at %q, parent %+v", fm.Title, fm.Path, fm.Parent)
 	}
-	if _, err := c.CanonicalLibrary(ctx, cfgEn1, cfgEn1, LibraryKind, "publications/books/fm"); err == nil {
+	if _, err := c.CanonicalLibrary(ctx, cfgEn1, cfgEn1, LibraryKind, "all-publications/books/fm"); err == nil {
 		t.Error("the English library read a book it does not carry")
 	}
 
@@ -174,7 +170,7 @@ func TestCanonicalLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := root.Cards()[1]; got.Title != "Bücher" || got.Path != "publications/books" {
+	if got := root.Cards()[1]; got.Title != "Bücher" || got.Path != "all-publications/books" {
 		t.Errorf("root card = %+v", got)
 	}
 }

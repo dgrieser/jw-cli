@@ -232,70 +232,12 @@ func rootSlug(root LibraryPage) string {
 	return ""
 }
 
-// CanonicalRoot is the first segment of every canonical library path: the
-// top of the tree, which wol calls all-publications in English.
-const CanonicalRoot = "publications"
-
 // CanonicalLibrary reads a page of the library in cfg while naming it, and
 // every library page it leads to, by its canonical path — the path of canon,
 // the English tree, or below the last page that tree carries, the key
 // segments of cfg's own pages — so an address is the same in every language.
-// Canonical paths begin with CanonicalRoot (publications/books/fm). A path
-// that names no page of cfg's tree is ErrNoTranslation.
+// A path that names no page of cfg's tree is ErrNoTranslation.
 func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
-	path = strings.Trim(path, "/")
-	if kind == LibraryKind && path != "" {
-		rest, ok := strings.CutPrefix(path+"/", CanonicalRoot+"/")
-		if !ok {
-			return LibraryPage{}, fmt.Errorf("%w: library path %q", ErrNoTranslation, path)
-		}
-		root, err := c.Library(ctx, canon, LibraryKind, "")
-		if err != nil {
-			return LibraryPage{}, err
-		}
-		path = strings.TrimSuffix(rootSlug(root)+"/"+rest, "/")
-	}
-	page, err := c.canonicalLibrary(ctx, cfg, canon, kind, path)
-	if err != nil {
-		return LibraryPage{}, err
-	}
-	root, err := c.Library(ctx, canon, LibraryKind, "")
-	if err != nil {
-		return LibraryPage{}, err
-	}
-	rename := func(p string) string {
-		if p == rootSlug(root) {
-			return CanonicalRoot
-		}
-		if rest, ok := strings.CutPrefix(p, rootSlug(root)+"/"); ok {
-			return CanonicalRoot + "/" + rest
-		}
-		return p
-	}
-	if page.Kind == LibraryKind {
-		page.Path = rename(page.Path)
-	}
-	if page.Parent != nil && page.Parent.Kind == LibraryKind {
-		parent := *page.Parent
-		parent.Path = rename(parent.Path)
-		page.Parent = &parent
-	}
-	groups := make([]LibraryGroup, len(page.Groups))
-	for gi, g := range page.Groups {
-		cards := make([]LibraryCard, len(g.Cards))
-		for ci, card := range g.Cards {
-			if card.Kind == LibraryKind {
-				card.Path = rename(card.Path)
-			}
-			cards[ci] = card
-		}
-		groups[gi] = LibraryGroup{Title: g.Title, Cards: cards}
-	}
-	page.Groups = groups
-	return page, nil
-}
-
-func (c *Client) canonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
 	path = strings.Trim(path, "/")
 	if cfg == canon {
 		// wol answers a library path it does not know with a page above
@@ -332,7 +274,7 @@ func (c *Client) canonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 	}
 	if localKind != LibraryKind {
 		// a shelf in English, one publication here
-		return c.canonicalLibrary(ctx, cfg, canon, localKind, local)
+		return c.CanonicalLibrary(ctx, cfg, canon, localKind, local)
 	}
 	page, err := c.Library(ctx, cfg, LibraryKind, local)
 	if err != nil {

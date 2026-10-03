@@ -526,7 +526,7 @@ its table of contents (each article opens in the reader, sections of a long
 publication as tabs) and its files in every format the publication media API
 has, the audio tracks folded under their format; a bible opens in the bible
 reader. Addresses are the same in every language: a page of the library is
-named by its English path (`/pub/library/publications/watchtower/...`),
+named by its English path (`/pub/library/all-publications/watchtower/...`),
 whichever language it is shown in, so switching the language keeps the page.
 wol names its pages in each language's own words and orders them by their
 titles, so the counterpart is found by what the languages share — the
@@ -534,7 +534,7 @@ publication and issue a cover shows, a symbol in the title, the kind of
 publication and its year, and, among editions alike in that, their order.  Only
 English paths are addresses. A page the English library does not carry — an
 older book kept in German and French only — is named below its nearest English
-page by its symbol (`/pub/library/publications/books/fm`), or by its kind
+page by its symbol (`/pub/library/all-publications/books/fm`), or by its kind
 and year where it has none (`.../publications-index/dx-1945`). An address with
 no counterpart in the language asked for leads back to the start page. A publication is named by its symbol
 (`/pub/publication/lff`). Looking a

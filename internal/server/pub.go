@@ -99,7 +99,7 @@ const (
 var pubFormatOrder = []string{"PDF", "EPUB", "JWPUB", "RTF", "TXT", "BRL", "DAISY", "MP3", "AAC", "MP4", "M4V", "3GP", "ZIP"}
 
 // pubHref is the browser's own page for a library or publication path. The
-// top of the tree — a library path of one segment, "publications" — is
+// top of the tree — a library path of one segment, "all-publications" — is
 // /pub itself.
 func pubHref(kind, path string, page basePage) string {
 	if kind == wol.LibraryKind && !strings.Contains(path, "/") {
