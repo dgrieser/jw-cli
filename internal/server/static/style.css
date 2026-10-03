@@ -1080,6 +1080,18 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
   overflow: hidden;
 }
 .tile .cap .sub { display: block; color: var(--muted); font-size: 0.875rem; }
+/* a tile is narrow and German titles are long: hyphenate in the page's
+   language, break a word that still does not fit, and end a long name after
+   three lines (the tile's title attribute carries all of it); the line under
+   it — an issue's date range — is shown whole */
+.tile.cover .cap { overflow-wrap: anywhere; hyphens: auto; -webkit-hyphens: auto; }
+.tile.cover .cap .name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
 
 .pubgroup { max-width: 60rem; margin: 0 0 2rem; }
 .pubgroup > h2 { margin: 0 0 0.75rem; }
