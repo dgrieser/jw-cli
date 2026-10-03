@@ -935,6 +935,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 .crumbs { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.25rem; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 0.4rem; color: var(--line-strong); }
 
 .mediaitem {
   display: grid;
@@ -967,6 +968,9 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 
 .shelf { max-width: 60rem; margin: 0 0 2rem; }
 .shelf > h2 { margin: 0 0 0.75rem; }
+.shelf > h2 a { color: inherit; text-decoration: none; }
+.shelf > h2 a:hover { color: var(--accent); }
+.shelf-more { margin: 0.5rem 0 0; font-size: 0.9rem; }
 
 .tile { display: block; color: var(--ink); text-decoration: none; }
 .tile:hover .cap { color: var(--accent); }

@@ -236,6 +236,7 @@ type Messages struct {
 	UISize            string
 	UIScrollBack      string
 	UIScrollForward   string
+	UIShowAll         string
 	UIOverview        string
 	UIMidweek         string
 	UIWeekend         string

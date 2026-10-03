@@ -124,6 +124,10 @@ type wireCategory struct {
 	Type          string          `json:"type"`
 	Subcategories wireCategories  `json:"subcategories"`
 	Media         []wireMediaItem `json:"media"`
+	Parent        *struct {
+		Key  string `json:"key"`
+		Name string `json:"name"`
+	} `json:"parentCategory"`
 }
 
 // wireCategories is a list of subcategories as the mediator writes it: an
@@ -159,6 +163,9 @@ func (w wireCategory) toModel() model.Category {
 		Name:        w.Name,
 		Description: w.Description,
 		Type:        w.Type,
+	}
+	if w.Parent != nil && w.Parent.Key != "" {
+		c.Parent = &model.CategoryRef{Key: w.Parent.Key, Name: w.Parent.Name}
 	}
 	for _, s := range w.Subcategories {
 		c.Subcategories = append(c.Subcategories, s.toModel())
@@ -210,6 +217,24 @@ func (c *Client) Category(ctx context.Context, lang, key string, limit, offset i
 	if cat.Key == "" {
 		return cat, fmt.Errorf("category %q not found", key)
 	}
+	return cat, nil
+}
+
+// CategoryInfo fetches a category's name and parent without its contents —
+// what walking up the tree needs, at a fraction of a detailed fetch.
+func (c *Client) CategoryInfo(ctx context.Context, lang, key string) (model.Category, error) {
+	u := fmt.Sprintf("%s/categories/%s/%s?clientType=www&limit=1", c.base(), url.PathEscape(lang), url.PathEscape(key))
+	var resp struct {
+		Category wireCategory `json:"category"`
+	}
+	if err := c.hc.GetJSON(ctx, u, nil, &resp); err != nil {
+		return model.Category{}, err
+	}
+	if resp.Category.Key == "" {
+		return model.Category{}, fmt.Errorf("category %q not found", key)
+	}
+	cat := resp.Category.toModel()
+	cat.Subcategories, cat.Media = nil, nil
 	return cat, nil
 }
 

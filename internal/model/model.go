@@ -92,13 +92,20 @@ type MediaItem struct {
 
 // Category is a mediator category tree node.
 type Category struct {
-	Key           string      `json:"key"`
-	Name          string      `json:"name"`
-	Description   string      `json:"description,omitempty"`
-	Type          string      `json:"type"` // container|ondemand
-	Subcategories []Category  `json:"subcategories,omitempty"`
-	Media         []MediaItem `json:"media,omitempty"`
-	Total         int         `json:"total,omitempty"`
+	Key           string       `json:"key"`
+	Name          string       `json:"name"`
+	Description   string       `json:"description,omitempty"`
+	Type          string       `json:"type"` // container|ondemand
+	Subcategories []Category   `json:"subcategories,omitempty"`
+	Media         []MediaItem  `json:"media,omitempty"`
+	Total         int          `json:"total,omitempty"`
+	Parent        *CategoryRef `json:"parent,omitempty"`
+}
+
+// CategoryRef names a category without its contents: the parent of another.
+type CategoryRef struct {
+	Key  string `json:"key"`
+	Name string `json:"name"`
 }
 
 // PubFile is one downloadable publication file (PDF, EPUB, MP3 track, ...).

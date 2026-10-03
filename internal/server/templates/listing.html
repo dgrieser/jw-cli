@@ -50,3 +50,39 @@
 </div>
 {{- end}}
 {{end}}
+{{define "sections"}}
+{{- range .Sections}}
+<section class="shelf">
+  <h2>{{if .Href}}<a href="{{.Href}}">{{.Heading}}</a>{{else}}{{.Heading}}{{end}}</h2>
+  {{- with .Hero}}
+  <a class="tile hero" href="{{.Href}}">
+    <span class="poster">{{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{end}}{{template "playbadge" .}}</span>
+    <span class="cap">{{or .Title $.T.UIUntitled}}</span>
+  </a>
+  {{- end}}
+  {{- range .Rows}}
+  <div class="carousel" data-carousel>
+    <button type="button" class="car-btn prev" aria-label="{{$.T.UIScrollBack}}" hidden>‹</button>
+    <ul class="car-track">
+      {{- range .}}
+      <li><a class="tile" href="{{.Href}}">
+        <span class="poster">{{if .ImageURL}}<img src="{{.ImageURL}}" alt="" loading="lazy">{{end}}{{template "playbadge" .}}</span>
+        <span class="cap">{{or .Title $.T.UIUntitled}}</span>
+      </a></li>
+      {{- end}}
+    </ul>
+    <button type="button" class="car-btn next" aria-label="{{$.T.UIScrollForward}}" hidden>›</button>
+  </div>
+  {{- end}}
+  {{- if .More}}
+  <p class="shelf-more"><a href="{{.Href}}">{{$.T.UIShowAll}}</a></p>
+  {{- end}}
+</section>
+{{- end}}
+{{end}}
+{{define "playbadge"}}<span class="badge"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>{{if .Duration}}<span>{{.Duration}}</span>{{end}}</span>{{end}}
+{{define "crumbs"}}
+<nav class="crumbs" aria-label="Breadcrumb">
+  {{- range $i, $c := .Crumbs}}{{if $i}}<span class="sep" aria-hidden="true">›</span>{{end}}<a href="{{$c.Href}}">{{$c.Label}}</a>{{end -}}
+</nav>
+{{end}}

@@ -153,11 +153,34 @@ func mediaMux(t *testing.T) *http.ServeMux {
 			}]
 		}}`)
 	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/VideoOnDemand", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {"key": "VideoOnDemand", "name": "Videos", "type": "container", "subcategories": []}}`)
+	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/BJF", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {"key": "BJF", "name": "Become Jehovah's Friend", "type": "ondemand",
+			"parentCategory": {"key": "VODChildren", "name": "Children"}, "media": []}}`)
+	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/VODChildren", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {
+			"key": "VODChildren", "name": "Children", "type": "container",
+			"parentCategory": {"key": "VideoOnDemand", "name": "Videos"},
+			"subcategories": [
+				{"key": "BJF", "name": "Become Jehovah's Friend", "type": "ondemand", "media": [{
+					"languageAgnosticNaturalKey": "pub-pk_1_VIDEO", "type": "video", "title": "Caleb Video",
+					"images": {"lss": {"lg": "https://cdn.example/c.jpg"}}, "files": []
+				}]},
+				{"key": "ChildrenMore", "name": "More For Children", "type": "container", "media": []}
+			]
+		}}`)
+	})
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-abc_1_VIDEO", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"media": [{
 			"languageAgnosticNaturalKey": "pub-abc_1_VIDEO", "type": "video",
-			"title": "A New Video", "description": "About something.",
+			"title": "A New Video", "description": "About something.", "primaryCategory": "BJF",
 			"durationFormattedMinSec": "5:00", "availableLanguages": ["E","X"],
 			"files": [
 				{"progressiveDownloadURL": "https://cdn.example/v_r240P.mp4", "label": "240p", "frameHeight": 240, "mimetype": "video/mp4", "filesize": 5},
@@ -342,6 +365,44 @@ func TestUIMedia(t *testing.T) {
 	}
 	if strings.Contains(body, `href="/download/media/`) {
 		t.Errorf("item page still links the best rendition")
+	}
+}
+
+func TestUIMediaCategoryCarousels(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	resp, body := get(t, srv, "/media/category/VODChildren?lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	// the leaf category is a carousel under a heading linking to it
+	if !strings.Contains(body, `class="car-track"`) || !strings.Contains(body, "Caleb Video") ||
+		!strings.Contains(body, `<h2><a href="/media/category/BJF?lang=en">`) {
+		t.Errorf("leaf category should be a carousel: %.3000s", body)
+	}
+	// a category holding further categories stays a link in the list
+	if !strings.Contains(body, `class="title" href="/media/category/ChildrenMore?lang=en"`) {
+		t.Errorf("container category should stay a link: %.3000s", body)
+	}
+}
+
+func TestUIMediaCategoryCrumbs(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	_, body := get(t, srv, "/media/category/BJF?lang=en")
+	want := `<a href="/media?lang=en">Media</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/VideoOnDemand?lang=en">Videos</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/VODChildren?lang=en">Children</a>`
+	if !strings.Contains(body, want) {
+		t.Errorf("breadcrumb trail missing: %.1500s", body)
+	}
+}
+
+func TestUIMediaItemCrumbs(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	_, body := get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
+	want := `<a href="/media/category/VODChildren?lang=en">Children</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/BJF?lang=en">Become Jehovah&#39;s Friend</a>`
+	if !strings.Contains(body, want) || !strings.Contains(body, `<a href="/media?lang=en">Media</a>`) {
+		t.Errorf("item breadcrumb should end in its primary category: %.1500s", body)
 	}
 }
 

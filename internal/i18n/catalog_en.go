@@ -161,6 +161,7 @@ var en = Messages{
 	UISize:             "Size",
 	UIScrollBack:       "Back",
 	UIScrollForward:    "Forward",
+	UIShowAll:          "Show all",
 	UIOverview:         "overview",
 	UIMidweek:          "midweek",
 	UIWeekend:          "weekend",
