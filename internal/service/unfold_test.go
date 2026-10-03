@@ -577,9 +577,9 @@ func TestCitedRequests(t *testing.T) {
 // Each index of the study bible is headed as the page names it, with no parent
 // heading over the two, and an entry the first index already listed is left out
 // of the second.
-func TestWriteIndexGroups(t *testing.T) {
+func TestIndexSections(t *testing.T) {
 	var b strings.Builder
-	writeIndexGroups(&b,
+	writeSections(&b, indexSections(
 		[]model.ResearchItem{
 			{Title: "it-2 274", Source: "Publications Index",
 				Kind: model.PublicationIndexItem, ArticleURL: "/en/wol/d/r1/lp-e/1102014204"},
@@ -593,7 +593,7 @@ func TestWriteIndexGroups(t *testing.T) {
 				HTML: "<p>the index passage</p>"},
 			{Ref: unfold.Ref{Text: "The Watchtower, 12/15/2014", Group: "Research Guide"},
 				HTML: "<p>the guide passage</p>"},
-		}, 3, i18n.EN.Text())
+		}, 3, i18n.EN.Text()), 3)
 	out := b.String()
 	guide, index := strings.Index(out, "<h3>Research Guide</h3>"), strings.Index(out, "<h3>Publications Index</h3>")
 	if guide < 0 || index < 0 || guide >= index {
@@ -619,7 +619,7 @@ func TestWriteIndexGroups(t *testing.T) {
 	}
 	// an index nobody was listed under prints nothing
 	var empty strings.Builder
-	writeIndexGroups(&empty, nil, nil, 3, i18n.EN.Text())
+	writeSections(&empty, indexSections(nil, nil, 3, i18n.EN.Text()), 3)
 	if empty.String() != "" {
 		t.Errorf("nothing listed should print nothing: %q", empty.String())
 	}

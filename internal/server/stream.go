@@ -219,43 +219,10 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) {
-			sec.Lazy = lazyURL(r, sec)
-			ev.send(s.sectionEvent(sec))
-		},
-		Stage: ev.stage,
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Stage:   ev.stage,
 	})
 	ev.finish(r, note, requests, err, txt)
-}
-
-// lazyURL is where the body of a lazy section loads from once it is opened:
-// the other translations of a passage, or the publications quoting it.
-func lazyURL(r *http.Request, sec service.UnfoldSection) string {
-	var path string
-	switch sec.Lazy {
-	case service.LazyTranslations:
-		path = "/unfold/translations"
-	case service.LazyCited:
-		u := "/unfold/cited?" + service.CitedQuery([]bibleref.Ref{sec.Passage})
-		if l := r.FormValue("lang"); l != "" {
-			u += "&lang=" + url.QueryEscape(l)
-		}
-		return u
-	default:
-		return sec.Lazy
-	}
-	p := sec.Passage
-	q := url.Values{"vid": {fmt.Sprint(p.Book*1_000_000 + p.Chapter*1_000 + p.VerseStart)}}
-	if p.VerseEnd > p.VerseStart {
-		q.Set("to", fmt.Sprint(p.VerseEnd))
-	}
-	if sec.Edition != "" {
-		q.Set("bible", sec.Edition)
-	}
-	if l := r.FormValue("lang"); l != "" {
-		q.Set("lang", l)
-	}
-	return path + "?" + q.Encode()
 }
 
 // passageParam reads the passage a lazy section loads for: ?vid= the wol id of
@@ -383,12 +350,8 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) {
-			// a cited verse's other translations, as the verse stream has them
-			sec.Lazy = lazyURL(r, sec)
-			ev.send(s.sectionEvent(sec))
-		},
-		Stage: ev.stage,
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Stage:   ev.stage,
 	})
 	ev.finish(r, note, requests, err, txt)
 }

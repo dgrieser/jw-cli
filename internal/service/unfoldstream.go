@@ -43,11 +43,9 @@ type UnfoldSection struct {
 	// (FootnotesRef, TranslationsRef).
 	Ref string
 	// Lazy names what the section loads once it is opened rather than now —
-	// LazyTranslations, LazyCited — empty for a section that comes with its
-	// body. Passage and Edition say which verses, in which bible, it loads for.
-	Lazy    string
-	Passage bibleref.Ref
-	Edition string
+	// It is the address its body streams from, without the language, which
+	// the page adds; empty for a section that comes with its body.
+	Lazy string
 	// Open shows the section opened rather than as a closed chip.
 	Open bool
 	// Base absolutizes the links of Body, when it came from somewhere else than
@@ -60,12 +58,6 @@ type UnfoldSection struct {
 const (
 	FootnotesRef    = "footnotes"
 	TranslationsRef = "translations"
-	// LazyTranslations is the Lazy of a verse's translations section.
-	LazyTranslations = "translations"
-	// LazyCited is the Lazy of a verse's citations: the search for the
-	// publications quoting it is most of what a verse costs, so it runs only
-	// once the section is opened.
-	LazyCited = "cited"
 )
 
 // The order the sections of a verse read in, whenever they arrive: what it
@@ -86,6 +78,13 @@ const (
 type UnfoldStream struct {
 	Section func(UnfoldSection)
 	Stage   func(stage string)
+}
+
+// add hands out a section that has something to show.
+func (o UnfoldStream) add(sec UnfoldSection, ok bool) {
+	if ok {
+		o.Section(sec)
+	}
 }
 
 func (o UnfoldStream) stage(name string) {
@@ -165,49 +164,25 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 	var notes []string
 	study, err := r.studyOf(ctx, ref)
 	sess.Spend(study.Requests)
-	if err != nil {
-		if ctx.Err() != nil {
-			return "", spent(), ctx.Err()
-		}
-		out.Section(UnfoldSection{
-			Title: html.EscapeString(txt.StudyNotesHeading),
-			Body: fmt.Sprintf("<p><em>%s</em></p>",
-				html.EscapeString(fmt.Sprintf(txt.StudyFailed, err))),
-			Order: orderNotes,
-		})
+	if err != nil && ctx.Err() != nil {
+		return "", spent(), ctx.Err()
 	}
-	if len(study.Notes) > 0 {
-		var b strings.Builder
-		writeStudyNotes(&b, unfold.Node{Notes: study.Notes}, SectionLevel, txt)
-		out.Section(UnfoldSection{
-			Title: html.EscapeString(txt.StudyNotesHeading), Body: afterHeading(b.String()), Order: orderNotes,
-		})
-	}
+	out.add(notesSection(study.Notes, err, SectionLevel, txt))
 
 	// the footnotes: a request each, and a verse has one or two
-	body, n := footnotesHTML(ctx, r, footnoteLinks(text.String()))
+	footnotes, n := footnotesHTML(ctx, r, footnoteLinks(text.String()))
 	sess.Spend(n)
-	if body != "" {
-		out.Section(UnfoldSection{
-			Title: html.EscapeString(txt.FootnotesHeading), Body: body,
-			Ref: FootnotesRef, Order: orderFootnotes,
-		})
-	}
+	out.add(footnotesSection(footnotes, txt))
 
 	// the other bibles of the language, loaded only once the section is opened
 	if len(s.otherEditionsFor(ctx, lng, edition)) > 0 {
-		out.Section(UnfoldSection{
-			Title: html.EscapeString(txt.TranslationsHeading),
-			Ref:   TranslationsRef, Lazy: LazyTranslations, Order: orderTranslations,
-			Passage: ref, Edition: edition,
-		})
+		out.add(translationsSection(nil, translationsURL(ref, edition), SectionLevel, txt))
 	}
 	// who quotes the passage, likewise: the search is most of what a verse
 	// would cost otherwise
-	out.Section(UnfoldSection{
-		Title: html.EscapeString(fmt.Sprintf(txt.CitedInHeading, passageRef)),
-		Lazy:  LazyCited, Passage: ref, Order: orderCited,
-	})
+	out.add(citedSection(unfold.Cited{
+		Ref: passageRef, Lazy: citedURL([]bibleref.Ref{ref}),
+	}, SectionLevel, txt))
 
 	// the marginal references first, one at a time, under a section naming the
 	// passage: a handful of requests, where the indexes can take a hundred
@@ -229,11 +204,7 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 		return joinNotes(notes), spent(), err
 	}
 	if len(marginal) > 0 {
-		const key = "marginal"
-		out.Section(UnfoldSection{
-			Title: html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, passageRef)),
-			Key:   key, Order: orderMarginal,
-		})
+		out.Section(marginalSection(passageRef, txt))
 		for _, ref := range marginal {
 			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, txt)
 			if err != nil {
@@ -241,12 +212,7 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 			}
 			notes = appendNote(notes, note)
 			for _, n := range expanded[0] {
-				label := marginalLabel(n, txt)
-				var b strings.Builder
-				writeUnfoldNode(&b, n, SectionLevel, label, txt)
-				out.Section(UnfoldSection{
-					Title: html.EscapeString(label), Body: b.String(), In: key, Ref: RefPath(n.Ref.Path),
-				})
+				out.Section(marginalEntry(n, "", SectionLevel, txt))
 			}
 		}
 	}
@@ -262,10 +228,8 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 			}
 			nodes, notes = expanded[0], appendNote(notes, note)
 		}
-		for i, g := range indexGroups(study.Links, nodes, txt) {
-			var b strings.Builder
-			writeIndexGroup(&b, g, SectionLevel, txt)
-			out.Section(UnfoldSection{Title: html.EscapeString(g.name), Body: b.String(), Order: orderIndexes + i})
+		for _, sec := range indexSections(study.Links, nodes, SectionLevel, txt) {
+			out.Section(sec)
 		}
 	}
 	return joinNotes(notes), spent(), ctx.Err()
@@ -462,18 +426,6 @@ func passageRefs(passage string) []bibleref.Ref {
 		out = append(out, bibleref.Ref{Book: book, Chapter: chapter, VerseStart: verse, VerseEnd: verse})
 	}
 	return out
-}
-
-// afterHeading drops the heading a writer opened its output with, for a
-// section whose title is carried separately.
-func afterHeading(fragment string) string {
-	if !strings.HasPrefix(fragment, "<h") {
-		return fragment
-	}
-	if i := strings.Index(fragment, "</h"); i >= 0 && len(fragment) >= i+5 {
-		return fragment[i+5:]
-	}
-	return fragment
 }
 
 func appendNote(notes []string, note string) []string {

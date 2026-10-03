@@ -922,7 +922,7 @@ func TestUIBibleNav(t *testing.T) {
 func TestUnfoldVerseCitedIsLazy(t *testing.T) {
 	srv := newTestServer(t, studyMux(t))
 	_, body := get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
-	if !strings.Contains(body, `data-lazy=\"/unfold/cited?to=0\u0026amp;vid=43003016\u0026amp;lang=en\"`) {
+	if !strings.Contains(body, `data-lazy=\"/unfold/cited?to=0\u0026amp;vid=43003016\"`) {
 		t.Errorf("want a lazy citations section: %s", body)
 	}
 	if strings.Contains(body, `"stage":"cited"`) {
