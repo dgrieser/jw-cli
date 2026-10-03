@@ -1154,6 +1154,8 @@
     var url = d.getAttribute("data-lazy");
     if (!url || d.getAttribute("data-loaded")) return Promise.resolve();
     d.setAttribute("data-loaded", "1");
+    // a section the server folded names what to load without the language
+    if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
     var body = d.querySelector(":scope > .section-body");
     if (!body) {
       body = make("div", "section-body");

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"net/url"
 	"regexp"
 	"slices"
 	"strconv"
@@ -34,6 +35,10 @@ type UnfoldConfig struct {
 	// Off leaves it to the study bible's own material, which is where a
 	// request nobody can be asked to confirm — a web request — has to stay.
 	Cited bool
+	// LazyCited leaves the citation search itself to a web page: every verse
+	// that would be looked up gets its heading, and what the page loads it
+	// from, but no search is run and none is priced. Only with Cited.
+	LazyCited bool
 	// CitedDepth is how many levels of the expansion those lookups reach.
 	// One covers the references a document writes; zero covers none, so the
 	// verses jw bible read prints are looked up and the references reached
@@ -65,7 +70,10 @@ type tooltipResolver struct {
 	// cited turns the citation search on; cats is the publication filter it
 	// runs with, resolved once for the language.
 	cited bool
-	cats  WOLCategories
+	// lazyCited answers with what a page loads the citations from, rather
+	// than searching for them (UnfoldConfig.LazyCited)
+	lazyCited bool
+	cats      WOLCategories
 	// tips are the citations already resolved in this run. A research passage
 	// is resolved twice — once to see which document it names, once to read
 	// it — and an index lists dozens of them per verse.
@@ -82,6 +90,16 @@ type tooltipResolver struct {
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
 	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
+}
+
+// withCitedAs turns the citation search on as cfg asks: run, or left to the
+// page, or not at all.
+func (r *tooltipResolver) withCitedAs(ctx context.Context, cfg UnfoldConfig) *tooltipResolver {
+	if cfg.Cited && cfg.LazyCited {
+		r.cited, r.lazyCited = true, true
+		return r
+	}
+	return r.withCited(ctx, cfg.Cited)
 }
 
 // withCited turns the citation search on for this run, with the filter
@@ -184,6 +202,16 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	}
 	if r.table == nil {
 		r.table = r.s.BookTable(ctx, r.lng)
+	}
+	if r.lazyCited {
+		if label == "" {
+			spelled := make([]string, len(refs))
+			for i, ref := range refs {
+				spelled[i] = RefString(ref, r.table)
+			}
+			label = strings.Join(spelled, "; ")
+		}
+		return unfold.Cited{Ref: label, Lazy: CitedQuery(refs)}
 	}
 	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
 	if err != nil || query == "" {
@@ -444,7 +472,7 @@ func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art mod
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited), art.HTML, cfg, txt)
+	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCitedAs(ctx, cfg), art.HTML, cfg, txt)
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
@@ -772,6 +800,7 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		writeTranslations(&b, translations[verses[i].ID%1000], level, txt)
 		writeCited(&b, unfold.Node{
 			Cited: cited[i].Results, CitedTotal: cited[i].Total, CitedRef: cited[i].Ref,
+			CitedLazy: cited[i].Lazy,
 		}, level, txt)
 		if b.Len() > 0 && i < len(verses)-1 {
 			// the rule closes what the verse brought rather than opening it,
@@ -806,6 +835,9 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
+		if cfg.LazyCited {
+			o.CitedCost = 0
+		}
 	}
 	return o
 }
@@ -1162,12 +1194,41 @@ func paragraph(fragment string) string {
 // verse: the other direction from the research guide above it, and the same
 // shape, with the passage each one quotes it in underneath.
 func writeCited(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
-	if len(n.Cited) == 0 || n.CitedRef == "" {
+	if n.CitedRef == "" || (len(n.Cited) == 0 && n.CitedLazy == "") {
 		return
 	}
 	b.WriteString(headingHTML(level,
 		html.EscapeString(fmt.Sprintf(txt.CitedInHeading, n.CitedRef))))
+	if n.CitedLazy != "" {
+		// the search left to the page: what it asks for, once the heading is
+		// opened
+		fmt.Fprintf(b, `<p class="%s" data-cited="%s">…</p>`, CitedLazyClass, html.EscapeString(n.CitedLazy))
+		return
+	}
 	writeCitedItems(b, n.Cited, level)
+}
+
+// CitedLazyClass marks the placeholder a lazy citations heading carries.
+const CitedLazyClass = "cited-lazy"
+
+// CitedQuery is the query a page loads the citations of refs with from
+// /unfold/cited: the wol id of the first verse of each passage, and the number
+// of its last (zero for a single verse).
+func CitedQuery(refs []bibleref.Ref) string {
+	q := url.Values{}
+	for _, ref := range refs {
+		from := max(ref.VerseStart, 1)
+		q.Add("vid", strconv.Itoa(ref.Book*1_000_000+ref.Chapter*1_000+from))
+		to := 0
+		switch {
+		case ref.VerseStart == 0:
+			to = bibleref.LastVerse // a whole chapter
+		case ref.VerseEnd > from:
+			to = min(ref.VerseEnd, bibleref.LastVerse)
+		}
+		q.Add("to", strconv.Itoa(to))
+	}
+	return q.Encode()
 }
 
 // writeCitedItems prints the quoting publications themselves, below a heading

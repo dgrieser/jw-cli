@@ -106,6 +106,15 @@ func unfoldConfig(depth int, force bool) service.UnfoldConfig {
 	return cfg
 }
 
+// pageUnfoldConfig is unfoldConfig for a page of the web site: the citations
+// of every verse get their heading, and are only searched for once the reader
+// opens it.
+func pageUnfoldConfig(depth int, force bool) service.UnfoldConfig {
+	cfg := unfoldConfig(depth, force)
+	cfg.LazyCited = true
+	return cfg
+}
+
 // forceParam reads the answer a caller gave in advance to the question an
 // expensive expansion would otherwise be refused over.
 func forceParam(r *http.Request) bool { return boolParam(r, "force") }

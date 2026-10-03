@@ -78,6 +78,9 @@ type Cited struct {
 	// Requests is what the lookup cost, reported even when it found nothing,
 	// so the budget the user confirmed stays honest.
 	Requests int
+	// Lazy is set instead of Results when the search was left for later: what
+	// a page asks for to load the citations once the reader opens them.
+	Lazy string
 }
 
 // CitedResolver is an optional capability of a Resolver: who quotes the verse
@@ -109,6 +112,7 @@ type Node struct {
 	Cited      []model.Result
 	CitedTotal int
 	CitedRef   string
+	CitedLazy  string
 	StudyErr   error
 	Children   []Node
 }
@@ -344,7 +348,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 			if cited != nil && level <= o.CitedDepth && n.Err == nil && n.Ref.IsVerse() {
 				c := cited.Cited(ctx, n.Title)
 				res.Requests += c.Requests
-				n.Cited, n.CitedTotal, n.CitedRef = c.Results, c.Total, c.Ref
+				n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy = c.Results, c.Total, c.Ref, c.Lazy
 			}
 			if o.Progress != nil {
 				o.Progress(level, i+1, len(frontier))

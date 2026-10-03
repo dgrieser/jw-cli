@@ -3,6 +3,8 @@ package server
 import (
 	"strings"
 
+	"github.com/dgrieser/jw-cli/internal/service"
+
 	"github.com/PuerkitoBio/goquery"
 	nethtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -105,6 +107,7 @@ func foldHeadings(n *nethtml.Node) {
 			body.AppendChild(kids[i])
 		}
 		foldHeadings(body)
+		lazyCited(details, body)
 		details.AppendChild(summary)
 		details.AppendChild(body)
 		wrap.AppendChild(details)
@@ -134,4 +137,32 @@ func headingLevel(name string) int {
 		return int(name[1] - '0')
 	}
 	return 0
+}
+
+// lazyCited makes a citations heading whose search was left to the page a
+// section that loads them once it is opened: the placeholder its body holds
+// says what to ask /unfold/cited for.
+func lazyCited(details, body *nethtml.Node) {
+	p := body.FirstChild
+	for p != nil && p.Type != nethtml.ElementNode {
+		p = p.NextSibling
+	}
+	if p == nil || p.DataAtom != atom.P || attr(p, "class") != service.CitedLazyClass {
+		return
+	}
+	query := attr(p, "data-cited")
+	if query == "" {
+		return
+	}
+	body.RemoveChild(p)
+	details.Attr = append(details.Attr, nethtml.Attribute{Key: "data-lazy", Val: "/unfold/cited?" + query})
+}
+
+func attr(n *nethtml.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
 }

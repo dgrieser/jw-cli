@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -235,7 +236,11 @@ func lazyURL(r *http.Request, sec service.UnfoldSection) string {
 	case service.LazyTranslations:
 		path = "/unfold/translations"
 	case service.LazyCited:
-		path = "/unfold/cited"
+		u := "/unfold/cited?" + service.CitedQuery([]bibleref.Ref{sec.Passage})
+		if l := r.FormValue("lang"); l != "" {
+			u += "&lang=" + url.QueryEscape(l)
+		}
+		return u
 	default:
 		return sec.Lazy
 	}
@@ -256,15 +261,49 @@ func lazyURL(r *http.Request, sec service.UnfoldSection) string {
 // passageParam reads the passage a lazy section loads for: ?vid= the wol id of
 // its first verse, ?to= the number of its last when it has more than one.
 func passageParam(r *http.Request) (bibleref.Ref, error) {
-	vid, err := intParam(r, "vid", 0)
-	if err != nil || vid <= 0 {
-		return bibleref.Ref{}, fmt.Errorf("missing or invalid parameter %q", "vid")
-	}
-	to, err := intParam(r, "to", 0)
+	refs, err := passagesParam(r)
 	if err != nil {
 		return bibleref.Ref{}, err
 	}
-	return service.PassageRef(vid, to)
+	return refs[0], nil
+}
+
+// maxCitedPassages bounds the passages one citations request asks about: a
+// reference names a handful at most.
+const maxCitedPassages = 16
+
+// passagesParam reads the passages a citations section loads for: each ?vid=
+// with the ?to= at the same position, zero or missing for a single verse.
+func passagesParam(r *http.Request) ([]bibleref.Ref, error) {
+	if err := r.ParseForm(); err != nil {
+		return nil, err
+	}
+	vids, tos := r.Form["vid"], r.Form["to"]
+	if len(vids) == 0 {
+		return nil, fmt.Errorf("missing parameter %q", "vid")
+	}
+	if len(vids) > maxCitedPassages {
+		return nil, fmt.Errorf("too many passages (%d, at most %d)", len(vids), maxCitedPassages)
+	}
+	refs := make([]bibleref.Ref, 0, len(vids))
+	for i, v := range vids {
+		vid, err := strconv.Atoi(v)
+		if err != nil || vid <= 0 {
+			return nil, fmt.Errorf("invalid parameter %q: %q", "vid", v)
+		}
+		to := 0
+		if i < len(tos) && tos[i] != "" {
+			if to, err = strconv.Atoi(tos[i]); err != nil {
+				return nil, fmt.Errorf("invalid parameter %q: %q", "to", tos[i])
+			}
+		}
+		ref, err := service.PassageRef(vid, to)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 // unfoldCited streams the publications quoting a passage: GET
@@ -276,14 +315,14 @@ func (s *Server) unfoldCited(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	ref, err := passageParam(r)
+	refs, err := passagesParam(r)
 	if err != nil {
 		badRequest(w, "%v", err)
 		return
 	}
 	txt := text(lng)
 	ev := startStream(w)
-	requests, err := s.svc.StreamCited(r.Context(), lng, ref, service.UnfoldStream{
+	requests, err := s.svc.StreamCited(r.Context(), lng, refs, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})

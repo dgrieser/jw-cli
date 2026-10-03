@@ -274,11 +274,11 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 // StreamCited lists the publications quoting a passage, each as a section of
 // its own heading the passage it quotes the verses in: what a page loads when
 // the citations of a passage are opened.
-func (s *Service) StreamCited(ctx context.Context, lng model.Language, ref bibleref.Ref,
+func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bibleref.Ref,
 	out UnfoldStream) (int, error) {
 	out.stage(StageCited)
 	r := newTooltipResolver(s, lng, nil).withCited(ctx, true)
-	c := r.citedFor(ctx, []bibleref.Ref{ref}, "")
+	c := r.citedFor(ctx, refs, "")
 	for i, item := range c.Results {
 		var b strings.Builder
 		writeCitedItems(&b, []model.Result{item}, SectionLevel)
