@@ -760,6 +760,7 @@
   // failedRefs gives every reference of root that could not be read a retry
   // button. The server marks such a reference with the citation it was.
   function failedRefs(root) {
+    markSavedFailures(root);
     root.querySelectorAll("p.unfold-failed[data-path]").forEach(function (p) {
       if (p.querySelector(":scope > .retry")) return;
       var b = button("small retry", null, T.retry || "Retry");
@@ -770,6 +771,30 @@
       });
       p.appendChild(document.createTextNode(" "));
       p.appendChild(b);
+    });
+  }
+
+  // markSavedFailures marks the failures an expansion kept from before the
+  // server marked them itself: the citation is read back out of the message,
+  // the text out of the heading it sits under. The message words the error as
+  // "… GET https://wol.jw.org/…/bc/…: HTTP 403".
+  function markSavedFailures(root) {
+    var FAILED_GET = /\bGET (\S+\/wol\/(?:bc|pc)\/\S+?):? HTTP \d+/;
+    root.querySelectorAll("p:not(.unfold-failed) > em:only-child").forEach(function (em) {
+      var m = FAILED_GET.exec(em.textContent || "");
+      if (!m) return;
+      var path;
+      try {
+        path = new URL(m[1]).pathname;
+      } catch (err) {
+        return;
+      }
+      var p = em.parentElement;
+      var d = p.closest("details");
+      var summary = d && d.querySelector(":scope > summary");
+      p.classList.add("unfold-failed");
+      p.setAttribute("data-path", path);
+      p.setAttribute("data-text", summary ? (summary.textContent || "").replace(/\s+/g, " ").trim() : "");
     });
   }
 
