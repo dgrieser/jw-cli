@@ -1133,6 +1133,29 @@
     return null;
   }
 
+  // onThisPage is where a link to a document already on the page points: a
+  // box or paragraph of the article itself, say. wol marks the root of each
+  // document it renders with its docId, and each block with its paragraph id;
+  // the link names the document by id and the paragraphs as #h=71-79 (or #p71).
+  // Nothing comes back for any other link, which unfolds as usual.
+  function onThisPage(a) {
+    var u;
+    try {
+      u = new URL(a.getAttribute("href"), location.href);
+    } catch (err) {
+      return null;
+    }
+    var m = /\/wol\/d\/(?:[^/]+\/)*?(\d+)\/?$/.exec(u.pathname);
+    if (!m) return null;
+    var cls = ".docId-" + m[1];
+    // the copy the link is in first, then the first on the page
+    var root = a.closest(cls) || doc.querySelector(cls);
+    if (!root) return null;
+    var p = /^#(?:h=|p)(\d+)/.exec(u.hash);
+    if (!p) return root;
+    return root.querySelector('[data-pid="' + p[1] + '"]');
+  }
+
   // ownerOf is what a link's section goes under: the verse it is in, the item
   // (a citing paragraph) it is in, the section whose heading it is, or the
   // block it is in
@@ -1278,6 +1301,12 @@
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest("a[href]") : null;
     if (!a || !doc.contains(a) || a.closest("[data-ui]")) return;
+    var here = onThisPage(a);
+    if (here) {
+      e.preventDefault();
+      reveal(here);
+      return;
+    }
     var target = linkTarget(a);
     if (!target) return;
     e.preventDefault();
