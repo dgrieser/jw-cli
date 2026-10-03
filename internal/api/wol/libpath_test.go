@@ -2,6 +2,7 @@ package wol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -134,13 +135,9 @@ func TestCanonicalLibrary(t *testing.T) {
 		t.Errorf("cards = %+v", cards)
 	}
 
-	// a path in the page's own language reads the same page
-	local, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "alle-publikationen/bücher")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if local.Path != "all-publications/books" || local.Cards()[0].Path != "all-publications/books/reasoning-rs" {
-		t.Errorf("own-language path: %q, %+v", local.Path, local.Cards())
+	// a path in the page's own language names no page
+	if _, err := c.CanonicalLibrary(ctx, cfgDe1, cfgEn1, LibraryKind, "alle-publikationen/bücher"); !errors.Is(err, ErrNoTranslation) {
+		t.Errorf("own-language path: err = %v", err)
 	}
 
 	// the root keeps English paths for its categories

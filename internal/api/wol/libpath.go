@@ -143,9 +143,10 @@ func rootSlug(root LibraryPage) string {
 
 // CanonicalLibrary reads a page of the library in cfg while naming it, and
 // every library page it leads to, by the paths of canon — the English tree —
-// so an address is the same in every language. path is canonical; a path of
-// cfg's own language is read as it is when it names no page of canon. A page
-// without a counterpart in canon keeps the path of its own language.
+// so an address is the same in every language. path is canonical: one with no
+// counterpart in cfg's tree is ErrNoTranslation, and a page of cfg's tree
+// with none in canon is left out of the page that leads to it, since no
+// address names it.
 func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
 	path = strings.Trim(path, "/")
 	if cfg == canon {
@@ -159,54 +160,57 @@ func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 			return LibraryPage{}, err
 		}
 		if page.Parent != nil && page.Parent.Kind == LibraryKind {
-			if p, err := c.TranslateLibraryPath(ctx, cfg, canon, page.Parent.Path); err == nil {
-				parent := *page.Parent
+			parent := *page.Parent
+			if p, err := c.TranslateLibraryPath(ctx, cfg, canon, parent.Path); err == nil {
 				parent.Path = p
 				page.Parent = &parent
+			} else {
+				page.Parent = nil
 			}
 		}
 		return page, nil
 	}
 
-	local, localKind, canonPath, paired := path, LibraryKind, path, true
-	if k, p, err := c.translateLibrary(ctx, canon, cfg, path); err == nil {
-		local, localKind = p, k
-	} else if p, err := c.TranslateLibraryPath(ctx, cfg, canon, path); err == nil {
-		canonPath = p // a path in the page's own language
-	} else {
-		paired = false
+	localKind, local, err := c.translateLibrary(ctx, canon, cfg, path)
+	if err != nil {
+		return LibraryPage{}, err
 	}
 	if localKind != LibraryKind {
 		// a shelf in English, one publication here
 		return c.CanonicalLibrary(ctx, cfg, canon, localKind, local)
 	}
 	page, err := c.Library(ctx, cfg, LibraryKind, local)
-	if err != nil || !paired {
-		return page, err
-	}
-	canonPage, err := c.Library(ctx, canon, LibraryKind, canonPath)
 	if err != nil {
-		return page, nil
+		return LibraryPage{}, err
+	}
+	canonPage, err := c.Library(ctx, canon, LibraryKind, path)
+	if err != nil {
+		return LibraryPage{}, err
 	}
 	page.Path = canonPage.Path
+	page.Parent = nil
 	if canonPage.Parent != nil {
 		parent := *canonPage.Parent
 		page.Parent = &parent
 	}
 	localKeys, _ := libraryKeys(page)
 	_, canonCards := libraryKeys(canonPage)
-	groups := make([]LibraryGroup, len(page.Groups))
-	for gi, g := range page.Groups {
-		cards := make([]LibraryCard, len(g.Cards))
-		for ci, card := range g.Cards {
+	groups := make([]LibraryGroup, 0, len(page.Groups))
+	for _, g := range page.Groups {
+		cards := make([]LibraryCard, 0, len(g.Cards))
+		for _, card := range g.Cards {
 			if card.Kind == LibraryKind {
-				if cc, ok := canonCards[localKeys[card.Path]]; ok {
-					card.Kind, card.Path = cc.Kind, cc.Path
+				cc, ok := canonCards[localKeys[card.Path]]
+				if !ok {
+					continue
 				}
+				card.Kind, card.Path = cc.Kind, cc.Path
 			}
-			cards[ci] = card
+			cards = append(cards, card)
 		}
-		groups[gi] = LibraryGroup{Title: g.Title, Cards: cards}
+		if len(cards) > 0 {
+			groups = append(groups, LibraryGroup{Title: g.Title, Cards: cards})
+		}
 	}
 	page.Groups = groups
 	return page, nil

@@ -148,8 +148,8 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	path = strings.Trim(path, "/")
 	lib, err := s.svc.Library(r.Context(), lng, kind, path)
 	if err != nil {
-		// a library path with no counterpart in the language asked for
-		// leads back to the top of the tree
+		// a library path with no counterpart in the language asked for —
+		// or one not in English — leads back to the top of the tree
 		if status, _ := classify(r.Context(), err); status == http.StatusNotFound && kind == wol.LibraryKind && path != "" {
 			http.Redirect(w, r, s.base(r, "").WithLang("/pub"), http.StatusSeeOther)
 			return

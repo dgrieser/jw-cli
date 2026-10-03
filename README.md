@@ -531,8 +531,11 @@ whichever language it is shown in, so switching the language keeps the page.
 wol names its pages in each language's own words and orders them by their
 titles, so the counterpart is found by what the languages share — the
 publication and issue a cover shows, a symbol in the title, the kind of
-publication and its year, and, among editions alike in that, their order. A
-publication is named by its symbol (`/pub/publication/lff`). Looking a
+publication and its year, and, among editions alike in that, their order.  Only
+English paths are addresses: one with no counterpart in the language asked
+for leads back to the start page, and a page that exists only in another
+language is not listed. A publication is named by its symbol
+(`/pub/publication/lff`). Looking a
 publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.
 
