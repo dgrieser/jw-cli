@@ -153,10 +153,20 @@ func mediaMux(t *testing.T) *http.ServeMux {
 			}]
 		}}`)
 	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/VideoOnDemand", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {"key": "VideoOnDemand", "name": "Videos", "type": "container", "subcategories": []}}`)
+	})
+	mux.HandleFunc("/apis/mediator/v1/categories/E/BJF", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"category": {"key": "BJF", "name": "Become Jehovah's Friend", "type": "ondemand",
+			"parentCategory": {"key": "VODChildren", "name": "Children"}, "media": []}}`)
+	})
 	mux.HandleFunc("/apis/mediator/v1/categories/E/VODChildren", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"category": {
 			"key": "VODChildren", "name": "Children", "type": "container",
+			"parentCategory": {"key": "VideoOnDemand", "name": "Videos"},
 			"subcategories": [
 				{"key": "BJF", "name": "Become Jehovah's Friend", "type": "ondemand", "media": [{
 					"languageAgnosticNaturalKey": "pub-pk_1_VIDEO", "type": "video", "title": "Caleb Video",
@@ -372,6 +382,17 @@ func TestUIMediaCategoryCarousels(t *testing.T) {
 	// a category holding further categories stays a link in the list
 	if !strings.Contains(body, `class="title" href="/media/category/ChildrenMore?lang=en"`) {
 		t.Errorf("container category should stay a link: %.3000s", body)
+	}
+}
+
+func TestUIMediaCategoryCrumbs(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	_, body := get(t, srv, "/media/category/BJF?lang=en")
+	want := `<a href="/media?lang=en">Media</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/VideoOnDemand?lang=en">Videos</a><span class="sep" aria-hidden="true">›</span>` +
+		`<a href="/media/category/VODChildren?lang=en">Children</a>`
+	if !strings.Contains(body, want) {
+		t.Errorf("breadcrumb trail missing: %.1500s", body)
 	}
 }
 

@@ -935,6 +935,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 .crumbs { color: var(--muted); font-size: 0.9rem; margin: 0 0 0.25rem; }
 .crumbs a { color: var(--muted); }
 .crumbs a:hover { color: var(--accent); }
+.crumbs .sep { margin: 0 0.4rem; color: var(--line-strong); }
 
 .mediaitem {
   display: grid;

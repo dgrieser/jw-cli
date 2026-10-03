@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -635,11 +636,38 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 
 type mediaPage struct {
 	basePage
+	Crumbs  []crumb // the categories above this one, top first
 	Heading string
 	Items   []resultView
 	// the start page leads with a featured video and rows of videos to
 	// browse, before the categories
 	Sections []mediaSection
+}
+
+// crumb is one step of a breadcrumb trail.
+type crumb struct {
+	Label, Href string
+}
+
+// maxCrumbs bounds the walk up the category tree, which is a few levels deep.
+const maxCrumbs = 6
+
+// categoryCrumbs is the trail from the media start page down to a category's
+// parent. The mediator names only the direct parent, so each level above
+// takes a small lookup; one that fails cuts the trail short there.
+func (s *Server) categoryCrumbs(ctx context.Context, lng model.Language, cat model.Category, page basePage) []crumb {
+	var trail []crumb
+	for p := cat.Parent; p != nil && len(trail) < maxCrumbs; {
+		trail = append(trail, crumb{Label: p.Name, Href: page.WithLang("/media/category/" + url.PathEscape(p.Key))})
+		up, err := s.svc.Mediator.CategoryInfo(ctx, lng.Symbol, p.Key)
+		if err != nil {
+			break
+		}
+		p = up.Parent
+	}
+	trail = append(trail, crumb{Label: text(lng).UINavMedia, Href: page.WithLang("/media")})
+	slices.Reverse(trail)
+	return trail
 }
 
 // mediaSection is one block of the media start page: a featured video shown
@@ -744,6 +772,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, cat.Name),
 		Heading:  cat.Name,
 	}
+	page.Crumbs = s.categoryCrumbs(r.Context(), lng, cat, page.basePage)
 	// a subcategory that holds videos itself — the lowest level of the tree —
 	// comes with them, and shows as a carousel rather than as a link
 	var subs []model.Category

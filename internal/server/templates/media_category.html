@@ -1,5 +1,7 @@
 {{define "content"}}
-<p class="crumbs"><a href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a></p>
+<nav class="crumbs" aria-label="Breadcrumb">
+  {{- range $i, $c := .Crumbs}}{{if $i}}<span class="sep" aria-hidden="true">›</span>{{end}}<a href="{{$c.Href}}">{{$c.Label}}</a>{{end -}}
+</nav>
 <h1>{{.Heading}}</h1>
 {{- template "sections" .}}
 {{- if or .Items (not .Sections)}}
