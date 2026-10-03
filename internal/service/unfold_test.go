@@ -680,3 +680,18 @@ func TestUnfoldFailedCitationCanBeRetried(t *testing.T) {
 		t.Errorf("only citations are retried:\n%s", got)
 	}
 }
+
+func TestSingleVerseID(t *testing.T) {
+	for _, tc := range []struct {
+		passage string
+		want    int
+	}{
+		{`<p><span id="v43-14-31-1" class="v">31 Damit</span> <span id="v43-14-31-2">die Welt</span></p>`, 43014031},
+		{`<p><span id="v19-25-12-1">12</span></p><p><span id="v19-25-13-1">13</span></p>`, 0},
+		{`<p>no verse at all</p>`, 0},
+	} {
+		if got := singleVerseID(tc.passage); got != tc.want {
+			t.Errorf("singleVerseID(%q) = %d, want %d", tc.passage, got, tc.want)
+		}
+	}
+}

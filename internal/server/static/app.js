@@ -658,7 +658,7 @@
   function countOf(section) {
     var list = section.querySelector(":scope > .section-body > .sections");
     var summary = section.querySelector(":scope > summary");
-    if (!list || !summary) return;
+    if (!list || !summary || !onlyList(section)) return;
     var badge = summary.querySelector(":scope > .count");
     if (!badge) {
       badge = make("span", "count");
@@ -666,6 +666,14 @@
       summary.appendChild(badge);
     }
     badge.textContent = String(list.children.length);
+  }
+
+  // onlyList reports whether a section holds nothing but the list others are
+  // streamed into — a verse's references — rather than a passage of its own
+  // with its sections after it
+  function onlyList(section) {
+    var body = section.querySelector(":scope > .section-body");
+    return !!body && body.children.length === 1 && body.firstElementChild.classList.contains("sections");
   }
 
   function makeLoader() {
@@ -702,23 +710,20 @@
           var node = fromHTML(ev.html);
           if (!node) break;
           node.classList.add("fresh");
+          // in the order the sections read in, whenever they arrive
           var into = ev.in && groups[ev.in];
-          if (into) {
-            into.list.appendChild(node);
-            countOf(into.section);
-          } else {
-            // in the order the sections read in, whenever they arrive
-            var order = ev.order || 0;
-            node.setAttribute("data-order", String(order));
-            var before = loader.parentNode === list ? loader : null;
-            for (var c = list.firstElementChild; c && c !== loader; c = c.nextElementSibling) {
-              if ((parseInt(c.getAttribute("data-order"), 10) || 0) > order) {
-                before = c;
-                break;
-              }
+          var target = into ? into.list : list;
+          var order = ev.order || 0;
+          node.setAttribute("data-order", String(order));
+          var before = loader.parentNode === target ? loader : null;
+          for (var c = target.firstElementChild; c && c !== loader; c = c.nextElementSibling) {
+            if ((parseInt(c.getAttribute("data-order"), 10) || 0) > order) {
+              before = c;
+              break;
             }
-            list.insertBefore(node, before);
           }
+          target.insertBefore(node, before);
+          if (into) countOf(into.section);
           if (ev.key) {
             var inner = node.querySelector('.sections[data-key="' + ev.key + '"]');
             if (inner) groups[ev.key] = { list: inner, section: node };
@@ -748,7 +753,7 @@
         loader.remove();
         // empty groups that never got an entry say nothing
         Object.keys(groups).forEach(function (k) {
-          if (!groups[k].list.children.length) {
+          if (!groups[k].list.children.length && onlyList(groups[k].section)) {
             groups[k].section.remove();
             res.count--;
           }

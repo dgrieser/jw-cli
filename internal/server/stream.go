@@ -216,21 +216,26 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
-	// where the translations of this verse load from, once they are opened
-	lazy := url.Values{"vid": {fmt.Sprint(vid)}, "bible": {edition}}
-	if l := r.FormValue("lang"); l != "" {
-		lazy.Set("lang", l)
-	}
 	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) {
 			if sec.Lazy == service.LazyTranslations {
-				sec.Lazy = "/unfold/translations?" + lazy.Encode()
+				sec.Lazy = translationsURL(r, sec.VerseID, sec.Edition)
 			}
 			ev.send(s.sectionEvent(sec))
 		},
 		Stage: ev.stage,
 	})
 	ev.finish(r, note, requests, err, txt)
+}
+
+// translationsURL is where the other translations of a verse load from, once
+// its section is opened.
+func translationsURL(r *http.Request, vid int, edition string) string {
+	q := url.Values{"vid": {fmt.Sprint(vid)}, "bible": {edition}}
+	if l := r.FormValue("lang"); l != "" {
+		q.Set("lang", l)
+	}
+	return "/unfold/translations?" + q.Encode()
 }
 
 // maxStreamRefs bounds the citations one request may ask about: a paragraph
@@ -287,8 +292,14 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
-		Stage:   ev.stage,
+		Section: func(sec service.UnfoldSection) {
+			// a cited verse's other translations, as the verse stream has them
+			if sec.Lazy == service.LazyTranslations {
+				sec.Lazy = translationsURL(r, sec.VerseID, sec.Edition)
+			}
+			ev.send(s.sectionEvent(sec))
+		},
+		Stage: ev.stage,
 	})
 	ev.finish(r, note, requests, err, txt)
 }
