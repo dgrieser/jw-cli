@@ -525,7 +525,15 @@ publications themselves for books. An issue or a publication shows its cover,
 its table of contents (each article opens in the reader, sections of a long
 publication as tabs) and its files in every format the publication media API
 has, the audio tracks folded under their format; a bible opens in the bible
-reader. Looking a publication up by symbol, document id, issue, book or track
+reader. Addresses are the same in every language: a page of the library is
+named by its English path (`/pub/library/all-publications/watchtower/...`),
+whichever language it is shown in, so switching the language keeps the page.
+wol names its pages in each language's own words and orders them by their
+titles, so the counterpart is found by what the languages share — the
+publication and issue a cover shows, a symbol in the title, the kind of
+publication and its year, and, among editions alike in that, their order. A
+publication is named by its symbol (`/pub/publication/lff`). Looking a
+publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.
 
 The bible, meeting, media and publication pages remember, in the browser, what
@@ -571,7 +579,7 @@ each verse or paragraph on its own.
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
-| `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at `path`) |
+| `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
 | `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents) |
 | `GET /api/v1/dailytext` | `date`, `format`, `unfold` | `jw dailytext` |
 | `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold` | `jw meetings ...` |

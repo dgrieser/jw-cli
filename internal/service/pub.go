@@ -11,15 +11,25 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
+// LibraryLocale is the language whose library paths name a page of the
+// publication tree in every language: an address stays the same when the
+// language changes.
+const LibraryLocale = "en"
+
 // Library reads one page of the library's publication tree in lng: kind is
 // wol.LibraryKind or wol.PublicationKind, and an empty library path is the
-// list of categories at the top.
+// list of categories at the top. Library paths, the one asked for and those
+// the page leads to, are English (all-publications/books) whatever lng is.
 func (s *Service) Library(ctx context.Context, lng model.Language, kind, path string) (wol.LibraryPage, error) {
 	cfg, err := s.WOLConfig(ctx, lng)
 	if err != nil {
 		return wol.LibraryPage{}, err
 	}
-	return s.WOL.Library(ctx, cfg, kind, path)
+	canon, err := s.WOL.ConfigFor(ctx, LibraryLocale)
+	if err != nil {
+		return wol.LibraryPage{}, err
+	}
+	return s.WOL.CanonicalLibrary(ctx, cfg, canon, kind, path)
 }
 
 // LibraryFiles is the downloadable files of the publication a library page

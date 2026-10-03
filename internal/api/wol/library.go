@@ -37,6 +37,9 @@ type LibraryCard struct {
 	DocID     int    `json:"docid,omitempty"`
 	URL       string `json:"url"`
 	Thumbnail string `json:"thumbnail,omitempty"`
+	// Icon is the kind of publication wol draws the card with ("w", "bk",
+	// "mwb"), the same in every language.
+	Icon string `json:"icon,omitempty"`
 }
 
 // LibraryGroup is a run of cards under one heading ("LESSONS"). The cards
@@ -122,7 +125,7 @@ func (c *Client) Library(ctx context.Context, cfg Config, kind, path string) (Li
 	if kind == PublicationKind {
 		ttl = publicationTTL
 	}
-	key := "library1-" + cfg.Locale + "-" + kind + "-" + path
+	key := "library2-" + cfg.Locale + "-" + kind + "-" + path
 	var cached LibraryPage
 	if c.cache.Get(key, ttl, &cached) && cached.URL != "" {
 		return cached, nil
@@ -240,6 +243,12 @@ func parseCard(li *goquery.Selection, base string) (LibraryCard, bool) {
 	}
 	if img := a.Find(selLibThumb).First(); img.Length() > 0 {
 		card.Thumbnail = absURL(base, img.AttrOr("src", ""))
+	}
+	for class := range strings.FieldsSeq(a.Find(".cardThumbnailImage").First().AttrOr("class", "")) {
+		if icon, ok := strings.CutPrefix(class, "icon-"); ok && icon != "" {
+			card.Icon = icon
+			break
+		}
 	}
 	return card, card.Title != ""
 }
