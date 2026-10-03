@@ -742,6 +742,12 @@ func TestUIArticleLazy(t *testing.T) {
 	if !strings.Contains(body, `class="expansion"`) || !strings.Contains(body, `<details class="section">`) {
 		t.Errorf("server-side unfold should come folded:\n%s", body)
 	}
+	// who quotes a cited verse is a heading the page loads once opened, as in
+	// a streamed expansion
+	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?to=0&amp;vid=43003016">`) ||
+		strings.Contains(body, "cited-lazy") {
+		t.Errorf("server-side unfold should leave the citations to the page:\n%s", body)
+	}
 }
 
 type budgetEvent struct {
@@ -916,7 +922,7 @@ func TestUIBibleNav(t *testing.T) {
 func TestUnfoldVerseCitedIsLazy(t *testing.T) {
 	srv := newTestServer(t, studyMux(t))
 	_, body := get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
-	if !strings.Contains(body, `data-lazy=\"/unfold/cited?lang=en\u0026amp;vid=43003016\"`) {
+	if !strings.Contains(body, `data-lazy=\"/unfold/cited?to=0\u0026amp;vid=43003016\"`) {
 		t.Errorf("want a lazy citations section: %s", body)
 	}
 	if strings.Contains(body, `"stage":"cited"`) {
@@ -927,5 +933,16 @@ func TestUnfoldVerseCitedIsLazy(t *testing.T) {
 	}
 	if resp, _ := get(t, srv, "/unfold/cited?vid=43003016&to=2"); resp.StatusCode != 400 {
 		t.Errorf("a range ending before it starts: status %d", resp.StatusCode)
+	}
+}
+
+// A bible page unfolded by the server gives every verse its citations heading,
+// loaded by the page once opened rather than searched for with the page.
+func TestUIBibleUnfoldCitedIsLazy(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en&unfold=1")
+	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?to=0&amp;vid=43003016"><summary>Quotations of John 3:16</summary>`) ||
+		strings.Contains(body, "cited-lazy") {
+		t.Errorf("want a lazy citations section:\n%s", body)
 	}
 }

@@ -3,6 +3,8 @@ package server
 import (
 	"strings"
 
+	"github.com/dgrieser/jw-cli/internal/service"
+
 	"github.com/PuerkitoBio/goquery"
 	nethtml "golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
@@ -105,6 +107,7 @@ func foldHeadings(n *nethtml.Node) {
 			body.AppendChild(kids[i])
 		}
 		foldHeadings(body)
+		lazySection(details, body)
 		details.AppendChild(summary)
 		details.AppendChild(body)
 		wrap.AppendChild(details)
@@ -134,4 +137,32 @@ func headingLevel(name string) int {
 		return int(name[1] - '0')
 	}
 	return 0
+}
+
+// lazySection makes a section written in one piece whose body was left to
+// the page — who quotes a verse — a section that loads it once it is opened:
+// the placeholder its body holds says from where.
+func lazySection(details, body *nethtml.Node) {
+	p := body.FirstChild
+	for p != nil && p.Type != nethtml.ElementNode {
+		p = p.NextSibling
+	}
+	if p == nil || p.DataAtom != atom.P || attr(p, "class") != service.LazyClass {
+		return
+	}
+	lazy := attr(p, "data-lazy")
+	if lazy == "" {
+		return
+	}
+	body.RemoveChild(p)
+	details.Attr = append(details.Attr, nethtml.Attribute{Key: "data-lazy", Val: lazy})
+}
+
+func attr(n *nethtml.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
 }

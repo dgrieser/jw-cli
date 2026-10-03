@@ -82,7 +82,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 	// their study panes come from
 	var expander *tooltipResolver
 	if req.Unfold.Depth > 0 {
-		expander = newTooltipResolver(s, lng, chapters).withCited(ctx, req.Unfold.Cited)
+		expander = newTooltipResolver(s, lng, chapters).withCitedAs(ctx, req.Unfold)
 	}
 	for _, ref := range refs {
 		var skipped []string

@@ -34,6 +34,10 @@ type UnfoldConfig struct {
 	// Off leaves it to the study bible's own material, which is where a
 	// request nobody can be asked to confirm — a web request — has to stay.
 	Cited bool
+	// LazyCited leaves the citation search itself to a web page: every verse
+	// that would be looked up gets its heading, and what the page loads it
+	// from, but no search is run and none is priced. Only with Cited.
+	LazyCited bool
 	// CitedDepth is how many levels of the expansion those lookups reach.
 	// One covers the references a document writes; zero covers none, so the
 	// verses jw bible read prints are looked up and the references reached
@@ -65,7 +69,10 @@ type tooltipResolver struct {
 	// cited turns the citation search on; cats is the publication filter it
 	// runs with, resolved once for the language.
 	cited bool
-	cats  WOLCategories
+	// lazyCited answers with what a page loads the citations from, rather
+	// than searching for them (UnfoldConfig.LazyCited)
+	lazyCited bool
+	cats      WOLCategories
 	// tips are the citations already resolved in this run. A research passage
 	// is resolved twice — once to see which document it names, once to read
 	// it — and an index lists dozens of them per verse.
@@ -82,6 +89,16 @@ type tooltipResolver struct {
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
 	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
+}
+
+// withCitedAs turns the citation search on as cfg asks: run, or left to the
+// page, or not at all.
+func (r *tooltipResolver) withCitedAs(ctx context.Context, cfg UnfoldConfig) *tooltipResolver {
+	if cfg.Cited && cfg.LazyCited {
+		r.cited, r.lazyCited = true, true
+		return r
+	}
+	return r.withCited(ctx, cfg.Cited)
 }
 
 // withCited turns the citation search on for this run, with the filter
@@ -184,6 +201,16 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	}
 	if r.table == nil {
 		r.table = r.s.BookTable(ctx, r.lng)
+	}
+	if r.lazyCited {
+		if label == "" {
+			spelled := make([]string, len(refs))
+			for i, ref := range refs {
+				spelled[i] = RefString(ref, r.table)
+			}
+			label = strings.Join(spelled, "; ")
+		}
+		return unfold.Cited{Ref: label, Lazy: citedURL(refs)}
 	}
 	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
 	if err != nil || query == "" {
@@ -444,7 +471,7 @@ func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art mod
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited), art.HTML, cfg, txt)
+	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCitedAs(ctx, cfg), art.HTML, cfg, txt)
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
@@ -753,10 +780,6 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		// itself, what the indexes point at, what its own margin points at,
 		// and only then who else quotes it
 		research, marginal := splitRootRefs(expanded[i], studies[i].Research)
-		var b strings.Builder
-		writeStudyNotes(&b, unfold.Node{Notes: studies[i].Notes}, level, txt)
-		writeFootnotes(ctx, &b, r, verses[i].HTML, level, txt)
-		writeIndexGroups(&b, studies[i].Links, research, level, txt)
 		// the cross references of the verse, under one heading naming it —
 		// each reference then says which verse it belongs to, which is what
 		// tells them from the references of a reference one level deeper
@@ -764,15 +787,21 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 			Book: ref.Book, Chapter: ref.Chapter,
 			VerseStart: verses[i].ID % 1000, VerseEnd: verses[i].ID % 1000,
 		}, table)
+		var secs sectionList
+		secs.add(notesSection(studies[i].Notes, nil, level, txt))
+		footnotes, _ := footnotesHTML(ctx, r, footnoteLinks(verses[i].HTML))
+		secs.add(footnotesSection(footnotes, txt))
+		secs = append(secs, indexSections(studies[i].Links, research, level, txt)...)
 		if len(marginal) > 0 {
-			b.WriteString(headingHTML(level,
-				html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, verseRef))))
-			writeUnfoldNodes(&b, marginal, level+1, verseRef, txt)
+			secs = append(secs, marginalSection(verseRef, txt))
+			for _, n := range marginal {
+				secs = append(secs, marginalEntry(n, verseRef, level+1, txt))
+			}
 		}
-		writeTranslations(&b, translations[verses[i].ID%1000], level, txt)
-		writeCited(&b, unfold.Node{
-			Cited: cited[i].Results, CitedTotal: cited[i].Total, CitedRef: cited[i].Ref,
-		}, level, txt)
+		secs.add(translationsSection(translations[verses[i].ID%1000], "", level, txt))
+		secs.add(citedSection(cited[i], level, txt))
+		var b strings.Builder
+		writeSections(&b, secs, level)
 		if b.Len() > 0 && i < len(verses)-1 {
 			// the rule closes what the verse brought rather than opening it,
 			// parting it from the verse that follows. Nothing follows the last
@@ -806,6 +835,9 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
+		if cfg.LazyCited {
+			o.CitedCost = 0
+		}
 	}
 	return o
 }
@@ -1009,30 +1041,11 @@ func isMarker(s string) bool {
 // passage to unfold. Both belong to the verse above them and sit at the same
 // level as what the verse cites, which follows them.
 func writeStudy(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
-	writeStudyNotes(b, n, level, txt)
-	if len(n.Links) > 0 {
-		b.WriteString(headingHTML(level, html.EscapeString(txt.ResearchHeading)))
-		writeResearchLinks(b, n.Links, "")
-	}
-	writeCited(b, n, level, txt)
-}
-
-// writeStudyNotes renders the study pane's notes, or says the pane could not be
-// read — the first thing a verse has to say about itself either way.
-func writeStudyNotes(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
-	if n.StudyErr != nil {
-		fmt.Fprintf(b, "<p><em>%s</em></p>",
-			html.EscapeString(fmt.Sprintf(txt.StudyFailed, n.StudyErr)))
-	}
-	if len(n.Notes) == 0 {
-		return
-	}
-	b.WriteString(headingHTML(level, html.EscapeString(txt.StudyNotesHeading)))
-	for _, note := range n.Notes {
-		// a note is the inside of its paragraph, so it needs one of its own:
-		// without it two notes run together into one
-		b.WriteString("<p>" + note.HTML + "</p>")
-	}
+	var secs sectionList
+	secs.add(notesSection(n.Notes, n.StudyErr, level, txt))
+	secs.add(researchLinksSection(n.Links, txt))
+	secs.add(citedSection(nodeCited(n), level, txt))
+	writeSections(b, secs, level)
 }
 
 // writeResearchLinks lists the research-guide entries that name a whole article
@@ -1066,23 +1079,6 @@ type indexGroup struct {
 	rank  int
 	nodes []unfold.Node
 	links []model.ResearchItem
-}
-
-// writeIndexGroups prints each index of the study bible under its own heading —
-// "Study Guide", then "Publications Index" — rather than lumping both under one
-// name. There is no heading over the two: the indexes are what the page names,
-// and the group holding them is not worth a line of its own.
-//
-// An entry the first index already listed is left out of the second. The
-// expansion drops a passage the other index also points at (the ranks part
-// them, see duplicates in internal/unfold); the entries with nothing to expand
-// are parted here, by the document they name.
-func writeIndexGroups(b *strings.Builder, links []model.ResearchItem, nodes []unfold.Node,
-	level int, txt *i18n.Messages) {
-	for _, g := range indexGroups(links, nodes, txt) {
-		b.WriteString(headingHTML(level, html.EscapeString(g.name)))
-		writeIndexGroup(b, g, level, txt)
-	}
 }
 
 // indexGroups sorts the entries of a verse's indexes into one group per index,
@@ -1156,18 +1152,6 @@ func paragraph(fragment string) string {
 		return fragment
 	}
 	return "<p>" + fragment + "</p>"
-}
-
-// writeCited renders the publications a citation search found quoting the
-// verse: the other direction from the research guide above it, and the same
-// shape, with the passage each one quotes it in underneath.
-func writeCited(b *strings.Builder, n unfold.Node, level int, txt *i18n.Messages) {
-	if len(n.Cited) == 0 || n.CitedRef == "" {
-		return
-	}
-	b.WriteString(headingHTML(level,
-		html.EscapeString(fmt.Sprintf(txt.CitedInHeading, n.CitedRef))))
-	writeCitedItems(b, n.Cited, level)
 }
 
 // writeCitedItems prints the quoting publications themselves, below a heading

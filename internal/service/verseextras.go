@@ -75,18 +75,6 @@ func footnotesHTML(ctx context.Context, r unfold.Resolver, paths []string) (stri
 	return b.String(), requests
 }
 
-// writeFootnotes prints the footnotes of a verse under their heading, nothing
-// when it has none.
-func writeFootnotes(ctx context.Context, b *strings.Builder, r unfold.Resolver, verseHTML string,
-	level int, txt *i18n.Messages) {
-	body, _ := footnotesHTML(ctx, r, footnoteLinks(verseHTML))
-	if body == "" {
-		return
-	}
-	b.WriteString(headingHTML(level, html.EscapeString(txt.FootnotesHeading)))
-	b.WriteString(body)
-}
-
 // EditionVerse is a verse as one bible edition renders it.
 type EditionVerse struct {
 	Edition wol.BibleEdition
@@ -168,19 +156,6 @@ func (s *Service) translationsOf(ctx context.Context, lng model.Language, curren
 		}
 	}
 	return out
-}
-
-// writeTranslations prints a verse as the other bibles render it: each under
-// the name of its edition.
-func writeTranslations(b *strings.Builder, list []EditionVerse, level int, txt *i18n.Messages) {
-	if len(list) == 0 {
-		return
-	}
-	b.WriteString(headingHTML(level, html.EscapeString(txt.TranslationsHeading)))
-	for _, v := range list {
-		b.WriteString(headingHTML(level+1, html.EscapeString(v.Label())))
-		b.WriteString(paragraph(v.HTML))
-	}
 }
 
 // StreamTranslations reads a passage — a verse, or a range of verses of one

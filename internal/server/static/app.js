@@ -545,24 +545,31 @@
   // spent is what the run this item is part of already cost, so the server
   // weighs its budget over the whole run rather than item by item
   function streamURL(item, depth, force, spent) {
+    if (item.params.kind !== "verse") return refsURL(item.params.refs, depth, force, spent);
+    var q = new URLSearchParams({ vid: item.params.vid });
+    if (item.params.bible) q.set("bible", item.params.bible);
+    return "/unfold/verse?" + unfoldQuery(q, depth, force, spent);
+  }
+
+  // refsURL is where the citations refs ({path, text}) unfold from, to depth
+  // levels: a citing block, a link followed, or a citation asked for again
+  function refsURL(refs, depth, force, spent) {
     var q = new URLSearchParams();
-    var path;
-    if (item.params.kind === "verse") {
-      path = "/unfold/verse";
-      q.set("vid", item.params.vid);
-      if (item.params.bible) q.set("bible", item.params.bible);
-    } else {
-      path = "/unfold/refs";
-      item.params.refs.forEach(function (r) {
-        q.append("path", r.path);
-        q.append("text", r.text);
-      });
-    }
+    refs.forEach(function (r) {
+      q.append("path", r.path);
+      q.append("text", r.text);
+    });
+    return "/unfold/refs?" + unfoldQuery(q, depth, force, spent);
+  }
+
+  // unfoldQuery adds what every unfold stream reads to q: how deep, in which
+  // language, and what the run already spent — or that it may spend anyway
+  function unfoldQuery(q, depth, force, spent) {
     q.set("depth", String(depth));
     if (lang) q.set("lang", lang);
     if (force) q.set("force", "1");
     else if (spent > 0) q.set("spent", String(spent));
-    return path + "?" + q.toString();
+    return q.toString();
   }
 
   // stream reads newline-delimited JSON as it arrives
@@ -807,16 +814,12 @@
   // cites in turn unfolds from its own blocks — and puts what came in place of
   // the message, under the heading the reference already has.
   function retryRef(p) {
-    var q = new URLSearchParams();
-    q.append("path", p.getAttribute("data-path"));
-    q.append("text", p.getAttribute("data-text") || "");
-    q.set("depth", "1");
-    if (lang) q.set("lang", lang);
+    var url = refsURL([{ path: p.getAttribute("data-path"), text: p.getAttribute("data-text") || "" }], 1);
     var list = make("div", "sections");
     var loader = makeLoader();
     list.appendChild(loader);
     p.replaceWith(list);
-    streamSections("/unfold/refs?" + q.toString(), list, loader, null).then(function (res) {
+    streamSections(url, list, loader, null).then(function (res) {
       var sections = list.querySelectorAll(":scope > details.section");
       if (res.failure || !sections.length) {
         // still nothing: the message again, saying what went wrong this time
@@ -1154,6 +1157,8 @@
     var url = d.getAttribute("data-lazy");
     if (!url || d.getAttribute("data-loaded")) return Promise.resolve();
     d.setAttribute("data-loaded", "1");
+    // a section the server folded names what to load without the language
+    if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
     var body = d.querySelector(":scope > .section-body");
     if (!body) {
       body = make("div", "section-body");
@@ -1348,10 +1353,8 @@
         setState(owner.item, "done");
         return true;
       case "ref":
-        q.set("path", target.url.pathname);
-        q.set("text", (a.textContent || "").replace(/\s+/g, " ").trim());
-        q.set("depth", "1");
-        streamOne("/unfold/refs?" + q.toString(), list).then(done);
+        var text = (a.textContent || "").replace(/\s+/g, " ").trim();
+        streamOne(refsURL([{ path: target.url.pathname, text: text }], 1), list).then(done);
         return true;
       case "footnote":
         q.set("path", target.url.pathname);
