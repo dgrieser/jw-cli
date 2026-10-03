@@ -635,6 +635,12 @@ func libraryMux(t *testing.T) *http.ServeMux {
 	shelf("all-publications/watchtower/the-watchtower-2024", "The Watchtower—2024", "all-publications/watchtower", "study-edition", "Study Edition")
 	shelf("all-publications/watchtower/the-watchtower-2024/study-edition", "Study Edition", "all-publications/watchtower/the-watchtower-2024", "may", "May")
 	mux.HandleFunc("/en/wol/publication/r1/lp-e/nwt", wolFixture(t, "publication_nwt.html"))
+	// two books: lff of 2021, wcg of 2025
+	mux.HandleFunc("/en/wol/publication/r1/lp-e/lff", wolFixture(t, "publication_lff.html"))
+	mux.HandleFunc("/en/wol/publication/r1/lp-e/wcg", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><input type="hidden" id="englishSym" value="wcg"/><input type="hidden" id="pubYear" value="2025"/>
+		<article id="article"><h1><a class="backNav" href="/en/wol/library/r1/lp-e/all-publications/books">Courage</a></h1></article></body></html>`))
+	})
 	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
 		if q := r.URL.Query(); q.Get("pub") != "w" || q.Get("issue") != "202405" || q.Get("langwritten") != "E" {
 			http.NotFound(w, r)
@@ -724,6 +730,10 @@ func TestUIPubStart(t *testing.T) {
 	}
 	if strings.Contains(body, "/pub/publication/ad?") {
 		t.Errorf("a book without a cover is on the row")
+	}
+	// books run by their release, newest first: wcg (2025) before lff (2021)
+	if wcg, lff := strings.Index(body, "/pub/publication/wcg?"), strings.Index(body, "/pub/publication/lff?"); wcg < 0 || lff < 0 || wcg > lff {
+		t.Errorf("books row not newest first: wcg at %d, lff at %d", wcg, lff)
 	}
 	if strings.Contains(body, `name="pub"`) {
 		t.Errorf("the start page still carries the symbol form")

@@ -456,6 +456,74 @@ func (s *Server) periodicalShelves(ctx context.Context, lng model.Language, cat 
 	return out
 }
 
+// isIssues reports whether every card is a periodical's issue.
+func isIssues(cards []wol.LibraryCard) bool {
+	for _, c := range cards {
+		if !issueCover.MatchString(c.Thumbnail) {
+			return false
+		}
+	}
+	return true
+}
+
+// mepsDocID reads the year out of a book's or brochure's document id:
+// 1102021352 is 2021.
+var mepsDocID = regexp.MustCompile(`^110((?:19|20)\d\d)\d{3}$`)
+
+// release is when a publication came out, as near as the library tells: the
+// year its page records, else the year in the id of its first article; the
+// id orders publications of one year.
+type release struct{ year, docid int }
+
+// releaseOf reads a publication's release off its own page.
+func (s *Server) releaseOf(ctx context.Context, lng model.Language, c wol.LibraryCard) release {
+	lib, err := s.svc.Library(ctx, lng, c.Kind, c.Path)
+	if err != nil {
+		return release{}
+	}
+	var r release
+	r.year, _ = strconv.Atoi(lib.Year)
+	for _, d := range lib.Cards() {
+		if d.Kind != wol.DocumentKind {
+			continue
+		}
+		r.docid = d.DocID
+		if m := mepsDocID.FindStringSubmatch(strconv.Itoa(d.DocID)); m != nil && r.year == 0 {
+			r.year, _ = strconv.Atoi(m[1])
+		}
+		break
+	}
+	return r
+}
+
+// newestReleasesFirst orders books, brochures, tracts and the like by their
+// release, newest first; one the library gives no date for goes last, in
+// wol's order. Each publication's page is read at once, and kept for a week.
+func (s *Server) newestReleasesFirst(ctx context.Context, lng model.Language, cards []wol.LibraryCard) []wol.LibraryCard {
+	rel := make([]release, len(cards))
+	var wg sync.WaitGroup
+	for i, c := range cards {
+		wg.Go(func() { rel[i] = s.releaseOf(ctx, lng, c) })
+	}
+	wg.Wait()
+	idx := make([]int, len(cards))
+	for i := range idx {
+		idx[i] = i
+	}
+	slices.SortStableFunc(idx, func(a, b int) int {
+		ra, rb := rel[a], rel[b]
+		if ra.year != rb.year {
+			return rb.year - ra.year
+		}
+		return rb.docid - ra.docid
+	})
+	out := make([]wol.LibraryCard, len(cards))
+	for i, j := range idx {
+		out[i] = cards[j]
+	}
+	return out
+}
+
 // newestIssuesFirst orders a row gathered across years by the year and issue
 // on each cover, newest first; an entry without them goes last.
 func newestIssuesFirst(cards []wol.LibraryCard) []wol.LibraryCard {
@@ -505,18 +573,27 @@ func (s *Server) pubCovers(ctx context.Context, lng model.Language, at wol.Libra
 	if err != nil {
 		return nil
 	}
-	var tiles []pubTile
-	var below []wol.LibraryCard
-	for _, c := range latestFirst(lib.Cards()) {
+	var covers, below []wol.LibraryCard
+	for _, c := range lib.Cards() {
 		if c.Kind != wol.LibraryKind && c.Kind != wol.PublicationKind {
 			continue
 		}
 		if c.Thumbnail != "" {
-			tiles = append(tiles, cardTile(c, page))
+			covers = append(covers, c)
 		}
 		if c.Kind == wol.LibraryKind {
 			below = append(below, c)
 		}
+	}
+	// issues by their date, everything else by its release
+	if isIssues(covers) {
+		covers = latestFirst(covers)
+	} else if len(covers) > 1 {
+		covers = s.newestReleasesFirst(ctx, lng, covers)
+	}
+	var tiles []pubTile
+	for _, c := range covers {
+		tiles = append(tiles, cardTile(c, page))
 	}
 	// one cover is no row
 	if len(tiles) > 1 {
