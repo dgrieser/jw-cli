@@ -500,7 +500,11 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Unfold, page.AutoUnfold = depth, auto
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
-	page.Heading = art.Title
+	// a library document opens with its own title; only one without a
+	// heading of its own gets one
+	if !strings.Contains(string(page.Body), "<h1") {
+		page.Heading = art.Title
+	}
 	page.URL = art.URL
 	page.Refs = art.ScriptureRefs
 	page.Images = art.Images
