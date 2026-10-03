@@ -509,6 +509,7 @@
   // its own: a paragraph of the document, or — nested — a paragraph of a
   // passage an unfold brought, so what that cites unfolds in turn.
   function citingBlocks(root, nested) {
+    failedRefs(root);
     var byBlock = new Map();
     root.querySelectorAll('a[href*="/bc/"], a[href*="/pc/"]').forEach(function (a) {
       if (a.closest("summary, [data-ui]")) return;
@@ -754,6 +755,55 @@
         });
         return res;
       });
+  }
+
+  // failedRefs gives every reference of root that could not be read a retry
+  // button. The server marks such a reference with the citation it was.
+  function failedRefs(root) {
+    root.querySelectorAll("p.unfold-failed[data-path]").forEach(function (p) {
+      if (p.querySelector(":scope > .retry")) return;
+      var b = button("small retry", null, T.retry || "Retry");
+      b.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        retryRef(p);
+      });
+      p.appendChild(document.createTextNode(" "));
+      p.appendChild(b);
+    });
+  }
+
+  // retryRef asks for one failed reference again, one level deep — what it
+  // cites in turn unfolds from its own blocks — and puts what came in place of
+  // the message, under the heading the reference already has.
+  function retryRef(p) {
+    var q = new URLSearchParams();
+    q.append("path", p.getAttribute("data-path"));
+    q.append("text", p.getAttribute("data-text") || "");
+    q.set("depth", "1");
+    if (lang) q.set("lang", lang);
+    var list = make("div", "sections");
+    var loader = makeLoader();
+    list.appendChild(loader);
+    p.replaceWith(list);
+    streamSections("/unfold/refs?" + q.toString(), list, loader, null).then(function (res) {
+      var sections = list.querySelectorAll(":scope > details.section");
+      if (res.failure || !sections.length) {
+        // still nothing: the message again, saying what went wrong this time
+        if (res.failure) p.querySelector("em").textContent = fmt(T.error, res.failure);
+        list.replaceWith(p);
+        return;
+      }
+      // the section repeats the heading this reference already sits under:
+      // only what it holds is kept
+      var got = document.createDocumentFragment();
+      sections.forEach(function (sec) {
+        var body = sec.querySelector(":scope > .section-body");
+        while (body && body.firstChild) got.appendChild(body.firstChild);
+      });
+      list.replaceWith(got);
+      saveState();
+    });
   }
 
   // unfold loads what one item references, to depth levels, into a fresh
