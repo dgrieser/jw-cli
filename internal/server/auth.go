@@ -217,7 +217,7 @@ func apr1(password, salt string) string {
 	}
 	sum := ctx.Sum(nil)
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		h := md5.New()
 		if i&1 == 1 {
 			h.Write(pw)
