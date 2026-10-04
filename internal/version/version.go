@@ -4,8 +4,9 @@
 //
 //	-ldflags "-X github.com/dgrieser/jw-cli/internal/version.Version=v1.2.3"
 //
-// Builds without those flags fall back to the information the Go toolchain
-// embeds: the module version for `go install module@version`, otherwise the
+// A build given a commit but no version (the edge image) reports
+// "dev+abcdef1". Builds without those flags fall back to the information the
+// Go toolchain embeds: the module version for `go install module@version`, otherwise the
 // VCS stamp of the working tree, yielding "dev+abcdef1" or "dev+abcdef1-dirty".
 package version
 
@@ -32,6 +33,11 @@ const shortLen = 7
 func String() string {
 	if v := strings.TrimSpace(Version); v != "" && v != dev {
 		return v
+	}
+	// a build from a branch (the edge image) is stamped with its commit but
+	// no version, and carries no VCS stamp of its own
+	if c := strings.TrimSpace(Commit); c != "" {
+		return dev + "+" + short(c)
 	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {

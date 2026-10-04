@@ -19,6 +19,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/version"
 )
 
 // basePage is what every UI page carries: the title, the language round-trip,
@@ -40,6 +41,24 @@ type basePage struct {
 	// same language wherever one exists.
 	Locale string
 	T      *i18n.Messages
+}
+
+// Version is the build serving the page, for the footer: a release tag or
+// dev+commit.
+func (basePage) Version() string { return version.String() }
+
+// VersionURL leads from the footer to the build on GitHub: the release of a
+// tag, the commit of a branch build, nothing for a local one.
+func (basePage) VersionURL() string {
+	const repo = "https://github.com/dgrieser/jw-cli"
+	v := version.String()
+	switch {
+	case strings.HasPrefix(v, "v"):
+		return repo + "/releases/tag/" + url.PathEscape(v)
+	case strings.HasPrefix(v, "dev+") && !strings.HasSuffix(v, "-dirty"):
+		return repo + "/commit/" + url.PathEscape(strings.TrimPrefix(v, "dev+"))
+	}
+	return ""
 }
 
 type hiddenField struct{ Name, Value string }

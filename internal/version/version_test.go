@@ -36,6 +36,13 @@ func TestStringFallsBackToVCSStamp(t *testing.T) {
 	}
 }
 
+func TestStringInjectedCommit(t *testing.T) {
+	set(t, "", "0123456789abcdef", "")
+	if got := String(); got != "dev+0123456" {
+		t.Fatalf("String() = %q, want %q", got, "dev+0123456")
+	}
+}
+
 func TestStringIgnoresDevPlaceholder(t *testing.T) {
 	set(t, dev, "", "")
 	if got := String(); got == "" {
