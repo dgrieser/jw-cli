@@ -37,10 +37,15 @@ COPY --from=build /out/jw /jw
 COPY --from=build --chown=nonroot:nonroot /out/data /data
 ENV XDG_CACHE_HOME=/data/cache
 
+# Basic auth: mount an .htaccess or .htpasswd file here (or point
+# JW_AUTH_FILE elsewhere) and every route asks for a login; without the file
+# the server runs open. JW_AUTH_USER and JW_AUTH_PASSWORD add one more user.
+ENV JW_AUTH_FILE=/config/.htaccess
+
 VOLUME /data
 EXPOSE 8080
 
 # 0.0.0.0 on purpose: inside the container network, port mapping (-p) is the
-# boundary. The server has no authentication — publish the port thoughtfully.
+# boundary. Without auth configured, publish the port thoughtfully.
 ENTRYPOINT ["/jw"]
 CMD ["serve", "--addr", "0.0.0.0", "--port", "8080"]

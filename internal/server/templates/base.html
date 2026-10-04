@@ -57,7 +57,7 @@
 </main>
 <footer class="site-footer">
   <div class="wrap">
-    <p>{{.T.UIFooter}} {{.T.UIJSONAPI}}: <a href="/api/v1/languages"><code>/api/v1</code></a> · jw {{with .VersionURL}}<a href="{{.}}" rel="noopener"><code>{{$.Version}}</code></a>{{else}}<code>{{.Version}}</code>{{end}}</p>
+    <p>JW {{with .VersionURL}}<a href="{{.}}" rel="noopener">{{$.Version}}</a>{{else}}{{.Version}}{{end}} · <a href="https://github.com/dgrieser/jw-cli" rel="noopener">https://github.com/dgrieser/jw-cli</a> · API: <a href="/api/v1/languages"><code>/api/v1</code></a></p>
   </div>
 </footer>
 <div class="loading" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span>{{.T.UILoading}}</div>

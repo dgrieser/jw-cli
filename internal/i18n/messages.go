@@ -212,9 +212,6 @@ type Messages struct {
 	UIUntitled        string
 	UINoLanguages     string
 	UIBackToStart     string
-	UILead            string
-	UIFooter          string
-	UIJSONAPI         string
 	UISearchHint      string
 	UIRefHint         string
 	UIArticleHint     string

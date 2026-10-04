@@ -915,8 +915,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 /* index --------------------------------------------------------------- */
 
 .hero { padding: 1rem 0 1.5rem; max-width: 56rem; }
-.hero h1 { font-size: 2rem; margin-bottom: 0.25rem; }
-.hero .lead { margin-bottom: 1.25rem; }
+.hero h1 { font-size: 2rem; margin-bottom: 1.25rem; }
 
 .destinations {
   list-style: none;

@@ -1,7 +1,7 @@
 // Package server exposes the features of the jw CLI over HTTP: a JSON API
 // under /api/v1 and a server-rendered web UI on the same routes the CLI's
-// commands cover. It carries no authentication; jw serve binds to localhost
-// unless asked otherwise.
+// commands cover. Authentication is optional HTTP basic auth (see
+// Credentials); jw serve binds to localhost unless asked otherwise.
 package server
 
 import (
@@ -20,6 +20,9 @@ type Config struct {
 	DefaultLang string
 	// Logf, when set, receives one line per request.
 	Logf func(format string, args ...any)
+	// Auth, when it holds users, puts every route behind HTTP basic
+	// authentication.
+	Auth *Credentials
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -27,6 +30,7 @@ type Server struct {
 	svc         *service.Service
 	defaultLang string
 	logf        func(format string, args ...any)
+	auth        *Credentials
 	// langMemo caches resolved languages per spec, so the language list is not
 	// re-scanned on every request.
 	langMemo sync.Map
@@ -41,6 +45,7 @@ func New(cfg Config) *Server {
 		svc:         cfg.Svc,
 		defaultLang: cfg.DefaultLang,
 		logf:        cfg.Logf,
+		auth:        cfg.Auth,
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}
@@ -107,7 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 	mux.HandleFunc("GET /languages", s.uiLanguages)
 
-	return s.logged(remembersLanguage(mux))
+	return s.logged(s.auth.RequireAuth(remembersLanguage(mux)))
 }
 
 // remembersLanguage keeps the language a reader picks, so it survives the next

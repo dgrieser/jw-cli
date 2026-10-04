@@ -453,9 +453,34 @@ server-rendered **web site** (no JavaScript required) and a **JSON API** under
 `/api/v1`. Both are driven by the same code the commands use, so output and
 behavior match the CLI.
 
-**There is no authentication.** The server binds to `127.0.0.1` unless
-`--addr` says otherwise, and warns when it is about to listen on a
-non-loopback address.
+The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
+it is about to listen on a non-loopback address without authentication.
+
+### Basic authentication
+
+HTTP basic auth puts every route — web site, API and downloads — behind a
+login. Either source turns it on, and both may be used together:
+
+- **A file**: `--auth-file PATH`, or `JW_AUTH_FILE=PATH`. It may be an
+  `.htpasswd` file (`user:hash` lines, as `htpasswd` writes them) or an
+  `.htaccess` file whose `AuthUserFile` names one (a relative path is resolved
+  against the `.htaccess` file's directory) and whose `AuthName` becomes the
+  login prompt's realm. A path that does not exist is skipped, so the setting
+  can stay in place while no file is mounted. Supported hashes: bcrypt
+  (`htpasswd -B`, recommended), Apache MD5 (`htpasswd -m`) and SHA-1
+  (`htpasswd -s`); any other entry stops the server rather than locking a user
+  out silently.
+- **One user from the environment**: `JW_AUTH_USER` and `JW_AUTH_PASSWORD`
+  (both, or neither).
+
+```sh
+htpasswd -cB .htpasswd anne
+jw serve --addr 0.0.0.0 --auth-file .htpasswd
+JW_AUTH_USER=me JW_AUTH_PASSWORD=secret jw serve --addr 0.0.0.0
+```
+
+Basic auth sends the password with every request; put TLS in front (a reverse
+proxy) for anything beyond a trusted network.
 
 ### Docker
 
@@ -464,7 +489,15 @@ make docker                                    # build jw:dev locally
 docker run --rm -p 8080:8080 jw:dev            # http://127.0.0.1:8080
 docker run --rm -p 8080:8080 -v jw-cache:/data jw:dev   # keep the cache
 docker run --rm jw:dev languages -s german     # any CLI command works too
+
+# with basic auth: the image looks for /config/.htaccess ($JW_AUTH_FILE) ...
+docker run --rm -p 8080:8080 -v "$PWD/.htaccess:/config/.htaccess:ro" jw:dev
+# ... or takes one user from the environment
+docker run --rm -p 8080:8080 -e JW_AUTH_USER=me -e JW_AUTH_PASSWORD=secret jw:dev
 ```
+
+The container runs as a non-root user, so a mounted auth file (and the
+`AuthUserFile` it names, e.g. also under `/config`) must be world-readable.
 
 Published images land on GHCR on every release tag (`latest`, `1.2`, `1.2.3`)
 and on every push to `main` (`edge`):
@@ -475,9 +508,9 @@ docker run --rm -p 8080:8080 ghcr.io/dgrieser/jw-cli:latest
 
 The image is distroless, runs as a non-root user, and defaults to
 `serve --addr 0.0.0.0 --port 8080` — inside the container network the port
-mapping is the boundary, but remember the server has no authentication, so
-publish the port to localhost (`-p 127.0.0.1:8080:8080`) or put an
-authenticating reverse proxy in front for anything internet-facing. `/data`
+mapping is the boundary; without basic auth configured, publish the port to
+localhost (`-p 127.0.0.1:8080:8080`) or put an authenticating reverse proxy in
+front for anything internet-facing. `/data`
 holds the on-disk cache; mount a volume to keep it across restarts.
 
 What jw.org and wol.jw.org answer is kept on disk (in the user cache

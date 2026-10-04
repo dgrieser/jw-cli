@@ -18,6 +18,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/server"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/version"
 )
 
 // newTestServer wires the server against a mock upstream, mirroring the CLI
@@ -527,7 +528,7 @@ func TestUIArticle(t *testing.T) {
 		t.Fatalf("no article element in:\n%s", body)
 	}
 	// the footer names the build
-	if !strings.Contains(body, "· jw <") {
+	if !strings.Contains(body, "<p>JW "+version.String()+" · ") {
 		t.Errorf("no version in the footer")
 	}
 	// the document brings its own title; the page does not repeat it
