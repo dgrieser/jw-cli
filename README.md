@@ -363,7 +363,9 @@ order, and leaves out whatever the verse does not have:
 4. **Quotations of …** — every publication a citation search finds quoting the
    verse, each with the passage it quotes it in: `jw bible cited` for that
    verse, printed where the verse stands. The heading names the reference it
-   answers for.
+   answers for. A quotation is where an expansion ends: what it cites is never
+   unfolded in turn, and the document being unfolded is never listed as
+   quoting a verse it cites itself.
 
 Each unfolded reference is a verse in its own right, so at `--unfold 2` it
 brings its own notes, indexes and margin in turn, one level deeper. The
@@ -507,10 +509,38 @@ opens on its own. Every paragraph of an unfolded passage that cites something
 has a button of its own, so an expansion can be followed as deep as wanted.
 
 Links open in place instead of leaving the page: a marginal reference (`+`), a
-footnote (`*`), a bible reference or a link to an article opens its section
-under the verse or paragraph it is in and scrolls to it, loading just that one
-reference when it is not there yet; a verse number opens the verse in the
-other bibles of the language. Ctrl/Cmd-click still follows the link itself.
+footnote (`*`), a bible reference or a link to an article — a table-of-contents
+link like "App. C" included — opens its section under the verse or paragraph it
+is in and scrolls to it, loading just that one reference when it is not there
+yet; a verse number opens the verse in the other bibles of the language.
+Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
+opens under the verse's cross references, all of them unfolded as at depth 1,
+while the verse's other sections — study notes, footnotes, indexes,
+translations, quotations — appear as headings that load once opened.
+
+The page's depth is the anchor for everything opened on it. Depth 1 unfolds a
+verse or a range of verses one deep: study notes, indexes, cross references,
+and the quotations as a heading that loads when opened. A passage of another
+publication, or an article a link leads to, comes with the bible texts it cites
+(their text only); deeper levels go on from there. What a link opens unfolds to
+the level of the verse or paragraph it is in, else to the page's level, else to
+depth 1. Quotations are always the end: what they cite unfolds only from its
+own button, and the documents the reader reached a verse through — the article
+on the page, the passage a section shows — are left out of who quotes it.
+Every loader has an abort button that stops it and keeps what already came. Every picture on a page — in an article, a verse's
+notes, anything unfolded — opens full size in a new tab, from the wol.jw.org or
+jw.org address it was read from.
+
+Every page keeps a header in view: the page's title, a link up to the page
+above it (the last breadcrumb, the section's start, or the page a document was
+opened from), and buttons for a smaller, the default or a larger text size —
+kept in this browser. On the bible reader the header names the book, chapter
+and verses in view and opens a book picker: the chapters of the current book in
+one row that scrolls sideways, the book grid under it, and a book picked there
+shows its chapters in that row. Typing words instead of a reference into the
+bible's field searches the text of the bible being read and of the other
+bibles its translations section shows, and lists every hit, grouped by bible,
+each passage a link into the reader.
 An unfolded verse also brings its **footnotes** (only when it has any) and the
 same verse in the **other translations** of the language — the New World
 Translation once, as the study edition where it exists — which the web UI
@@ -558,13 +588,16 @@ unasked is offered on a confirmation page first (with JavaScript, a prompt).
 The page loads those expansions from two streaming endpoints, answered as
 newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `error`, `done`) flushed as they happen:
-`GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse: study notes,
-indexes, marginal references, quotations) and
+`GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse, or a range
+with `to=`: study notes, indexes, marginal references, quotations; `part=notes|
+footnotes|indexes|marginal` — the index with `group=` — loads one of them alone,
+and with `lazy=1` loads it while the others come as headings) and
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
 wol citation paths are followed), plus `GET /unfold/footnote?path=…`,
-`GET /unfold/translations?vid=…&bible=…` and `GET /unfold/article?url=…` (a
-library document or a jw.org page; only its path is kept and read from that
-site). Everything one request unfolds shares one
+`GET /unfold/translations?vid=…&bible=…`, `GET /unfold/cited?vid=…&self=…`
+(who quotes a passage, leaving the documents named by `self` out) and
+`GET /unfold/article?url=…&depth=…` (a library document or a jw.org page; only
+its path is kept and read from that site). Everything one request unfolds shares one
 request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports
 what the request spent, and **Unfold all** passes the running total of its run

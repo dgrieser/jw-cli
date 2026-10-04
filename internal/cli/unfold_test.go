@@ -277,3 +277,29 @@ func TestBibleReadUnfoldAsksPerVerse(t *testing.T) {
 		t.Errorf("the range was asked about as a whole: %q", queries)
 	}
 }
+
+// The article being unfolded is never listed as quoting a verse it cites
+// itself.
+func TestArticleUnfoldLeavesItselfOutOfQuotations(t *testing.T) {
+	mux := studyUnfoldMux(t)
+	mux.HandleFunc("/en/wol/s/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(citedResultsPage(map[int]string{
+			2024360: "w24 - the article itself",
+			9999999: "g20 - a publication only the search knows",
+		})))
+	})
+	mux.HandleFunc("/en/wol/d/r1/lp-e/9999999", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><div id="article"><p>This publication discusses
+		  the verse at some length.</p></div></body></html>`))
+	})
+	out, err := runCmd(t, mux, "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "1", "-y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Doc 9999999") {
+		t.Errorf("the other publication is missing:\n%s", out)
+	}
+	if strings.Contains(out, "Doc 2024360") {
+		t.Errorf("the article was listed as quoting itself:\n%s", out)
+	}
+}

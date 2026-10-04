@@ -741,3 +741,57 @@ func TestSessionDeduplicatesAcrossRuns(t *testing.T) {
 		t.Errorf("asked %v", r.asked)
 	}
 }
+
+// With Tail, a passage of another publication at the last level brings the
+// verses it cites as text — no study material, nothing further — while a
+// passage it cites stays pending.
+func TestRunTailResolvesVersesOfLastPassages(t *testing.T) {
+	r := &fakeStudyResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/pc/w/1": {Title: "Watchtower", ContentHTML: "<p>see " + link("/wol/bc/2/2", "Ro 5:8") +
+				" and " + link("/wol/pc/w/9", "w24") + "</p>"},
+			"/wol/bc/2/2": {Title: "Romans 5:8", ContentHTML: "<p>while we were yet sinners " +
+				link("/wol/bc/3/3", "+") + "</p>"},
+		}},
+		study: map[string]Study{"Romans 5:8": {Notes: []model.StudyNote{{HTML: "note"}}}},
+	}
+	res, err := Run(context.Background(), r, "<p>"+link("/wol/pc/w/1", "w23")+"</p>", Options{Depth: 1, Tail: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 1 || len(res.Nodes[0].Children) != 1 {
+		t.Fatalf("nodes = %+v", res.Nodes)
+	}
+	verse := res.Nodes[0].Children[0]
+	if verse.Title != "Romans 5:8" || len(verse.Notes) != 0 || len(verse.Children) != 0 {
+		t.Errorf("tail verse = %+v, want its text alone", verse)
+	}
+	if len(r.askedFor) != 0 {
+		t.Errorf("study asked for %v, want none", r.askedFor)
+	}
+	if res.Pending != 1 || res.Requests != 2 {
+		t.Errorf("pending, requests = %d, %d; want 1, 2", res.Pending, res.Requests)
+	}
+}
+
+// A Depth of zero with Tail resolves the fragment's own verses and nothing
+// else: an article read with the scriptures it quotes.
+func TestRunTailAlone(t *testing.T) {
+	r := &fakeResolver{content: map[string]model.Tooltip{
+		"/wol/bc/2/2": {Title: "Romans 5:8", ContentHTML: "<p>sinners " + link("/wol/bc/3/3", "+") + "</p>"},
+	}}
+	frag := "<p>" + link("/wol/bc/2/2", "Ro 5:8") + link("/wol/pc/w/1", "w23") + "</p>"
+	res, err := Run(context.Background(), r, frag, Options{Tail: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Nodes) != 1 || res.Nodes[0].Title != "Romans 5:8" || len(res.Nodes[0].Children) != 0 {
+		t.Fatalf("nodes = %+v", res.Nodes)
+	}
+	if !slices.Equal(r.asked, []string{"/wol/bc/2/2"}) {
+		t.Errorf("asked %v", r.asked)
+	}
+	if res, _ := Run(context.Background(), r, frag, Options{}); len(res.Nodes) != 0 {
+		t.Errorf("without Tail a zero depth unfolded %+v", res.Nodes)
+	}
+}

@@ -29,6 +29,8 @@
   --control: 2.5rem;
   --r: 8px;
   --r-small: 6px;
+  /* the height of the page's header, which sticky pieces of a page sit below */
+  --bar-h: 2.85rem;
 
   color-scheme: light dark;
 }
@@ -60,7 +62,11 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  /* what a link scrolls to lands below the page's header, not under it */
+  scroll-padding-top: calc(var(--bar-h) + 1rem);
+}
 
 body {
   margin: 0;
@@ -69,7 +75,7 @@ body {
   flex-direction: column;
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -645,7 +651,7 @@ details.section[open] > summary::before { transform: none; }
 details.section > summary:hover { color: var(--accent); }
 details.section[open] > summary {
   position: sticky;
-  top: 0;
+  top: var(--bar-h);
   z-index: 1;
   background: var(--surface);
   border-radius: var(--r) var(--r) 0 0;
@@ -705,7 +711,7 @@ details.section.fresh { animation: pop 260ms ease-out; }
 
 /* what a followed link led to: clear of the sticky bar, and marked for a
    moment so the eye finds it */
-[data-ref] { scroll-margin-top: 4.5rem; }
+[data-ref] { scroll-margin-top: calc(var(--bar-h) + 4.5rem); }
 .flash { animation: flash 1.6s ease-out; }
 @keyframes flash {
   0%, 30% { box-shadow: 0 0 0 3px var(--accent); background-color: var(--accent-soft); }
@@ -837,6 +843,8 @@ li.unfold-item.nested { padding-right: 2.3rem; }
   font-size: 0.85rem;
 }
 .unfold-loader .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.unfold-loader .abort { min-height: 1.6rem; padding: 0 0.5rem; margin-right: -0.5rem; font-size: 0.8rem; }
+.unfold-aborted { font-size: 0.85rem; }
 .meter {
   flex: none;
   position: relative;
@@ -863,7 +871,7 @@ li.unfold-item.nested { padding-right: 2.3rem; }
 .unfold-bar .tabs.unfold { margin: 0; }
 .unfold-bar.busy {
   position: sticky;
-  top: 0;
+  top: var(--bar-h);
   z-index: 7;
   background: var(--paper);
   padding: 0.5rem 0;
@@ -1210,6 +1218,135 @@ tbody tr:hover { background: var(--surface); }
 .links { font-size: 0.9rem; }
 .links a { margin-right: 1.25rem; }
 
+/* the page's header: what the page shows, the way up, the text size ---- */
+
+.page-bar {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+}
+.page-bar .pb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: calc(var(--bar-h) - 1px);
+}
+.pb-up {
+  flex: none;
+  font-size: 0.9rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pb-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+}
+.pb-font { flex: none; display: inline-flex; gap: 2px; margin-left: auto; }
+.pb-btn {
+  min-height: 2rem;
+  min-width: 2.1rem;
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  border-radius: var(--r-small);
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.pb-btn[data-font="-1"] { font-size: 0.75rem; }
+.pb-btn[data-font="1"] { font-size: 1rem; }
+.pb-bible {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+  min-height: 2.1rem;
+  padding: 0 0.6rem;
+  background: var(--field);
+  border-color: transparent;
+  font-weight: 650;
+  max-width: max-content;
+}
+.pb-bible .pb-title { flex: 0 1 auto; }
+.pb-caret {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  background: var(--chevron) center / 1rem no-repeat;
+}
+@media (max-width: 36rem) {
+  .pb-up-label { display: none; }
+}
+
+/* the bible's book picker: a book's chapters as one row, the books under it */
+dialog.bible-picker {
+  width: min(56rem, calc(100vw - 1.5rem));
+  max-height: calc(100vh - 2rem);
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink);
+  overflow: auto;
+}
+dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
+.bp-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem 0;
+  background: var(--paper);
+}
+.bp-book { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-close { min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
+.bp-chapters {
+  position: sticky;
+  top: 2.5rem;
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+  padding: 0.5rem 0.75rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+.bp-chapters a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.5rem;
+  padding: 0 0.5rem;
+  scroll-snap-align: start;
+  background: var(--book-dark);
+  color: #fff;
+  font-weight: 550;
+  text-decoration: none;
+}
+.bp-chapters a:hover { filter: brightness(1.12); color: #fff; }
+.bp-chapters a.active { background: var(--accent); color: var(--accent-ink); }
+.bp-books { padding: 0.5rem 0.75rem 0.75rem; }
+.bp-books .bible-nav-heading { margin-top: 0.5rem; }
+.bp-books .book-grid a.active { outline: 3px solid var(--accent); outline-offset: -3px; }
+
+/* a text search of the bible */
+.bible-search-edition { margin-top: 1.5rem; }
+.bible-search-edition .count { color: var(--muted); font-weight: 500; }
+.bible-search .row .context { margin-left: 0.4rem; font-size: 0.9rem; }
+
 /* loading ------------------------------------------------------------- */
 
 .progress {
@@ -1302,3 +1439,8 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
   html.is-loading .progress::before { animation: none; transform: none; width: 100%; opacity: 0.6; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }
 }
+html:not(.js) .pb-font { display: none; }
+
+/* a picture opens full size in a new tab */
+a.img-link { display: inline-block; max-width: 100%; cursor: zoom-in; }
+a.img-link > img { display: block; }

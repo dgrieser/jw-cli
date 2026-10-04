@@ -38,6 +38,312 @@
     });
   }
 
+  // --- text size -----------------------------------------------------------
+
+  // the size is a percentage of the browser's own, kept in this browser; the
+  // head of the page applies it before anything is drawn
+  var FONT_STEPS = [80, 90, 100, 112, 125, 140, 160];
+  function fontSize() {
+    var f = parseFloat(root.style.fontSize);
+    return f > 0 ? f : 100;
+  }
+  document.querySelectorAll(".pb-font [data-font]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var dir = parseInt(b.getAttribute("data-font"), 10) || 0;
+      var cur = fontSize();
+      var next = 100;
+      if (dir > 0) {
+        next = FONT_STEPS[FONT_STEPS.length - 1];
+        for (var i = 0; i < FONT_STEPS.length; i++) {
+          if (FONT_STEPS[i] > cur + 0.5) { next = FONT_STEPS[i]; break; }
+        }
+      } else if (dir < 0) {
+        next = FONT_STEPS[0];
+        for (var j = FONT_STEPS.length - 1; j >= 0; j--) {
+          if (FONT_STEPS[j] < cur - 0.5) { next = FONT_STEPS[j]; break; }
+        }
+      }
+      root.style.fontSize = next === 100 ? "" : next + "%";
+      try {
+        if (next === 100) window.localStorage.removeItem("jw:font");
+        else window.localStorage.setItem("jw:font", String(next));
+      } catch (err) {
+        // not kept: the size holds for this page only
+      }
+    });
+  });
+
+  // --- the page's header ------------------------------------------------------
+
+  // the bar that stays in view names what the page shows and leads up to the
+  // page above it: the last breadcrumb, the section a page belongs to, or —
+  // for a document opened from another page of the site — where it came from
+  var pageBar = document.querySelector(".page-bar");
+  (function () {
+    if (!pageBar) return;
+    var title = pageBar.querySelector(".pb-title");
+    if (title && !title.textContent.trim()) {
+      var h = document.querySelector("main .document h1, main h1, main h2");
+      title.textContent = (h ? h.textContent : document.title.replace(/\s*·\s*JW$/, "")).replace(/\s+/g, " ").trim();
+    }
+    var up = pageBar.querySelector(".pb-up");
+    if (!up) return;
+    var href = "";
+    var crumbs = document.querySelectorAll("main .crumbs a[href]");
+    if (crumbs.length) href = crumbs[crumbs.length - 1].getAttribute("href");
+    var nav = document.querySelector(".site-nav a.active[href]");
+    if (!href && nav) {
+      var u = new URL(nav.href, location.href);
+      if (u.pathname !== location.pathname) href = nav.getAttribute("href");
+    }
+    // a page of its own, outside the menu's sections: back where it was opened
+    if (!href && !nav && document.referrer) {
+      try {
+        var r = new URL(document.referrer);
+        if (r.origin === location.origin && (r.pathname !== location.pathname || r.search !== location.search)) {
+          href = r.pathname + r.search;
+        }
+      } catch (err) {
+        // no way back to name
+      }
+    }
+    if (href) {
+      up.setAttribute("href", href);
+      up.hidden = false;
+    }
+  })();
+
+  // --- the bible's header: the verses in view, and a way to another book -----
+
+  (function () {
+    var btn = document.querySelector(".pb-bible");
+    if (!btn) return;
+    var title = btn.querySelector(".pb-title");
+    var names = {};
+    try {
+      names = JSON.parse((document.getElementById("bible-books") || {}).textContent || "{}") || {};
+    } catch (err) {
+      names = {};
+    }
+    var edition = btn.getAttribute("data-edition") || "nwtsty";
+    var lang = new URLSearchParams(location.search).get("lang") || "";
+    var currentBook = parseInt(btn.getAttribute("data-book"), 10) || 0;
+    var currentChapter = 0;
+
+    // the verses in view, as a reference: the book and chapter of the first,
+    // the verses of that chapter on screen
+    var verses = Array.prototype.slice.call(document.querySelectorAll(".document .item[data-vid]"));
+    if (verses.length && window.IntersectionObserver) {
+      var visible = new Set();
+      var update = function () {
+        var ids = [];
+        visible.forEach(function (v) { ids.push(v); });
+        if (!ids.length) return;
+        ids.sort(function (a, b) { return a - b; });
+        var first = ids[0];
+        var book = Math.floor(first / 1e6);
+        var chapter = Math.floor(first / 1e3) % 1e3;
+        var last = first;
+        ids.forEach(function (id) {
+          if (Math.floor(id / 1e3) === Math.floor(first / 1e3)) last = Math.max(last, id);
+        });
+        currentBook = book;
+        currentChapter = chapter;
+        var from = first % 1e3;
+        var to = last % 1e3;
+        title.textContent = (names[book] || "") + " " + chapter + ":" + from + (to > from ? "–" + to : "");
+      };
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          var id = parseInt(e.target.getAttribute("data-vid"), 10);
+          if (e.isIntersecting) visible.add(id);
+          else visible.delete(id);
+        });
+        update();
+      }, { rootMargin: "-" + (pageBar ? pageBar.offsetHeight : 0) + "px 0px 0px 0px" });
+      // only the verse's own text counts, not what was unfolded under it
+      verses.forEach(function (v) {
+        var t = v.querySelector(":scope > .item-text");
+        if (t) {
+          t.setAttribute("data-vid", v.getAttribute("data-vid"));
+          io.observe(t);
+        }
+      });
+    } else if (verses.length) {
+      var id0 = parseInt(verses[0].getAttribute("data-vid"), 10);
+      currentBook = Math.floor(id0 / 1e6);
+      currentChapter = Math.floor(id0 / 1e3) % 1e3;
+    }
+    if (!currentBook && verses.length) {
+      var id1 = parseInt(verses[0].getAttribute("data-vid"), 10);
+      currentBook = Math.floor(id1 / 1e6);
+      currentChapter = Math.floor(id1 / 1e3) % 1e3;
+    }
+
+    // the picker: the chapters of a book as one row, the books under it
+    var dialog = null;
+    var row = null;
+    var rowTitle = null;
+    var grid = null;
+    var navCache = {};
+
+    function api(book) {
+      var q = new URLSearchParams({ bible: edition });
+      if (book) q.set("book", String(book));
+      if (lang) q.set("lang", lang);
+      var key = q.toString();
+      if (!navCache[key]) {
+        navCache[key] = fetch("/api/v1/bible/nav?" + key, { credentials: "same-origin" }).then(function (res) {
+          if (!res.ok) throw new Error(res.status + " " + res.statusText);
+          return res.json();
+        });
+        navCache[key].catch(function () { delete navCache[key]; });
+      }
+      return navCache[key];
+    }
+
+    function chapterHref(book, chapter) {
+      var q = new URLSearchParams({ bible: edition, book: String(book), chapter: String(chapter) });
+      if (lang) q.set("lang", lang);
+      return "/bible?" + q.toString();
+    }
+
+    function showChapters(book) {
+      row.textContent = "";
+      rowTitle.textContent = names[book] || "";
+      grid.querySelectorAll(".book a").forEach(function (a) {
+        a.classList.toggle("active", parseInt(a.getAttribute("data-book"), 10) === book);
+      });
+      api(book).then(function (nav) {
+        rowTitle.textContent = nav.title || names[book] || "";
+        var chosen = null;
+        (nav.chapters || []).forEach(function (c) {
+          var a = document.createElement("a");
+          a.href = chapterHref(book, c);
+          a.textContent = String(c);
+          if (book === currentBook && c === currentChapter) {
+            a.className = "active";
+            a.setAttribute("aria-current", "true");
+            chosen = a;
+          }
+          row.appendChild(a);
+        });
+        var target = chosen || row.firstElementChild;
+        if (target) row.scrollLeft = Math.max(0, target.offsetLeft - row.clientWidth / 2 + target.offsetWidth / 2);
+      }, function (err) {
+        row.textContent = String(err && err.message || err);
+      });
+    }
+
+    function buildDialog() {
+      dialog = document.createElement("dialog");
+      dialog.className = "bible-picker";
+      dialog.setAttribute("aria-label", T.pickBook || "");
+      dialog.innerHTML = '<div class="bp-head"><strong class="bp-book"></strong>' +
+        '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
+        '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>';
+      row = dialog.querySelector(".bp-chapters");
+      rowTitle = dialog.querySelector(".bp-book");
+      grid = dialog.querySelector(".bp-books");
+      dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
+      // a click on the backdrop closes it
+      dialog.addEventListener("click", function (e) {
+        if (e.target === dialog) dialog.close();
+      });
+      document.body.appendChild(dialog);
+      grid.textContent = T.loading || "…";
+      api(0).then(function (nav) {
+        grid.textContent = "";
+        (nav.sections || []).forEach(function (sec) {
+          if (sec.heading) {
+            var h = document.createElement("h3");
+            h.className = "bible-nav-heading";
+            h.textContent = sec.heading;
+            grid.appendChild(h);
+          }
+          var ul = document.createElement("ul");
+          ul.className = "book-grid " + (sec.key || "");
+          (sec.books || []).forEach(function (b) {
+            if (!names[b.number]) names[b.number] = b.name;
+            var li = document.createElement("li");
+            li.className = "book " + (b.group || "");
+            var a = document.createElement("a");
+            a.href = "/bible?" + new URLSearchParams(Object.assign({ bible: edition, book: String(b.number) }, lang ? { lang: lang } : {})).toString();
+            a.setAttribute("data-book", String(b.number));
+            if (b.abbreviation) a.title = b.name;
+            var n = document.createElement("span");
+            n.className = "name";
+            n.textContent = b.name;
+            a.appendChild(n);
+            if (b.abbreviation) {
+              var ab = document.createElement("span");
+              ab.className = "abbr";
+              ab.textContent = b.abbreviation;
+              a.appendChild(ab);
+            }
+            a.addEventListener("click", function (e) {
+              if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+              e.preventDefault();
+              e.stopPropagation();
+              showChapters(b.number);
+              row.scrollIntoView({ block: "nearest" });
+            });
+            li.appendChild(a);
+            ul.appendChild(li);
+          });
+          grid.appendChild(ul);
+        });
+        if (currentBook) showChapters(currentBook);
+      }, function (err) {
+        grid.textContent = String(err && err.message || err);
+      });
+    }
+
+    btn.addEventListener("click", function () {
+      if (!dialog) buildDialog();
+      else if (currentBook) showChapters(currentBook);
+      if (dialog.showModal) dialog.showModal();
+      else dialog.setAttribute("open", "");
+    });
+  })();
+
+  // --- images ----------------------------------------------------------------
+
+  // every picture of a page opens on its own, full size, in a new tab: the
+  // original on wol.jw.org or jw.org it was read from. A picture that already
+  // leads somewhere keeps its link; ones streamed in later get theirs as they
+  // arrive.
+  function linkImages(scope) {
+    if (!scope || !scope.querySelectorAll) return;
+    var imgs = scope.tagName === "IMG" ? [scope] : scope.querySelectorAll("img");
+    Array.prototype.forEach.call(imgs, function (img) {
+      if (img.closest("a, button, [data-ui]")) return;
+      var src = img.currentSrc || img.getAttribute("src") || "";
+      if (!/^https?:\/\//.test(src)) return;
+      var a = document.createElement("a");
+      a.href = src;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "img-link";
+      if (img.alt) a.title = img.alt;
+      img.parentNode.insertBefore(a, img);
+      a.appendChild(img);
+    });
+  }
+  var mainEl = document.querySelector("main");
+  if (mainEl) {
+    linkImages(mainEl);
+    if (window.MutationObserver) {
+      new MutationObserver(function (records) {
+        records.forEach(function (r) {
+          Array.prototype.forEach.call(r.addedNodes, function (n) {
+            if (n.nodeType === 1) linkImages(n);
+          });
+        });
+      }).observe(mainEl, { childList: true, subtree: true });
+    }
+  }
+
   // --- focus ---------------------------------------------------------------
 
   // the page's main field takes the focus where typing needs no keyboard to
@@ -688,6 +994,9 @@
     loader.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="text"></span>' +
       '<span class="meter" aria-hidden="true"><i></i></span>';
     loader.querySelector(".text").textContent = T.loading || "…";
+    // what is loading can be called off, keeping what already came
+    var abort = button("small ghost abort", T.abort || "×", T.abort || "×");
+    loader.appendChild(abort);
     return loader;
   }
 
@@ -695,12 +1004,32 @@
   // as it arrives, in the order the sections read in, the ones streamed into
   // a group into that group. It settles with what the stream said: how many
   // sections came, and whether it was expensive, failed or aborted.
+  //
+  // The loader's abort button stops the stream where it is: what came stays,
+  // and the result says it was stopped rather than aborted (which is what a
+  // caller replacing the stream does through signal).
   function streamSections(url, list, loader, signal) {
-    var res = { count: 0, expensive: null, failure: "", note: "", requests: 0, aborted: false };
+    var res = { count: 0, expensive: null, failure: "", note: "", requests: 0, aborted: false, stopped: false };
     var groups = {};
     var stage = "";
+    var inner = window.AbortController ? new AbortController() : null;
+    if (inner && signal) {
+      if (signal.aborted) inner.abort();
+      else signal.addEventListener("abort", function () { inner.abort(); });
+    }
+    var abortBtn = loader.querySelector(".abort");
+    if (abortBtn) {
+      if (!inner) abortBtn.hidden = true;
+      abortBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        res.stopped = true;
+        inner.abort();
+      });
+    }
+    var sig = inner ? inner.signal : signal;
     function onEvent(ev) {
-      if (signal && signal.aborted) return;
+      if (sig && sig.aborted) return;
       switch (ev.type) {
         case "stage":
           stage = stageText(ev.stage);
@@ -720,6 +1049,25 @@
           // in the order the sections read in, whenever they arrive
           var into = ev.in && groups[ev.in];
           var target = into ? into.list : list;
+          if (ev.unwrap) {
+            // the body of a section the page shows already: what it holds
+            // goes in ahead of the list its own sections are streamed into
+            citingBlocks(node, true);
+            var got = node.querySelector(":scope > .section-body");
+            var frag = document.createDocumentFragment();
+            while (got && got.firstChild) frag.appendChild(got.firstChild);
+            if (target.parentNode && target.parentNode.classList.contains("section-body")) {
+              target.parentNode.insertBefore(frag, target);
+            } else {
+              target.insertBefore(frag, loader.parentNode === target ? loader : null);
+            }
+            res.count++;
+            break;
+          }
+          // a section the list holds already — one a followed link brought,
+          // say — is not shown twice
+          var ref = node.getAttribute("data-ref");
+          if (ref && target.querySelector(":scope > [data-ref=" + cssString(ref) + "]")) break;
           var order = ev.order || 0;
           node.setAttribute("data-order", String(order));
           var before = loader.parentNode === target ? loader : null;
@@ -750,13 +1098,17 @@
           break;
       }
     }
-    return stream(url, onEvent, signal)
+    return stream(url, onEvent, sig)
       .catch(function (err) {
-        if (err && err.name === "AbortError") res.aborted = true;
+        if (err && err.name === "AbortError") res.aborted = !res.stopped;
         else res.failure = (err && err.message) || String(err);
       })
       .then(function () {
         if (res.aborted) return res;
+        if (res.stopped) {
+          var note = make("p", "note unfold-aborted", T.aborted || "×");
+          loader.replaceWith(note);
+        }
         loader.remove();
         // empty groups that never got an entry say nothing
         Object.keys(groups).forEach(function (k) {
@@ -877,6 +1229,19 @@
         return;
       }
       if (res.note) exp.appendChild(make("p", "note", res.note));
+      if (res.stopped) {
+        // called off: what came stays, and the item can be unfolded again
+        if (res.count <= 0) {
+          exp.remove();
+          item.exp = null;
+          setLevel(item, 0);
+          setState(item, "idle");
+          return;
+        }
+        setLevel(item, depth);
+        setState(item, "error");
+        return;
+      }
       if (res.count <= 0 && !res.note) {
         exp.remove();
         item.exp = null;
@@ -1018,6 +1383,8 @@
 
   var batch = null;
   var queue = [];
+  // the level the page is unfolded to: what a followed link unfolds to as well
+  var anchorLevel = pageLevel;
 
   function dequeue(item) {
     var i = queue.indexOf(item);
@@ -1042,6 +1409,7 @@
   }
 
   function markLevel(level) {
+    anchorLevel = level;
     levelLinks.forEach(function (a) {
       var on = parseInt(a.getAttribute("data-level"), 10) === level;
       a.classList.toggle("active", on);
@@ -1159,6 +1527,12 @@
     d.setAttribute("data-loaded", "1");
     // a section the server folded names what to load without the language
     if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
+    // who quotes a verse: never the documents the reader got to it through
+    if (/^\/unfold\/cited\?/.test(url)) {
+      selfDocs(d).forEach(function (id) {
+        if (!new RegExp("[?&]self=" + id + "(&|$)").test(url)) url += "&self=" + id;
+      });
+    }
     var body = d.querySelector(":scope > .section-body");
     if (!body) {
       body = make("div", "section-body");
@@ -1169,7 +1543,14 @@
     var loader = makeLoader();
     list.appendChild(loader);
     return streamSections(url, list, loader, null).then(function (res) {
-      if (res.failure) {
+      if (res.stopped) {
+        // called off before anything came: opened again, it loads again
+        if (res.count <= 0) {
+          d.removeAttribute("data-loaded");
+          list.textContent = "";
+          d.open = false;
+        }
+      } else if (res.failure) {
         d.removeAttribute("data-loaded");
         body.appendChild(make("div", "unfold-msg error", fmt(T.error, res.failure)));
       } else if (res.count <= 0) {
@@ -1183,6 +1564,35 @@
     var d = e.target;
     if (d instanceof HTMLElement && d.matches("details.section[data-lazy]") && d.open) loadLazy(d);
   }, true);
+
+  // selfDocs are the documents el was reached through, by docid: the page's
+  // own document, and every section around el showing a passage of one.
+  var DOC_PATH = /\/wol\/d\/(?:[^/]+\/)*?(\d+)\/?$/;
+  var DOC_CLASS = /(?:^|\s)docId-(\d+)(?=\s|$)/g;
+  function selfDocs(el) {
+    var ids = [];
+    function add(id) {
+      id = parseInt(id, 10);
+      if (id > 0 && ids.indexOf(id) < 0) ids.push(id);
+    }
+    function fromClass(node) {
+      var cls = typeof node.className === "string" ? node.className : "";
+      var m;
+      DOC_CLASS.lastIndex = 0;
+      while ((m = DOC_CLASS.exec(cls))) add(m[1]);
+    }
+    for (var n = el; n && n !== document.documentElement; n = n.parentElement) {
+      fromClass(n);
+      add(n.getAttribute("data-doc"));
+      var m = DOC_PATH.exec(n.getAttribute("data-ref") || "");
+      if (m) add(m[1]);
+    }
+    // the document the page shows, outside whatever was unfolded into it
+    doc.querySelectorAll('[class*="docId-"]').forEach(function (node) {
+      if (!node.closest(".expansion")) fromClass(node);
+    });
+    return ids.slice(0, 16);
+  }
 
   // --- following a link: open what it points at, here ---------------------
   //
@@ -1212,7 +1622,8 @@
       return { kind: "translations", key: "translations", url: u };
     }
     var host = u.hostname.toLowerCase();
-    if (/\/wol\/d\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
+    // a document, or a table-of-contents link ("App. C") wol redirects to one
+    if (/\/wol\/(d|tc)\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
       return { kind: "article", key: path, url: u };
     }
     return null;
@@ -1320,6 +1731,14 @@
     return d;
   }
 
+  // anchorDepth is how deep what a link leads to unfolds: as deep as the item
+  // it is in, else as the page, and one level when neither is unfolded
+  function anchorDepth(owner) {
+    var l = owner && owner.item ? owner.item.level : 0;
+    if (!(l > 0)) l = anchorLevel;
+    return Math.min(Math.max(l || 1, 1), MAX_DEPTH);
+  }
+
   function streamOne(url, list) {
     var loader = makeLoader();
     list.appendChild(loader);
@@ -1353,12 +1772,35 @@
         setState(owner.item, "done");
         return true;
       case "ref":
+        var depth = anchorDepth(owner);
+        if (owner.item && owner.item.params.kind === "verse") {
+          // a marginal reference of a verse: the verse's references as they
+          // unfold, under their heading, and its other sections as headings
+          // that load once opened
+          q.set("vid", owner.item.params.vid);
+          if (owner.item.params.bible) q.set("bible", owner.item.params.bible);
+          q.set("part", "marginal");
+          q.set("lazy", "1");
+          q.set("depth", String(depth));
+          streamOne("/unfold/verse?" + q.toString(), list).then(function () {
+            if (!(owner.item.level > 0)) setLevel(owner.item, depth);
+            done();
+          });
+          return true;
+        }
         var text = (a.textContent || "").replace(/\s+/g, " ").trim();
-        streamOne(refsURL([{ path: target.url.pathname, text: text }], 1), list).then(done);
+        streamOne(refsURL([{ path: target.url.pathname, text: text }], depth), list).then(done);
         return true;
       case "footnote":
         q.set("path", target.url.pathname);
         var existing = findRef(scopeOf(owner), "footnotes");
+        if (existing && existing.hasAttribute("data-lazy") && !existing.getAttribute("data-loaded")) {
+          // the verse's footnotes, not loaded yet: all of them, then this one
+          var loading = loadLazy(existing);
+          existing.open = true;
+          loading.then(done);
+          return true;
+        }
         if (existing) {
           // another footnote of a verse whose footnotes are out already:
           // into the same section
@@ -1374,6 +1816,7 @@
         return true;
       case "article":
         q.set("url", target.url.href);
+        q.set("depth", String(anchorDepth(owner)));
         streamOne("/unfold/article?" + q.toString(), list).then(done);
         return true;
     }
@@ -1383,7 +1826,7 @@
   doc.addEventListener("click", function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest("a[href]") : null;
-    if (!a || !doc.contains(a) || a.closest("[data-ui]")) return;
+    if (!a || !doc.contains(a) || a.closest("[data-ui]") || a.target) return;
     var here = onThisPage(a);
     if (here) {
       e.preventDefault();

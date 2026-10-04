@@ -51,14 +51,60 @@ type UnfoldSection struct {
 	// Base absolutizes the links of Body, when it came from somewhere else than
 	// the library (an article on jw.org); empty is the library itself.
 	Base string
+	// Unwrap hands out what the section holds without the section: the body
+	// of a lazy section that already stands on the page with its heading.
+	Unwrap bool
+	// Doc is the document the section's passage was lifted out of, by docid;
+	// zero when it is not known. A page leaves it out of the publications
+	// quoting the verses inside the section.
+	Doc int
+}
+
+// The parts of a passage's expansion a page can load on its own
+// (PassageParts.Only).
+const (
+	PartNotes     = "notes"
+	PartFootnotes = "footnotes"
+	PartIndexes   = "indexes"
+	PartMarginal  = "marginal"
+)
+
+// PassageParts narrows what StreamPassageUnfold hands out. The zero value is
+// everything, loaded.
+type PassageParts struct {
+	// Only is the part to load: one of the Part constants, empty for all.
+	Only string
+	// Group is the index Only=PartIndexes loads, by its position among the
+	// indexes of the passage.
+	Group int
+	// Lazy hands out every other part as its heading only, loaded once it
+	// is opened — what a page shows for a verse whose marginal reference was
+	// followed before the verse was unfolded. Without it, Only is the body of
+	// a section already on the page, handed out unwrapped.
+	Lazy bool
+}
+
+// IsPart reports whether name is a part a passage can load on its own.
+func IsPart(name string) bool {
+	switch name {
+	case PartNotes, PartFootnotes, PartIndexes, PartMarginal:
+		return true
+	}
+	return false
 }
 
 // The names a page finds a verse's sections by, beside the paths of its
 // references.
 const (
+	NotesRef        = "notes"
 	FootnotesRef    = "footnotes"
+	MarginalRef     = "marginal"
 	TranslationsRef = "translations"
+	CitedRef        = "cited"
 )
+
+// IndexRef names the index of a passage at position i.
+func IndexRef(i int) string { return "index-" + strconv.Itoa(i) }
 
 // The order the sections of a verse read in, whenever they arrive: what it
 // says about itself, what the indexes point at, what its own margin points at,
@@ -129,9 +175,23 @@ func (s *Service) StreamVerseUnfold(ctx context.Context, lng model.Language, edi
 // before any of it is spent.
 func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, edition string, ref bibleref.Ref,
 	cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (note string, requests int, err error) {
+	return s.StreamPassageParts(ctx, lng, edition, ref, PassageParts{}, cfg, txt, out)
+}
+
+// StreamPassageParts is StreamPassageUnfold narrowed to the parts parts asks
+// for: one of them alone, unwrapped into the section a page already shows for
+// it, or one loaded and the others as headings loaded once opened.
+func (s *Service) StreamPassageParts(ctx context.Context, lng model.Language, edition string, ref bibleref.Ref,
+	parts PassageParts, cfg UnfoldConfig, txt *i18n.Messages, out UnfoldStream) (note string, requests int, err error) {
 	if edition == "" {
 		edition = studyEdition
 	}
+	// a part asked for alone is the body of a section on the page already
+	alone := parts.Only != "" && !parts.Lazy
+	want := func(part string) bool { return parts.Only == "" || parts.Only == part || parts.Lazy }
+	lazy := func(part string) bool { return parts.Lazy && parts.Only != part }
+	lazyURL := func(part string, group int) string { return passagePartURL(ref, edition, part, group, cfg.Depth) }
+
 	out.stage(StageStudy)
 	doc, err := s.Chapter(ctx, lng, edition, ref)
 	if err != nil {
@@ -162,27 +222,50 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 	passageRef := RefString(ref, table)
 
 	var notes []string
-	study, err := r.studyOf(ctx, ref)
+	study, studyErr := r.studyOf(ctx, ref)
 	sess.Spend(study.Requests)
-	if err != nil && ctx.Err() != nil {
+	if studyErr != nil && ctx.Err() != nil {
 		return "", spent(), ctx.Err()
 	}
-	out.add(notesSection(study.Notes, err, SectionLevel, txt))
+	if want(PartNotes) {
+		sec, ok := notesSection(study.Notes, studyErr, SectionLevel, txt)
+		if ok && lazy(PartNotes) {
+			sec.Body, sec.Lazy = "", lazyURL(PartNotes, 0)
+		}
+		sec.Unwrap = alone
+		out.add(sec, ok)
+	}
 
 	// the footnotes: a request each, and a verse has one or two
-	footnotes, n := footnotesHTML(ctx, r, footnoteLinks(text.String()))
-	sess.Spend(n)
-	out.add(footnotesSection(footnotes, txt))
-
-	// the other bibles of the language, loaded only once the section is opened
-	if len(s.otherEditionsFor(ctx, lng, edition)) > 0 {
-		out.add(translationsSection(nil, translationsURL(ref, edition), SectionLevel, txt))
+	if want(PartFootnotes) {
+		links := footnoteLinks(text.String())
+		if lazy(PartFootnotes) {
+			if len(links) > 0 {
+				out.Section(UnfoldSection{
+					Title: html.EscapeString(txt.FootnotesHeading), Ref: FootnotesRef, Order: orderFootnotes,
+					Lazy: lazyURL(PartFootnotes, 0),
+				})
+			}
+		} else {
+			footnotes, n := footnotesHTML(ctx, r, links)
+			sess.Spend(n)
+			sec, ok := footnotesSection(footnotes, txt)
+			sec.Unwrap = alone
+			out.add(sec, ok)
+		}
 	}
-	// who quotes the passage, likewise: the search is most of what a verse
-	// would cost otherwise
-	out.add(citedSection(unfold.Cited{
-		Ref: passageRef, Lazy: citedURL([]bibleref.Ref{ref}),
-	}, SectionLevel, txt))
+
+	if !alone {
+		// the other bibles of the language, loaded only once the section is opened
+		if len(s.otherEditionsFor(ctx, lng, edition)) > 0 {
+			out.add(translationsSection(nil, translationsURL(ref, edition), SectionLevel, txt))
+		}
+		// who quotes the passage, likewise: the search is most of what a verse
+		// would cost otherwise
+		out.add(citedSection(unfold.Cited{
+			Ref: passageRef, Lazy: citedURL([]bibleref.Ref{ref}),
+		}, SectionLevel, txt))
+	}
 
 	// the marginal references first, one at a time, under a section naming the
 	// passage: a handful of requests, where the indexes can take a hundred
@@ -192,19 +275,50 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 		research[ref.Path] = true
 	}
 	var marginal []unfold.Ref
-	for _, ref := range unfold.Refs(text.String()) {
-		if !research[ref.Path] {
-			marginal = append(marginal, ref)
+	if want(PartMarginal) {
+		for _, ref := range unfold.Refs(text.String()) {
+			if !research[ref.Path] {
+				marginal = append(marginal, ref)
+			}
 		}
+	}
+	var indexRefs []unfold.Ref
+	var indexLinks []model.ResearchItem
+	if want(PartIndexes) {
+		indexRefs, indexLinks = study.Research, study.Links
+	}
+	if lazy(PartMarginal) {
+		if len(marginal) > 0 {
+			sec := marginalSection(passageRef, txt)
+			sec.Key, sec.Lazy = "", lazyURL(PartMarginal, 0)
+			out.Section(sec)
+		}
+		marginal = nil
+	}
+	if lazy(PartIndexes) {
+		// the heading of each index, which its entries name without being read
+		roots := make([]unfold.Node, len(indexRefs))
+		for i, ref := range indexRefs {
+			roots[i] = unfold.Node{Ref: ref}
+		}
+		for i, g := range indexGroups(indexLinks, roots, txt) {
+			out.Section(UnfoldSection{
+				Title: html.EscapeString(g.name), Order: orderIndexes + i, Lazy: lazyURL(PartIndexes, i),
+				Ref: IndexRef(i),
+			})
+		}
+		indexRefs, indexLinks = nil, nil
 	}
 	// the whole first level at once — the margin and the indexes — so an
 	// expensive passage is asked about before any of it
-	planned := sess.Cost(append(slices.Clone(marginal), study.Research...))
+	planned := sess.Cost(append(slices.Clone(marginal), indexRefs...))
 	if ok, err := sess.Check(1, planned); err != nil || !ok {
 		return joinNotes(notes), spent(), err
 	}
 	if len(marginal) > 0 {
-		out.Section(marginalSection(passageRef, txt))
+		if !alone {
+			out.Section(marginalSection(passageRef, txt))
+		}
 		for _, ref := range marginal {
 			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: []unfold.Ref{ref}}}, txt)
 			if err != nil {
@@ -212,36 +326,78 @@ func (s *Service) StreamPassageUnfold(ctx context.Context, lng model.Language, e
 			}
 			notes = appendNote(notes, note)
 			for _, n := range expanded[0] {
-				out.Section(marginalEntry(n, "", SectionLevel, txt))
+				sec := marginalEntry(n, "", SectionLevel, txt)
+				if alone {
+					// straight into the section on the page
+					sec.In = ""
+				}
+				out.Section(sec)
 			}
 		}
 	}
 
-	if len(study.Research) > 0 || len(study.Links) > 0 {
+	if len(indexRefs) > 0 || len(indexLinks) > 0 {
 		var nodes []unfold.Node
-		if len(study.Research) > 0 {
+		if len(indexRefs) > 0 {
 			// one run for both indexes, which is what drops a passage the two
 			// of them point at alike
-			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: study.Research}}, txt)
+			expanded, note, err := runSession(ctx, sess, []unfold.Group{{RootRefs: indexRefs}}, txt)
 			if err != nil {
 				return joinNotes(notes), spent(), err
 			}
 			nodes, notes = expanded[0], appendNote(notes, note)
 		}
-		for _, sec := range indexSections(study.Links, nodes, SectionLevel, txt) {
+		secs := indexSections(indexLinks, nodes, SectionLevel, txt)
+		if alone && parts.Only == PartIndexes {
+			// the one index the section on the page heads, found by the name
+			// it had before anything was read
+			roots := make([]unfold.Node, len(indexRefs))
+			for i, ref := range indexRefs {
+				roots[i] = unfold.Node{Ref: ref}
+			}
+			names := indexGroups(indexLinks, roots, txt)
+			var one []UnfoldSection
+			if parts.Group >= 0 && parts.Group < len(names) {
+				for _, sec := range secs {
+					if sec.Title == html.EscapeString(names[parts.Group].name) {
+						sec.Unwrap = true
+						one = append(one, sec)
+					}
+				}
+			}
+			secs = one
+		}
+		for _, sec := range secs {
 			out.Section(sec)
 		}
 	}
 	return joinNotes(notes), spent(), ctx.Err()
 }
 
+// passagePartURL is where a page loads one part of a passage's expansion from
+// once its heading is opened.
+func passagePartURL(ref bibleref.Ref, edition, part string, group, depth int) string {
+	q := passageQuery([]bibleref.Ref{ref})
+	q.Set("bible", edition)
+	q.Set("part", part)
+	if part == PartIndexes {
+		q.Set("group", strconv.Itoa(group))
+	}
+	q.Set("depth", strconv.Itoa(max(depth, 1)))
+	return "/unfold/verse?" + q.Encode()
+}
+
 // StreamCited lists the publications quoting a passage, each as a section of
 // its own heading the passage it quotes the verses in: what a page loads when
 // the citations of a passage are opened.
-func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bibleref.Ref,
+//
+// self are the documents the page read the passage from — an article citing
+// it, the passage of another article that did: a publication is never listed
+// as quoting a verse in the very document the reader followed it from.
+func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bibleref.Ref, self []int,
 	out UnfoldStream) (int, error) {
 	out.stage(StageCited)
-	r := newTooltipResolver(s, lng, nil).withCited(ctx, true)
+	r := newTooltipResolver(s, lng, nil).withCited(ctx, true).excluding(self...)
 	c := r.citedFor(ctx, refs, "")
 	for i, item := range c.Results {
 		var b strings.Builder
@@ -347,6 +503,7 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 			writeUnfoldNode(&b, n, SectionLevel, label, txt)
 			out.Section(UnfoldSection{
 				Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
+				Doc: wol.DocIDFromURL(n.URL),
 			})
 		}
 	}

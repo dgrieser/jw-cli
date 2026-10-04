@@ -143,6 +143,13 @@ type Options struct {
 	// passage is made of. They are expanded alongside the fragment's own
 	// citations, at the same level.
 	RootRefs []Ref
+	// Tail brings the bible text with every passage of another publication the
+	// last level resolved: the verses it cites are resolved too, their text
+	// only — no study material, no quotations, nothing they cite in turn. A
+	// passage reads with the scriptures it quotes; a verse reached that way is
+	// one level more only once it is asked for. With a Depth of zero, the
+	// fragments' own verses are resolved that way, and nothing else.
+	Tail bool
 }
 
 // Result is an expansion and how far it got.
@@ -282,7 +289,7 @@ func (s *Session) Cost(refs []Ref) int {
 func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err error) {
 	r, o := s.r, s.o
 	res = Grouped{Nodes: make([][]Node, len(groups))}
-	if o.Depth <= 0 {
+	if o.Depth <= 0 && !o.Tail {
 		return res, nil
 	}
 	s.run++
@@ -298,10 +305,20 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 	// reached through their list rather than kept as pointers, because dropping
 	// a duplicate rewrites the list it sat in.
 	var tiers []*[]Node
+	if o.Depth <= 0 {
+		// the tail alone: the verses the fragments cite, as text
+		for i, g := range groups {
+			res.Nodes[i] = plan(verseRefs(append(Refs(g.Fragment), g.RootRefs...)), seen)
+			tiers = append(tiers, &res.Nodes[i])
+		}
+		return res, s.resolveTail(ctx, tiers, 1, &res)
+	}
 	for i, g := range groups {
 		res.Nodes[i] = plan(append(Refs(g.Fragment), g.RootRefs...), seen)
 		tiers = append(tiers, &res.Nodes[i])
 	}
+	// the verses the passages of the last level cite, resolved after it
+	var tail []*[]Node
 
 	for level := 1; ; level++ {
 		frontier := nodesIn(tiers)
@@ -364,6 +381,16 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		// the tiers themselves
 		var next []*[]Node
 		for _, n := range nodesIn(tiers) {
+			if level == o.Depth && o.Tail && n.Err == nil && !n.Ref.IsVerse() {
+				// a passage brings the scriptures it cites with it
+				all := Refs(n.HTML)
+				n.Children = plan(verseRefs(all), seen)
+				if len(n.Children) > 0 {
+					tail = append(tail, &n.Children)
+				}
+				res.Pending += len(plan(all, seen))
+				continue
+			}
 			refs := plan(append(Refs(n.HTML), research[n.Ref.Path]...), seen)
 			if level == o.Depth {
 				// the depth is used up: report what was left rather than
@@ -375,11 +402,67 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 			next = append(next, &n.Children)
 		}
 		if level == o.Depth {
+			if len(tail) > 0 {
+				return res, s.resolveTail(ctx, tail, level+1, &res)
+			}
 			break
 		}
 		tiers = next
 	}
 	return res, nil
+}
+
+// resolveTail resolves the verses of tiers to their text, and nothing more:
+// the tail of an expansion (Options.Tail). It is asked about as a level of its
+// own would be.
+func (s *Session) resolveTail(ctx context.Context, tiers []*[]Node, level int, res *Grouped) error {
+	frontier := nodesIn(tiers)
+	if len(frontier) == 0 {
+		return nil
+	}
+	if s.o.Confirm != nil {
+		ok, err := s.Check(level, len(frontier))
+		if err != nil {
+			return err
+		}
+		if !ok {
+			// declined: the verses are not shown at all rather than as gaps
+			for _, tier := range tiers {
+				*tier = nil
+			}
+			res.Pending += len(frontier)
+			res.Stopped = true
+			return nil
+		}
+	}
+	for i, n := range frontier {
+		if err := ctx.Err(); err != nil {
+			res.Pending += len(frontier) - i
+			return err
+		}
+		tip, err := s.r.Resolve(ctx, n.Ref.Path)
+		res.Requests++
+		if err != nil {
+			n.Err = err
+		} else {
+			n.Title, n.HTML, n.URL = tip.Title, tip.ContentHTML, tip.URL
+		}
+		if s.o.Progress != nil {
+			s.o.Progress(level, i+1, len(frontier))
+		}
+	}
+	return nil
+}
+
+// verseRefs keeps the references to bible text.
+func verseRefs(refs []Ref) []Ref {
+	var out []Ref
+	for _, r := range refs {
+		if r.IsVerse() {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // passage is a piece of content already in the output: the reference it is shown

@@ -54,6 +54,10 @@ type UnfoldConfig struct {
 	// request per verse, is one expansion as far as the budget goes. Only the
 	// streamed expansions read it.
 	Spent int
+	// Tail brings the bible text with every passage of another publication
+	// the last level reaches (unfold.Options.Tail): a web page's depth one
+	// shows a passage with the scriptures it quotes.
+	Tail bool
 }
 
 // studyEdition is the only edition that carries a study pane, matching what
@@ -85,6 +89,30 @@ type tooltipResolver struct {
 	// docs are chapter pages the caller already holds, borrowed rather than
 	// fetched again. Same key as sections.
 	docs map[string]*wol.ChapterDoc
+	// self are the documents the expansion is read from, by docid: a
+	// publication quoting a verse is never the document that cited the verse
+	// in the first place.
+	self []int
+}
+
+// excluding leaves the documents docids out of every citation lookup.
+func (r *tooltipResolver) excluding(docids ...int) *tooltipResolver {
+	for _, id := range docids {
+		if id > 0 && !slices.Contains(r.self, id) {
+			r.self = append(r.self, id)
+		}
+	}
+	return r
+}
+
+// isSelf reports whether a quoting publication is one of the documents the
+// expansion is read from.
+func (r *tooltipResolver) isSelf(item model.Result) bool {
+	id := item.DocID
+	if id == 0 {
+		id = wol.DocIDFromURL(item.WOLLink)
+	}
+	return id > 0 && slices.Contains(r.self, id)
 }
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
@@ -210,7 +238,7 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 			}
 			label = strings.Join(spelled, "; ")
 		}
-		return unfold.Cited{Ref: label, Lazy: citedURL(refs)}
+		return unfold.Cited{Ref: label, Lazy: citedURL(refs, r.self...)}
 	}
 	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
 	if err != nil || query == "" {
@@ -243,7 +271,7 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	named, requests := r.namedByResearch(ctx, &study)
 	out.Requests += requests
 	for _, item := range found.Items {
-		if named.has(item) {
+		if named.has(item) || r.isSelf(item) {
 			continue
 		}
 		out.Results = append(out.Results, item)
@@ -471,7 +499,8 @@ func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art mod
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	return unfoldInline(ctx, newTooltipResolver(s, lng, nil).withCitedAs(ctx, cfg), art.HTML, cfg, txt)
+	r := newTooltipResolver(s, lng, nil).withCitedAs(ctx, cfg).excluding(art.DocID, wol.DocIDFromURL(art.URL))
+	return unfoldInline(ctx, r, art.HTML, cfg, txt)
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
@@ -832,6 +861,7 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 		Threshold: UnfoldThreshold,
 		Confirm:   cfg.Confirm,
 		Progress:  cfg.Progress,
+		Tail:      cfg.Tail,
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
