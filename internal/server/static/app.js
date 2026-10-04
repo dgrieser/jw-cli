@@ -210,12 +210,18 @@
 
     function showChapters(book) {
       row.textContent = "";
-      rowTitle.textContent = names[book] || "";
+      // the book's regular name, with the chapter being read when it is this
+      // book — never the long title the library heads the book with
+      var label = function () {
+        var n = names[book] || "";
+        return book === currentBook && currentChapter ? n + " " + currentChapter : n;
+      };
+      rowTitle.textContent = label();
       grid.querySelectorAll(".book a").forEach(function (a) {
         a.classList.toggle("active", parseInt(a.getAttribute("data-book"), 10) === book);
       });
       api(book).then(function (nav) {
-        rowTitle.textContent = nav.title || names[book] || "";
+        rowTitle.textContent = label();
         var chosen = null;
         (nav.chapters || []).forEach(function (c) {
           var a = document.createElement("a");
