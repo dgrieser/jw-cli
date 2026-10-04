@@ -340,6 +340,25 @@
       return null;
     }
 
+    // the languages picked here, newest first, kept in this browser
+    var RECENT_KEY = "jw:recent-langs";
+    function recent() {
+      try {
+        var list = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+        return Array.isArray(list) ? list.filter(function (s) { return typeof s === "string"; }).slice(0, 3) : [];
+      } catch (err) {
+        return [];
+      }
+    }
+    function remember(sym) {
+      try {
+        var list = [sym].concat(recent().filter(function (s) { return s !== sym; })).slice(0, 3);
+        localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+      } catch (err) {
+        // not kept: the quick list just lacks it
+      }
+    }
+
     function option(l) {
       var o = document.createElement("option");
       o.value = l.symbol;
@@ -351,10 +370,15 @@
       select.textContent = "";
       var quick = document.createElement("optgroup");
       quick.label = T.langQuick || "";
-      var english = langs.find(function (l) { return l.symbol === "E"; });
-      var browser = detect(langs);
-      [english, browser].forEach(function (l, i) {
-        if (l && (i === 0 || l !== english)) quick.appendChild(option(l));
+      var bySymbol = {};
+      langs.forEach(function (l) { bySymbol[l.symbol] = l; });
+      // English, the browser's language, then the last ones picked here
+      var picks = [bySymbol.E, detect(langs)].concat(recent().map(function (sym) { return bySymbol[sym]; }));
+      var seen = {};
+      picks.forEach(function (l) {
+        if (!l || seen[l.symbol]) return;
+        seen[l.symbol] = true;
+        quick.appendChild(option(l));
       });
       var all = document.createElement("optgroup");
       all.label = T.langAll || "";
@@ -388,6 +412,7 @@
       });
       select.addEventListener("change", function () {
         if (!select.value || select.value === current) return;
+        remember(select.value);
         var u = new URL(location.href);
         u.searchParams.set("lang", select.value);
         location.assign(u.toString());
@@ -408,6 +433,100 @@
       if (dialog.showModal) dialog.showModal();
       else dialog.setAttribute("open", "");
       if (!select.disabled) select.focus();
+    });
+  })();
+
+  // --- dates: written the way the browser's locale writes them -------------
+  //
+  // A date field shows and takes the date in the browser's own order and
+  // separators, today's date as its placeholder; the calendar button opens
+  // the native picker. The native field stays in the form, hidden, and is
+  // what is sent, as yyyy-mm-dd.
+
+  (function () {
+    var pickers = document.querySelectorAll('form input[type="date"][name]');
+    if (!pickers.length || !window.Intl || !Intl.DateTimeFormat.prototype.formatToParts) return;
+    var df = new Intl.DateTimeFormat(navigator.language || undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+    var order = df.formatToParts(new Date(2000, 10, 22)).map(function (p) { return p.type; })
+      .filter(function (t) { return t === "year" || t === "month" || t === "day"; });
+    var CAL = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2"/>' +
+      '<path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
+
+    function pad(n) { return (n < 10 ? "0" : "") + n; }
+
+    function show(iso) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || "");
+      return m ? df.format(new Date(+m[1], +m[2] - 1, +m[3])) : "";
+    }
+
+    // the date typed, as yyyy-mm-dd; "" for none, null for one that is not a date
+    function parse(text) {
+      text = text.trim();
+      if (!text) return "";
+      var y, mo, d;
+      var iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(text);
+      if (iso) {
+        y = +iso[1]; mo = +iso[2]; d = +iso[3];
+      } else {
+        var nums = text.match(/\d+/g);
+        if (!nums || nums.length !== 3 || order.length !== 3) return null;
+        var v = {};
+        order.forEach(function (k, i) { v[k] = +nums[i]; });
+        y = v.year < 100 ? 2000 + v.year : v.year; mo = v.month; d = v.day;
+      }
+      var dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return null;
+      return y + "-" + pad(mo) + "-" + pad(d);
+    }
+
+    Array.prototype.forEach.call(pickers, function (picker) {
+      var label = picker.getAttribute("aria-label") || "";
+      var wrap = document.createElement("span");
+      wrap.className = "date-field";
+      var text = document.createElement("input");
+      text.type = "text";
+      text.className = "date-text";
+      text.inputMode = "numeric";
+      text.autocomplete = "off";
+      text.placeholder = df.format(new Date());
+      text.value = show(picker.value);
+      if (label) text.setAttribute("aria-label", label);
+      if (picker.title) text.title = picker.title;
+      var cal = document.createElement("button");
+      cal.type = "button";
+      cal.className = "date-cal";
+      cal.innerHTML = CAL;
+      cal.setAttribute("aria-label", label);
+      picker.parentNode.insertBefore(wrap, picker);
+      wrap.appendChild(text);
+      wrap.appendChild(cal);
+      wrap.appendChild(picker);
+      picker.classList.add("date-native");
+      picker.tabIndex = -1;
+      picker.setAttribute("aria-hidden", "true");
+
+      cal.addEventListener("click", function () {
+        try {
+          picker.showPicker();
+        } catch (err) {
+          picker.focus();
+          picker.click();
+        }
+      });
+      picker.addEventListener("change", function () {
+        text.value = show(picker.value);
+        text.setCustomValidity("");
+      });
+      text.addEventListener("input", function () {
+        var v = parse(text.value);
+        if (v === null) {
+          text.setCustomValidity(text.placeholder);
+        } else {
+          text.setCustomValidity("");
+          picker.value = v;
+        }
+      });
     });
   })();
 
@@ -1463,8 +1582,8 @@
   var stop = button("small stop", null, T.stop || "Stop");
   status.appendChild(stop);
   var tools = make("div", "unfold-tools");
-  var openAll = button("small ghost", null, T.openAll || "Open all");
-  var closeAll = button("small ghost", null, T.closeAll || "Close all");
+  var openAll = button("small pill", null, T.openAll || "Open all");
+  var closeAll = button("small pill", null, T.closeAll || "Close all");
   tools.appendChild(openAll);
   tools.appendChild(closeAll);
   if (bar) {
@@ -1503,17 +1622,106 @@
     if (!batch) {
       status.hidden = true;
       if (bar) bar.classList.remove("busy");
+      if (allBtn) allBtn.classList.remove("busy");
       return;
     }
     status.hidden = false;
     if (bar) bar.classList.add("busy");
+    if (allBtn) allBtn.classList.add("busy");
     status.querySelector(".text").textContent =
       (T.unfolding || "") + " " + fmt(T.progressItems, Math.min(batch.done + 1, batch.total), batch.total);
     status.querySelector(".meter i").style.width = Math.round(100 * batch.done / Math.max(batch.total, 1)) + "%";
   }
 
+  // the page bar's diamond unfolds everything, the way an item's diamond
+  // unfolds one item: a menu of depths, and × to fold it all away. The level
+  // links under the heading stay for a browser without a script.
+  var allBtn = null;
+  var allMenu = null;
+  var pb = document.querySelector(".page-bar .pb");
+  if (bar && levelLinks.length && pb) {
+    allBtn = button("unfold-btn pb-unfold", T.unfoldAll || "Unfold all");
+    allBtn.innerHTML = ICON + '<span class="lvl" aria-hidden="true"></span>';
+    allBtn.setAttribute("aria-haspopup", "true");
+    allBtn.setAttribute("aria-expanded", "false");
+    allMenu = make("div", "unfold-menu pb-unfold-menu");
+    allMenu.setAttribute("role", "group");
+    allMenu.setAttribute("aria-label", T.unfoldAll || "Unfold all");
+    allMenu.setAttribute("data-ui", "");
+    allMenu.hidden = true;
+    allMenu.appendChild(make("span", "label", T.unfoldAll || "Unfold all"));
+    for (var ad = 1; ad <= MAX_DEPTH; ad++) {
+      (function (depth) {
+        var b = button("depth", fmt(T.depthN, depth), String(depth));
+        b.setAttribute("data-depth", String(depth));
+        b.addEventListener("click", function (e) {
+          e.stopPropagation();
+          closeAllMenu();
+          unfoldAll(depth);
+        });
+        allMenu.appendChild(b);
+      })(ad);
+    }
+    var allRemove = button("remove", T.foldAway || "×", "×");
+    allRemove.addEventListener("click", function (e) {
+      e.stopPropagation();
+      closeAllMenu();
+      unfoldAll(0);
+      allBtn.focus();
+    });
+    allMenu.appendChild(allRemove);
+    var font = pb.querySelector(".pb-font");
+    pb.insertBefore(allBtn, font);
+    pb.appendChild(allMenu);
+    bar.classList.add("has-pb-unfold");
+    if (anchorLevel > 0) {
+      allBtn.querySelector(".lvl").textContent = String(anchorLevel);
+      allBtn.classList.add("on");
+    }
+
+    allBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!allMenu.hidden) {
+        closeAllMenu();
+        return;
+      }
+      closeMenu();
+      allMenu.querySelectorAll("button.depth").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(parseInt(b.getAttribute("data-depth"), 10) === anchorLevel));
+      });
+      allRemove.hidden = anchorLevel === 0 && !batch;
+      allMenu.hidden = false;
+      // under the diamond, its right edge on the diamond's, never past the
+      // bar's left edge
+      var right = pb.clientWidth - allBtn.offsetLeft - allBtn.offsetWidth;
+      allMenu.style.right = Math.max(0, Math.min(right, pb.clientWidth - allMenu.offsetWidth)) + "px";
+      allBtn.setAttribute("aria-expanded", "true");
+      var first = allMenu.querySelector('button.depth[aria-pressed="true"]') || allMenu.querySelector("button.depth");
+      if (first) first.focus({ preventScroll: true });
+    });
+    document.addEventListener("click", function (e) {
+      if (!allMenu.hidden && !allMenu.contains(e.target)) closeAllMenu();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key !== "Escape" || allMenu.hidden) return;
+      closeAllMenu();
+      allBtn.focus();
+    });
+  }
+
+  function closeAllMenu() {
+    if (!allMenu) return;
+    allMenu.hidden = true;
+    allBtn.setAttribute("aria-expanded", "false");
+  }
+
   function markLevel(level) {
     anchorLevel = level;
+    if (allBtn) {
+      allBtn.querySelector(".lvl").textContent = level > 0 ? String(level) : "";
+      allBtn.classList.toggle("on", level > 0);
+    }
     levelLinks.forEach(function (a) {
       var on = parseInt(a.getAttribute("data-level"), 10) === level;
       a.classList.toggle("active", on);
