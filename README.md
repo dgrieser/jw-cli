@@ -527,7 +527,9 @@ the level of the verse or paragraph it is in, else to the page's level, else to
 depth 1. Quotations are always the end: what they cite unfolds only from its
 own button, and the documents the reader reached a verse through — the article
 on the page, the passage a section shows — are left out of who quotes it.
-Every loader has an abort button that stops it and keeps what already came.
+Every loader has an abort button that stops it and keeps what already came. Every picture on a page — in an article, a verse's
+notes, anything unfolded — opens full size in a new tab, from the wol.jw.org or
+jw.org address it was read from.
 
 Every page keeps a header in view: the page's title, a link up to the page
 above it (the last breadcrumb, the section's start, or the page a document was

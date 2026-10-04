@@ -1440,3 +1440,7 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }
 }
 html:not(.js) .pb-font { display: none; }
+
+/* a picture opens full size in a new tab */
+a.img-link { display: inline-block; max-width: 100%; cursor: zoom-in; }
+a.img-link > img { display: block; }

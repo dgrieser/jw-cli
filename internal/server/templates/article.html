@@ -37,7 +37,7 @@
   <ul class="gallery">
     {{- range .Images}}
     <li>
-      <a href="{{.URL}}" rel="noopener"><img src="{{if .ThumbnailURL}}{{.ThumbnailURL}}{{else}}{{.URL}}{{end}}" alt="{{.Alt}}" loading="lazy"></a>
+      <a href="{{.URL}}" target="_blank" rel="noopener"><img src="{{if .ThumbnailURL}}{{.ThumbnailURL}}{{else}}{{.URL}}{{end}}" alt="{{.Alt}}" loading="lazy"></a>
       {{- if .Caption}}<p>{{.Caption}}</p>{{end}}
       {{- if .Credit}}<p class="credit">{{.Credit}}</p>{{end}}
     </li>

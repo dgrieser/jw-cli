@@ -307,6 +307,43 @@
     });
   })();
 
+  // --- images ----------------------------------------------------------------
+
+  // every picture of a page opens on its own, full size, in a new tab: the
+  // original on wol.jw.org or jw.org it was read from. A picture that already
+  // leads somewhere keeps its link; ones streamed in later get theirs as they
+  // arrive.
+  function linkImages(scope) {
+    if (!scope || !scope.querySelectorAll) return;
+    var imgs = scope.tagName === "IMG" ? [scope] : scope.querySelectorAll("img");
+    Array.prototype.forEach.call(imgs, function (img) {
+      if (img.closest("a, button, [data-ui]")) return;
+      var src = img.currentSrc || img.getAttribute("src") || "";
+      if (!/^https?:\/\//.test(src)) return;
+      var a = document.createElement("a");
+      a.href = src;
+      a.target = "_blank";
+      a.rel = "noopener";
+      a.className = "img-link";
+      if (img.alt) a.title = img.alt;
+      img.parentNode.insertBefore(a, img);
+      a.appendChild(img);
+    });
+  }
+  var mainEl = document.querySelector("main");
+  if (mainEl) {
+    linkImages(mainEl);
+    if (window.MutationObserver) {
+      new MutationObserver(function (records) {
+        records.forEach(function (r) {
+          Array.prototype.forEach.call(r.addedNodes, function (n) {
+            if (n.nodeType === 1) linkImages(n);
+          });
+        });
+      }).observe(mainEl, { childList: true, subtree: true });
+    }
+  }
+
   // --- focus ---------------------------------------------------------------
 
   // the page's main field takes the focus where typing needs no keyboard to
@@ -1789,7 +1826,7 @@
   doc.addEventListener("click", function (e) {
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest("a[href]") : null;
-    if (!a || !doc.contains(a) || a.closest("[data-ui]")) return;
+    if (!a || !doc.contains(a) || a.closest("[data-ui]") || a.target) return;
     var here = onThisPage(a);
     if (here) {
       e.preventDefault();
