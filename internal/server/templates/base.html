@@ -23,6 +23,9 @@
       <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
       <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}">A<span aria-hidden="true">+</span></button>
     </span>
+    <button type="button" class="pb-btn lang-toggle" data-current="{{.LangSymbol}}" aria-haspopup="dialog" title="{{.T.UILanguage}}" aria-label="{{.T.UILanguage}}">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.6 3.6 5.6 3.6 9s-1.2 6.4-3.6 9c-2.4-2.6-3.6-5.6-3.6-9S9.6 5.6 12 3z"/></svg>
+    </button>
   </div>
   <div class="menu" id="menu">
     <div class="wrap">
@@ -34,7 +37,6 @@
         <a class="{{.Active "/meetings"}}" href="{{.WithLang "/meetings"}}">{{.T.UINavMeetings}}</a>
         <a class="{{.Active "/media"}}" href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a>
         <a class="{{.Active "/pub"}}" href="{{.WithLang "/pub"}}">{{.T.UINavPublications}}</a>
-        <a class="{{.Active "/languages"}}" href="{{.WithLang "/languages"}}">{{.T.UINavLanguages}}</a>
       </nav>
       <form class="langform" method="get" action="{{.Path}}">
         {{- range .Hidden}}

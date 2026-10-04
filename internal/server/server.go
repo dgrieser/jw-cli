@@ -110,7 +110,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub", s.uiPubRoot)
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
-	mux.HandleFunc("GET /languages", s.uiLanguages)
 
 	return s.logged(s.auth.RequireAuth(remembersLanguage(mux)))
 }

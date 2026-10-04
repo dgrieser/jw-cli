@@ -41,6 +41,9 @@ type basePage struct {
 	// same language wherever one exists.
 	Locale string
 	T      *i18n.Messages
+	// LangSymbol is the resolved content language, which the language
+	// picker shows as chosen.
+	LangSymbol string
 }
 
 // Version is the build serving the page, for the footer: a release tag or
@@ -103,6 +106,9 @@ func (p basePage) UIText() map[string]string {
 		"footnotes":      t.FootnotesHeading,
 		"pickBook":       t.UIPickBook,
 		"abort":          t.UIAbort,
+		"language":       t.UILanguage,
+		"langQuick":      t.UILangQuick,
+		"langAll":        t.UILangAll,
 		"aborted":        t.UIAborted,
 	}
 }
@@ -137,7 +143,7 @@ func (s *Server) base(r *http.Request, title string) basePage {
 	})
 	page := basePage{Title: title, Lang: lang, Path: r.URL.Path, Hidden: hidden, Locale: "en", T: i18n.EN.Text()}
 	if lng, err := s.language(r); err == nil {
-		page.Locale, page.T = lng.Locale, text(lng)
+		page.Locale, page.T, page.LangSymbol = lng.Locale, text(lng), lng.Symbol
 	}
 	return page
 }
@@ -889,26 +895,6 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	s.render(w, http.StatusOK, "media_item", page)
-}
-
-type languagesPage struct {
-	basePage
-	Query     string
-	Languages []model.Language
-}
-
-func (s *Server) uiLanguages(w http.ResponseWriter, r *http.Request) {
-	langs, err := s.svc.Languages(r.Context())
-	if err != nil {
-		s.failUI(w, r, err)
-		return
-	}
-	q := r.FormValue("q")
-	s.render(w, http.StatusOK, "languages", languagesPage{
-		basePage:  s.base(r, "Languages"),
-		Query:     q,
-		Languages: service.FilterLanguages(langs, q),
-	})
 }
 
 type biblePage struct {

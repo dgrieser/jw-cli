@@ -187,6 +187,8 @@ type Messages struct {
 	UIMenu            string
 	UILoading         string
 	UILanguage        string
+	UILangQuick       string
+	UILangAll         string
 	UILanguageHint    string
 	UIGo              string
 	UIReset           string
@@ -211,12 +213,10 @@ type Messages struct {
 	UIScriptureRefs   string
 	UIImages          string
 	UIUntitled        string
-	UINoLanguages     string
 	UIBackToStart     string
 	UISearchHint      string
 	UIRefHint         string
 	UIArticleHint     string
-	UILangFilterHint  string
 	UIDateHint        string
 	UISymbol          string
 	UIIssue           string
@@ -244,7 +244,6 @@ type Messages struct {
 	UICardMeetings     string
 	UICardMedia        string
 	UICardPublications string
-	UICardLanguages    string
 	// UIExpensive* are the web's form of the confirmation the terminal asks
 	// for. UIExpensiveBody takes the level and the number of requests.
 	UIExpensiveTitle   string
