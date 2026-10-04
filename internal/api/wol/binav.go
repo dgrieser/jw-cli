@@ -6,9 +6,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
 // NavBook is one book of a bible's navigation grid, as the library's own
@@ -60,18 +61,19 @@ const (
 
 var chapterHref = regexp.MustCompile(`/b/[^/]+/[^/]+/[^/]+/(\d+)/(\d+)$`)
 
-// BibleNav reads the book grid of an edition (/binav/{edition}). Cached for 30
-// days.
+// BibleNav reads the book grid of an edition (/binav/{edition}), kept until
+// the page changes upstream.
 func (c *Client) BibleNav(ctx context.Context, cfg Config, edition string) (BibleNav, error) {
 	if edition == "" {
 		edition = "nwtsty"
 	}
-	key := "binav-" + cfg.Locale + "-" + edition
-	var cached BibleNav
-	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached.Sections) > 0 {
-		return cached, nil
-	}
 	u := c.url(cfg, "binav", "/"+edition)
+	return httpx.Memo(ctx, c.cache, "binav2-"+u, func(ctx context.Context) (BibleNav, error) {
+		return c.bibleNav(ctx, u, edition)
+	})
+}
+
+func (c *Client) bibleNav(ctx context.Context, u, edition string) (BibleNav, error) {
 	doc, err := c.hc.GetHTML(ctx, u)
 	if err != nil {
 		return BibleNav{}, err
@@ -120,22 +122,22 @@ func (c *Client) BibleNav(ctx context.Context, cfg Config, edition string) (Bibl
 	if len(nav.Sections) == 0 {
 		return BibleNav{}, fmt.Errorf("no bible books found at %s (edition missing, or page layout changed)", u)
 	}
-	c.cache.Put(key, nav)
 	return nav, nil
 }
 
-// BookNav reads the chapter grid of one book (/binav/{edition}/{book}).
-// Cached for 30 days.
+// BookNav reads the chapter grid of one book (/binav/{edition}/{book}), kept
+// until the page changes upstream.
 func (c *Client) BookNav(ctx context.Context, cfg Config, edition string, book int) (BookNav, error) {
 	if edition == "" {
 		edition = "nwtsty"
 	}
-	key := fmt.Sprintf("binav-%s-%s-%d", cfg.Locale, edition, book)
-	var cached BookNav
-	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached.Chapters) > 0 {
-		return cached, nil
-	}
 	u := c.url(cfg, "binav", fmt.Sprintf("/%s/%d", edition, book))
+	return httpx.Memo(ctx, c.cache, "binav2-"+u, func(ctx context.Context) (BookNav, error) {
+		return c.bookNav(ctx, u, edition, book)
+	})
+}
+
+func (c *Client) bookNav(ctx context.Context, u, edition string, book int) (BookNav, error) {
 	doc, err := c.hc.GetHTML(ctx, u)
 	if err != nil {
 		return BookNav{}, err
@@ -159,6 +161,5 @@ func (c *Client) BookNav(ctx context.Context, cfg Config, edition string, book i
 	if len(nav.Chapters) == 0 {
 		return BookNav{}, fmt.Errorf("no chapters found at %s (book missing in %s, or page layout changed)", u, edition)
 	}
-	c.cache.Put(key, nav)
 	return nav, nil
 }

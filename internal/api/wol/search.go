@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -45,10 +44,9 @@ const (
 	CategoryIndex  = "dx"
 )
 
-const (
-	categoriesKey    = "wolfc1-"
-	categoriesMaxAge = 30 * 24 * time.Hour
-)
+// categoriesKey keeps the categories a language offers as a search last
+// showed them; every search refreshes them.
+const categoriesKey = "wolfc1-"
 
 // search result selectors, grouped for cheap fixing on layout drift.
 const (
@@ -179,7 +177,7 @@ func (c *Client) Search(ctx context.Context, cfg Config, query string, opts Sear
 // yet (AllCategories is the starting point in that case).
 func (c *Client) Categories(cfg Config) []string {
 	var out []string
-	if c.cache.Get(categoriesKey+cfg.Locale, categoriesMaxAge, &out) {
+	if c.cache.Get(categoriesKey+cfg.Locale, &out) {
 		return out
 	}
 	return nil

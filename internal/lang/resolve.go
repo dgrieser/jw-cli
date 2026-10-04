@@ -2,9 +2,9 @@ package lang
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"golang.org/x/text/language"
 
@@ -24,26 +24,18 @@ type Resolver struct {
 	Cache  *httpx.Cache
 }
 
-const cacheKey = "languages"
-const cacheTTL = 7 * 24 * time.Hour
+const cacheKey = "languages2"
 
-// All returns every available content language, cached for a week.
+// All returns every available content language, kept until the list changes
+// upstream; while it cannot be read, the list last seen is used.
 func (r *Resolver) All(ctx context.Context) ([]model.Language, error) {
-	var langs []model.Language
-	if r.Cache.Get(cacheKey, cacheTTL, &langs) && len(langs) > 0 {
-		return langs, nil
-	}
-	langs, err := r.Source.Languages(ctx)
-	if err != nil {
-		// fall back to a stale cache entry if the network is down
-		var stale []model.Language
-		if r.Cache.Get(cacheKey, 365*24*time.Hour, &stale) && len(stale) > 0 {
-			return stale, nil
+	return httpx.Memo(ctx, r.Cache, cacheKey, func(ctx context.Context) ([]model.Language, error) {
+		langs, err := r.Source.Languages(ctx)
+		if err == nil && len(langs) == 0 {
+			err = errors.New("the language list is empty")
 		}
-		return nil, err
-	}
-	r.Cache.Put(cacheKey, langs)
-	return langs, nil
+		return langs, err
+	})
 }
 
 // Resolve maps spec (JW symbol like "X", locale like "de", or BCP-47 like

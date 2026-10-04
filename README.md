@@ -194,7 +194,7 @@ the matches it found.
 For the wol engine both commands then read each result's document and print the
 passage the hit sits in — the paragraph, list item or table, whole — instead of
 wol's teaser, which is cut mid-sentence. That is one request per result, run
-eight at a time and cached for a week, so a repeated search costs nothing.
+eight at a time and cached, so a repeated search costs nothing.
 `--no-excerpts` skips it and keeps the teasers.
 
 The codes are wol's own, from its "refine search" sidebar: `bi` bibles, `dx`
@@ -261,7 +261,7 @@ with every image:
 
 A study-bible verse picture keeps its explanation and its credit on the gallery
 page its thumbnail links to, so `jw bible media` reads that page as well
-(cached for a month) and lists the full-size rendition instead of the
+(cached) and lists the full-size rendition instead of the
 thumbnail. Failing to reach it costs the extra words, not the entry.
 
 The metadata is printed with `--no-urls` too: the flag hides where a picture is,
@@ -431,7 +431,7 @@ Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 
 The count is an upper bound: verses of one chapter share its page, and a verse's
 citation lookup is priced at two full pages of results before anyone knows how
-many there are. Documents are cached for a week, so a second run of the same
+many there are. Documents are cached, so a second run of the same
 material spends almost nothing.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
@@ -514,10 +514,19 @@ front for anything internet-facing. `/data`
 holds the on-disk cache; mount a volume to keep it across restarts.
 
 What jw.org and wol.jw.org answer is kept on disk (in the user cache
-directory, `/data` in the image) for 24 hours and reused — by the next
-command, and by `jw serve` across restarts. `--cache-ttl 1h` changes how long,
-`--cache-ttl 0` turns it off; downloads and signed-in search requests are never
-kept.
+directory, `/data` in the image) with no expiry, and reused — by the next
+command, and by `jw serve` across restarts. For 24 hours an answer is used as
+is; after that, a `HEAD` request asks upstream whether it changed (by ETag,
+length or Last-Modified, whichever the site sends). If not, it is good for
+another 24 hours; if so, only that page is read again, and only the results
+derived from it (a parsed book grid, a library listing) are rebuilt. When
+upstream cannot be reached, what is kept is used. `--cache-ttl 1h` changes the
+window, `--cache-ttl 0` checks on every use.
+
+The cache is bounded at 1 GB by default; past that, what was used least
+recently is dropped. `--cache-max 500MB` or `JW_CACHE_MAX=2GB` changes the
+bound, `0` turns the cache off. Downloads and signed-in search requests are
+never kept.
 
 `--lang` sets the default content language; every page and endpoint takes a
 `?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
@@ -709,11 +718,17 @@ passage would lead nowhere.
 
 The client sends a browser-like User-Agent, keeps a cookie jar, and paces
 wol.jw.org requests at 50 a second (`requestsPerSecond` in
-`internal/httpx/client.go`, burst the same). Slow-changing data (language list,
-wol library config, localized bible book names, wol search categories) is cached
-under the user cache directory (`~/.cache/jw` on Linux), as are document pages
-for a week — a published document does not change, and search excerpts read a
-lot of them.
+`internal/httpx/client.go`, burst the same). Response bodies are kept under the
+user cache directory (`~/.cache/jw` on Linux, `http/`) with their validators,
+and revalidated by `HEAD` once older than the freshness window
+(`internal/httpx/revalidate.go`); a server that cannot answer a `HEAD` usefully
+— the CDN's mediator API answers it with 404, jw.org renders some pages per
+request — is remembered and asked with a `GET` instead, and an equal body is
+still no change. Results derived from bodies (language list, localized bible
+book names, book grids, library pages) are memos (`memo/`, `httpx.Memo`) that
+record the bodies they were built from and are rebuilt only when one of those
+changed. Concurrent reads of one page share one request, and the least recently
+used entries are evicted beyond `--cache-max`.
 
 ## Live smoke-test checklist
 

@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"regexp"
-	"time"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 )
@@ -46,15 +45,23 @@ func cfgPatternFor(locale string) *regexp.Regexp {
 // <link rel="alternate"> block for every other language, and those hreflang
 // locales are not unique (/en/wol/h/r969/lp-mnn is listed as hreflang="en"),
 // so even a locale-anchored body match can pick up a foreign pair.
-// Cached for a week.
+// Kept for the freshness window, then asked again; while wol cannot be
+// reached, the pair last seen is used.
 func (c *Client) ConfigFor(ctx context.Context, locale string) (Config, error) {
-	// v2: v1 entries may hold a foreign rsconf/lp pair.
-	key := "wolcfg2-" + locale
+	return httpx.Memo(ctx, c.cache, "wolcfg3-"+locale, func(ctx context.Context) (Config, error) {
+		return c.configFor(ctx, locale)
+	})
+}
+
+func (c *Client) configFor(ctx context.Context, locale string) (Config, error) {
 	var cfg Config
-	if c.cache.Get(key, 7*24*time.Hour, &cfg) && cfg.Rsconf != "" {
-		return cfg, nil
-	}
 	home := c.hc.Base.WOL + "/" + locale
+	// the redirect is all that is needed, and a HEAD follows it as well
+	if resp, err := c.hc.Head(ctx, home, nil); err == nil && resp.StatusCode/100 == 2 {
+		if m := cfgPathPattern.FindStringSubmatch(finalPath(resp)); m != nil {
+			return Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}, nil
+		}
+	}
 	resp, err := c.hc.Get(ctx, home, nil)
 	if err != nil {
 		return Config{}, fmt.Errorf("discover wol config for %q: %w", locale, err)
@@ -62,9 +69,7 @@ func (c *Client) ConfigFor(ctx context.Context, locale string) (Config, error) {
 	defer resp.Body.Close()
 
 	if m := cfgPathPattern.FindStringSubmatch(finalPath(resp)); m != nil {
-		cfg = Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}
-		c.cache.Put(key, cfg)
-		return cfg, nil
+		return Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}, nil
 	}
 	// no redirect (or an unexpected target): fall back to a body scan
 	body, err := io.ReadAll(resp.Body)
@@ -76,7 +81,6 @@ func (c *Client) ConfigFor(ctx context.Context, locale string) (Config, error) {
 		return Config{}, fmt.Errorf("could not find wol library config for %q on %s (page layout changed?)", locale, home)
 	}
 	cfg = Config{Locale: locale, Rsconf: string(m[1]), Lp: string(m[2])}
-	c.cache.Put(key, cfg)
 	return cfg, nil
 }
 
