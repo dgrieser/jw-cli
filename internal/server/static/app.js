@@ -14,7 +14,7 @@
 
   // --- menu ---------------------------------------------------------------
 
-  var header = document.querySelector(".site-header");
+  var header = document.querySelector(".page-bar");
   var toggle = document.querySelector(".menu-toggle");
 
   function setMenu(open) {
@@ -309,6 +309,105 @@
       else if (currentBook) showChapters(currentBook);
       if (dialog.showModal) dialog.showModal();
       else dialog.setAttribute("open", "");
+    });
+  })();
+
+  // --- the content language: a dialog behind the translate glyph in the bar -
+
+  (function () {
+    var btn = document.querySelector(".lang-toggle");
+    if (!btn) return;
+    var current = btn.getAttribute("data-current") || "";
+    var dialog, select;
+
+    function label(l) {
+      var v = l.vernacular || l.name || l.symbol;
+      return l.name && l.name !== v ? v + " (" + l.name + ")" : v;
+    }
+
+    // the browser's own language, as the first content language that matches
+    // one of its preferred tags exactly, or else by the tag's language alone
+    function detect(langs) {
+      var tags = (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""])
+        .map(function (t) { return String(t).toLowerCase(); }).filter(Boolean);
+      var spoken = langs.filter(function (l) { return !l.isSignLanguage && l.locale; });
+      for (var i = 0; i < tags.length; i++) {
+        var tag = tags[i], base = tag.split("-")[0];
+        var hit = spoken.find(function (l) { return l.locale.toLowerCase() === tag; }) ||
+          spoken.find(function (l) { return l.locale.toLowerCase() === base; });
+        if (hit) return hit;
+      }
+      return null;
+    }
+
+    function option(l) {
+      var o = document.createElement("option");
+      o.value = l.symbol;
+      o.textContent = label(l);
+      return o;
+    }
+
+    function fill(langs) {
+      select.textContent = "";
+      var quick = document.createElement("optgroup");
+      quick.label = T.langQuick || "";
+      var english = langs.find(function (l) { return l.symbol === "E"; });
+      var browser = detect(langs);
+      [english, browser].forEach(function (l, i) {
+        if (l && (i === 0 || l !== english)) quick.appendChild(option(l));
+      });
+      var all = document.createElement("optgroup");
+      all.label = T.langAll || "";
+      langs.forEach(function (l) { all.appendChild(option(l)); });
+      select.appendChild(quick);
+      select.appendChild(all);
+      // the language in use shows as chosen: in the quick group when it is
+      // there, so the long list does not open scrolled far down
+      var chosen = select.querySelector('option[value="' + CSS.escape(current) + '"]');
+      if (chosen) chosen.selected = true;
+      else select.selectedIndex = -1;
+      select.disabled = false;
+    }
+
+    function buildDialog() {
+      dialog = document.createElement("dialog");
+      dialog.className = "lang-picker";
+      dialog.setAttribute("aria-label", T.language || "");
+      dialog.innerHTML = '<div class="bp-head"><strong class="bp-book"></strong>' +
+        '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
+        '<div class="lp-body"><select class="lp-select" disabled></select></div>';
+      dialog.querySelector(".bp-book").textContent = T.language || "";
+      select = dialog.querySelector(".lp-select");
+      select.setAttribute("aria-label", T.language || "");
+      var loading = document.createElement("option");
+      loading.textContent = T.loading || "…";
+      select.appendChild(loading);
+      dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
+      dialog.addEventListener("click", function (e) {
+        if (e.target === dialog) dialog.close();
+      });
+      select.addEventListener("change", function () {
+        if (!select.value || select.value === current) return;
+        var u = new URL(location.href);
+        u.searchParams.set("lang", select.value);
+        location.assign(u.toString());
+      });
+      document.body.appendChild(dialog);
+      fetch("/api/v1/languages", { headers: { Accept: "application/json" } })
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status + " " + r.statusText);
+          return r.json();
+        })
+        .then(fill, function (err) {
+          loading.textContent = String(err && err.message || err);
+        });
+    }
+
+    btn.addEventListener("click", function () {
+      if (!dialog) buildDialog();
+      if (dialog.showModal) dialog.showModal();
+      else dialog.setAttribute("open", "");
+      if (!select.disabled) select.focus();
     });
   })();
 

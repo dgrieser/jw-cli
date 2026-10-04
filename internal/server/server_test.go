@@ -18,6 +18,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/server"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/version"
 )
 
 // newTestServer wires the server against a mock upstream, mirroring the CLI
@@ -476,9 +477,13 @@ func TestUIIndexAndLanguages(t *testing.T) {
 		t.Errorf("language not remembered: %q", cookie)
 	}
 
-	resp, body = get(t, srv, "/languages?q=german")
-	if resp.StatusCode != 200 || !strings.Contains(body, "Deutsch") || strings.Contains(body, "Français") {
-		t.Errorf("languages page: status %d\n%s", resp.StatusCode, body)
+	// the language page is gone: the page bar's language button replaces it
+	resp, _ = get(t, srv, "/languages")
+	if resp.StatusCode != 404 {
+		t.Errorf("languages page: status %d, want 404", resp.StatusCode)
+	}
+	if _, body = get(t, srv, "/?lang=de"); !strings.Contains(body, `class="pb-btn lang-toggle" data-current="X"`) {
+		t.Errorf("no language button naming the current language")
 	}
 
 	resp, _ = get(t, srv, "/static/style.css")
@@ -527,7 +532,7 @@ func TestUIArticle(t *testing.T) {
 		t.Fatalf("no article element in:\n%s", body)
 	}
 	// the footer names the build
-	if !strings.Contains(body, "· jw <") {
+	if !strings.Contains(body, "<p>JW "+version.String()+" · ") {
 		t.Errorf("no version in the footer")
 	}
 	// the document brings its own title; the page does not repeat it

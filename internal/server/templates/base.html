@@ -11,21 +11,32 @@
 </head>
 <body>
 <div class="progress" aria-hidden="true"></div>
-<header class="site-header">
-  <div class="wrap bar">
-    <a class="brand" href="{{.WithLang "/"}}">JW</a>
-    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="menu">
-      <span class="menu-icon" aria-hidden="true"></span>{{.T.UIMenu}}
+<header class="page-bar" data-ui>
+  <div class="wrap pb">
+    <button class="menu-toggle pb-btn" type="button" aria-expanded="false" aria-controls="menu" aria-label="{{.T.UIMenu}}" title="{{.T.UIMenu}}">
+      <span class="menu-icon" aria-hidden="true"></span>
     </button>
-    <div class="menu" id="menu">
+    <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
+    {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
+    <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
+      <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}"><span aria-hidden="true">−</span></button>
+      <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
+      <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}"><span aria-hidden="true">+</span></button>
+    </span>
+    <button type="button" class="pb-btn lang-toggle" data-current="{{.LangSymbol}}" aria-haspopup="dialog" title="{{.T.UILanguage}}" aria-label="{{.T.UILanguage}}">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12.87 15.07l-2.54-2.51.03-.03c1.74-1.94 2.98-4.17 3.71-6.53H17V4h-7V2H8v2H1v1.99h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/></svg>
+    </button>
+  </div>
+  <div class="menu" id="menu">
+    <div class="wrap">
       <nav class="site-nav" aria-label="{{.T.UIMenu}}">
+        <a class="{{.Active "/"}}" href="{{.WithLang "/"}}">{{.T.UINavHome}}</a>
         <a class="{{.Active "/search"}}" href="{{.WithLang "/search"}}">{{.T.UINavSearch}}</a>
         <a class="{{.Active "/bible"}}" href="{{.WithLang "/bible"}}">{{.T.UINavBible}}</a>
         <a class="{{.Active "/dailytext"}}" href="{{.WithLang "/dailytext"}}">{{.T.UINavDailyText}}</a>
         <a class="{{.Active "/meetings"}}" href="{{.WithLang "/meetings"}}">{{.T.UINavMeetings}}</a>
         <a class="{{.Active "/media"}}" href="{{.WithLang "/media"}}">{{.T.UINavMedia}}</a>
         <a class="{{.Active "/pub"}}" href="{{.WithLang "/pub"}}">{{.T.UINavPublications}}</a>
-        <a class="{{.Active "/languages"}}" href="{{.WithLang "/languages"}}">{{.T.UINavLanguages}}</a>
       </nav>
       <form class="langform" method="get" action="{{.Path}}">
         {{- range .Hidden}}
@@ -38,17 +49,6 @@
     </div>
   </div>
 </header>
-<div class="page-bar" data-ui>
-  <div class="wrap pb">
-    <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
-    {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
-    <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
-      <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}">A<span aria-hidden="true">−</span></button>
-      <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
-      <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}">A<span aria-hidden="true">+</span></button>
-    </span>
-  </div>
-</div>
 <main class="wrap">
 {{- if .Error}}
 <p class="error" role="alert">{{.Error}}</p>
@@ -57,7 +57,7 @@
 </main>
 <footer class="site-footer">
   <div class="wrap">
-    <p>{{.T.UIFooter}} {{.T.UIJSONAPI}}: <a href="/api/v1/languages"><code>/api/v1</code></a> · jw {{with .VersionURL}}<a href="{{.}}" rel="noopener"><code>{{$.Version}}</code></a>{{else}}<code>{{.Version}}</code>{{end}}</p>
+    <p>JW {{with .VersionURL}}<a href="{{.}}" rel="noopener">{{$.Version}}</a>{{else}}{{.Version}}{{end}} · <a href="https://github.com/dgrieser/jw-cli" rel="noopener">https://github.com/dgrieser/jw-cli</a> · API: <a href="/api/v1/languages"><code>/api/v1</code></a></p>
   </div>
 </footer>
 <div class="loading" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span>{{.T.UILoading}}</div>
