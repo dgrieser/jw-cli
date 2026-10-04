@@ -14,7 +14,7 @@
 
   // --- menu ---------------------------------------------------------------
 
-  var header = document.querySelector(".site-header");
+  var header = document.querySelector(".page-bar");
   var toggle = document.querySelector(".menu-toggle");
 
   function setMenu(open) {

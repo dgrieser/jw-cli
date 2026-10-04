@@ -101,6 +101,7 @@ var de = Messages{
 	},
 
 	// --- the web UI --------------------------------------------------------
+	UINavHome:          "Startseite",
 	UINavSearch:        "Suchen",
 	UINavBible:         "Bibel",
 	UINavDailyText:     "Tagestext",

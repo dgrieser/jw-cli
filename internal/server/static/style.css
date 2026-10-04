@@ -111,55 +111,9 @@ img { max-width: 100%; height: auto; }
 .hint { font-size: 0.9rem; }
 .empty { padding: 1rem 0; }
 
-/* header -------------------------------------------------------------- */
+/* menu: behind the button at the left end of the page bar ---------------- */
 
-.site-header { border-bottom: 1px solid var(--line); }
-
-.site-header .bar {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  min-height: 3.25rem;
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 1.15rem;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  text-decoration: none;
-  padding: 0.25rem 0;
-}
-.brand:hover { color: var(--accent); }
-
-.menu { display: contents; }
-
-.site-nav { display: flex; align-self: stretch; }
-.site-nav a {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 0.7rem;
-  color: var(--muted);
-  text-decoration: none;
-  font-weight: 500;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  white-space: nowrap;
-}
-.site-nav a:hover { color: var(--ink); }
-.site-nav a.active { color: var(--ink); border-bottom-color: var(--accent); }
-
-.langform {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
-  color: var(--muted);
-}
-.langform input { width: 4.5rem; text-align: center; }
-
-.menu-toggle { display: none; }
+.pb .menu-toggle { flex: none; color: var(--ink); margin-left: -0.4rem; }
 .menu-icon {
   position: relative;
   display: inline-block;
@@ -180,39 +134,60 @@ img { max-width: 100%; height: auto; }
   transition: transform 160ms;
 }
 /* open: the three lines become a cross */
-.site-header.open .menu-icon { box-shadow: none; transform: rotate(45deg); }
-.site-header.open .menu-icon::after { transform: rotate(90deg); }
+.page-bar.open .menu-icon { box-shadow: none; transform: rotate(45deg); }
+.page-bar.open .menu-icon::after { transform: rotate(90deg); }
 
-/* small screens: the menu folds behind a button */
-@media (max-width: 56rem) {
-  .site-header .bar { flex-wrap: wrap; gap: 0 1rem; }
-  .menu-toggle { display: inline-flex; margin-left: auto; }
-  .menu {
-    display: none;
-    flex-basis: 100%;
-    padding: 0.25rem 0 0.75rem;
-  }
-  .site-header.open .menu, html:not(.js) .menu { display: block; }
-  html:not(.js) .menu-toggle { display: none; }
-
-  .site-nav { flex-direction: column; margin: 0 calc(-1 * var(--gutter)); }
-  .site-nav a {
-    min-height: 2.75rem;
-    padding: 0 var(--gutter);
-    border-bottom: 0;
-    border-left: 3px solid transparent;
-    margin: 0;
-    color: var(--ink);
-  }
-  .site-nav a.active { border-left-color: var(--accent); background: var(--accent-soft); }
-
-  .langform {
-    margin: 0.75rem 0 0;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--line);
-  }
-  .langform input { flex: 1; text-align: left; }
+.menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: calc(100dvh - var(--bar-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.25rem 0 0.75rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 12px 24px -16px rgba(0, 0, 0, 0.45);
 }
+.page-bar.open .menu { display: block; }
+/* wider screens: a panel along the left edge rather than a full-width sheet */
+@media (min-width: 40rem) {
+  .menu { right: auto; width: calc(24rem + 2 * var(--gutter)); border-right: 1px solid var(--line); }
+}
+/* without a script the button does nothing: the menu simply stands open */
+html:not(.js) .menu-toggle { display: none; }
+html:not(.js) .menu { display: block; position: static; box-shadow: none; border-bottom: 0; }
+html:not(.js) .page-bar { position: static; }
+
+.site-nav { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--gutter)); max-width: calc(24rem + 2 * var(--gutter)); }
+.site-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 var(--gutter);
+  border-left: 3px solid transparent;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.site-nav a:hover { background: var(--field); }
+.site-nav a.active { border-left-color: var(--accent); background: var(--accent-soft); }
+
+.langform {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 24rem;
+  margin: 0.75rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.langform input { flex: 1; }
 
 /* footer -------------------------------------------------------------- */
 
@@ -1343,6 +1318,21 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 }
 .bp-books .bible-nav-heading { margin-top: 0.5rem; }
 .bp-books .book-grid a.active { outline: 3px solid var(--accent); outline-offset: -3px; }
+/* phones: the picker takes the whole screen, edge to edge */
+@media (max-width: 36rem) {
+  dialog.bible-picker {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .bp-chapters, .bp-books { padding-inline: 0; }
+  .bp-books .bible-nav-heading { padding-inline: 0.75rem; }
+}
 
 /* a text search of the bible */
 .bible-search-edition { margin-top: 1.5rem; }

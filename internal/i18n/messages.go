@@ -176,6 +176,7 @@ type Messages struct {
 	// The chrome of the server's own pages. It follows the content language the
 	// same way the command line's does: German for a German reading, English
 	// for everything else.
+	UINavHome         string
 	UINavSearch       string
 	UINavBible        string
 	UINavDailyText    string

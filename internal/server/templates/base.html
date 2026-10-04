@@ -11,14 +11,23 @@
 </head>
 <body>
 <div class="progress" aria-hidden="true"></div>
-<header class="site-header">
-  <div class="wrap bar">
-    <a class="brand" href="{{.WithLang "/"}}">JW</a>
-    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="menu">
-      <span class="menu-icon" aria-hidden="true"></span>{{.T.UIMenu}}
+<header class="page-bar" data-ui>
+  <div class="wrap pb">
+    <button class="menu-toggle pb-btn" type="button" aria-expanded="false" aria-controls="menu" aria-label="{{.T.UIMenu}}" title="{{.T.UIMenu}}">
+      <span class="menu-icon" aria-hidden="true"></span>
     </button>
-    <div class="menu" id="menu">
+    <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
+    {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
+    <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
+      <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}">A<span aria-hidden="true">−</span></button>
+      <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
+      <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}">A<span aria-hidden="true">+</span></button>
+    </span>
+  </div>
+  <div class="menu" id="menu">
+    <div class="wrap">
       <nav class="site-nav" aria-label="{{.T.UIMenu}}">
+        <a class="{{.Active "/"}}" href="{{.WithLang "/"}}">{{.T.UINavHome}}</a>
         <a class="{{.Active "/search"}}" href="{{.WithLang "/search"}}">{{.T.UINavSearch}}</a>
         <a class="{{.Active "/bible"}}" href="{{.WithLang "/bible"}}">{{.T.UINavBible}}</a>
         <a class="{{.Active "/dailytext"}}" href="{{.WithLang "/dailytext"}}">{{.T.UINavDailyText}}</a>
@@ -38,17 +47,6 @@
     </div>
   </div>
 </header>
-<div class="page-bar" data-ui>
-  <div class="wrap pb">
-    <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
-    {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
-    <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
-      <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}">A<span aria-hidden="true">−</span></button>
-      <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
-      <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}">A<span aria-hidden="true">+</span></button>
-    </span>
-  </div>
-</div>
 <main class="wrap">
 {{- if .Error}}
 <p class="error" role="alert">{{.Error}}</p>

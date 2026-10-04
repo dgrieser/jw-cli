@@ -101,6 +101,7 @@ var en = Messages{
 	},
 
 	// --- the web UI --------------------------------------------------------
+	UINavHome:          "Home",
 	UINavSearch:        "Search",
 	UINavBible:         "Bible",
 	UINavDailyText:     "Daily text",
