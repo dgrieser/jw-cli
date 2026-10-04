@@ -312,7 +312,7 @@
     });
   })();
 
-  // --- the content language: a dialog behind the globe in the page bar ------
+  // --- the content language: a dialog behind the translate glyph in the bar -
 
   (function () {
     var btn = document.querySelector(".lang-toggle");

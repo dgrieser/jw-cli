@@ -188,7 +188,7 @@ html:not(.js) .page-bar { position: static; }
   color: var(--muted);
 }
 .langform input { flex: 1; }
-/* with a script, the globe in the page bar picks the language instead */
+/* with a script, the translate glyph in the page bar picks the language */
 html.js .langform { display: none; }
 
 /* footer -------------------------------------------------------------- */
