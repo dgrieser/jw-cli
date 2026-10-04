@@ -526,6 +526,10 @@ func TestUIArticle(t *testing.T) {
 	if start < 0 || end < start {
 		t.Fatalf("no article element in:\n%s", body)
 	}
+	// the footer names the build
+	if !strings.Contains(body, "· jw <") {
+		t.Errorf("no version in the footer")
+	}
 	// the document brings its own title; the page does not repeat it
 	if n := strings.Count(body[start:end], "<h1"); n != 1 {
 		t.Errorf("article has %d headings, want 1", n)
