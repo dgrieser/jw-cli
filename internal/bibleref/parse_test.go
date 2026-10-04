@@ -2,6 +2,7 @@ package bibleref
 
 import (
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -115,4 +116,21 @@ func TestVerseID(t *testing.T) {
 	if VerseID(43, 3, 16) != 43003016 {
 		t.Errorf("John 3:16 = %d", VerseID(43, 3, 16))
 	}
+}
+
+// normalizeName runs on every request at once; a shared transformer once
+// panicked with "slice bounds out of range" under that load.
+func TestNormalizeNameConcurrent(t *testing.T) {
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 500 {
+				if got := normalizeName("Génesis"); got != "genesis" {
+					t.Errorf("normalizeName = %q", got)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }

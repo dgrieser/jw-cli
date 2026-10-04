@@ -140,14 +140,18 @@ func (t *Table) Lookup(name string) (int, bool) {
 	return 0, false
 }
 
-var stripMarks = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+// stripMarks builds a fresh chain per call: a transform.Chain keeps state
+// between calls, so one shared chain breaks under concurrent requests.
+func stripMarks() transform.Transformer {
+	return transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
+}
 
 // normalizeName lowercases, strips periods/diacritics, normalizes roman
 // ordinals (i/ii/iii -> 1/2/3), and collapses whitespace.
 func normalizeName(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = strings.ReplaceAll(s, ".", "")
-	if out, _, err := transform.String(stripMarks, s); err == nil {
+	if out, _, err := transform.String(stripMarks(), s); err == nil {
 		s = out
 	}
 	fields := strings.Fields(s)

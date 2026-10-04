@@ -113,7 +113,7 @@ img { max-width: 100%; height: auto; }
 
 /* menu: behind the button at the left end of the page bar ---------------- */
 
-.pb .menu-toggle { flex: none; color: var(--ink); margin-left: -0.4rem; }
+.pb .menu-toggle { flex: none; color: var(--ink); margin-left: -0.4rem; margin-right: 0.4rem; }
 .menu-icon {
   position: relative;
   display: inline-block;
@@ -303,6 +303,33 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .query button { flex: none; }
 .query.compact { max-width: 24rem; }
 .query.compact input { flex: 1; }
+/* a date in the browser's own format, the native picker behind a button */
+.date-field { position: relative; flex: 1; min-width: 0; display: flex; }
+.date-field .date-text { flex: 1; min-width: 0; padding-right: 2.6rem; }
+.date-cal {
+  position: absolute;
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+  min-height: 2rem;
+  width: 2.2rem;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ink);
+}
+.date-cal:hover { background: var(--field-hover); border-color: transparent; }
+.date-field .date-native {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 
 .query.large { max-width: 40rem; }
 .query.large input, .query.large button { min-height: 3rem; font-size: 1.05rem; border-radius: 10px; }
@@ -859,6 +886,18 @@ li.unfold-item.nested { padding-right: 2.3rem; }
 .unfold-tools { display: inline-flex; gap: 0.35rem; margin-left: auto; }
 .unfold-tools[hidden] { display: none; }
 html:not(.js) .unfold-tools { display: none; }
+/* with a script, the page bar's diamond picks the level instead */
+.unfold-bar.has-pb-unfold .tabs.unfold { display: none; }
+button.pill {
+  min-height: 2.1rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+button.pill:hover { color: var(--ink); border-color: var(--muted); background: var(--field); }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); font-weight: 500; }
 button.ghost:hover { background: var(--field); color: var(--ink); border-color: transparent; }
 
@@ -1208,7 +1247,8 @@ tbody tr:hover { background: var(--surface); }
 .page-bar .pb {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  /* the controls on the right sit close together; the left keeps its room */
+  gap: 0.1rem;
   min-height: calc(var(--bar-h) - 1px);
 }
 .pb-up {
@@ -1225,11 +1265,21 @@ tbody tr:hover { background: var(--surface); }
   white-space: nowrap;
   font-weight: 650;
 }
-.pb-font { flex: none; display: inline-flex; gap: 2px; margin-left: auto; }
+.pb-font { flex: none; display: inline-flex; gap: 0; margin-left: auto; }
+.pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
+.page-bar .pb { position: relative; }
+/* the diamond that unfolds the whole page sits in the bar, not beside a line */
+.pb .pb-unfold { position: relative; top: auto; right: auto; flex: none; margin-left: auto; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; }
+.pb .pb-unfold + .pb-font { margin-left: 0; }
+.pb .pb-unfold.on { color: var(--accent); background: var(--accent-soft); }
+.pb .pb-unfold.busy svg { animation: spin-pulse 1.2s ease-in-out infinite; }
+@keyframes spin-pulse { 50% { opacity: 0.35; } }
+.pb-unfold-menu { top: calc(100% + 0.2rem); right: 0; }
+.pb-unfold-menu .label { white-space: nowrap; }
 .pb-btn {
   min-height: 2rem;
-  min-width: 2.1rem;
-  padding: 0 0.4rem;
+  min-width: 1.9rem;
+  padding: 0 0.25rem;
   font-size: 0.85rem;
   border-radius: var(--r-small);
   background: transparent;
@@ -1250,7 +1300,7 @@ html:not(.js) .lang-toggle { display: none; }
   font-weight: 650;
   max-width: max-content;
 }
-.pb-bible .pb-title { flex: 0 1 auto; }
+.pb-bible .pb-title { flex: 0 1 auto; margin-right: 0; }
 .pb-caret {
   flex: none;
   width: 1rem;
