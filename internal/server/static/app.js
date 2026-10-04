@@ -446,7 +446,14 @@
   (function () {
     var pickers = document.querySelectorAll('form input[type="date"][name]');
     if (!pickers.length || !window.Intl || !Intl.DateTimeFormat.prototype.formatToParts) return;
-    var df = new Intl.DateTimeFormat(navigator.language || undefined, { year: "numeric", month: "2-digit", day: "2-digit" });
+    var opts = { year: "numeric", month: "2-digit", day: "2-digit" };
+    var df;
+    try {
+      df = new Intl.DateTimeFormat(navigator.language || undefined, opts);
+    } catch (err) {
+      // a tag Intl does not take (en-US@posix): the default locale instead
+      df = new Intl.DateTimeFormat(undefined, opts);
+    }
     var order = df.formatToParts(new Date(2000, 10, 22)).map(function (p) { return p.type; })
       .filter(function (t) { return t === "year" || t === "month" || t === "day"; });
     var CAL = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" ' +
