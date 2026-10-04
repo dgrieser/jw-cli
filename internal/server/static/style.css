@@ -1236,8 +1236,7 @@ tbody tr:hover { background: var(--surface); }
   border-color: transparent;
   color: var(--muted);
 }
-.pb-btn[data-font="-1"] { font-size: 0.75rem; }
-.pb-btn[data-font="1"] { font-size: 1rem; }
+.pb-btn[data-font="-1"], .pb-btn[data-font="1"] { font-size: 1.15rem; }
 .pb .lang-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); margin-right: -0.4rem; }
 html:not(.js) .lang-toggle { display: none; }
 .pb-bible {
