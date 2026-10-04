@@ -1287,31 +1287,29 @@ tbody tr:hover { background: var(--surface); }
 /* the bible's book picker: a book's chapters as one row, the books under it */
 dialog.bible-picker {
   width: min(56rem, calc(100vw - 1.5rem));
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
   padding: 0;
   border: 1px solid var(--line-strong);
   border-radius: var(--r);
   background: var(--paper);
   color: var(--ink);
-  overflow: auto;
+  overflow: hidden;
 }
+/* the book's name and its chapters stay put; only the books scroll under
+   them, so neither is ever covered or pushed out of view */
+dialog.bible-picker[open] { display: flex; flex-direction: column; }
 dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 .bp-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem 0;
-  background: var(--paper);
 }
-.bp-book { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-book { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
 .bp-close { min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
 .bp-chapters {
-  position: sticky;
-  top: 2.5rem;
-  z-index: 1;
+  flex: none;
   display: flex;
   gap: 2px;
   padding: 0.5rem 0.75rem;
@@ -1319,7 +1317,6 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scrollbar-width: thin;
-  background: var(--paper);
   border-bottom: 1px solid var(--line);
 }
 .bp-chapters a {
@@ -1338,7 +1335,13 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 }
 .bp-chapters a:hover { filter: brightness(1.12); color: #fff; }
 .bp-chapters a.active { background: var(--accent); color: var(--accent-ink); }
-.bp-books { padding: 0.5rem 0.75rem 0.75rem; }
+.bp-books {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.5rem 0.75rem 0.75rem;
+}
 .bp-books .bible-nav-heading { margin-top: 0.5rem; }
 .bp-books .book-grid a.active { outline: 3px solid var(--accent); outline-offset: -3px; }
 

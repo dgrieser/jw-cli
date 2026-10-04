@@ -286,7 +286,6 @@
               e.preventDefault();
               e.stopPropagation();
               showChapters(b.number);
-              row.scrollIntoView({ block: "nearest" });
             });
             li.appendChild(a);
             ul.appendChild(li);
