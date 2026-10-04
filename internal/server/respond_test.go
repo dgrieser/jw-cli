@@ -222,6 +222,7 @@ func TestArticleTarget(t *testing.T) {
 	for raw, want := range map[string]string{
 		"https://wol.jw.org/de/wol/d/r10/lp-x/1102010144#h=43:0-48:0": "https://wol.jw.org/de/wol/d/r10/lp-x/1102010144#h=43:0-48:0",
 		"https://evil.example/de/wol/d/r10/lp-x/1":                    "https://wol.jw.org/de/wol/d/r10/lp-x/1",
+		"https://wol.jw.org/de/wol/tc/r10/lp-x/1001070640/3":          "https://wol.jw.org/de/wol/tc/r10/lp-x/1001070640/3",
 		"https://www.jw.org/de/bibliothek/artikel/x/":                 "https://www.jw.org/de/bibliothek/artikel/x/",
 	} {
 		if got, ok := s.articleTarget(raw); !ok || got != want {

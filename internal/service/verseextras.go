@@ -229,7 +229,13 @@ func (s *Service) StreamFootnote(ctx context.Context, lng model.Language, path s
 // ArticleSection reads a linked document into one section: the passage the
 // link names when it names one ("#h=12:0-14:0"), the whole document otherwise.
 // What a page loads when a link to an article is followed.
-func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target string) (UnfoldSection, error) {
+//
+// cfg.Depth is how deep the document unfolds, counting the document itself as
+// the first level: at one it brings the bible texts it quotes, as a passage
+// does at the end of an expansion; deeper, what it cites unfolds Depth-1
+// levels, closed by those texts again (cfg.Tail). Zero shows it as it is.
+func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target string,
+	cfg UnfoldConfig, txt *i18n.Messages) (UnfoldSection, error) {
 	page := target
 	if i := strings.IndexByte(page, '#'); i >= 0 {
 		page = page[:i]
@@ -242,10 +248,25 @@ func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target
 	if passage, err := s.WOL.Passage(ctx, target); err == nil && strings.TrimSpace(passage) != "" {
 		body = passage
 	}
+	if cfg.Depth > 0 {
+		acfg := cfg
+		acfg.Depth, acfg.Tail = cfg.Depth-1, true
+		// the references the document writes are looked up for quotations
+		// once opened, as an article's are
+		acfg.CitedDepth = 1
+		r := newTooltipResolver(s, lng, nil).withCitedAs(ctx, acfg).
+			excluding(art.DocID, wol.DocIDFromURL(art.URL), wol.DocIDFromURL(page))
+		unfolded, err := unfoldInline(ctx, r, body, acfg, txt)
+		if err != nil {
+			return UnfoldSection{}, err
+		}
+		body = unfolded
+	}
 	return UnfoldSection{
 		Title: html.EscapeString(firstNonBlank(art.Title, target)),
 		Body:  dropFirstH1(body),
 		Ref:   RefPath(target),
+		Doc:   firstDocID(art.DocID, wol.DocIDFromURL(art.URL), wol.DocIDFromURL(page)),
 		Base:  s.ArticleBase(art),
 		Open:  true,
 	}, nil
@@ -267,6 +288,15 @@ func dropFirstH1(fragment string) string {
 		return fragment
 	}
 	return out
+}
+
+func firstDocID(ids ...int) int {
+	for _, id := range ids {
+		if id > 0 {
+			return id
+		}
+	}
+	return 0
 }
 
 func firstNonBlank(vals ...string) string {

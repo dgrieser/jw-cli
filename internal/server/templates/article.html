@@ -10,7 +10,7 @@
 </form>
 {{- else}}
 {{template "unfold" .}}
-<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
+<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}{{if .DocID}} data-doc="{{.DocID}}"{{end}}>
 {{- if .Heading}}<h1>{{.Heading}}</h1>{{end}}
 {{.Body}}
 </article>

@@ -7,7 +7,7 @@
 <title>{{.Title}} · JW</title>
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
-<script>document.documentElement.classList.add("js")</script>
+<script>document.documentElement.classList.add("js");try{var f=parseFloat(localStorage.getItem("jw:font"));if(f>0)document.documentElement.style.fontSize=f+"%"}catch(e){}</script>
 </head>
 <body>
 <div class="progress" aria-hidden="true"></div>
@@ -38,6 +38,17 @@
     </div>
   </div>
 </header>
+<div class="page-bar" data-ui>
+  <div class="wrap pb">
+    <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
+    {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
+    <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
+      <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}">A<span aria-hidden="true">−</span></button>
+      <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
+      <button type="button" class="pb-btn" data-font="1" title="{{.T.UIFontLarger}}" aria-label="{{.T.UIFontLarger}}">A<span aria-hidden="true">+</span></button>
+    </span>
+  </div>
+</div>
 <main class="wrap">
 {{- if .Error}}
 <p class="error" role="alert">{{.Error}}</p>

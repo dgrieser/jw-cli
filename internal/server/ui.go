@@ -101,6 +101,9 @@ func (p basePage) UIText() map[string]string {
 		"unfoldAnyway":   t.UIUnfoldAnyway,
 		"translations":   t.TranslationsHeading,
 		"footnotes":      t.FootnotesHeading,
+		"pickBook":       t.UIPickBook,
+		"abort":          t.UIAbort,
+		"aborted":        t.UIAborted,
 	}
 }
 
@@ -488,6 +491,9 @@ type articlePage struct {
 	Body         template.HTML
 	Refs         []model.ScriptureAnchor
 	Images       []model.MediaAsset
+	// DocID is the library document shown, zero for a page of jw.org: the
+	// publications quoting what it cites leave it out.
+	DocID int
 }
 
 func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
@@ -525,6 +531,10 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		page.Heading = art.Title
 	}
 	page.URL = art.URL
+	page.DocID = art.DocID
+	if page.DocID == 0 {
+		page.DocID = wol.DocIDFromURL(art.URL)
+	}
 	page.Refs = art.ScriptureRefs
 	page.Images = art.Images
 	s.render(w, http.StatusOK, "article", page)
@@ -920,6 +930,42 @@ type biblePage struct {
 	Nav      *wol.BibleNav
 	BookNav  *wol.BookNav
 	BookName string
+	// Search is what a text search found, when what was typed is not a
+	// reference.
+	Search *bibleSearchView
+	// BookNames are the books as the language names them, by number: what
+	// the page's header calls the book of the verses in view.
+	BookNames map[int]string
+}
+
+// bibleSearchView is a text search of the bible as the page lists it: the
+// hits of each bible searched, under its name.
+type bibleSearchView struct {
+	Header    string
+	Editions  string
+	Truncated string
+	Groups    []bibleHitGroup
+}
+
+type bibleHitGroup struct {
+	Label string
+	Hits  []bibleHitView
+}
+
+// bibleHitView is one hit: the book (or the study notes) it is in, where it
+// opens in the reader, and the passages that matched.
+type bibleHitView struct {
+	Title    string
+	Href     string
+	Refs     []bibleHitRef
+	Snippet  template.HTML
+	External string
+}
+
+// bibleHitRef is one passage of a hit, as a link into the reader.
+type bibleHitRef struct {
+	Label string
+	Href  string
 }
 
 // BookLink leads from the book grid to the chapter grid of one book.
@@ -985,6 +1031,14 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		Edition:  valueOr(r, "bible", "nwtsty"),
 	}
 	page.Editions = s.editionOptions(r, page.Edition)
+	// a chapter picked from the header's book picker reads like one typed
+	if book, _ := intParam(r, "book", 0); page.Ref == "" && book >= 1 && book <= 66 {
+		if chapter, _ := intParam(r, "chapter", 0); chapter > 0 {
+			if lng, err := s.language(r); err == nil {
+				page.Ref = fmt.Sprintf("%s %d", s.svc.BookTable(r.Context(), lng).Name(book), chapter)
+			}
+		}
+	}
 	if page.Ref == "" {
 		s.bibleNav(r, &page)
 		s.render(w, http.StatusOK, "bible", page)
@@ -993,6 +1047,12 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	lng, err := s.language(r)
 	if err != nil {
 		s.failUI(w, r, err)
+		return
+	}
+	// what is not a reference is words to look for in the bible
+	if _, _, err := s.svc.ParseRefs(r.Context(), lng, page.Ref); err != nil {
+		s.bibleSearch(r, lng, &page)
+		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
 	depth, auto, err := unfoldRequest(r, 0)
@@ -1011,7 +1071,61 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, page.Edition, depth)
+	if res.Table != nil {
+		page.BookNames = map[int]string{}
+		for b := 1; b <= 66; b++ {
+			page.BookNames[b] = res.Table.Name(b)
+		}
+	}
 	s.render(w, http.StatusOK, "bible", page)
+}
+
+// bibleSearch fills in what a text search of the bible being read, and of the
+// other bibles of the language, found: every hit, grouped by bible, each
+// passage a link into the reader.
+func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePage) {
+	res, err := s.svc.SearchBible(r.Context(), lng, page.Ref, page.Edition)
+	if err != nil {
+		page.Error = err.Error()
+		return
+	}
+	txt := text(lng)
+	table := s.svc.BookTable(r.Context(), lng)
+	view := &bibleSearchView{Header: fmt.Sprintf(txt.UIBibleSearchHeader, len(res.Hits), page.Ref)}
+	var names []string
+	for _, e := range res.Editions {
+		label := firstNonEmpty(e.Title, e.Symbol)
+		names = append(names, label)
+		group := bibleHitGroup{Label: label}
+		for _, h := range res.Hits {
+			if !strings.EqualFold(h.Edition, e.Symbol) {
+				continue
+			}
+			v := bibleHitView{
+				Title:    inlineText(h.Title),
+				Snippet:  s.sanitized(h.Snippet, s.svc.HTTP.Base.WOL),
+				External: h.WOLLink,
+				Href:     articleHref(h.WOLLink, page.Lang),
+			}
+			for i, ref := range h.Passages {
+				q := url.Values{"bible": {h.Edition}, "ref": {service.RefString(ref, table)}}
+				link := bibleHitRef{Label: service.RefString(ref, table), Href: page.WithLang("/bible?" + q.Encode())}
+				if i == 0 {
+					v.Href = link.Href
+				}
+				v.Refs = append(v.Refs, link)
+			}
+			group.Hits = append(group.Hits, v)
+		}
+		if len(group.Hits) > 0 {
+			view.Groups = append(view.Groups, group)
+		}
+	}
+	view.Editions = fmt.Sprintf(txt.UIBibleSearchEditions, strings.Join(names, ", "))
+	if res.Truncated {
+		view.Truncated = fmt.Sprintf(txt.UIBibleSearchTruncated, service.MaxBibleSearchPages)
+	}
+	page.Search = view
 }
 
 // bibleNav fills in the grid the page opens with: the books of the edition, or

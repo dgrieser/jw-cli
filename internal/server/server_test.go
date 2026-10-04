@@ -876,7 +876,7 @@ func TestUnfoldVerseStream(t *testing.T) {
 		t.Fatalf("no sections in:\n%s", body)
 	}
 	// the study notes come first, as a disclosure of their own
-	if !strings.Contains(sections[0].HTML, `<details class="section"><summary>Study notes</summary>`) {
+	if !strings.Contains(sections[0].HTML, `<details class="section" data-ref="notes"><summary>Study notes</summary>`) {
 		t.Errorf("first section is not the study notes: %s", sections[0].HTML)
 	}
 	last := evs[len(evs)-1]
@@ -938,8 +938,8 @@ func TestUIArticleLazy(t *testing.T) {
 		t.Errorf("server-side unfold should come folded:\n%s", body)
 	}
 	// who quotes a cited verse is a heading the page loads once opened, as in
-	// a streamed expansion
-	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?to=0&amp;vid=43003016">`) ||
+	// a streamed expansion — and leaves the article itself out of the answer
+	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?self=2024360&amp;to=0&amp;vid=43003016">`) ||
 		strings.Contains(body, "cited-lazy") {
 		t.Errorf("server-side unfold should leave the citations to the page:\n%s", body)
 	}

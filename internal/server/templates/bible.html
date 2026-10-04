@@ -1,3 +1,9 @@
+{{define "pagebar"}}
+<button type="button" class="pb-bible" data-edition="{{.Edition}}"{{with .BookNav}} data-book="{{.Book}}"{{end}} aria-haspopup="dialog" title="{{.T.UIPickBook}}">
+  <span class="pb-title">{{if .Search}}{{.Ref}}{{else if .Ref}}{{.Ref}}{{else if .BookNav}}{{.BookNav.Title}}{{else}}{{.T.UINavBible}}{{end}}</span><span class="pb-caret" aria-hidden="true"></span>
+</button>
+{{- if .BookNames}}<script type="application/json" id="bible-books">{{.BookNames}}</script>{{end}}
+{{end}}
 {{define "content"}}
 <h1>{{.T.UINavBible}}</h1>
 <form class="form bible-form" method="get" action="/bible">
@@ -16,7 +22,32 @@
   {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
 </form>
 
-{{- if .Ref}}
+{{- if .Search}}
+<section class="bible-search">
+<h2 class="listheader">{{.Search.Header}}</h2>
+<p class="note">{{.Search.Editions}}</p>
+{{- range .Search.Groups}}
+<h3 class="bible-search-edition">{{.Label}} <span class="count">{{len .Hits}}</span></h3>
+<ol class="listing">
+  {{- range .Hits}}
+  <li>
+    <div class="body">
+      <p class="row"><a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>
+      {{- range .Refs}} <a class="context" href="{{.Href}}">{{.Label}}</a>{{end}}</p>
+      {{- if .Snippet}}
+      <blockquote class="snippet">{{.Snippet}}</blockquote>
+      {{- end}}
+      {{- if .External}}<p class="links"><a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a></p>{{end}}
+    </div>
+  </li>
+  {{- end}}
+</ol>
+{{- else}}
+<p class="empty">{{$.T.NoResults}}</p>
+{{- end}}
+{{- if .Search.Truncated}}<p class="note">{{.Search.Truncated}}</p>{{end}}
+</section>
+{{- else if .Ref}}
 {{template "unfold" .}}
 <article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}

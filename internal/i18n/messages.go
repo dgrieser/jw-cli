@@ -275,6 +275,24 @@ type Messages struct {
 	UIProgressLevel   string
 	UIProgressItems   string
 	UIUnfolding       string
+	// UIAbort stops a loader, UIAborted says what it left.
+	UIAbort   string
+	UIAborted string
+	// UIBibleSearch* head a text search of the bible: the hits and the query,
+	// the bibles searched, and the pages read when not all of them were.
+	UIBibleSearchHeader    string
+	UIBibleSearchEditions  string
+	UIBibleSearchTruncated string
+	// UIPickBook opens the book picker of the bible's header, UIBooks heads
+	// its book grid.
+	UIPickBook string
+	UIBooks    string
+	// UIFont* are the text size controls of every page.
+	UIFontSmaller string
+	UIFontLarger  string
+	UIFontReset   string
+	// UIBackToOverview leads from a page's header to the page above it.
+	UIBackToOverview string
 }
 
 // Date renders t as a full date in the language's own word order.

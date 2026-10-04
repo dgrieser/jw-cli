@@ -51,6 +51,9 @@ type streamEvent struct {
 	Count    int    `json:"count,omitempty"`
 	Order    int    `json:"order,omitempty"`
 	Text     string `json:"text,omitempty"`
+	// Unwrap says the section's body goes into the section the page already
+	// shows for it, without the section around it.
+	Unwrap bool `json:"unwrap,omitempty"`
 }
 
 // progressEvery throttles the progress events of a level: a request answered
@@ -147,6 +150,9 @@ func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
 	if sec.Lazy != "" {
 		fmt.Fprintf(&b, ` data-lazy="%s"`, html.EscapeString(sec.Lazy))
 	}
+	if sec.Doc > 0 {
+		fmt.Fprintf(&b, ` data-doc="%d"`, sec.Doc)
+	}
 	if sec.Open {
 		b.WriteString(` open`)
 	}
@@ -158,7 +164,7 @@ func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
 		fmt.Fprintf(&b, `<div class="sections" data-key="%s"></div>`, html.EscapeString(sec.Key))
 	}
 	b.WriteString(`</div></details>`)
-	return streamEvent{Type: "section", HTML: b.String(), Key: sec.Key, In: sec.In, Order: sec.Order}
+	return streamEvent{Type: "section", HTML: b.String(), Key: sec.Key, In: sec.In, Order: sec.Order, Unwrap: sec.Unwrap}
 }
 
 // streamDepth reads ?depth= for a stream: at least one level, since a stream
@@ -180,6 +186,8 @@ func streamConfig(r *http.Request, depth int) (service.UnfoldConfig, error) {
 	}
 	cfg := unfoldConfig(depth, forceParam(r))
 	cfg.Spent = max(spent, 0)
+	// a passage the last level reaches reads with the scriptures it quotes
+	cfg.Tail = true
 	return cfg, nil
 }
 
@@ -188,16 +196,28 @@ func streamConfig(r *http.Request, depth int) (service.UnfoldConfig, error) {
 var editionSymbol = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
 
 // unfoldVerse streams the expansion of one verse: GET /unfold/verse?vid=
-// 43003016&depth=1&bible=nwtsty.
+// 43003016&depth=1&bible=nwtsty, a range of verses with &to=. &part= narrows
+// it to one of its sections (notes, footnotes, indexes with &group=, marginal):
+// alone, as the body of a section the page shows already, or with &lazy=1
+// loaded while every other section comes as a heading loaded once opened.
 func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	lng, err := s.language(r)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
-	vid, err := intParam(r, "vid", 0)
-	if err != nil || vid <= 0 {
+	ref, err := passageParam(r)
+	if err != nil {
 		badRequest(w, "missing or invalid parameter %q", "vid")
+		return
+	}
+	parts := service.PassageParts{Only: r.FormValue("part"), Lazy: boolParam(r, "lazy")}
+	if parts.Only != "" && !service.IsPart(parts.Only) {
+		badRequest(w, "invalid parameter %q: %q", "part", parts.Only)
+		return
+	}
+	if parts.Group, err = intParam(r, "group", 0); err != nil {
+		badRequest(w, "%v", err)
 		return
 	}
 	depth, err := streamDepth(r)
@@ -218,7 +238,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
-	note, requests, err := s.svc.StreamVerseUnfold(r.Context(), lng, edition, vid, cfg, txt, service.UnfoldStream{
+	note, requests, err := s.svc.StreamPassageParts(r.Context(), lng, edition, ref, parts, cfg, txt, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
@@ -287,9 +307,16 @@ func (s *Server) unfoldCited(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
+	// the documents the page read the passage from, left out of the answer
+	var self []int
+	for _, v := range r.Form["self"] {
+		if id, err := strconv.Atoi(v); err == nil && id > 0 && len(self) < maxCitedPassages {
+			self = append(self, id)
+		}
+	}
 	txt := text(lng)
 	ev := startStream(w)
-	requests, err := s.svc.StreamCited(r.Context(), lng, refs, service.UnfoldStream{
+	requests, err := s.svc.StreamCited(r.Context(), lng, refs, self, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
@@ -440,9 +467,22 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "parameter %q is not a document of wol.jw.org or jw.org", "url")
 		return
 	}
+	// no depth reads the document as it is
+	depth, err := intParam(r, "depth", 0)
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
+	cfg, err := streamConfig(r, min(max(depth, 0), maxUnfoldDepth))
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
+	cfg.LazyCited = true
 	txt := text(lng)
 	ev := startStream(w)
-	sec, err := s.svc.ArticleSection(r.Context(), lng, target)
+	cfg.Progress = ev.progress
+	sec, err := s.svc.ArticleSection(r.Context(), lng, target, cfg, txt)
 	if err == nil {
 		ev.send(s.sectionEvent(sec))
 	}
@@ -481,7 +521,9 @@ func (s *Server) articleTarget(raw string) (string, bool) {
 	var base string
 	host := strings.ToLower(u.Hostname())
 	switch {
-	case strings.Contains(path, "/wol/d/"):
+	case strings.Contains(path, "/wol/d/") || strings.Contains(path, "/wol/tc/"):
+		// a table-of-contents link ("App. C") answers with the document it
+		// names, redirected
 		base = s.svc.HTTP.Base.WOL
 	case strings.Contains(path, "/wol/") || host == "wol.jw.org":
 		// the library's other endpoints are citations, not documents

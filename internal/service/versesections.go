@@ -48,7 +48,7 @@ func notesSection(notes []model.StudyNote, err error, level int, txt *i18n.Messa
 		return UnfoldSection{}, false
 	}
 	return UnfoldSection{
-		Title: html.EscapeString(txt.StudyNotesHeading), Body: b.String(), Order: orderNotes,
+		Title: html.EscapeString(txt.StudyNotesHeading), Body: b.String(), Order: orderNotes, Ref: NotesRef,
 	}, true
 }
 
@@ -70,7 +70,9 @@ func indexSections(links []model.ResearchItem, research []unfold.Node, level int
 	for i, g := range indexGroups(links, research, txt) {
 		var b strings.Builder
 		writeIndexGroup(&b, g, level, txt)
-		out = append(out, UnfoldSection{Title: html.EscapeString(g.name), Body: b.String(), Order: orderIndexes + i})
+		out = append(out, UnfoldSection{
+			Title: html.EscapeString(g.name), Body: b.String(), Order: orderIndexes + i, Ref: IndexRef(i),
+		})
 	}
 	return out
 }
@@ -96,7 +98,7 @@ const marginalKey = "marginal"
 func marginalSection(passage string, txt *i18n.Messages) UnfoldSection {
 	return UnfoldSection{
 		Title: html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, passage)),
-		Key:   marginalKey, Order: orderMarginal,
+		Key:   marginalKey, Order: orderMarginal, Ref: MarginalRef,
 	}
 }
 
@@ -144,6 +146,7 @@ func citedSection(c unfold.Cited, level int, txt *i18n.Messages) (UnfoldSection,
 	}
 	sec := UnfoldSection{
 		Title: html.EscapeString(fmt.Sprintf(txt.CitedInHeading, c.Ref)), Lazy: c.Lazy, Order: orderCited,
+		Ref: CitedRef,
 	}
 	if c.Lazy == "" {
 		var b strings.Builder
@@ -197,9 +200,13 @@ func translationsURL(ref bibleref.Ref, edition string) string {
 }
 
 // citedURL is where a page loads the publications quoting refs from, once
-// their citations are opened.
-func citedURL(refs []bibleref.Ref) string {
-	return "/unfold/cited?" + passageQuery(refs).Encode()
+// their citations are opened; self are the documents to leave out of them.
+func citedURL(refs []bibleref.Ref, self ...int) string {
+	q := passageQuery(refs)
+	for _, id := range self {
+		q.Add("self", strconv.Itoa(id))
+	}
+	return "/unfold/cited?" + q.Encode()
 }
 
 // passageQuery names passages the way /unfold/translations and /unfold/cited
