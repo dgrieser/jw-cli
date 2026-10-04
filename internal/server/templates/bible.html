@@ -1,6 +1,6 @@
 {{define "pagebar"}}
 <button type="button" class="pb-bible" data-edition="{{.Edition}}"{{with .BookNav}} data-book="{{.Book}}"{{end}} aria-haspopup="dialog" title="{{.T.UIPickBook}}">
-  <span class="pb-title">{{if .Search}}{{.Ref}}{{else if .Ref}}{{.Ref}}{{else if .BookNav}}{{.BookNav.Title}}{{else}}{{.T.UINavBible}}{{end}}</span><span class="pb-caret" aria-hidden="true"></span>
+  <span class="pb-title">{{if .Search}}{{.Ref}}{{else if .Ref}}{{.Ref}}{{else if .BookNav}}{{or .BookName .BookNav.Title}}{{else}}{{.T.UINavBible}}{{end}}</span><span class="pb-caret" aria-hidden="true"></span>
 </button>
 {{- if .BookNames}}<script type="application/json" id="bible-books">{{.BookNames}}</script>{{end}}
 {{end}}
