@@ -247,7 +247,7 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	}
 	p := SearchParams{
 		Engine: "wol", Query: query, Sort: "newest", Scope: "par",
-		Excerpts: true, Categories: r.cats,
+		Excerpts: true, Videos: true, Categories: r.cats,
 	}
 	found, err := r.s.CitedListing(ctx, r.lng, &p, nil)
 	if err != nil {
@@ -1232,8 +1232,9 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 	for _, item := range items {
 		// each publication heads the passage it quotes the verse in, the way
 		// every other reference of an expansion heads its own text
+		// a video has no wol page; its jw.org one names it
 		label := fmt.Sprintf(`<a href="%s">%s</a>`,
-			html.EscapeString(item.WOLLink), html.EscapeString(collapseSpace(item.Title)))
+			html.EscapeString(firstNonEmptyString(item.WOLLink, item.JWLink)), html.EscapeString(collapseSpace(item.Title)))
 		if item.Context != "" {
 			label += " (" + html.EscapeString(item.Context) + ")"
 		}

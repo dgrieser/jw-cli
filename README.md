@@ -191,6 +191,18 @@ the real passage to judge, so `--no-excerpts` shows everything unfiltered, and
 `jw search` is never filtered — a search is asked for matches and should report
 the matches it found.
 
+wol has no videos, so `jw bible cited` also asks the jw.org search for the
+videos quoting the verse — talks, morning worship, demonstrations — which it
+finds through their transcripts. Each comes with the transcript passage quoting
+the verse and is sorted in among the publications by the day it was first
+published, which its line shows. A publication line names its year only, so a
+video counts as newer than a publication of the same year from July on; one
+whose date cannot be read, and every video of an `-s occ` listing, closes the
+listing. A video that shows no transcript passage and names no verse in its
+title (a song matched by its theme text) is left out.
+`--no-videos` leaves the videos out altogether, and so does `--include`, which
+names the publications to cover.
+
 For the wol engine both commands then read each result's document and print the
 passage the hit sits in — the paragraph, list item or table, whole — instead of
 wol's teaser, which is cut mid-sentence. That is one request per result, run
@@ -232,6 +244,7 @@ jw bible cited "Jer 31:15"                   # publications citing that verse
 jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
 jw bible cited "Jer 31:15; Mt 2:18"          # either verse, every page
 jw bible cited "Jer 31:15" --no-excerpts     # teasers only, no document reads
+jw bible cited "Jas 5:19" --no-videos        # publications only, no videos
 jw bible books                               # book numbers/names
 ```
 
@@ -361,8 +374,9 @@ order, and leaves out whatever the verse does not have:
    which is what tells them from the references of a reference one level
    deeper. What belongs to one of them is nested under it.
 4. **Quotations of …** — every publication a citation search finds quoting the
-   verse, each with the passage it quotes it in: `jw bible cited` for that
-   verse, printed where the verse stands. The heading names the reference it
+   verse, each with the passage it quotes it in, and every video quoting it,
+   with the passage of its transcript: `jw bible cited` for that verse, printed
+   where the verse stands. The heading names the reference it
    answers for. A quotation is where an expansion ends: what it cites is never
    unfolded in turn, and the document being unfolded is never listed as
    quoting a verse it cites itself.
@@ -698,7 +712,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
 | `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |
 | `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
-| `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0` | `jw bible cited` |
+| `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0`, `videos=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |

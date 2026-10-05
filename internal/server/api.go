@@ -125,6 +125,8 @@ func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
 		Sort:     valueOr(r, "sort", "newest"),
 		Scope:    valueOr(r, "scope", "par"),
 		Excerpts: boolParamOr(r, "excerpts", true),
+		// include names the publications to cover, which no video is
+		Videos: boolParamOr(r, "videos", true) && !r.URL.Query().Has("include"),
 	}
 	if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
 		badRequest(w, "%s", err)

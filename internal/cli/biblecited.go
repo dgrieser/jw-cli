@@ -18,6 +18,7 @@ func newBibleCitedCmd(a *app.App) *cobra.Command {
 		scope       string
 		interactive bool
 		noExcerpts  bool
+		noVideos    bool
 		cats        categoryFilter
 	)
 	cats.defaultExclude = []string{wol.CategoryBibles, wol.CategoryIndex}
@@ -35,12 +36,18 @@ since they cite every verse by construction. Several references, separated by
 semicolons, are searched together as one OR query. Every result page is read,
 so the listing is the complete answer rather than its first 40 rows.
 
+The videos quoting the verse — talks, morning worship, demonstrations — are
+found by the jw.org search through their transcripts and sorted in among the
+publications by the day they were first published. They are left out with --no-videos, and whenever --include names the publications
+to cover.
+
 Examples:
   jw bible cited "Jer 31:15"
   jw bible cited "Mt 24:14" --include w,g      only Watchtower and Awake!
   jw bible cited "Ps 83" --all                 bibles and indexes included
   jw bible cited "Jer 31:15; Mt 2:18"          either of the two
-  jw bible cited "Mt 24:14" -s oldest`,
+  jw bible cited "Mt 24:14" -s oldest
+  jw bible cited "Jas 5:19" --no-videos        publications only`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -53,7 +60,9 @@ Examples:
 			if err != nil {
 				return err
 			}
-			p := service.SearchParams{Engine: "wol", Query: query, Sort: sortBy, Scope: scope, Excerpts: !noExcerpts}
+			// --include names the publications to cover, which no video is
+			p := service.SearchParams{Engine: "wol", Query: query, Sort: sortBy, Scope: scope,
+				Excerpts: !noExcerpts, Videos: !noVideos && len(cats.include) == 0}
 			if p.Categories, err = cats.resolve(cmd, svc.KnownCategories(ctx, lng)); err != nil {
 				return err
 			}
@@ -92,6 +101,7 @@ Examples:
 	fl.StringVar(&scope, "scope", "par", "match unit: par (paragraph) or sen (sentence)")
 	fl.BoolVarP(&interactive, "interactive", "i", false, "browse results interactively (TUI)")
 	fl.BoolVar(&noExcerpts, "no-excerpts", false, "keep wol's short teasers instead of reading each document")
+	fl.BoolVar(&noVideos, "no-videos", false, "leave out the videos quoting the verse (searched on jw.org)")
 	cats.bind(cmd)
 	return cmd
 }
