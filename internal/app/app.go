@@ -38,9 +38,12 @@ type Flags struct {
 	BaseJWOrg string
 	BaseWOL   string
 	CacheDir  string
-	// CacheTTL is how long the bodies of upstream reads are kept on disk;
-	// zero keeps none.
+	// CacheTTL is how long what upstream answered is used as is before a HEAD
+	// request checks whether it changed; zero checks on every use.
 	CacheTTL time.Duration
+	// CacheMax bounds the cache in bytes, dropping the least recently used
+	// entries beyond it; negative turns the cache off, zero is the default.
+	CacheMax int64
 }
 
 type App struct {
@@ -89,14 +92,14 @@ func (a *App) init() {
 				fmt.Fprintf(a.Stderr, format+"\n", args...)
 			}))
 		}
-		if a.Flags.CacheDir != "" {
-			a.cache = httpx.OpenCacheAt(a.Flags.CacheDir)
-		} else {
-			a.cache = httpx.OpenCache()
+		fresh := a.Flags.CacheTTL
+		if fresh <= 0 {
+			fresh = -1 // check on every use
 		}
+		a.cache = httpx.Open(a.Flags.CacheDir, httpx.CacheOptions{Fresh: fresh, MaxBytes: a.Flags.CacheMax})
 		// what upstream answered is kept on disk, so the next command — or
-		// jw serve after a restart — does not ask again the same day
-		opts = append(opts, httpx.WithResponseCache(a.cache, a.Flags.CacheTTL))
+		// jw serve after a restart — does not ask again until it changed
+		opts = append(opts, httpx.WithResponseCache(a.cache))
 		a.http = httpx.New(opts...)
 		a.mediator = mediator.New(a.http)
 		a.pubmedia = pubmedia.New(a.http)
@@ -127,6 +130,14 @@ func (a *App) HTTP() *httpx.Client {
 func (a *App) Cache() *httpx.Cache {
 	a.init()
 	return a.cache
+}
+
+// Close lets a cache sweep under way finish, so the cache stays within its
+// limit even when commands run only briefly.
+func (a *App) Close() {
+	if a.cache != nil {
+		a.cache.Close()
+	}
 }
 
 func (a *App) Mediator() *mediator.Client {

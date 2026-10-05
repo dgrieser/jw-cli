@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -329,15 +329,16 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 }
 
 // LocalizedBookNames extracts the localized bible book names from the bible
-// navigation page (best effort; cached for 30 days).
+// navigation page (best effort; kept until the page changes upstream).
 func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]string, error) {
-	// v2: v1 entries hold run-together names ("JohannesJoh.Joh").
-	key := "books2-" + cfg.Locale
-	var cached map[int][]string
-	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached) > 0 {
-		return cached, nil
-	}
-	doc, err := c.hc.GetHTML(ctx, c.url(cfg, "binav", ""))
+	u := c.url(cfg, "binav", "")
+	return httpx.Memo(ctx, c.cache, "books3-"+u, func(ctx context.Context) (map[int][]string, error) {
+		return c.localizedBookNames(ctx, cfg, u)
+	})
+}
+
+func (c *Client) localizedBookNames(ctx context.Context, cfg Config, u string) (map[int][]string, error) {
+	doc, err := c.hc.GetHTML(ctx, u)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +367,6 @@ func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]
 	if len(names) < 60 {
 		return nil, fmt.Errorf("could not extract localized book names for %s (found %d)", cfg.Locale, len(names))
 	}
-	c.cache.Put(key, names)
 	return names, nil
 }
 
@@ -374,13 +374,14 @@ func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]
 // order its own bible list prints them (the current translation first, older
 // ones after it). Which editions exist is language specific — English has eight,
 // German three — and the list moves, so it is read rather than hardcoded.
-// Cached for 30 days.
+// Kept until the page changes upstream.
 func (c *Client) Bibles(ctx context.Context, cfg Config) ([]BibleEdition, error) {
-	key := "bibles-" + cfg.Locale
-	var cached []BibleEdition
-	if c.cache.Get(key, 30*24*time.Hour, &cached) && len(cached) > 0 {
-		return cached, nil
-	}
+	return httpx.Memo(ctx, c.cache, "bibles2-"+c.url(cfg, "bibles", ""), func(ctx context.Context) ([]BibleEdition, error) {
+		return c.bibles(ctx, cfg)
+	})
+}
+
+func (c *Client) bibles(ctx context.Context, cfg Config) ([]BibleEdition, error) {
 	doc, err := c.hc.GetHTML(ctx, c.url(cfg, "bibles", ""))
 	if err != nil {
 		return nil, err
@@ -402,7 +403,6 @@ func (c *Client) Bibles(ctx context.Context, cfg Config) ([]BibleEdition, error)
 	if len(out) == 0 {
 		return nil, fmt.Errorf("could not find the bible editions of %s at %s (page layout changed?)", cfg.Locale, c.url(cfg, "bibles", ""))
 	}
-	c.cache.Put(key, out)
 	return out, nil
 }
 

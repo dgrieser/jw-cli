@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -26,12 +26,9 @@ const (
 	selGalleryNonCaption = selGalleryCredit + ", .relatedScriptures"
 )
 
-// galleryTTL: an item's caption and credit are as stable as the publication.
-const galleryTTL = 30 * 24 * time.Hour
-
 // GalleryItem fetches the metadata of one study-bible media item from its
 // gallery page: the full-size image, its long caption and its rights line.
-// Cached for a month. Best effort by design — a caller that only wants the
+// Kept until the page changes upstream. Best effort by design — a caller that only wants the
 // thumbnail can ignore the error.
 func (c *Client) GalleryItem(ctx context.Context, itemURL string) (model.MediaAsset, error) {
 	if itemURL == "" {
@@ -43,22 +40,21 @@ func (c *Client) GalleryItem(ctx context.Context, itemURL string) (model.MediaAs
 	if i := strings.IndexByte(fetchURL, '#'); i >= 0 {
 		fetchURL = fetchURL[:i]
 	}
-	key := "gallery1-" + fetchURL
-	var cached model.MediaAsset
-	if c.cache.Get(key, galleryTTL, &cached) && cached.URL != "" {
-		cached.SourceURL = itemURL
-		return cached, nil
-	}
-	doc, err := c.hc.GetHTML(ctx, fetchURL)
+	asset, err := httpx.Memo(ctx, c.cache, "gallery2-"+fetchURL, func(ctx context.Context) (model.MediaAsset, error) {
+		doc, err := c.hc.GetHTML(ctx, fetchURL)
+		if err != nil {
+			return model.MediaAsset{}, err
+		}
+		asset, err := parseGalleryItem(doc.Selection, c.hc.Base.WOL)
+		if err != nil {
+			return model.MediaAsset{}, fmt.Errorf("read gallery item %s: %w", itemURL, err)
+		}
+		return asset, nil
+	})
 	if err != nil {
 		return model.MediaAsset{}, err
 	}
-	asset, err := parseGalleryItem(doc.Selection, c.hc.Base.WOL)
-	if err != nil {
-		return model.MediaAsset{}, fmt.Errorf("read gallery item %s: %w", itemURL, err)
-	}
 	asset.SourceURL = itemURL
-	c.cache.Put(key, asset)
 	return asset, nil
 }
 

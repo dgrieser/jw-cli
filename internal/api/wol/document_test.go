@@ -15,8 +15,9 @@ func testClient(t *testing.T, mux *http.ServeMux) *Client {
 	t.Helper()
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{WOL: srv.URL, CDN: srv.URL, JWOrg: srv.URL}))
-	return New(hc, httpx.OpenCacheAt(t.TempDir()))
+	cache := httpx.OpenCacheAt(t.TempDir())
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{WOL: srv.URL, CDN: srv.URL, JWOrg: srv.URL}), httpx.WithResponseCache(cache))
+	return New(hc, cache)
 }
 
 func serveFile(t *testing.T, path string) http.HandlerFunc {

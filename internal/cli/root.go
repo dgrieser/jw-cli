@@ -20,6 +20,7 @@ func Execute() int {
 	// close the blank-line frame even on failure, so a partially written listing
 	// does not run straight into the error line
 	_ = a.Flush()
+	a.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		return 1
@@ -51,8 +52,10 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	pf.StringVar(&a.Flags.BaseJWOrg, "base-jworg", "", "override www.jw.org base URL")
 	pf.StringVar(&a.Flags.BaseWOL, "base-wol", "", "override wol.jw.org base URL")
 	pf.StringVar(&a.Flags.CacheDir, "cache-dir", "", "override cache directory")
-	pf.DurationVar(&a.Flags.CacheTTL, "cache-ttl", httpx.ResponseTTL,
-		"keep what jw.org and wol.jw.org answered on disk this long and reuse it (0 turns it off)")
+	pf.DurationVar(&a.Flags.CacheTTL, "cache-ttl", httpx.DefaultFresh,
+		"use what jw.org and wol.jw.org answered as is this long, then check with a HEAD request whether it changed (0 checks every time)")
+	pf.Var(newSizeValue(&a.Flags.CacheMax, os.Getenv("JW_CACHE_MAX")), "cache-max",
+		"bound the cache, dropping what was used least recently beyond it, e.g. 500MB or 2GB; 0 turns the cache off ($JW_CACHE_MAX)")
 	for _, hidden := range []string{"base-cdn", "base-jworg", "base-wol", "cache-dir"} {
 		_ = pf.MarkHidden(hidden)
 	}
@@ -73,3 +76,42 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	)
 	return root
 }
+
+// sizeValue is a byte count flag ("1GB", "500MB"), its default taken from the
+// environment when that holds a valid size.
+type sizeValue struct {
+	n   *int64
+	raw string
+}
+
+const defaultCacheMax = "1GB"
+
+func newSizeValue(n *int64, env string) *sizeValue {
+	v := &sizeValue{n: n}
+	if env != "" && v.Set(env) == nil {
+		return v
+	}
+	if env != "" {
+		fmt.Fprintf(os.Stderr, "Warning: ignoring JW_CACHE_MAX=%q: not a size like 1GB or 500MB\n", env)
+	}
+	_ = v.Set(defaultCacheMax)
+	return v
+}
+
+func (v *sizeValue) Set(s string) error {
+	n, err := httpx.ParseSize(s)
+	if err != nil {
+		return err
+	}
+	*v.n, v.raw = n, s
+	return nil
+}
+
+func (v *sizeValue) String() string {
+	if v == nil || v.raw == "" {
+		return defaultCacheMax
+	}
+	return v.raw
+}
+
+func (v *sizeValue) Type() string { return "size" }

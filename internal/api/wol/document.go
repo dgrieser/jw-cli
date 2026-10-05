@@ -3,11 +3,9 @@ package wol
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -38,43 +36,11 @@ func (c *Client) DocumentByURL(ctx context.Context, pageURL string) (model.Artic
 	return art, nil
 }
 
-const (
-	docPageKey    = "woldoc1-"
-	docPageMaxAge = 7 * 24 * time.Hour
-)
-
-// documentPage fetches a document page, from the disk cache when it is there.
-// A published document does not change, so a week is safe, and it makes the
-// second reading of the same publication — a listing that quotes it, then
-// jw show on one of its rows — free.
+// documentPage fetches a document page. The response cache keeps it, so the
+// second reading of the same publication — a listing that quotes it, then jw
+// show on one of its rows — costs no request.
 func (c *Client) documentPage(ctx context.Context, pageURL string) (*goquery.Document, error) {
-	key := docPageKey + docPageCacheKey(pageURL)
-	var body string
-	if !c.cache.Get(key, docPageMaxAge, &body) || body == "" {
-		var err error
-		if body, err = c.hc.GetText(ctx, pageURL, nil); err != nil {
-			return nil, err
-		}
-		c.cache.Put(key, body)
-	}
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("parse HTML %s: %w", pageURL, err)
-	}
-	return doc, nil
-}
-
-// docPageCacheKey drops the fragment and keeps the query: wol renders a
-// document differently when a search hands it a ?q=, marking what it matched,
-// so the two are not the same page. jw show follows the same link a listing
-// stored, which is how it reads the copy the listing already paid for.
-func docPageCacheKey(pageURL string) string {
-	u, err := url.Parse(pageURL)
-	if err != nil {
-		return pageURL
-	}
-	u.Fragment = ""
-	return u.Host + u.Path + "?" + u.RawQuery
+	return c.hc.GetHTML(ctx, pageURL)
 }
 
 // contentSelectors are tried in order to find the document body; kept

@@ -7,9 +7,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
 // The two kinds of page the library's publication tree is made of. A library
@@ -98,13 +99,6 @@ const (
 	selLibThumb    = "img.cardThumbnailImage"
 )
 
-// library pages gain an entry whenever an issue comes out; a publication's
-// table of contents stays as it is
-const (
-	libraryTTL     = 24 * time.Hour
-	publicationTTL = 7 * 24 * time.Hour
-)
-
 // libraryHref splits a wol href into its command and the rest of its path:
 // /en/wol/library/r1/lp-e/all-publications/books -> library,
 // all-publications/books.
@@ -112,7 +106,7 @@ var libraryHref = regexp.MustCompile(`^(?:https?://[^/]+)?/[^/]+/wol/([a-z]+)/r\
 
 // Library reads one page of the publication tree. kind is LibraryKind or
 // PublicationKind; an empty library path is the top of the tree, the list of
-// categories. Cached for a day (library) or a week (publication).
+// categories. Kept until the page changes upstream.
 func (c *Client) Library(ctx context.Context, cfg Config, kind, path string) (LibraryPage, error) {
 	if kind != LibraryKind && kind != PublicationKind {
 		return LibraryPage{}, errors.New("wol: library kind must be library or publication")
@@ -121,28 +115,20 @@ func (c *Client) Library(ctx context.Context, cfg Config, kind, path string) (Li
 	if kind == PublicationKind && path == "" {
 		return LibraryPage{}, errors.New("wol: publication path required")
 	}
-	ttl := libraryTTL
-	if kind == PublicationKind {
-		ttl = publicationTTL
-	}
-	key := "library2-" + cfg.Locale + "-" + kind + "-" + path
-	var cached LibraryPage
-	if c.cache.Get(key, ttl, &cached) && cached.URL != "" {
-		return cached, nil
-	}
 	rest := ""
 	if path != "" {
 		rest = "/" + escapePath(path)
 	}
 	u := c.url(cfg, kind, rest)
-	doc, err := c.hc.GetHTML(ctx, u)
-	if err != nil {
-		return LibraryPage{}, err
-	}
-	page := parseLibrary(doc.Selection, c.hc.Base.WOL)
-	page.Kind, page.Path, page.URL = kind, path, u
-	c.cache.Put(key, page)
-	return page, nil
+	return httpx.Memo(ctx, c.cache, "library3-"+u, func(ctx context.Context) (LibraryPage, error) {
+		doc, err := c.hc.GetHTML(ctx, u)
+		if err != nil {
+			return LibraryPage{}, err
+		}
+		page := parseLibrary(doc.Selection, c.hc.Base.WOL)
+		page.Kind, page.Path, page.URL = kind, path, u
+		return page, nil
+	})
 }
 
 // escapePath escapes each segment of an unescaped path: library paths carry
