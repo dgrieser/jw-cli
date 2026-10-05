@@ -39,12 +39,21 @@ func TestCompleteAudio(t *testing.T) {
 		media  []model.MediaItem
 		tracks map[string][]model.PubFile
 		want   []string
+		desc   []string
 	}{
 		{
 			name:   "new tracks after the last",
 			media:  items("pub-imc_1_AUDIO", "pub-imc_2_AUDIO"),
 			tracks: map[string][]model.PubFile{"imc": files(1, 2, 3, 4, 516)},
 			want:   []string{"pub-imc_1_AUDIO", "pub-imc_2_AUDIO", "pub-imc_3_AUDIO", "pub-imc_4_AUDIO"},
+			desc:   []string{"pub-imc_516_AUDIO"},
+		},
+		{
+			name:   "described tracks on their own, publication by publication",
+			media:  items("pub-pksjj_140_AUDIO", "pub-pk_1_AUDIO"),
+			tracks: map[string][]model.PubFile{"pk": files(1, 503, 501), "pksjj": files(140, 641)},
+			want:   []string{"pub-pksjj_140_AUDIO", "pub-pk_1_AUDIO"},
+			desc:   []string{"pub-pksjj_641_AUDIO", "pub-pk_501_AUDIO", "pub-pk_503_AUDIO"},
 		},
 		{
 			name:   "a gap filled in place",
@@ -66,9 +75,17 @@ func TestCompleteAudio(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		got := lanks(completeAudio(c.media, c.tracks, "Cat"))
-		if !slices.Equal(got, c.want) {
+		media, described := completeAudio(c.media, c.tracks, "Cat")
+		if got := lanks(media); !slices.Equal(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+		if got := lanks(described); !slices.Equal(got, c.desc) {
+			t.Errorf("%s: described %v, want %v", c.name, got, c.desc)
+		}
+		for _, d := range described {
+			if d.PrimaryCategory != "Cat"+describedKey {
+				t.Errorf("%s: %s in %q", c.name, d.LANK, d.PrimaryCategory)
+			}
 		}
 	}
 }
@@ -80,14 +97,18 @@ func TestCompleteAudioCover(t *testing.T) {
 	for i := range media {
 		media[i].Images = cover
 	}
-	got := completeAudio(media, map[string][]model.PubFile{"imc": files(3)}, "Cat")
+	got, _ := completeAudio(media, map[string][]model.PubFile{"imc": files(3)}, "Cat")
 	if len(got) != 3 || BestImage(got[2].Images) != "cover.jpg" {
 		t.Fatalf("%+v", got)
 	}
 	media[1].Images = map[string]map[string]string{"sqr": {"md": "song.jpg"}}
-	got = completeAudio(media[:2:2], map[string][]model.PubFile{"imc": files(3)}, "Cat")
+	got, described := completeAudio(media[:2:2], map[string][]model.PubFile{"imc": files(3, 502)}, "Cat")
 	if got[2].Images != nil {
 		t.Fatalf("art of single songs lent: %+v", got[2].Images)
+	}
+	// a described track shows its song's own picture
+	if len(described) != 1 || BestImage(described[0].Images) != "song.jpg" {
+		t.Fatalf("described: %+v", described)
 	}
 }
 

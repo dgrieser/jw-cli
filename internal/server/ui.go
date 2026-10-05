@@ -701,7 +701,7 @@ const maxCrumbs = 6
 func (s *Server) mediaCrumbs(ctx context.Context, lng model.Language, start *model.CategoryRef, page basePage) []crumb {
 	var trail []crumb
 	for p := start; p != nil && len(trail) < maxCrumbs; {
-		up, err := s.svc.Mediator.CategoryInfo(ctx, lng.Symbol, p.Key)
+		up, err := s.svc.CategoryInfo(ctx, lng.Symbol, p.Key)
 		name := p.Name
 		if err == nil && up.Name != "" {
 			name = up.Name
@@ -827,7 +827,10 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 	// comes with them, and shows as a carousel rather than as a link
 	var subs []model.Category
 	for _, sub := range cat.Subcategories {
-		if len(sub.Media) == 0 {
+		// beside a category's own list — the songs of an album, and the
+		// category of their versions with audio descriptions — a subcategory
+		// is a link after it
+		if len(sub.Media) == 0 || len(cat.Media) > 0 {
 			subs = append(subs, sub)
 			continue
 		}
@@ -840,6 +843,9 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	items := append(service.CategoriesToResults(subs), service.MediaToResults(cat.Media)...)
+	if len(cat.Media) > 0 {
+		items = append(service.MediaToResults(cat.Media), service.CategoriesToResults(subs)...)
+	}
 	page.Items = s.resultViews(items, page.Lang)
 	s.render(w, http.StatusOK, "media_category", page)
 }

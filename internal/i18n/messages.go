@@ -46,6 +46,9 @@ type Messages struct {
 	// MediaOn takes the bible reference.
 	MediaOn         string
 	MediaCategories string
+	// MediaDescribed names the category of a category's tracks with audio
+	// descriptions, from the category's name.
+	MediaDescribed string
 
 	// --- bible ------------------------------------------------------------
 	// BibleRefsIn and NoBibleRefs take the article title.
