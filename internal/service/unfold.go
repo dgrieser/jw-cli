@@ -34,10 +34,6 @@ type UnfoldConfig struct {
 	// Off leaves it to the study bible's own material, which is where a
 	// request nobody can be asked to confirm — a web request — has to stay.
 	Cited bool
-	// LazyCited leaves the citation search itself to a web page: every verse
-	// that would be looked up gets its heading, and what the page loads it
-	// from, but no search is run and none is priced. Only with Cited.
-	LazyCited bool
 	// CitedDepth is how many levels of the expansion those lookups reach.
 	// One covers the references a document writes; zero covers none, so the
 	// verses jw bible read prints are looked up and the references reached
@@ -54,10 +50,18 @@ type UnfoldConfig struct {
 	// request per verse, is one expansion as far as the budget goes. Only the
 	// streamed expansions read it.
 	Spent int
-	// Tail brings the bible text with every passage of another publication
-	// the last level reaches (unfold.Options.Tail): a web page's depth one
-	// shows a passage with the scriptures it quotes.
-	Tail bool
+	// Hops counts Depth in bible references rather than in levels
+	// (unfold.Options.Hops), the way jw serve unfolds: a verse with references
+	// left brings its study notes, footnotes, indexes and marginal references
+	// together with every verse they cite, one reference further down, and a
+	// verse with none left its text, its sections loading once opened. Who
+	// quotes a verse and the other translations always load once opened.
+	// Cited and CitedDepth are not read.
+	Hops bool
+	// Verses are the verses already shown, which an expansion counted in
+	// bible references adds to and never shows again: the pieces of one page
+	// unfolded together share them. Nil starts afresh.
+	Verses *unfold.Verses
 }
 
 // studyEdition is the only edition that carries a study pane, matching what
@@ -74,7 +78,7 @@ type tooltipResolver struct {
 	// runs with, resolved once for the language.
 	cited bool
 	// lazyCited answers with what a page loads the citations from, rather
-	// than searching for them (UnfoldConfig.LazyCited)
+	// than searching for them (hopResolver)
 	lazyCited bool
 	cats      WOLCategories
 	// tips are the citations already resolved in this run. A research passage
@@ -117,16 +121,6 @@ func (r *tooltipResolver) isSelf(item model.Result) bool {
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
 	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
-}
-
-// withCitedAs turns the citation search on as cfg asks: run, or left to the
-// page, or not at all.
-func (r *tooltipResolver) withCitedAs(ctx context.Context, cfg UnfoldConfig) *tooltipResolver {
-	if cfg.Cited && cfg.LazyCited {
-		r.cited, r.lazyCited = true, true
-		return r
-	}
-	return r.withCited(ctx, cfg.Cited)
 }
 
 // withCited turns the citation search on for this run, with the filter
@@ -496,10 +490,16 @@ const (
 // and styling — as the article itself.
 func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art model.Article,
 	cfg UnfoldConfig, txt *i18n.Messages) (string, error) {
+	if cfg.Hops {
+		// a verse the document cites is the verse unfolded; a passage of
+		// another publication brings the verses it cites, one further down
+		r := hopResolver(s, lng, nil, art.DocID, wol.DocIDFromURL(art.URL))
+		return unfoldInlineHops(ctx, r, art.HTML, cfg, cfg.Depth, false, txt)
+	}
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	r := newTooltipResolver(s, lng, nil).withCitedAs(ctx, cfg).excluding(art.DocID, wol.DocIDFromURL(art.URL))
+	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited).excluding(art.DocID, wol.DocIDFromURL(art.URL))
 	return unfoldInline(ctx, r, art.HTML, cfg, txt)
 }
 
@@ -638,6 +638,40 @@ func collapseSpace(s string) string { return strings.Join(strings.Fields(s), " "
 // and a passage cited twice is expanded once, under the citation that came first.
 func unfoldInline(ctx context.Context, r unfold.Resolver, fragment string,
 	cfg UnfoldConfig, txt *i18n.Messages) (string, error) {
+	return unfoldBlocks(ctx, r, fragment, cfg, txt, func(refs []unfold.Ref) unfold.Group {
+		return unfold.Group{RootRefs: refs}
+	})
+}
+
+// unfoldInlineHops is unfoldInline for an expansion counted in bible
+// references: a verse the document cites has hops left. versesOnly follows the
+// verses it cites and nothing else, the way a passage of another publication
+// brings them.
+func unfoldInlineHops(ctx context.Context, r unfold.Resolver, fragment string,
+	cfg UnfoldConfig, hops int, versesOnly bool, txt *i18n.Messages) (string, error) {
+	return unfoldBlocks(ctx, r, fragment, cfg, txt, func(refs []unfold.Ref) unfold.Group {
+		if versesOnly {
+			refs = verseRefsOf(refs)
+		}
+		return unfold.Group{RootRefs: refs, Hops: hops}
+	})
+}
+
+// verseRefsOf keeps the references to bible text.
+func verseRefsOf(refs []unfold.Ref) []unfold.Ref {
+	var out []unfold.Ref
+	for _, ref := range refs {
+		if ref.IsVerse() {
+			out = append(out, ref)
+		}
+	}
+	return out
+}
+
+// unfoldBlocks is unfoldInline with the expansion of each citing block made
+// from what the block cites by group.
+func unfoldBlocks(ctx context.Context, r unfold.Resolver, fragment string,
+	cfg UnfoldConfig, txt *i18n.Messages, group func([]unfold.Ref) unfold.Group) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
 	if err != nil {
 		return "", err
@@ -648,7 +682,7 @@ func unfoldInline(ctx context.Context, r unfold.Resolver, fragment string,
 	}
 	groups := make([]unfold.Group, len(blocks))
 	for i, b := range blocks {
-		groups[i] = unfold.Group{RootRefs: refsOf(b.refs)}
+		groups[i] = group(refsOf(b.refs))
 	}
 	res, err := unfold.RunGroups(ctx, r, groups, unfoldOptions(cfg))
 	if err != nil {
@@ -861,13 +895,11 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 		Threshold: UnfoldThreshold,
 		Confirm:   cfg.Confirm,
 		Progress:  cfg.Progress,
-		Tail:      cfg.Tail,
+		Hops:      cfg.Hops,
+		Verses:    cfg.Verses,
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
-		if cfg.LazyCited {
-			o.CitedCost = 0
-		}
 	}
 	return o
 }
@@ -1222,6 +1254,10 @@ func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source
 // written at level under the label it was headed with: its text, its study
 // material, and whatever it cites in turn.
 func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string, txt *i18n.Messages) {
+	if n.Parts != nil {
+		writeHopVerse(b, n, level, txt)
+		return
+	}
 	// what the passage cites is read inside the passage, at the block citing
 	// it; what it does not cite itself follows the passage
 	rest := n.Children
@@ -1247,6 +1283,18 @@ func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string,
 	}
 	writeStudy(b, n, level+1, txt)
 	writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)
+}
+
+// wrapped reports whether the expansions inlined into a passage are verses
+// unfolded by their sections (unfold.Node.Parts): those close with sections of
+// their own, which a page folds, and would take in whatever follows them.
+func wrapped(children []unfold.Node) bool {
+	for _, c := range children {
+		if c.Parts != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // inlineChildren puts the expansion of every citation of a passage under the
@@ -1294,6 +1342,12 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 				verseSource(source, cite.chapter, cite.verse), txt)
 		}
 		if sub.Len() == 0 {
+			continue
+		}
+		if wrapped(children) {
+			// a verse unfolded by its sections is folded inside a block of
+			// its own, so what the passage goes on with stays out of them
+			inlineUnder(block.sel, `<div class="expansion">`+sub.String()+"</div><hr/>")
 			continue
 		}
 		inlineUnder(block.sel, sub.String()+"<hr/>")

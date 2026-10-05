@@ -11,6 +11,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
+	"github.com/dgrieser/jw-cli/internal/unfold"
 )
 
 // Verse is a verse as jw bible read prints it: the text, and with an unfold
@@ -81,8 +82,12 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 	// one expander for every passage read, so they share the chapter pages
 	// their study panes come from
 	var expander *tooltipResolver
+	if req.Unfold.Hops && req.Unfold.Verses == nil {
+		// what one verse of the reading showed is not shown again under the next
+		req.Unfold.Verses = unfold.NewVerses()
+	}
 	if req.Unfold.Depth > 0 {
-		expander = newTooltipResolver(s, lng, chapters).withCitedAs(ctx, req.Unfold)
+		expander = newTooltipResolver(s, lng, chapters).withCited(ctx, req.Unfold.Cited)
 	}
 	for _, ref := range refs {
 		var skipped []string
@@ -129,11 +134,16 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				// the other bibles of the language, unless every one of them is
 				// being read anyway
 				var translations map[int][]EditionVerse
-				if !req.AllBibles {
+				if !req.AllBibles && !req.Unfold.Hops {
 					translations = s.translationsOf(ctx, lng, ed.Symbol, r, chapters)
 				}
-				unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, expander, r, verses, table, level,
-					req.Unfold, translations, txt)
+				if req.Unfold.Hops {
+					unfolded, p.UnfoldNote, err = s.unfoldVersesHops(ctx, lng, ed.Symbol, r, verses, level,
+						&req.Unfold, txt)
+				} else {
+					unfolded, p.UnfoldNote, err = unfoldBibleVerses(ctx, expander, r, verses, table, level,
+						req.Unfold, translations, txt)
+				}
 				if err != nil {
 					return ReadResult{}, err
 				}

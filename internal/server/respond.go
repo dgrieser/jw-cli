@@ -89,30 +89,21 @@ func (e *tooExpensiveError) Error() string {
 // traffic, and past this depth the CLI is the right tool.
 const maxUnfoldDepth = 3
 
-// unfoldConfig is how the server runs an expansion: capped in depth, never
-// waiting on anybody, and refusing a level that would cost too many requests
-// unless the caller has already said to spend them. force is what -y is on the
-// command line — the answer to a question nobody is there to be asked.
+// unfoldConfig is how the server runs an expansion: capped in depth, counted
+// in bible references (service.UnfoldConfig.Hops), never waiting on anybody,
+// and refusing a level that would cost too many requests unless the caller has
+// already said to spend them. force is what -y is on the command line — the
+// answer to a question nobody is there to be asked.
 func unfoldConfig(depth int, force bool) service.UnfoldConfig {
 	cfg := service.UnfoldConfig{
 		Depth: min(depth, maxUnfoldDepth),
-		// the same expansion the CLI runs, citation lookups included
-		Cited: depth > 0,
+		Hops:  true,
 	}
 	if !force {
 		cfg.Confirm = func(level, requests int) (bool, error) {
 			return false, &tooExpensiveError{level: level, requests: requests}
 		}
 	}
-	return cfg
-}
-
-// pageUnfoldConfig is unfoldConfig for a page of the web site: the citations
-// of every verse get their heading, and are only searched for once the reader
-// opens it.
-func pageUnfoldConfig(depth int, force bool) service.UnfoldConfig {
-	cfg := unfoldConfig(depth, force)
-	cfg.LazyCited = true
 	return cfg
 }
 

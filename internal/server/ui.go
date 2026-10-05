@@ -257,7 +257,7 @@ func unfoldLevels(r *http.Request, current, def int) []unfoldLevel {
 // asked for, and returns its body sanitized for the page.
 func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.Article, depth int) (template.HTML, error) {
 	if depth > 0 {
-		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, pageUnfoldConfig(depth, forceParam(r)), text(lng))
+		body, err := s.svc.UnfoldArticle(r.Context(), lng, art, unfoldConfig(depth, forceParam(r)), text(lng))
 		if err != nil {
 			return "", err
 		}
@@ -1049,7 +1049,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.Unfold, page.AutoUnfold = depth, auto
 	res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
 		Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
-		Unfold: pageUnfoldConfig(depth, forceParam(r)),
+		Unfold: unfoldConfig(depth, forceParam(r)),
 	}, text(lng))
 	if err != nil {
 		s.failUI(w, r, err)

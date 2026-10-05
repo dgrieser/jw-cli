@@ -556,19 +556,50 @@ link like "App. C" included — opens its section under the verse or paragraph i
 is in and scrolls to it, loading just that one reference when it is not there
 yet; a verse number opens the verse in the other bibles of the language.
 Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
-opens under the verse's cross references, all of them unfolded as at depth 1,
-while the verse's other sections — study notes, footnotes, indexes,
+opens under the verse's cross references, all of them unfolded at the verse's
+depth, while the verse's other sections — study notes, footnotes, indexes,
 translations, quotations — appear as headings that load once opened.
 
-The page's depth is the anchor for everything opened on it. Depth 1 unfolds a
-verse or a range of verses one deep: study notes, indexes, cross references,
-and the quotations as a heading that loads when opened. A passage of another
-publication, or an article a link leads to, comes with the bible texts it cites
-(their text only); deeper levels go on from there. What a link opens unfolds to
-the level of the verse or paragraph it is in, else to the page's level, else to
-depth 1. Quotations are always the end: what they cite unfolds only from its
-own button, and the documents the reader reached a verse through — the article
-on the page, the passage a section shows — are left out of who quotes it.
+The server counts the depth in **bible references**, the same way on every page
+and in the API. A verse at depth N brings at once its study notes, its
+footnotes, the passages its Research Guide and Publications Index point at,
+and its marginal references — and every bible verse any of them cites, as a
+verse at depth N−1. A verse at depth 0 is its text, with all of its sections as
+headings that load once opened; one that turns out to have nothing is dropped
+when it is opened. Other translations and quotations load once opened at every
+depth. A passage of another publication is no step of its own: it brings the
+verses it cites one reference further down than the verse or document citing
+it, and nothing else it cites is followed. Depth 1 on a verse:
+
+```
+Verse
+├── Study notes ───────── at once, with every bible verse they cite
+├── Research Guide ────── at once, with every bible verse its passages cite
+├── Publications Index ── at once, with every bible verse its passages cite
+├── Marginal references ─ at once
+├── Other translations ── once opened
+└── Quotations ────────── once opened
+        └── each bible verse reached: its text, and the same six sections
+            (and footnotes, where it has any), every one loaded once opened
+```
+
+At depth 2 those verses unfold as the verse does at depth 1, and theirs wait to
+be opened. In a document, a bible verse it cites is the verse unfolded at the
+page's depth; a passage of another publication it cites, or an article a link
+leads to, brings the verses it quotes one deeper — at depth 1 their text with
+their sections to be opened. A section opened later unfolds as at depth 1.
+What a link opens unfolds to the level of the verse or paragraph it is in, else
+to the page's level, else to depth 1. Quotations are always the end: what they
+cite unfolds only from its own button, and the documents the reader reached a
+verse through — the article on the page, the passage a section shows — are left
+out of who quotes it.
+
+A verse is shown once: an expansion that reaches it again — a second study note
+citing it, a marginal reference the notes already brought, a paragraph further
+down an article — leaves it out, and the verse being unfolded is never repeated
+under itself. **Unfold all** shares that across every item of its run, the
+items streaming at once included. A reference covering verses not shown yet (a
+range around one that is) is still shown.
 Every loader has an abort button that stops it and keeps what already came. Every picture on a page — in an article, a verse's
 notes, anything unfolded — opens full size in a new tab, from the wol.jw.org or
 jw.org address it was read from.
@@ -632,8 +663,8 @@ newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `error`, `done`) flushed as they happen:
 `GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse, or a range
 with `to=`: study notes, indexes, marginal references, quotations; `part=notes|
-footnotes|indexes|marginal` — the index with `group=` — loads one of them alone,
-and with `lazy=1` loads it while the others come as headings) and
+footnotes|indexes|marginal` — one index with `kind=guide|pubindex` — loads one
+of them alone, and with `lazy=1` loads it while the others come as headings) and
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
 wol citation paths are followed), plus `GET /unfold/footnote?path=…`,
 `GET /unfold/translations?vid=…&bible=…`, `GET /unfold/cited?vid=…&self=…`
@@ -644,7 +675,10 @@ request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports
 what the request spent, and **Unfold all** passes the running total of its run
 as `spent=`, so the confirmation threshold covers the whole run rather than
-each verse or paragraph on its own.
+each verse or paragraph on its own. It also names its run (`run=`, a random
+token): the server keeps the verses each run has shown for an hour, so the
+verse, paragraph and article streams of one run show a verse once between
+them; a stream that fails gives its verses back.
 
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
@@ -687,8 +721,10 @@ CLI keeps.
 
 The server runs the same expansions and listings the CLI does, defaults
 included: excerpts are read for wol searches and citation listings
-(`excerpts=0` turns them off), and an expansion lists who quotes the verses it
-touches. That costs upstream requests, and the CLI asks before spending a lot
+(`excerpts=0` turns them off). Expansions are the exception: `unfold` counts in
+bible references as the web pages do (above), with who quotes a verse and its
+other translations left as headings whose body loads from the `/unfold/…`
+address they carry. That costs upstream requests, and the CLI asks before spending a lot
 of them, so the server asks too: past 2000 requests for one level the API
 answers `422 too_expensive` naming the count, and the web pages offer the count
 with a link that repeats the request. `force=1` is the answer given in advance

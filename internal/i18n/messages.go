@@ -153,6 +153,11 @@ type Messages struct {
 	// ResearchHeading labels the research-guide entries of an unfolded verse
 	// that point at a whole article, which has no passage to unfold.
 	ResearchHeading string
+	// ResearchGuideHeading and PublicationsIndexHeading head the two indexes of
+	// the study bible on a verse whose sections load once opened, before the
+	// page has said what it calls them.
+	ResearchGuideHeading     string
+	PublicationsIndexHeading string
 	// StudyFailed takes the reason the study pane of a verse could not be read.
 	// The verse itself is still printed.
 	StudyFailed string
