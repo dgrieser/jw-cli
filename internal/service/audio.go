@@ -50,16 +50,17 @@ func (s *Service) Category(ctx context.Context, lang, key string, limit, offset 
 		return cat, err
 	}
 	type list struct {
-		media *[]model.MediaItem
-		key   string
+		media  *[]model.MediaItem
+		key    string
+		images map[string]map[string]string
 	}
 	var lists []list
 	if offset == 0 && (cat.Total == 0 || len(cat.Media) >= cat.Total) {
-		lists = append(lists, list{&cat.Media, cat.Key})
+		lists = append(lists, list{&cat.Media, cat.Key, cat.Images})
 	}
 	for i := range cat.Subcategories {
 		if sub := &cat.Subcategories[i]; len(sub.Media) > 0 {
-			lists = append(lists, list{&sub.Media, sub.Key})
+			lists = append(lists, list{&sub.Media, sub.Key, sub.Images})
 		}
 	}
 	var pubs []string
@@ -77,7 +78,7 @@ func (s *Service) Category(ctx context.Context, lang, key string, limit, offset 
 	n := len(cat.Media)
 	described := map[string][]model.MediaItem{}
 	for _, l := range lists {
-		*l.media, described[l.key] = completeAudio(*l.media, tracks, l.key)
+		*l.media, described[l.key] = completeAudio(*l.media, tracks, l.key, l.images)
 	}
 	if cat.Total > 0 {
 		cat.Total += len(cat.Media) - n
@@ -87,23 +88,24 @@ func (s *Service) Category(ctx context.Context, lang, key string, limit, offset 
 	for _, sub := range cat.Subcategories {
 		subs = append(subs, sub)
 		if media := described[sub.Key]; len(media) > 0 {
-			subs = append(subs, describedSub(sub.Key, sub.Name, name, media, &model.CategoryRef{Key: cat.Key, Name: cat.Name}))
+			subs = append(subs, describedSub(sub, name, media, &model.CategoryRef{Key: cat.Key, Name: cat.Name}))
 		}
 	}
 	if media := described[cat.Key]; len(media) > 0 {
-		subs = append(subs, describedSub(cat.Key, cat.Name, name, media, &model.CategoryRef{Key: cat.Key, Name: cat.Name}))
+		subs = append(subs, describedSub(cat, name, media, &model.CategoryRef{Key: cat.Key, Name: cat.Name}))
 	}
 	cat.Subcategories = subs
 	return cat, nil
 }
 
 // describedSub is the category of the tracks with audio descriptions of the
-// category key.
-func describedSub(key, catName, format string, media []model.MediaItem, parent *model.CategoryRef) model.Category {
+// category of: its name, after format, and its pictures.
+func describedSub(of model.Category, format string, media []model.MediaItem, parent *model.CategoryRef) model.Category {
 	return model.Category{
-		Key:    key + describedKey,
-		Name:   fmt.Sprintf(format, catName),
+		Key:    of.Key + describedKey,
+		Name:   fmt.Sprintf(format, of.Name),
 		Type:   "ondemand",
+		Images: of.Images,
 		Media:  media,
 		Total:  len(media),
 		Parent: parent,
@@ -243,8 +245,9 @@ func (s *Service) pubTracks(ctx context.Context, lang string, pubs []string) (ma
 // counts up, before it where it counts down. The tracks with audio
 // descriptions of a publication the list has none of are not added; they are
 // returned on their own, publication by publication as the list has them,
-// each counting up.
-func completeAudio(media []model.MediaItem, tracks map[string][]model.PubFile, category string) ([]model.MediaItem, []model.MediaItem) {
+// each counting up. A track added without a picture of its own, or one lent
+// by the tracks around it, shows the category's: images.
+func completeAudio(media []model.MediaItem, tracks map[string][]model.PubFile, category string, images map[string]map[string]string) ([]model.MediaItem, []model.MediaItem) {
 	type pubList struct {
 		have        map[int]bool
 		first, last int // the tracks listed first and last
@@ -290,6 +293,9 @@ func completeAudio(media []model.MediaItem, tracks map[string][]model.PubFile, c
 			if item.Images == nil {
 				item.Images = cover
 			}
+			if item.Images == nil {
+				item.Images = images
+			}
 			media = insertTrack(media, sym, f.Track, down, item)
 		}
 	}
@@ -304,6 +310,9 @@ func completeAudio(media []model.MediaItem, tracks map[string][]model.PubFile, c
 			described[i].Images = media[j].Images
 		} else {
 			described[i].Images = sharedImages(pubs[sym].listed)
+		}
+		if described[i].Images == nil {
+			described[i].Images = images
 		}
 	}
 	return media, described

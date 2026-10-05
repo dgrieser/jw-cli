@@ -75,7 +75,7 @@ func TestCompleteAudio(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		media, described := completeAudio(c.media, c.tracks, "Cat")
+		media, described := completeAudio(c.media, c.tracks, "Cat", nil)
 		if got := lanks(media); !slices.Equal(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
 		}
@@ -97,17 +97,35 @@ func TestCompleteAudioCover(t *testing.T) {
 	for i := range media {
 		media[i].Images = cover
 	}
-	got, _ := completeAudio(media, map[string][]model.PubFile{"imc": files(3)}, "Cat")
+	got, _ := completeAudio(media, map[string][]model.PubFile{"imc": files(3)}, "Cat", nil)
 	if len(got) != 3 || BestImage(got[2].Images) != "cover.jpg" {
 		t.Fatalf("%+v", got)
 	}
 	media[1].Images = map[string]map[string]string{"sqr": {"md": "song.jpg"}}
-	got, described := completeAudio(media[:2:2], map[string][]model.PubFile{"imc": files(3, 502)}, "Cat")
+	got, described := completeAudio(media[:2:2], map[string][]model.PubFile{"imc": files(3, 502)}, "Cat", nil)
 	if got[2].Images != nil {
 		t.Fatalf("art of single songs lent: %+v", got[2].Images)
 	}
 	// a described track shows its song's own picture
 	if len(described) != 1 || BestImage(described[0].Images) != "song.jpg" {
+		t.Fatalf("described: %+v", described)
+	}
+}
+
+// With no picture of their own nor lent by their neighbours, added and
+// described tracks show the category's.
+func TestCompleteAudioCategoryPicture(t *testing.T) {
+	catImages := map[string]map[string]string{"pnr": {"lg": "category.png"}}
+	media := items("pub-osg_1_AUDIO", "pub-osg_2_AUDIO")
+	media[0].Images = map[string]map[string]string{"sqr": {"md": "one.jpg"}}
+	media[1].Images = map[string]map[string]string{"sqr": {"md": "two.jpg"}}
+	got, described := completeAudio(media, map[string][]model.PubFile{"osg": files(3, 501, 503)}, "Cat", catImages)
+	if BestImage(got[0].Images) != "one.jpg" || BestImage(got[2].Images) != "category.png" {
+		t.Fatalf("added: %+v", got)
+	}
+	// 501 describes song 1 and shows its picture; 503 describes a song the
+	// list does not have
+	if len(described) != 2 || BestImage(described[0].Images) != "one.jpg" || BestImage(described[1].Images) != "category.png" {
 		t.Fatalf("described: %+v", described)
 	}
 }

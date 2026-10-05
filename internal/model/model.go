@@ -92,14 +92,17 @@ type MediaItem struct {
 
 // Category is a mediator category tree node.
 type Category struct {
-	Key           string       `json:"key"`
-	Name          string       `json:"name"`
-	Description   string       `json:"description,omitempty"`
-	Type          string       `json:"type"` // container|ondemand
-	Subcategories []Category   `json:"subcategories,omitempty"`
-	Media         []MediaItem  `json:"media,omitempty"`
-	Total         int          `json:"total,omitempty"`
-	Parent        *CategoryRef `json:"parent,omitempty"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Type        string `json:"type"` // container|ondemand
+	// Images are the category's own pictures, type -> size -> url, as a
+	// media item's.
+	Images        map[string]map[string]string `json:"images,omitempty"`
+	Subcategories []Category                   `json:"subcategories,omitempty"`
+	Media         []MediaItem                  `json:"media,omitempty"`
+	Total         int                          `json:"total,omitempty"`
+	Parent        *CategoryRef                 `json:"parent,omitempty"`
 }
 
 // CategoryRef names a category without its contents: the parent of another.
