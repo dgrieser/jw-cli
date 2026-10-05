@@ -2144,6 +2144,10 @@
       return { kind: "translations", key: "translations", url: u };
     }
     var host = u.hostname.toLowerCase();
+    // a video quoting a verse: its player page here, not a document to unfold
+    if (/(^|\.)jw\.org$/.test(host) && u.searchParams.get("lank")) {
+      return { kind: "media", key: u.searchParams.get("lank"), url: u };
+    }
     // a document, or a table-of-contents link ("App. C") wol redirects to one
     if (/\/wol\/(d|tc)\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
       return { kind: "article", key: path, url: u };
@@ -2358,6 +2362,10 @@
     var target = linkTarget(a);
     if (!target) return;
     e.preventDefault();
+    if (target.kind === "media") {
+      location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
+      return;
+    }
     follow(a, target);
   });
 

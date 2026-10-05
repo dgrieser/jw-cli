@@ -26,6 +26,9 @@ type SearchParams struct {
 	// Excerpts reads each result's document to replace its teaser with the
 	// passage it was cut from. wol engine only.
 	Excerpts bool
+	// Videos also asks jw.org for the videos quoting the verses of a citation
+	// query. Citation listings only: wol has no videos to search.
+	Videos bool
 }
 
 // SearchOutcome is one page of results together with what a caller needs to

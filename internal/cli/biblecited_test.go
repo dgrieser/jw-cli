@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // sentCategories reads the fc[] values off a recorded query string. Matching
@@ -307,5 +309,85 @@ func TestBibleCitedNoExcerpts(t *testing.T) {
 	}
 	if strings.Contains(out, "lies dazu die Einsichten nach") {
 		t.Errorf("--no-excerpts printed a passage:\n%s", out)
+	}
+}
+
+// citedVideosMux adds the jw.org video search to the citation fixture: a talk
+// quoting the verse in its transcript, a demonstration naming it in its title,
+// and a song matched by its theme text alone. The video queries are recorded.
+func citedVideosMux(t *testing.T, queries, videoQueries *[]string) *http.ServeMux {
+	mux := citedMux(t, queries)
+	mux.HandleFunc("/tokens/jworg.jwt", func(w http.ResponseWriter, r *http.Request) {
+		payload := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d}`, time.Now().Add(time.Hour).Unix()))
+		fmt.Fprint(w, "h."+payload+".s")
+	})
+	mux.HandleFunc("/apis/search/results/E/videos", func(w http.ResponseWriter, r *http.Request) {
+		*videoQueries = append(*videoQueries, r.URL.Query().Get("q"))
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"results": [
+			{"type": "item", "subtype": "video", "title": "Joel Dellinger: Love Jehovah’s Lost Sheep (Jer. 31:15)",
+			 "lank": "pub-jwbvod26_55_VIDEO", "duration": "10:03",
+			 "snippet": "Let us read together\n<strong>Jeremiah 31:15</strong> and see what it teaches us about Jehovah’s love.",
+			 "links": {"jw.org": "https://www.jw.org/open?docid=1011214&item=pub-jwbvod26_55_VIDEO"}},
+			{"type": "item", "subtype": "video", "title": "Initial Call (Jer 31:15, 16)", "lank": "pub-mwbv_1_VIDEO"},
+			{"type": "item", "subtype": "video", "title": "114. Exercise Patience", "lank": "pub-sjjm_114_VIDEO"}
+		]}`)
+	})
+	return mux
+}
+
+func TestBibleCitedVideos(t *testing.T) {
+	var queries, videoQueries []string
+	out, err := runCmd(t, citedVideosMux(t, &queries, &videoQueries), "bible", "cited", "Jeremiah 31:15", "-l", "en", "-o", "raw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(videoQueries, []string{"(Jeremiah 31:15)"}) {
+		t.Errorf("video queries = %v", videoQueries)
+	}
+	for _, want := range []string{
+		// the two publications and the two videos that quote the verse
+		"4 publications citing Jeremiah 31:15",
+		"Love Jehovah’s Lost Sheep",
+		"what it teaches us about Jehovah’s love",
+		"Initial Call",
+		// the video's own page, in the reader's language
+		"https://www.jw.org/finder?lank=pub-jwbvod26_55_VIDEO&wtlocale=E",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	// the song names no verse and shows no passage quoting it
+	if strings.Contains(out, "Exercise Patience") {
+		t.Errorf("song matched by its theme text listed:\n%s", out)
+	}
+	// the videos close the listing, after the publications
+	if strings.Index(out, "Lost Sheep") < strings.Index(out, "31. August–6. September") {
+		t.Errorf("videos before publications:\n%s", out)
+	}
+}
+
+// --no-videos leaves the videos out, and so does --include, which names the
+// publications to cover. Each reference is searched on its own: the video
+// search has no OR.
+func TestBibleCitedVideoFlags(t *testing.T) {
+	tests := []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"Jeremiah 31:15", "--no-videos"}, nil},
+		{[]string{"Jeremiah 31:15", "--include", "w"}, nil},
+		{[]string{"Jeremiah 31:15; Matthew 2:18"}, []string{"(Jeremiah 31:15)", "(Matthew 2:18)"}},
+	}
+	for _, tt := range tests {
+		var queries, videoQueries []string
+		args := append([]string{"bible", "cited", "-l", "en"}, tt.args...)
+		if _, err := runCmd(t, citedVideosMux(t, &queries, &videoQueries), args...); err != nil {
+			t.Fatalf("%v: %v", tt.args, err)
+		}
+		if !slices.Equal(videoQueries, tt.want) {
+			t.Errorf("%v: video queries = %v, want %v", tt.args, videoQueries, tt.want)
+		}
 	}
 }
