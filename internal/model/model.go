@@ -120,6 +120,12 @@ type PubFile struct {
 	DocID    int    `json:"docid,omitempty"`
 	BookNum  int    `json:"booknum,omitempty"`
 	Filesize int64  `json:"filesize"`
+	// Duration is the length of an audio or video file in seconds, Modified
+	// when the file last changed ("2026-10-01 20:46:48"), ImageURL a track's
+	// own picture when it has one.
+	Duration float64 `json:"duration,omitempty"`
+	Modified string  `json:"modified,omitempty"`
+	ImageURL string  `json:"imageUrl,omitempty"`
 }
 
 // PubMedia is the pub-media API response for one publication.

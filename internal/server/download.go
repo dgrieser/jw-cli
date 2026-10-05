@@ -17,7 +17,7 @@ func (s *Server) downloadMedia(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	item, err := s.svc.Mediator.MediaItem(r.Context(), lng.Symbol, r.PathValue("lank"))
+	item, err := s.svc.MediaItem(r.Context(), lng.Symbol, r.PathValue("lank"))
 	if err != nil {
 		failJSON(w, r, err)
 		return

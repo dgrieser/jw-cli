@@ -813,7 +813,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, r.PathValue("key"), limit, offset)
+	cat, err := s.svc.Category(r.Context(), lng.Symbol, r.PathValue("key"), limit, offset)
 	if err != nil {
 		s.failUI(w, r, err)
 		return
@@ -870,7 +870,7 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	item, err := s.svc.Mediator.MediaItem(r.Context(), lng.Symbol, r.PathValue("lank"))
+	item, err := s.svc.MediaItem(r.Context(), lng.Symbol, r.PathValue("lank"))
 	if err != nil {
 		s.failUI(w, r, err)
 		return

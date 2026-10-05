@@ -154,7 +154,7 @@ func downloadLANK(ctx context.Context, a *app.App, lank, quality string, subtitl
 	if err != nil {
 		return err
 	}
-	item, err := a.Mediator().MediaItem(ctx, lng.Symbol, lank)
+	item, err := a.Service().MediaItem(ctx, lng.Symbol, lank)
 	if err != nil {
 		return err
 	}

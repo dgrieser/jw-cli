@@ -60,7 +60,7 @@ Examples:
 				header = a.Text().MediaCategories
 				items = service.CategoriesToResults(cats)
 			} else {
-				cat, err := a.Mediator().Category(cmd.Context(), lng.Symbol, key, limit, offset)
+				cat, err := a.Service().Category(cmd.Context(), lng.Symbol, key, limit, offset)
 				if err != nil {
 					return err
 				}
@@ -98,7 +98,7 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 			if err != nil {
 				return err
 			}
-			item, err := a.Mediator().MediaItem(cmd.Context(), lng.Symbol, args[0])
+			item, err := a.Service().MediaItem(cmd.Context(), lng.Symbol, args[0])
 			if err != nil {
 				return err
 			}
