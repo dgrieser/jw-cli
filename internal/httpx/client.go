@@ -58,6 +58,10 @@ type Client struct {
 	// rebuild that follows
 	stashMu sync.Mutex
 	stashed map[string]stashed
+	// editions tells the editions of a site's bodies apart, newest the
+	// newest seen of each; see Editions
+	editions Editions
+	newest   newestEditions
 }
 
 type Option func(*Client)
@@ -99,6 +103,9 @@ func New(opts ...Option) *Client {
 	}
 	if c.hc.Jar == nil {
 		c.hc.Jar = jar
+	}
+	if c.hc.CheckRedirect == nil {
+		c.hc.CheckRedirect = c.checkRedirect
 	}
 	c.limiters = map[string]*rate.Limiter{}
 	for _, raw := range []string{c.Base.WOL, c.Base.JWOrg} {

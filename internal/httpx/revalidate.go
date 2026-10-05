@@ -76,6 +76,14 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		return f, nil
 	}
 	e, body, ok := c.responses.loadEntry(id, false)
+	if ok && c.editions != nil && !e.EdSeen {
+		c.stamp(&e, body)
+		c.responses.saveEntry(id, e, body)
+	}
+	// a body of an older edition than the newest seen is asked for again
+	if ok && c.behind(e) && !c.backingOff(id) {
+		return c.renew(ctx, id, rawURL, hdr, e, body)
+	}
 	if ok && e.fresh(c.responses.fresh) {
 		c.verbose("GET %s (cached)", rawURL)
 		return &fetched{body: body, id: id, e: e}, nil
@@ -87,6 +95,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 	if err != nil {
 		return nil, err
 	}
+	body, resp = c.latest(ctx, rawURL, hdr, body, resp)
 	e = entry{URL: rawURL, Header: keyHeaders(hdr)}
 	e.setValidators(resp, false)
 	return c.pendingBody(id, e, body), nil
@@ -95,7 +104,11 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 // lookupAnew answers a read from upstream whatever the cache holds. When
 // upstream cannot answer, a body kept before is better than none.
 func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Header) (*fetched, error) {
-	body, resp, err := c.download(ctx, rawURL, hdr)
+	// past the CDN too, which keeps what it got for hours
+	body, resp, err := c.downloadPast(ctx, rawURL, hdr, 0)
+	if err == nil {
+		body, resp = c.latest(ctx, rawURL, hdr, body, resp)
+	}
 	if err != nil {
 		if IsGone(err) {
 			c.responses.removeEntry(id)
@@ -109,10 +122,23 @@ func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Hea
 	}
 	e := entry{URL: rawURL, Header: keyHeaders(hdr)}
 	e.setValidators(resp, false)
+	c.stamp(&e, body)
+	// never an older edition for the one kept
+	if old, kept, ok := c.responses.loadEntry(id, false); ok {
+		if !old.EdSeen {
+			c.stamp(&old, kept)
+		}
+		if older(e, old) {
+			return c.confirm(id, old, kept), nil
+		}
+	}
 	return c.pendingBody(id, e, body), nil
 }
 
 func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
+	if !e.EdSeen {
+		c.stamp(&e, body)
+	}
 	e.Size, e.Hash, e.Checked = int64(len(body)), bodyHash(body), time.Now().Unix()
 	return &fetched{body: body, id: id, e: e, pending: true}
 }
@@ -169,6 +195,14 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 	if bodyHash(nbody) == e.Hash {
 		return c.confirm(id, ne, body), nil
 	}
+	// a server not up to date answers with an older edition: past the CDN
+	// for a newer one, and never in place of the newer one kept
+	nbody, resp = c.latest(ctx, e.URL, hdr, nbody, resp)
+	ne.setValidators(resp, false)
+	c.stamp(&ne, nbody)
+	if older(ne, e) {
+		return c.confirm(id, e, body), nil
+	}
 	c.verbose("GET %s (changed)", e.URL)
 	return c.pendingBody(id, ne, nbody), nil
 }
@@ -176,6 +210,9 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 // confirm records that a kept body is still current and starts a new
 // freshness window for it.
 func (c *Client) confirm(id string, e entry, body []byte) *fetched {
+	if !e.EdSeen {
+		c.stamp(&e, body)
+	}
 	e.Checked = time.Now().Unix()
 	c.responses.saveEntry(id, e, body)
 	e.Size, e.Hash = int64(len(body)), bodyHash(body)
