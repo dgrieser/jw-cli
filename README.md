@@ -193,9 +193,13 @@ the matches it found.
 
 wol has no videos, so `jw bible cited` also asks the jw.org search for the
 videos quoting the verse — talks, morning worship, demonstrations — which it
-finds through their transcripts. They follow the publications, each with the
-transcript passage quoting the verse; a video that shows no such passage and
-names no verse in its title (a song matched by its theme text) is left out.
+finds through their transcripts. Each comes with the transcript passage quoting
+the verse and is sorted in among the publications by the day it was first
+published, which its line shows. A publication line names its year only, so a
+video counts as newer than a publication of the same year from July on; one
+whose date cannot be read, and every video of an `-s occ` listing, closes the
+listing. A video that shows no transcript passage and names no verse in its
+title (a song matched by its theme text) is left out.
 `--no-videos` leaves the videos out altogether, and so does `--include`, which
 names the publications to cover.
 

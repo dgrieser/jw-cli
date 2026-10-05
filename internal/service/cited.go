@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
@@ -22,16 +26,15 @@ const maxCitedPages = 100
 // something to page through by hand. Excerpts, when asked for, are filled in
 // after the walk so one progress counter covers the whole listing.
 //
-// With p.Videos, the videos quoting the verses follow the publications: wol
-// has none, so jw.org is asked for them alongside the walk. They carry no
-// date to sort them in by, and a talk quoting a verse is a different kind of
-// answer than an article, so they close the listing rather than mix into it.
+// With p.Videos, the videos quoting the verses join the publications: wol has
+// none, so jw.org is asked for them alongside the walk, and each is sorted in
+// by the day it was first published (see mergeVideos).
 func (s *Service) CitedListing(ctx context.Context, lng model.Language, p *SearchParams,
 	progress func(done, total int)) (SearchOutcome, error) {
 	out := SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: 1}
-	var videos chan []model.Result
+	var videos chan []datedVideo
 	if p.Videos {
-		videos = make(chan []model.Result, 1)
+		videos = make(chan []datedVideo, 1)
 		go func() { videos <- s.citedVideos(ctx, lng, citationTerms(p.Query), p.Excerpts) }()
 	}
 	seen := map[string]bool{}
@@ -71,7 +74,7 @@ func (s *Service) CitedListing(ctx context.Context, lng model.Language, p *Searc
 	// the videos were judged as they were found
 	if videos != nil {
 		found := <-videos
-		out.Items = append(out.Items, found...)
+		out.Items = mergeVideos(out.Items, found, p.Sort)
 		out.Total += len(found)
 	}
 	return out, nil
@@ -99,7 +102,7 @@ var refInTitle = regexp.MustCompile(`\d+:\d+`)
 // and a video that shows no such passage and names no verse in its title — a
 // song matched by its theme text — is left out, as keepTelling leaves out the
 // publications that only name a verse.
-func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []string, excerpts bool) []model.Result {
+func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []string, excerpts bool) []datedVideo {
 	if s.Search == nil {
 		return nil
 	}
@@ -129,6 +132,122 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 				break
 			}
 		}
+	}
+	return s.dateVideos(ctx, lng, out)
+}
+
+// datedVideo is a video of a citation listing and the day it was first
+// published; zero when the mediator could not say.
+type datedVideo struct {
+	model.Result
+	published time.Time
+}
+
+// dateVideos looks up when each video was first published: the search does
+// not say, the mediator's media item does. The day heads the video's line, in
+// the place a publication names its issue. Best effort: a video whose item
+// cannot be read stays undated.
+func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []model.Result) []datedVideo {
+	out := make([]datedVideo, len(videos))
+	var (
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, excerptWorkers)
+	)
+	for i, v := range videos {
+		out[i].Result = v
+		if v.LANK == "" || s.Mediator == nil {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			item, err := s.Mediator.MediaItem(ctx, lng.Symbol, v.LANK)
+			if err != nil {
+				return
+			}
+			if t, err := time.Parse(time.RFC3339, item.FirstPublished); err == nil {
+				out[i].published = t
+				out[i].Context = t.Format(time.DateOnly)
+			}
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
+// publicationYear is the year a wol result's publication line ends in —
+// "w06 15. 11. S. 26-30 - Der Wachtturm 2006", "… Arbeitsheft (2026)". Zero
+// for the publications that name none, a book like Insight.
+var publicationYear = regexp.MustCompile(`\b(1[89]\d\d|20\d\d)\D*$`)
+
+// resultDate is when a wol result was published, as near as its line says:
+// the middle of its year, since the line names the issue in words of its own
+// language ("Juli", "15. 3.", "3/15") and the year in digits. Zero when it
+// names no year.
+func resultDate(r model.Result) time.Time {
+	m := publicationYear.FindStringSubmatch(r.Context)
+	if m == nil {
+		return time.Time{}
+	}
+	year, _ := strconv.Atoi(m[1])
+	return time.Date(year, time.July, 1, 0, 0, 0, 0, time.UTC)
+}
+
+// mergeVideos sorts the videos into the publications, which wol has already
+// put in order. Each video goes ahead of the first dated publication it is
+// newer than (older than, for -s oldest); the undated publications are not
+// asked, as they say nothing about where a date belongs. A video nothing comes
+// after closes the listing, as does an undated one and every video of a
+// listing ranked by occurrences, which has no date order to keep.
+func mergeVideos(items []model.Result, videos []datedVideo, sortBy string) []model.Result {
+	if len(videos) == 0 {
+		return items
+	}
+	oldest := sortBy == "oldest"
+	if sortBy != "newest" && !oldest {
+		for _, v := range videos {
+			items = append(items, v.Result)
+		}
+		return items
+	}
+	// before reports whether a dated a belongs ahead of b in the listing
+	before := func(a, b time.Time) bool {
+		if oldest {
+			return a.Before(b)
+		}
+		return a.After(b)
+	}
+	var dated, undated []datedVideo
+	for _, v := range videos {
+		if v.published.IsZero() {
+			undated = append(undated, v)
+		} else {
+			dated = append(dated, v)
+		}
+	}
+	slices.SortStableFunc(dated, func(a, b datedVideo) int {
+		switch {
+		case before(a.published, b.published):
+			return -1
+		case before(b.published, a.published):
+			return 1
+		}
+		return 0
+	})
+	out := make([]model.Result, 0, len(items)+len(videos))
+	for _, item := range items {
+		if d := resultDate(item); !d.IsZero() {
+			for len(dated) > 0 && before(dated[0].published, d) {
+				out = append(out, dated[0].Result)
+				dated = dated[1:]
+			}
+		}
+		out = append(out, item)
+	}
+	for _, v := range append(dated, undated...) {
+		out = append(out, v.Result)
 	}
 	return out
 }

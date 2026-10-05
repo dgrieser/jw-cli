@@ -362,7 +362,8 @@ func TestBibleCitedVideos(t *testing.T) {
 	if strings.Contains(out, "Exercise Patience") {
 		t.Errorf("song matched by its theme text listed:\n%s", out)
 	}
-	// the videos close the listing, after the publications
+	// the fixture's videos have no media item to date them, so they close
+	// the listing, after the publications
 	if strings.Index(out, "Lost Sheep") < strings.Index(out, "31. August–6. September") {
 		t.Errorf("videos before publications:\n%s", out)
 	}

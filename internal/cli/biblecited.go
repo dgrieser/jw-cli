@@ -36,9 +36,9 @@ since they cite every verse by construction. Several references, separated by
 semicolons, are searched together as one OR query. Every result page is read,
 so the listing is the complete answer rather than its first 40 rows.
 
-The videos quoting the verse — talks, morning worship, demonstrations — follow
-the publications, found by the jw.org search through their transcripts. They
-are left out with --no-videos, and whenever --include names the publications
+The videos quoting the verse — talks, morning worship, demonstrations — are
+found by the jw.org search through their transcripts and sorted in among the
+publications by the day they were first published. They are left out with --no-videos, and whenever --include names the publications
 to cover.
 
 Examples:
