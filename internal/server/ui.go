@@ -106,6 +106,8 @@ func (p basePage) UIText() map[string]string {
 		"translations":   t.TranslationsHeading,
 		"footnotes":      t.FootnotesHeading,
 		"pickBook":       t.UIPickBook,
+		"allBooks":       t.UIAllBooks,
+		"chapters":       t.UIChapters,
 		"abort":          t.UIAbort,
 		"language":       t.UILanguage,
 		"langQuick":      t.UILangQuick,

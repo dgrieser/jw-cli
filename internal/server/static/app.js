@@ -180,12 +180,34 @@
       currentChapter = Math.floor(id1 / 1e3) % 1e3;
     }
 
-    // the picker: the chapters of a book as one row, the books under it
+    var picker = biblePicker({
+      edition: edition,
+      lang: lang,
+      names: names,
+      current: function () { return { book: currentBook, chapter: currentChapter }; }
+    });
+    btn.addEventListener("click", picker.open);
+  })();
+
+  // --- the bible's picker: a book's chapters as one row, the books under it --
+  //
+  // Opened at the book being read, its chapters run in a row above the books.
+  // A book picked from the grid shows its chapters the way the bible page does
+  // — a heading and a grid — with the row gone, and a way back to the books.
+  // Away from the bible there is no book being read: the books, then their
+  // chapters. A chapter is a link: it opens the bible there.
+
+  function biblePicker(opts) {
+    var edition = opts.edition || "nwtsty";
+    var lang = opts.lang || "";
+    var names = opts.names || {};
     var dialog = null;
     var row = null;
     var rowTitle = null;
     var grid = null;
+    var view = null;
     var navCache = {};
+    var cur = { book: 0, chapter: 0 };
 
     function api(book) {
       var q = new URLSearchParams({ bible: edition });
@@ -208,26 +230,42 @@
       return "/bible?" + q.toString();
     }
 
-    function showChapters(book) {
-      row.textContent = "";
-      // the book's regular name, with the chapter being read when it is this
-      // book — never the long title the library heads the book with
-      var label = function () {
-        var n = names[book] || "";
-        return book === currentBook && currentChapter ? n + " " + currentChapter : n;
-      };
-      rowTitle.textContent = label();
+    function markBook(book) {
       grid.querySelectorAll(".book a").forEach(function (a) {
         a.classList.toggle("active", parseInt(a.getAttribute("data-book"), 10) === book);
       });
+    }
+
+    // the books, with the chapters of the book being read in the row above
+    function showBooks() {
+      view.hidden = true;
+      grid.hidden = false;
+      row.textContent = "";
+      var book = cur.book;
+      markBook(book);
+      if (!book) {
+        row.hidden = true;
+        rowTitle.textContent = T.pickBook || "";
+        return;
+      }
+      row.hidden = false;
+      // the book's regular name, with the chapter being read — never the long
+      // title the library heads the book with
+      var label = function () {
+        var n = names[book] || "";
+        return cur.chapter ? n + " " + cur.chapter : n;
+      };
+      rowTitle.textContent = label();
       api(book).then(function (nav) {
+        if (row.hidden || cur.book !== book) return;
         rowTitle.textContent = label();
+        row.textContent = "";
         var chosen = null;
         (nav.chapters || []).forEach(function (c) {
           var a = document.createElement("a");
           a.href = chapterHref(book, c);
           a.textContent = String(c);
-          if (book === currentBook && c === currentChapter) {
+          if (c === cur.chapter) {
             a.className = "active";
             a.setAttribute("aria-current", "true");
             chosen = a;
@@ -239,18 +277,65 @@
       }, function (err) {
         row.textContent = String(err && err.message || err);
       });
+      grid.scrollTop = 0;
     }
 
-    function buildDialog() {
+    // one book's chapters as the bible page lays them out: the row is gone
+    function showBook(book) {
+      row.hidden = true;
+      grid.hidden = true;
+      view.hidden = false;
+      rowTitle.textContent = names[book] || "";
+      var list = view.querySelector(".chapter-grid");
+      var heading = view.querySelector("h2");
+      heading.textContent = names[book] || "";
+      list.textContent = T.loading || "…";
+      view.scrollTop = 0;
+      view.setAttribute("data-book", String(book));
+      api(book).then(function (nav) {
+        if (view.getAttribute("data-book") !== String(book)) return;
+        heading.textContent = nav.title || names[book] || "";
+        list.textContent = "";
+        (nav.chapters || []).forEach(function (c) {
+          var li = document.createElement("li");
+          var a = document.createElement("a");
+          a.href = chapterHref(book, c);
+          a.textContent = String(c);
+          if (book === cur.book && c === cur.chapter) {
+            a.className = "active";
+            a.setAttribute("aria-current", "true");
+          }
+          li.appendChild(a);
+          list.appendChild(li);
+        });
+        var first = list.querySelector("a");
+        if (first) first.focus({ preventScroll: true });
+      }, function (err) {
+        list.textContent = String(err && err.message || err);
+      });
+    }
+
+    function build() {
       dialog = document.createElement("dialog");
       dialog.className = "bible-picker";
       dialog.setAttribute("aria-label", T.pickBook || "");
       dialog.innerHTML = '<div class="bp-head"><strong class="bp-book"></strong>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
-        '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>';
+        '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>' +
+        '<div class="bp-book-view bible-nav chapters-nav" hidden>' +
+        '<p class="bible-nav-back"><a href="#" class="bp-back"></a></p><h2></h2>' +
+        '<h3 class="bible-nav-heading"></h3><ul class="chapter-grid"></ul></div>';
       row = dialog.querySelector(".bp-chapters");
       rowTitle = dialog.querySelector(".bp-book");
       grid = dialog.querySelector(".bp-books");
+      view = dialog.querySelector(".bp-book-view");
+      var back = view.querySelector(".bp-back");
+      back.textContent = "‹ " + (T.allBooks || "");
+      back.addEventListener("click", function (e) {
+        e.preventDefault();
+        showBooks();
+      });
+      view.querySelector(".bible-nav-heading").textContent = T.chapters || "";
       dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
       // a click on the backdrop closes it
       dialog.addEventListener("click", function (e) {
@@ -291,25 +376,46 @@
               if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
               e.preventDefault();
               e.stopPropagation();
-              showChapters(b.number);
+              showBook(b.number);
             });
             li.appendChild(a);
             ul.appendChild(li);
           });
           grid.appendChild(ul);
         });
-        if (currentBook) showChapters(currentBook);
+        // the names are known now: the row's title can say the book
+        if (!grid.hidden) showBooks();
       }, function (err) {
         grid.textContent = String(err && err.message || err);
       });
     }
 
-    btn.addEventListener("click", function () {
-      if (!dialog) buildDialog();
-      else if (currentBook) showChapters(currentBook);
-      if (dialog.showModal) dialog.showModal();
-      else dialog.setAttribute("open", "");
-    });
+    return {
+      open: function () {
+        cur = opts.current ? opts.current() : { book: 0, chapter: 0 };
+        if (!dialog) build();
+        showBooks();
+        if (dialog.showModal) dialog.showModal();
+        else dialog.setAttribute("open", "");
+      }
+    };
+  }
+
+  // --- the bar's bible: away from the bible, a way to a chapter of it ---------
+
+  (function () {
+    var btn = document.querySelector(".pb-jump");
+    if (!btn) return;
+    var lang = new URLSearchParams(location.search).get("lang") || "";
+    // the edition last read in this language, else the study bible
+    var edition = "nwtsty";
+    try {
+      var last = window.localStorage.getItem("jw:last:bible:" + lang);
+      if (last) edition = new URL(last, location.href).searchParams.get("bible") || edition;
+    } catch (err) {
+      // nothing remembered: the study bible
+    }
+    btn.addEventListener("click", biblePicker({ edition: edition, lang: lang }).open);
   })();
 
   // --- the content language: a dialog behind the translate glyph in the bar -
