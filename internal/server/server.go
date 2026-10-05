@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -113,7 +114,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
-	return s.logged(s.auth.RequireAuth(remembersLanguage(mux)))
+	return s.logged(s.auth.RequireAuth(remembersLanguage(refreshes(mux))))
+}
+
+// refreshes reads past the cache for a request that asks with ?refresh=1:
+// every page of jw.org it needs is fetched anew, once, and replaces what was
+// kept. The parameter goes before the handler sees the request, so no link,
+// form or remembered page built from it carries it on.
+func refreshes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("refresh") != "1" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		q.Del("refresh")
+		r = r.WithContext(httpx.WithRefresh(r.Context()))
+		r.URL.RawQuery = q.Encode()
+		r.Form = nil
+		w.Header().Set("Cache-Control", "no-store")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // remembersLanguage keeps the language a reader picks, so it survives the next

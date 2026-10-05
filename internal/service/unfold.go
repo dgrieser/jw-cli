@@ -15,6 +15,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/unfold"
@@ -151,7 +152,7 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 		return tip, nil
 	}
 	r.s.mem.init()
-	if tip, ok := r.s.mem.tips.get(tipKey(r.lng, path)); ok {
+	if tip, ok := r.s.mem.tips.get(tipKey(r.lng, path)); ok && !httpx.Refreshing(ctx) {
 		r.keep(path, tip)
 		return tip, nil
 	}
@@ -377,7 +378,7 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 	var out unfold.Study
 	if !ok {
 		// read before, by this service: nothing to ask
-		cm, known := r.chapterMemo(ref.Book, ref.Chapter)
+		cm, known := r.chapterMemo(ctx, ref.Book, ref.Chapter)
 		if !known {
 			doc, borrowed := r.docs[key]
 			if !borrowed {

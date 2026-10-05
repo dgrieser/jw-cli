@@ -1270,7 +1270,11 @@ tbody tr:hover { background: var(--surface); }
   white-space: nowrap;
   font-weight: 650;
 }
-.pb-font { flex: none; display: inline-flex; gap: 0; margin-left: auto; }
+.pb-font { flex: none; display: inline-flex; position: relative; margin-left: auto; }
+.pb .pb-font-toggle, .pb .pb-refresh { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+.pb-font-menu { top: calc(100% + 0.2rem); right: 0; }
+.pb-font-menu [data-font="-1"], .pb-font-menu [data-font="1"] { font-size: 1.25rem; }
+html:not(.js) .pb-refresh { display: none; }
 .pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
 .page-bar .pb { position: relative; }
 /* the diamond that unfolds the whole page sits in the bar, not beside a line */
@@ -1291,7 +1295,6 @@ tbody tr:hover { background: var(--surface); }
   border-color: transparent;
   color: var(--muted);
 }
-.pb-btn[data-font="-1"], .pb-btn[data-font="1"] { font-size: 1.15rem; }
 .pb .lang-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); margin-right: -0.4rem; }
 html:not(.js) .lang-toggle { display: none; }
 /* away from the bible, a way into it: first of the controls on the right */

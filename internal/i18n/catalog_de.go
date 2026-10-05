@@ -202,5 +202,7 @@ var de = Messages{
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
 	UIFontReset:            "Normale Schriftgröße",
+	UITextSize:             "Schriftgröße",
+	UIRefresh:              "Neu laden, ohne Cache",
 	UIBackToOverview:       "Übersicht",
 }

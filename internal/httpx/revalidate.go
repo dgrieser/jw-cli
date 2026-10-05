@@ -35,8 +35,13 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 		return &fetched{body: body}, nil
 	}
 	id := entryID(key)
-	ch := c.flight.DoChan(id, func() (any, error) {
-		return c.lookup(context.WithoutCancel(ctx), id, rawURL, hdr)
+	// a read past the cache shares no lookup with the reads that use it
+	flightKey, lookup := id, c.lookup
+	if refreshFirst(ctx, "GET "+id) {
+		flightKey, lookup = id+"\x00refresh", c.lookupAnew
+	}
+	ch := c.flight.DoChan(flightKey, func() (any, error) {
+		return lookup(context.WithoutCancel(ctx), id, rawURL, hdr)
 	})
 	var f *fetched
 	select {
@@ -83,6 +88,26 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		return nil, err
 	}
 	e = entry{URL: rawURL, Header: keyHeaders(hdr)}
+	e.setValidators(resp, false)
+	return c.pendingBody(id, e, body), nil
+}
+
+// lookupAnew answers a read from upstream whatever the cache holds. When
+// upstream cannot answer, a body kept before is better than none.
+func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Header) (*fetched, error) {
+	body, resp, err := c.download(ctx, rawURL, hdr)
+	if err != nil {
+		if IsGone(err) {
+			c.responses.removeEntry(id)
+			return nil, err
+		}
+		if e, kept, ok := c.responses.loadEntry(id, false); ok {
+			c.verbose("GET %s (cached, upstream unavailable: %v)", rawURL, err)
+			return &fetched{body: kept, id: id, e: e}, nil
+		}
+		return nil, err
+	}
+	e := entry{URL: rawURL, Header: keyHeaders(hdr)}
 	e.setValidators(resp, false)
 	return c.pendingBody(id, e, body), nil
 }

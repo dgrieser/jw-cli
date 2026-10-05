@@ -296,6 +296,10 @@ type Messages struct {
 	UIFontSmaller string
 	UIFontLarger  string
 	UIFontReset   string
+	// UITextSize opens the text size controls, UIRefresh reloads the page
+	// past the cache.
+	UITextSize string
+	UIRefresh  string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 }

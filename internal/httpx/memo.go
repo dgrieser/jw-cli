@@ -30,10 +30,16 @@ func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.C
 	if !c.active() {
 		return build(ctx)
 	}
-	ch := c.memoFlight.DoChan(key, func() (any, error) {
+	// a memo read past the cache is built anew, sharing nothing with the
+	// reads that use it
+	flightKey, anew := key, refreshFirst(ctx, "memo "+key)
+	if anew {
+		flightKey += "\x00refresh"
+	}
+	ch := c.memoFlight.DoChan(flightKey, func() (any, error) {
 		// shared by every caller waiting on key, so not cut short by the first
 		// one giving up
-		return c.memo(context.WithoutCancel(ctx), key, func(ctx context.Context) (any, error) {
+		return c.memo(context.WithoutCancel(ctx), key, anew, func(ctx context.Context) (any, error) {
 			return build(ctx)
 		})
 	})
@@ -65,9 +71,9 @@ type memoResult struct {
 	deps  map[string]string
 }
 
-func (c *Cache) memo(ctx context.Context, key string, build func(context.Context) (any, error)) (memoResult, error) {
+func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(context.Context) (any, error)) (memoResult, error) {
 	old, have := c.loadMemo(key)
-	if have && c.memoCurrent(ctx, old) {
+	if have && !anew && c.memoCurrent(ctx, old) {
 		return memoResult{old.Value, old.Deps}, nil
 	}
 	tctx, t := withTracker(ctx)
