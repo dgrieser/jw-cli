@@ -833,6 +833,11 @@ li.unfold-item.nested { padding-right: 2.3rem; }
 }
 .unfold-hint.gone { opacity: 0; }
 
+/* a section opened and found empty: it says so, then fades away */
+details.section.vanishing { transition: opacity 0.4s ease; }
+details.section.vanishing.gone { opacity: 0; }
+details.section .empty-note { margin: 0.2rem 0; color: var(--muted); font-size: 0.9em; }
+
 /* what is still on its way: a chip in line with the sections that came */
 .unfold-loader {
   display: inline-flex;
