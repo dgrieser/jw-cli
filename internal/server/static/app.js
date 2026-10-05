@@ -73,6 +73,54 @@
     });
   });
 
+  // the size controls are a menu behind one button: open until a click
+  // elsewhere or Escape, so a size can be stepped through
+  (function () {
+    var btn = document.querySelector(".pb-font-toggle");
+    var menu = document.getElementById("font-menu");
+    if (!btn || !menu) return;
+    function setOpen(open) {
+      menu.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(menu.hidden);
+    });
+    document.addEventListener("click", function (e) {
+      if (!menu.hidden && !menu.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !menu.hidden) {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+  })();
+
+  // --- reloading past the cache ----------------------------------------------
+
+  // the bar's reload asks the server for the page once more with ?refresh=1:
+  // what it read from jw.org is read anew. The address drops the parameter at
+  // once, so the next reload is an ordinary one; what was unfolded is asked
+  // for anew too, rather than put back as it was kept.
+  var REFRESH = false;
+  (function () {
+    var u = new URL(location.href);
+    if (u.searchParams.get("refresh") === "1") {
+      REFRESH = true;
+      u.searchParams.delete("refresh");
+      history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    }
+    var btn = document.querySelector(".pb-refresh");
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var to = new URL(location.href);
+      to.searchParams.set("refresh", "1");
+      location.replace(to.pathname + to.search + to.hash);
+    });
+  })();
+
   // --- the page's header ------------------------------------------------------
 
   // the bar that stays in view names what the page shows and leads up to the
@@ -828,7 +876,7 @@
   // what is remembered about it, not of which page it is
   function pageKey(u) {
     var q = new URLSearchParams(u.search);
-    ["lazy", "force", "unfold"].forEach(function (k) { q.delete(k); });
+    ["lazy", "force", "unfold", "refresh"].forEach(function (k) { q.delete(k); });
     var pairs = [];
     q.forEach(function (v, k) { pairs.push([k, v]); });
     pairs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
@@ -1216,6 +1264,7 @@
   function unfoldQuery(q, depth, force, spent) {
     q.set("depth", String(depth));
     if (lang) q.set("lang", lang);
+    if (refreshing) q.set("refresh", "1");
     if (force) q.set("force", "1");
     else if (spent > 0) q.set("spent", String(spent));
     return q.toString();
@@ -1734,6 +1783,8 @@
 
   var batch = null;
   var queue = [];
+  // a reload past the cache asks the server past it until its run is over
+  var refreshing = REFRESH;
   // the level the page is unfolded to: what a followed link unfolds to as well
   var anchorLevel = pageLevel;
 
@@ -1911,19 +1962,31 @@
       items.forEach(removeExpansion);
       return;
     }
-    var run = { id: runID(), level: level, done: 0, total: 0, spent: 0, force: false, asked: false, stopped: false };
-    queue = items.filter(function (item) { return item.level !== level || item.state === "error"; });
-    if (!queue.length) return;
+    var todo = items.filter(function (item) { return item.level !== level || item.state === "error"; });
+    runAll(todo.map(function (item) { return { item: item, level: level }; }));
+  }
+
+  // runAll unfolds each of todo ({item, level}) as one run, two at a time: the
+  // next verse starts while the last one waits on its slowest part, and the
+  // server paces wol.jw.org either way. A reload past the cache reads past it
+  // until its run is over.
+  function runAll(todo) {
+    var run = { id: runID(), done: 0, total: 0, spent: 0, force: false, asked: false, stopped: false };
+    var levels = new Map();
+    todo.forEach(function (t) { levels.set(t.item, t.level); });
+    queue = todo.map(function (t) { return t.item; });
+    if (!queue.length) {
+      refreshing = false;
+      return;
+    }
     run.total = queue.length;
     batch = run;
     showStatus();
-    // two at a time: the next verse starts while the last one waits on its
-    // slowest part, and the server paces wol.jw.org either way
     var worker = function () {
       if (run.stopped || !queue.length) return Promise.resolve();
       var item = queue.shift();
       item.batch = run;
-      return unfold(item, level, { batch: run }).then(function () {
+      return unfold(item, levels.get(item), { batch: run }).then(function () {
         item.batch = null;
         if (run.stopped) return;
         run.done++;
@@ -1932,6 +1995,7 @@
       });
     };
     Promise.all([worker(), worker()]).then(function () {
+      refreshing = false;
       if (batch === run) {
         batch = null;
         showStatus();
@@ -2377,6 +2441,7 @@
   // same number of items — since a position means nothing on another one.
   function restoreState(saved) {
     if (!saved || saved.sig !== sig || !Array.isArray(saved.items)) return 0;
+    if (REFRESH) return refreshState(saved);
     var levels = {};
     saved.items.forEach(function (st, i) {
       var item = items[i];
@@ -2399,6 +2464,26 @@
     return ls.length === 1 ? parseInt(ls[0], 10) : 0;
   }
 
+  // refreshState is restoreState for a reload past the cache: what was open
+  // opens again, and what was unfolded is asked for anew, each item to the
+  // level it had, instead of being put back as it was kept
+  var refreshTodo = [];
+  function refreshState(saved) {
+    var levels = {};
+    saved.items.forEach(function (st, i) {
+      var item = items[i];
+      if (!st || !item || item.exp || !(st.level > 0)) return;
+      refreshTodo.push({ item: item, level: st.level });
+      levels[st.level] = true;
+    });
+    var open = Array.isArray(saved.open) ? saved.open : [];
+    pageDetails().forEach(function (d, i) {
+      if (i < open.length) d.open = !!open[i];
+    });
+    var ls = Object.keys(levels);
+    return ls.length === 1 ? parseInt(ls[0], 10) : 0;
+  }
+
   syncTools();
   var auto = parseInt(doc.getAttribute("data-auto"), 10) || 0;
   PS.load().then(function (saved) {
@@ -2412,6 +2497,7 @@
       unfoldAll(Math.min(auto, MAX_DEPTH));
     } else {
       markLevel(restored || pageLevel);
+      runAll(refreshTodo);
     }
   });
 })();

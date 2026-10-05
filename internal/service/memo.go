@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/unfold"
 )
@@ -140,6 +141,10 @@ func (r *tooltipResolver) Known(ctx context.Context, ref unfold.Ref) (model.Tool
 	if tip, ok := r.tips[ref.Path]; ok {
 		return tip, true
 	}
+	// a request reading past the cache reads past what is in memory too
+	if httpx.Refreshing(ctx) {
+		return model.Tooltip{}, false
+	}
 	m := &r.s.mem
 	m.init()
 	if tip, ok := m.tips.get(tipKey(r.lng, ref.Path)); ok {
@@ -156,7 +161,7 @@ func (r *tooltipResolver) Known(ctx context.Context, ref unfold.Ref) (model.Tool
 	}
 	// the verses of one chapter read before, written as the citation would
 	book, chapter := ids[0]/1_000_000, ids[0]/1_000%1_000
-	cm, ok := r.chapterMemo(book, chapter)
+	cm, ok := r.chapterMemo(ctx, book, chapter)
 	if !ok {
 		return model.Tooltip{}, false
 	}
@@ -187,8 +192,11 @@ func (r *tooltipResolver) keep(path string, tip model.Tooltip) {
 }
 
 // chapterMemo is what the study bible's page of a chapter says, when the
-// service read it before.
-func (r *tooltipResolver) chapterMemo(book, chapter int) (*chapterMemo, bool) {
+// service read it before and the request does not read past the cache.
+func (r *tooltipResolver) chapterMemo(ctx context.Context, book, chapter int) (*chapterMemo, bool) {
+	if httpx.Refreshing(ctx) {
+		return nil, false
+	}
 	r.s.mem.init()
 	return r.s.mem.chapters.get(chapterKey(r.lng, studyEdition, book, chapter))
 }
