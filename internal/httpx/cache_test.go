@@ -346,13 +346,20 @@ func TestEvictionKeepsTheRecentlyUsed(t *testing.T) {
 	dir := t.TempDir()
 	cache := Open(dir, CacheOptions{MaxBytes: 10 << 10})
 	body := make([]byte, 1<<10)
+	// every entry is used a second after the one before: files written back
+	// to back share a modification time (the file system's clock ticks in
+	// milliseconds), which would leave which of them is the least recently
+	// used to chance
 	old := time.Now().Add(-48 * time.Hour)
+	recent := time.Now().Add(-time.Minute)
 	for i := range 20 {
 		id := entryID(strconv.Itoa(i))
 		cache.saveEntry(id, entry{URL: strconv.Itoa(i)}, body)
+		used := recent.Add(time.Duration(i) * time.Second)
 		if i < 10 {
-			_ = os.Chtimes(cache.entryPath(id), old, old)
+			used = old.Add(time.Duration(i) * time.Second)
 		}
+		_ = os.Chtimes(cache.entryPath(id), used, used)
 	}
 	cache.Close()
 	var total int64
