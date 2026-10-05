@@ -91,6 +91,7 @@ func (p basePage) UIText() map[string]string {
 		"closeAll":       t.UICloseAll,
 		"stop":           t.UIStop,
 		"nothing":        t.UINothingToUnfold,
+		"emptySection":   t.UIEmptySection,
 		"error":          t.UIUnfoldError,
 		"retry":          t.UIRetry,
 		"stageStudy":     t.UIStageStudy,

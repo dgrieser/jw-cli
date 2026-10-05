@@ -269,6 +269,9 @@ type Messages struct {
 	UICloseAll        string
 	UIStop            string
 	UINothingToUnfold string
+	// UIEmptySection briefly stands in a section that was opened and turned
+	// out to hold nothing, before the section goes.
+	UIEmptySection    string
 	UIUnfoldError     string
 	UIRetry           string
 	UIStageStudy      string

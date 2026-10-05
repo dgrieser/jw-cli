@@ -182,6 +182,7 @@ var en = Messages{
 	UICloseAll:         "Close all",
 	UIStop:             "Stop",
 	UINothingToUnfold:  "Nothing to unfold",
+	UIEmptySection:     "Nothing here",
 	UIUnfoldError:      "Could not unfold: %s",
 	UIRetry:            "Try again",
 	UIStageStudy:       "Reading the study notes…",

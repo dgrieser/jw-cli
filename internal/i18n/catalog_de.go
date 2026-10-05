@@ -182,6 +182,7 @@ var de = Messages{
 	UICloseAll:         "Alle schließen",
 	UIStop:             "Anhalten",
 	UINothingToUnfold:  "Nichts aufzuklappen",
+	UIEmptySection:     "Nichts vorhanden",
 	UIUnfoldError:      "Aufklappen fehlgeschlagen: %s",
 	UIRetry:            "Erneut versuchen",
 	UIStageStudy:       "Studienanmerkungen werden gelesen…",

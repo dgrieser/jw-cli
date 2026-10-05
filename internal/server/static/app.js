@@ -1888,11 +1888,10 @@
         d.removeAttribute("data-loaded");
         body.appendChild(make("div", "unfold-msg error", fmt(T.error, res.failure)));
       } else if (res.count <= 0) {
-        // opened and found to hold nothing: the heading goes, and with it a
-        // group of sections left with none
-        var group = d.parentElement;
-        d.remove();
-        if (group && group.classList.contains("sections") && !group.children.length) group.remove();
+        // opened and found to hold nothing: it says so for a moment, then
+        // the heading goes, and with it a group of sections left with none
+        vanish(d, body);
+        return;
       }
       saveState();
     });
@@ -1902,6 +1901,21 @@
     var d = e.target;
     if (d instanceof HTMLElement && d.matches("details.section[data-lazy]") && d.open) loadLazy(d);
   }, true);
+
+  // vanish shows a section that turned out empty as such, briefly, then
+  // fades it out and takes it off the page
+  var VANISH_AFTER = 1400, VANISH_FADE = 400;
+  function vanish(d, body) {
+    d.classList.add("vanishing");
+    body.appendChild(make("p", "note empty-note", T.emptySection || T.nothing || "∅"));
+    setTimeout(function () { d.classList.add("gone"); }, VANISH_AFTER);
+    setTimeout(function () {
+      var group = d.parentElement;
+      d.remove();
+      if (group && group.classList.contains("sections") && !group.children.length) group.remove();
+      saveState();
+    }, VANISH_AFTER + VANISH_FADE);
+  }
 
   // selfDocs are the documents el was reached through, by docid: the page's
   // own document, and every section around el showing a passage of one.
@@ -2184,7 +2198,7 @@
   // comes back. What each nested item was unfolded to stays on it.
   function cleanCopy(exp) {
     var copy = exp.cloneNode(true);
-    copy.querySelectorAll("[data-ui], .unfold-menu, .unfold-hint, .unfold-loader").forEach(function (el) { el.remove(); });
+    copy.querySelectorAll("[data-ui], .unfold-menu, .unfold-hint, .unfold-loader, details.vanishing").forEach(function (el) { el.remove(); });
     copy.querySelectorAll(".unfold-item").forEach(function (el) {
       el.classList.remove("unfold-item", "nested");
       el.removeAttribute("data-state");

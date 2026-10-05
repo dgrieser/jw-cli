@@ -565,8 +565,8 @@ and in the API. A verse at depth N brings at once its study notes, its
 footnotes, the passages its Research Guide and Publications Index point at,
 and its marginal references — and every bible verse any of them cites, as a
 verse at depth N−1. A verse at depth 0 is its text, with all of its sections as
-headings that load once opened; one that turns out to have nothing is dropped
-when it is opened. Other translations and quotations load once opened at every
+headings that load once opened; one that turns out to have nothing says so
+for a moment ("Nothing here") and then fades away. Other translations and quotations load once opened at every
 depth. A passage of another publication is no step of its own: it brings the
 verses it cites one reference further down than the verse or document citing
 it, and nothing else it cites is followed. Depth 1 on a verse:
