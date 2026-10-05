@@ -20,6 +20,7 @@ var de = Messages{
 	ImagesIn:            "Bilder in %q",
 	MediaOn:             "Medien zu %s",
 	MediaCategories:     "Medienkategorien",
+	MediaDescribed:      "%s (mit Audiodeskription)",
 
 	BibleRefsIn:  "Bibelstellen in %q:",
 	NoBibleRefs:  "Keine Bibelstellen in %q gefunden.",

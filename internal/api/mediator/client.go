@@ -118,12 +118,13 @@ func (w wireMediaItem) toModel() model.MediaItem {
 }
 
 type wireCategory struct {
-	Key           string          `json:"key"`
-	Name          string          `json:"name"`
-	Description   string          `json:"description"`
-	Type          string          `json:"type"`
-	Subcategories wireCategories  `json:"subcategories"`
-	Media         []wireMediaItem `json:"media"`
+	Key           string                       `json:"key"`
+	Name          string                       `json:"name"`
+	Description   string                       `json:"description"`
+	Type          string                       `json:"type"`
+	Images        map[string]map[string]string `json:"images"`
+	Subcategories wireCategories               `json:"subcategories"`
+	Media         []wireMediaItem              `json:"media"`
 	Parent        *struct {
 		Key  string `json:"key"`
 		Name string `json:"name"`
@@ -163,6 +164,7 @@ func (w wireCategory) toModel() model.Category {
 		Name:        w.Name,
 		Description: w.Description,
 		Type:        w.Type,
+		Images:      w.Images,
 	}
 	if w.Parent != nil && w.Parent.Key != "" {
 		c.Parent = &model.CategoryRef{Key: w.Parent.Key, Name: w.Parent.Name}

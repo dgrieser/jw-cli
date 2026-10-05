@@ -23,7 +23,7 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 		Show: func(item model.Result) (tui.Content, error) {
 			switch item.Kind {
 			case "video", "audio":
-				mi, err := a.Mediator().MediaItem(ctx, lng.Symbol, item.LANK)
+				mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
 				if err != nil {
 					return tui.Content{}, err
 				}
@@ -88,7 +88,7 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 func tuiDownload(ctx context.Context, a *app.App, lng model.Language, item model.Result) (string, error) {
 	switch {
 	case item.LANK != "" && (item.Kind == "video" || item.Kind == "audio"):
-		mi, err := a.Mediator().MediaItem(ctx, lng.Symbol, item.LANK)
+		mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
 		if err != nil {
 			return "", err
 		}
@@ -116,7 +116,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			_ = results.Save(a.Cache().Dir(), rs)
 			return rs, a.Text().MediaCategories, nil
 		}
-		cat, err := a.Mediator().Category(ctx, lng.Symbol, key, pageSize, (page-1)*pageSize)
+		cat, err := a.Service().Category(ctx, lng.Symbol, key, pageSize, (page-1)*pageSize)
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}

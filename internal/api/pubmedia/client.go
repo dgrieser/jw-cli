@@ -45,7 +45,12 @@ type wireFile struct {
 	File  struct {
 		URL      string `json:"url"`
 		Checksum string `json:"checksum"`
+		Modified string `json:"modifiedDatetime"`
 	} `json:"file"`
+	TrackImage *struct {
+		URL string `json:"url"`
+	} `json:"trackImage"`
+	Duration float64 `json:"duration"`
 	Filesize int64   `json:"filesize"`
 	Label    string  `json:"label"`
 	Track    flexNum `json:"track"`
@@ -186,6 +191,11 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 					MimeType: f.MimeType,
 					Format:   format,
 					Filesize: f.Filesize,
+					Duration: f.Duration,
+					Modified: f.File.Modified,
+				}
+				if f.TrackImage != nil {
+					pf.ImageURL = f.TrackImage.URL
 				}
 				pf.Track, _ = atoiNum(f.Track)
 				pf.DocID, _ = atoiNum(f.DocID)

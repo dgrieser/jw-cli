@@ -30,7 +30,7 @@ rendered in the selected output format, videos/audio show their details.`,
 				if err != nil {
 					return err
 				}
-				mi, err := a.Mediator().MediaItem(ctx, lng.Symbol, item.LANK)
+				mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
 				if err != nil {
 					return err
 				}

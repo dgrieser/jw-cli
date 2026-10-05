@@ -92,14 +92,17 @@ type MediaItem struct {
 
 // Category is a mediator category tree node.
 type Category struct {
-	Key           string       `json:"key"`
-	Name          string       `json:"name"`
-	Description   string       `json:"description,omitempty"`
-	Type          string       `json:"type"` // container|ondemand
-	Subcategories []Category   `json:"subcategories,omitempty"`
-	Media         []MediaItem  `json:"media,omitempty"`
-	Total         int          `json:"total,omitempty"`
-	Parent        *CategoryRef `json:"parent,omitempty"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Type        string `json:"type"` // container|ondemand
+	// Images are the category's own pictures, type -> size -> url, as a
+	// media item's.
+	Images        map[string]map[string]string `json:"images,omitempty"`
+	Subcategories []Category                   `json:"subcategories,omitempty"`
+	Media         []MediaItem                  `json:"media,omitempty"`
+	Total         int                          `json:"total,omitempty"`
+	Parent        *CategoryRef                 `json:"parent,omitempty"`
 }
 
 // CategoryRef names a category without its contents: the parent of another.
@@ -120,6 +123,12 @@ type PubFile struct {
 	DocID    int    `json:"docid,omitempty"`
 	BookNum  int    `json:"booknum,omitempty"`
 	Filesize int64  `json:"filesize"`
+	// Duration is the length of an audio or video file in seconds, Modified
+	// when the file last changed ("2026-10-01 20:46:48"), ImageURL a track's
+	// own picture when it has one.
+	Duration float64 `json:"duration,omitempty"`
+	Modified string  `json:"modified,omitempty"`
+	ImageURL string  `json:"imageUrl,omitempty"`
 }
 
 // PubMedia is the pub-media API response for one publication.
