@@ -230,10 +230,11 @@ func (s *Service) StreamFootnote(ctx context.Context, lng model.Language, path s
 // link names when it names one ("#h=12:0-14:0"), the whole document otherwise.
 // What a page loads when a link to an article is followed.
 //
-// cfg.Depth is how deep the document unfolds, counting the document itself as
-// the first level: at one it brings the bible texts it quotes, as a passage
-// does at the end of an expansion; deeper, what it cites unfolds Depth-1
-// levels, closed by those texts again (cfg.Tail). Zero shows it as it is.
+// cfg.Depth is how deep the document unfolds, counted in bible references
+// (UnfoldConfig.Hops): the document is a passage reached at depth Depth, so
+// the verses it quotes come Depth-1 deep — at one, their text with their
+// sections loaded once opened — and nothing else it cites is followed. Zero
+// shows it as it is.
 func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target string,
 	cfg UnfoldConfig, txt *i18n.Messages) (UnfoldSection, error) {
 	page := target
@@ -249,14 +250,11 @@ func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target
 		body = passage
 	}
 	if cfg.Depth > 0 {
-		acfg := cfg
-		acfg.Depth, acfg.Tail = cfg.Depth-1, true
-		// the references the document writes are looked up for quotations
-		// once opened, as an article's are
-		acfg.CitedDepth = 1
-		r := newTooltipResolver(s, lng, nil).withCitedAs(ctx, acfg).
-			excluding(art.DocID, wol.DocIDFromURL(art.URL), wol.DocIDFromURL(page))
-		unfolded, err := unfoldInline(ctx, r, body, acfg, txt)
+		// the document is what cites: the verses it quotes, one reference
+		// further down than the link it was reached through
+		cfg.Hops = true
+		r := hopResolver(s, lng, nil, art.DocID, wol.DocIDFromURL(art.URL), wol.DocIDFromURL(page))
+		unfolded, err := unfoldInlineHops(ctx, r, body, cfg, cfg.Depth-1, true, txt)
 		if err != nil {
 			return UnfoldSection{}, err
 		}

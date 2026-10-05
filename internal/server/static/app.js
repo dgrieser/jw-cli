@@ -1078,19 +1078,26 @@
   }
   doc.classList.add("has-unfold");
 
-  // spent is what the run this item is part of already cost, so the server
-  // weighs its budget over the whole run rather than item by item
-  function streamURL(item, depth, force, spent) {
-    if (item.params.kind !== "verse") return refsURL(item.params.refs, depth, force, spent);
-    var q = new URLSearchParams({ vid: item.params.vid });
-    if (item.params.bible) q.set("bible", item.params.bible);
+  // batch is the unfold-all run this item is part of: what it already cost,
+  // so the server weighs its budget over the whole run rather than item by
+  // item, and its name, under which the server keeps the verses the run
+  // showed so that each is shown once
+  function streamURL(item, depth, force, batch) {
+    var spent = batch ? batch.spent : 0;
+    var q = new URLSearchParams();
+    if (item.params.kind === "verse") {
+      q.set("vid", item.params.vid);
+      if (item.params.bible) q.set("bible", item.params.bible);
+    }
+    if (batch) q.set("run", batch.id);
+    if (item.params.kind !== "verse") return refsURL(item.params.refs, depth, force, spent, q);
     return "/unfold/verse?" + unfoldQuery(q, depth, force, spent);
   }
 
   // refsURL is where the citations refs ({path, text}) unfold from, to depth
   // levels: a citing block, a link followed, or a citation asked for again
-  function refsURL(refs, depth, force, spent) {
-    var q = new URLSearchParams();
+  function refsURL(refs, depth, force, spent, q) {
+    q = q || new URLSearchParams();
     refs.forEach(function (r) {
       q.append("path", r.path);
       q.append("text", r.text);
@@ -1442,7 +1449,7 @@
     item.exp = exp;
     setState(item, "loading");
 
-    var url = streamURL(item, depth, opts.force, opts.batch ? opts.batch.spent : 0);
+    var url = streamURL(item, depth, opts.force, opts.batch);
     return streamSections(url, list, loader, ctrl && ctrl.signal).then(function (res) {
       if (res.aborted || item.ctrl !== ctrl) return;
       item.ctrl = null;
@@ -1506,6 +1513,14 @@
     item.exp.appendChild(msg);
     setLevel(item, count > 0 ? depth : 0);
     setState(item, "error");
+  }
+
+  // runID names an unfold-all run to the server: random, and new every run
+  function runID() {
+    var a = new Uint8Array(12);
+    if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(a);
+    else for (var i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+    return Array.prototype.map.call(a, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
   }
 
   // --- the menu of one item: how deep to unfold it ------------------------
@@ -1790,7 +1805,7 @@
       items.forEach(removeExpansion);
       return;
     }
-    var run = { level: level, done: 0, total: 0, spent: 0, force: false, asked: false, stopped: false };
+    var run = { id: runID(), level: level, done: 0, total: 0, spent: 0, force: false, asked: false, stopped: false };
     queue = items.filter(function (item) { return item.level !== level || item.state === "error"; });
     if (!queue.length) return;
     run.total = queue.length;
@@ -1873,7 +1888,11 @@
         d.removeAttribute("data-loaded");
         body.appendChild(make("div", "unfold-msg error", fmt(T.error, res.failure)));
       } else if (res.count <= 0) {
-        body.appendChild(make("p", "note", T.nothing || "∅"));
+        // opened and found to hold nothing: the heading goes, and with it a
+        // group of sections left with none
+        var group = d.parentElement;
+        d.remove();
+        if (group && group.classList.contains("sections") && !group.children.length) group.remove();
       }
       saveState();
     });

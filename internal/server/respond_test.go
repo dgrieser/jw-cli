@@ -38,12 +38,13 @@ func TestUnfoldConfigRefuses(t *testing.T) {
 	if cfg.Depth != maxUnfoldDepth {
 		t.Errorf("depth should be capped at %d, got %d", maxUnfoldDepth, cfg.Depth)
 	}
-	// the same expansion the CLI runs, citation lookups included
-	if !cfg.Cited {
-		t.Error("citation lookups should be on, as they are on the command line")
+	// counted in bible references, as every page and endpoint of the server
+	// unfolds; who quotes a verse is left to be opened, never searched
+	if !cfg.Hops {
+		t.Error("the server should count an expansion in bible references")
 	}
-	if unfoldConfig(0, false).Cited {
-		t.Error("nothing to expand, nothing to look up")
+	if cfg.Cited {
+		t.Error("citation lookups are loaded once opened, not run")
 	}
 	ok, err := cfg.Confirm(2, 5000)
 	if ok || err == nil {

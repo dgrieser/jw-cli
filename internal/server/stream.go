@@ -108,6 +108,17 @@ func (e *eventStream) progress(level, done, total int) {
 // finish closes a stream: what went wrong, if anything, then the count of
 // sections sent. A client that went away is not written to again.
 func (e *eventStream) finish(r *http.Request, note string, requests int, err error, txt *i18n.Messages) {
+	e.finishRun(r, note, requests, err, txt, nil)
+}
+
+// finishRun is finish for a stream that is part of an unfold run: a stream
+// that failed gives the verses it claimed back to the run, since the page
+// shows it again rather than keeping what it brought.
+func (e *eventStream) finishRun(r *http.Request, note string, requests int, err error, txt *i18n.Messages,
+	verses *unfold.Verses) {
+	if err != nil && verses != nil {
+		verses.Release()
+	}
 	if err != nil {
 		if r.Context().Err() != nil {
 			return
@@ -178,16 +189,17 @@ func streamDepth(r *http.Request) (int, error) {
 }
 
 // streamConfig is how a stream runs its expansion: as unfoldConfig says, on
-// top of what the page says it already spent (?spent=).
-func streamConfig(r *http.Request, depth int) (service.UnfoldConfig, error) {
+// top of what the page says it already spent (?spent=), and with the verses
+// shown by every stream of the same run (?run=) — the pieces of one page
+// unfolded together, some of them at once — so a verse is shown once on it.
+func (s *Server) streamConfig(r *http.Request, depth int) (service.UnfoldConfig, error) {
 	spent, err := intParam(r, "spent", 0)
 	if err != nil {
 		return service.UnfoldConfig{}, err
 	}
 	cfg := unfoldConfig(depth, forceParam(r))
 	cfg.Spent = max(spent, 0)
-	// a passage the last level reaches reads with the scriptures it quotes
-	cfg.Tail = true
+	cfg.Verses = s.runs.verses(r.FormValue("run")).Track()
 	return cfg, nil
 }
 
@@ -197,7 +209,7 @@ var editionSymbol = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
 
 // unfoldVerse streams the expansion of one verse: GET /unfold/verse?vid=
 // 43003016&depth=1&bible=nwtsty, a range of verses with &to=. &part= narrows
-// it to one of its sections (notes, footnotes, indexes with &group=, marginal):
+// it to one of its sections (notes, footnotes, indexes with &kind=, marginal):
 // alone, as the body of a section the page shows already, or with &lazy=1
 // loaded while every other section comes as a heading loaded once opened.
 func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
@@ -216,8 +228,8 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid parameter %q: %q", "part", parts.Only)
 		return
 	}
-	if parts.Group, err = intParam(r, "group", 0); err != nil {
-		badRequest(w, "%v", err)
+	if parts.Kind = r.FormValue("kind"); parts.Kind != "" && !service.IsIndexKind(parts.Kind) {
+		badRequest(w, "invalid parameter %q: %q", "kind", parts.Kind)
 		return
 	}
 	depth, err := streamDepth(r)
@@ -230,7 +242,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "invalid bible edition %q", edition)
 		return
 	}
-	cfg, err := streamConfig(r, depth)
+	cfg, err := s.streamConfig(r, depth)
 	if err != nil {
 		badRequest(w, "%v", err)
 		return
@@ -242,7 +254,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
-	ev.finish(r, note, requests, err, txt)
+	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
 }
 
 // passageParam reads the passage a lazy section loads for: ?vid= the wol id of
@@ -368,7 +380,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
-	cfg, err := streamConfig(r, depth)
+	cfg, err := s.streamConfig(r, depth)
 	if err != nil {
 		badRequest(w, "%v", err)
 		return
@@ -380,7 +392,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
 		Stage:   ev.stage,
 	})
-	ev.finish(r, note, requests, err, txt)
+	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
 }
 
 // citationPath reduces a link to the wol path it names, and reports whether
@@ -473,12 +485,11 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
-	cfg, err := streamConfig(r, min(max(depth, 0), maxUnfoldDepth))
+	cfg, err := s.streamConfig(r, min(max(depth, 0), maxUnfoldDepth))
 	if err != nil {
 		badRequest(w, "%v", err)
 		return
 	}
-	cfg.LazyCited = true
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
@@ -486,7 +497,7 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		ev.send(s.sectionEvent(sec))
 	}
-	ev.finish(r, "", 1, err, txt)
+	ev.finishRun(r, "", 1, err, txt, cfg.Verses)
 }
 
 // libraryPath is the path (and query) of a link, whatever host it named.

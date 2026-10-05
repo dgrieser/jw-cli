@@ -36,6 +36,8 @@ type Server struct {
 	langMemo sync.Map
 	// templates holds one parsed set per UI page, built once at startup.
 	templates map[string]*htmlTemplate
+	// runs are the verses each unfold run of a page has shown.
+	runs runs
 }
 
 // New builds a Server. Template parse errors panic: they are programming

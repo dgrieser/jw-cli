@@ -69,11 +69,13 @@ var en = Messages{
 	UnfoldStopped:  "Stopped here: %d more references were not unfolded.",
 	UnfoldFailed:   "could not be unfolded: %s",
 
-	StudyNotesHeading:   "Study notes",
-	ResearchHeading:     "Research guide",
-	FootnotesHeading:    "Footnotes",
-	TranslationsHeading: "Other translations",
-	StudyFailed:         "the study notes on this verse could not be read: %s",
+	StudyNotesHeading:        "Study notes",
+	ResearchHeading:          "Research guide",
+	ResearchGuideHeading:     "Research Guide",
+	PublicationsIndexHeading: "Publications Index",
+	FootnotesHeading:         "Footnotes",
+	TranslationsHeading:      "Other translations",
+	StudyFailed:              "the study notes on this verse could not be read: %s",
 
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
