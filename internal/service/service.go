@@ -31,6 +31,9 @@ type Service struct {
 	WOL      *wol.Client
 	JWOrg    *jworg.Client
 	Langs    *lang.Resolver
+	// mem is what an expansion read of the library, kept in memory for the
+	// next one: verses by the verses they hold, chapters of the study bible.
+	mem memo
 }
 
 // New builds a Service and all its clients around one HTTP client and cache.

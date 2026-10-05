@@ -300,6 +300,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 	// who quotes a verse is only ever a heading here: a resolver answering it
 	// is asked for where the page loads it from
 	cited, _ := r.(CitedResolver)
+	known, _ := r.(KnownResolver)
 	var tiers []*[]Node
 	for i, g := range groups {
 		res.Nodes[i] = s.planHops(append(Refs(g.Fragment), g.RootRefs...), g.Hops)
@@ -315,7 +316,25 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		}
 		return ok, err
 	}
+	// recall fills in what is at hand already, and counts what is not: what
+	// reading the nodes will cost
+	recall := func(nodes []*Node) int {
+		unknown := 0
+		for _, n := range nodes {
+			if known != nil {
+				if tip, ok := known.Known(ctx, n.Ref); ok {
+					n.Title, n.HTML, n.URL, n.ready = tip.Title, tip.ContentHTML, tip.URL, true
+					continue
+				}
+			}
+			unknown++
+		}
+		return unknown
+	}
 	resolve := func(n *Node) {
+		if n.ready {
+			return
+		}
 		tip, err := r.Resolve(ctx, n.Ref.Path)
 		res.Requests++
 		if err != nil {
@@ -329,7 +348,26 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		if len(frontier) == 0 {
 			return res, nil
 		}
-		if ok, err := ask(level, s.hopCost(frontier), len(frontier)); err != nil || !ok {
+		// a verse the citation names by its text, shown already, is left out
+		// before it is read
+		if known != nil {
+			early := map[string]bool{}
+			for _, n := range frontier {
+				if n.Ref.IsVerse() && s.o.Verses.Shown(known.VersesOf(ctx, n.Ref)) {
+					early[n.Ref.Path] = true
+				}
+			}
+			if len(early) > 0 {
+				for _, tier := range tiers {
+					*tier = without(*tier, early)
+				}
+				if frontier = nodesIn(tiers); len(frontier) == 0 {
+					return res, nil
+				}
+			}
+		}
+		unknown := recall(frontier)
+		if ok, err := ask(level, s.hopCost(frontier)-(len(frontier)-unknown), len(frontier)); err != nil || !ok {
 			return res, err
 		}
 		research := map[string][]Ref{}
@@ -389,7 +427,6 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		// what the verses of the step bring that has to be read before what
 		// it cites is known: the passages of their indexes, their footnotes
 		var footnotes, indexes []*[]Node
-		count := 0
 		for _, n := range survivors {
 			if n.Parts == nil || n.Parts.Lazy {
 				continue
@@ -402,28 +439,27 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 				s.seen[p] = true
 				n.Parts.Footnotes = append(n.Parts.Footnotes, Node{Ref: Ref{Text: "*", Path: p}, Hops: n.Hops - 1})
 			}
-			count += len(n.Parts.Research) + len(n.Parts.Footnotes)
 			footnotes = append(footnotes, &n.Parts.Footnotes)
 			indexes = append(indexes, &n.Parts.Research)
 		}
-		if count > 0 {
+		if count := recall(append(nodesIn(footnotes), nodesIn(indexes)...)); count > 0 {
 			if ok, err := ask(level, count, count); err != nil || !ok {
 				for _, list := range append(footnotes, indexes...) {
 					*list = nil
 				}
 				return res, err
 			}
-			for _, n := range append(nodesIn(footnotes), nodesIn(indexes)...) {
-				if err := ctx.Err(); err != nil {
-					return res, err
-				}
-				resolve(n)
+		}
+		for _, n := range append(nodesIn(footnotes), nodesIn(indexes)...) {
+			if err := ctx.Err(); err != nil {
+				return res, err
 			}
-			// the two indexes of a verse regularly point at one passage
-			if dropped := duplicates(nodesIn(indexes), s.shown, s.run, level); len(dropped) > 0 {
-				for _, list := range indexes {
-					*list = without(*list, dropped)
-				}
+			resolve(n)
+		}
+		// the two indexes of a verse regularly point at one passage
+		if dropped := duplicates(nodesIn(indexes), s.shown, s.run, level); len(dropped) > 0 {
+			for _, list := range indexes {
+				*list = without(*list, dropped)
 			}
 		}
 

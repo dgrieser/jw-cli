@@ -150,6 +150,11 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 	if tip, ok := r.tips[path]; ok {
 		return tip, nil
 	}
+	r.s.mem.init()
+	if tip, ok := r.s.mem.tips.get(tipKey(r.lng, path)); ok {
+		r.keep(path, tip)
+		return tip, nil
+	}
 	tip, err := r.s.WOL.Tooltip(ctx, path)
 	if err != nil {
 		return tip, err
@@ -162,10 +167,8 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 			tip.ContentHTML = passage
 		}
 	}
-	if r.tips == nil {
-		r.tips = map[string]model.Tooltip{}
-	}
-	r.tips[path] = tip
+	r.keep(path, tip)
+	r.s.mem.rememberTip(r.lng, path, tip)
 	return tip, nil
 }
 
@@ -373,16 +376,22 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 	sections, ok := r.sections[key]
 	var out unfold.Study
 	if !ok {
-		doc, borrowed := r.docs[key]
-		if !borrowed {
-			var err error
-			doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
-			out.Requests++
-			if err != nil {
-				return out, err
+		// read before, by this service: nothing to ask
+		cm, known := r.chapterMemo(ref.Book, ref.Chapter)
+		if !known {
+			doc, borrowed := r.docs[key]
+			if !borrowed {
+				var err error
+				doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
+				out.Requests++
+				if err != nil {
+					return out, err
+				}
 			}
+			cm = newChapterMemo(doc)
+			r.s.mem.chapters.put(chapterKey(r.lng, studyEdition, ref.Book, ref.Chapter), cm)
 		}
-		sections = studySections(doc)
+		sections = cm.sections
 		r.sections[key] = sections
 	}
 	from, to := ref.VerseStart, ref.VerseEnd

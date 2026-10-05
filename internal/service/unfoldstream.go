@@ -285,8 +285,16 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 	for i, ref := range plan {
 		// a verse, or a range of them, unfolds as it does in the bible
 		if ref.IsVerse() {
-			tip, err := r.Resolve(ctx, ref.Path)
-			sess.Spend(1)
+			// shown already, by what the citation says: nothing to read
+			if cfg.Verses.Shown(r.VersesOf(ctx, ref)) {
+				continue
+			}
+			tip, ok := r.Known(ctx, ref)
+			var err error
+			if !ok {
+				tip, err = r.Resolve(ctx, ref.Path)
+				sess.Spend(1)
+			}
 			if passages := passageRefs(tip.ContentHTML); err == nil && len(passages) > 0 {
 				if cfg.Verses.Shown(unfold.VerseIDs(tip.ContentHTML)) {
 					continue

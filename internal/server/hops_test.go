@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -183,5 +184,55 @@ func TestBibleReadAPIHops(t *testing.T) {
 		if !strings.Contains(read.Body, want) {
 			t.Errorf("missing %q in:\n%s", want, read.Body)
 		}
+	}
+}
+
+// countingMux counts what upstream is asked, by path.
+func countingMux(t *testing.T, mux *http.ServeMux) (http.Handler, func(string) int) {
+	var mu sync.Mutex
+	hits := map[string]int{}
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits[r.URL.Path]++
+		mu.Unlock()
+		mux.ServeHTTP(w, r)
+	})
+	return h, func(path string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		return hits[path]
+	}
+}
+
+// A verse read once is not read again, through whichever link it is reached:
+// another document's citation of it is told by its text, and a verse of a
+// chapter of the study bible read before comes out of that chapter.
+func TestUnfoldHopsReadsAVerseOnce(t *testing.T) {
+	mux := hopsMux(t)
+	mux.HandleFunc("/wol/bc/r1/lp-e/9999/1/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"title": "John 1:29", "content": "<p><span id=\"v43-1-29-1\" class=\"v\">Look, the Lamb of God</span></p>"}]}`))
+	})
+	mux.HandleFunc("/wol/bc/r1/lp-e/9999/2/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"items": [{"title": "John 3:16", "content": "<p><span id=\"v43-3-16-1\" class=\"v\">For God</span></p>"}]}`))
+	})
+	h, hits := countingMux(t, mux)
+	up := http.NewServeMux()
+	up.Handle("/", h)
+	srv := newTestServer(t, up)
+	// John 3:16's notes read John 1:29, and the study bible's John 3
+	get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
+	if hits("/wol/bc/r1/lp-e/1001070671/25/0") != 1 {
+		t.Fatalf("John 1:29 read %d times", hits("/wol/bc/r1/lp-e/1001070671/25/0"))
+	}
+	// another document citing both, through links of its own
+	_, body := get(t, srv, "/unfold/refs?lang=en&depth=1&path=%2Fwol%2Fbc%2Fr1%2Flp-e%2F9999%2F1%2F0&text=John+1%3A29"+
+		"&path=%2Fwol%2Fbc%2Fr1%2Flp-e%2F9999%2F2%2F0&text=John+3%3A16")
+	if n := hits("/wol/bc/r1/lp-e/9999/1/0") + hits("/wol/bc/r1/lp-e/9999/2/0"); n != 0 {
+		t.Errorf("verses read before were asked for again %d times", n)
+	}
+	if html, _ := sectionsHTML(t, body); !strings.Contains(html, "Look, the Lamb of God") {
+		t.Errorf("John 1:29 should come from what was read:\n%s", body)
 	}
 }

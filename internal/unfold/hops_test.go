@@ -246,3 +246,52 @@ func TestVersesTrackRelease(t *testing.T) {
 		t.Errorf("release takes back what the view added, and only that: %d", run.Len())
 	}
 }
+
+// knownResolver has some citations at hand without asking, and tells a few
+// verses by the text of their citation.
+type knownResolver struct {
+	*fakeResolver
+	known  map[string]model.Tooltip
+	verses map[string][]int
+}
+
+func (k *knownResolver) Known(_ context.Context, ref Ref) (model.Tooltip, bool) {
+	tip, ok := k.known[ref.Path]
+	return tip, ok
+}
+
+func (k *knownResolver) VersesOf(_ context.Context, ref Ref) []int { return k.verses[ref.Text] }
+
+// What is at hand is neither read nor paid for, and a citation naming a verse
+// shown already is left out before it is read.
+func TestHopsKnownIsNotReadAgain(t *testing.T) {
+	r := &knownResolver{
+		fakeResolver: &fakeResolver{content: map[string]model.Tooltip{
+			"/wol/bc/new": {Title: "Romans 5:8", ContentHTML: verseHTML(45, 5, 8, "love")},
+		}},
+		known: map[string]model.Tooltip{
+			"/wol/bc/read": {Title: "John 1:1", ContentHTML: verseHTML(43, 1, 1, "In the beginning was the Word")},
+		},
+		verses: map[string][]int{"Joh 3:16": {43003016}},
+	}
+	shown := NewVerses()
+	shown.Add(43003016)
+	var asked []int
+	_, res := runHops(t, r, 0, Options{Verses: shown, Threshold: -1, Confirm: func(_, requests int) (bool, error) {
+		asked = append(asked, requests)
+		return true, nil
+	}}, Ref{Text: "Joh 1:1", Path: "/wol/bc/read"}, Ref{Text: "Joh 3:16", Path: "/wol/bc/other"},
+		Ref{Text: "Ro 5:8", Path: "/wol/bc/new"})
+	if got := paths(res.Nodes[0]); !slices.Equal(got, []string{"/wol/bc/read", "/wol/bc/new"}) {
+		t.Errorf("kept %v", got)
+	}
+	if res.Nodes[0][0].HTML == "" {
+		t.Error("what is at hand is shown")
+	}
+	if !slices.Equal(r.asked, []string{"/wol/bc/new"}) || res.Requests != 1 {
+		t.Errorf("only what is not at hand is read: %v, %d requests", r.asked, res.Requests)
+	}
+	if !slices.Equal(asked, []int{1}) {
+		t.Errorf("only what is not at hand is paid for: %v", asked)
+	}
+}

@@ -92,6 +92,20 @@ type CitedResolver interface {
 	Cited(ctx context.Context, verseTitle string) Cited
 }
 
+// KnownResolver is an optional capability of a Resolver: what it can tell
+// about a citation without asking anybody. An expansion counted in bible
+// references (Options.Hops) asks it first, so that what was read before —
+// through the same link or through another one naming the same verses — is
+// neither read nor paid for again, and a verse shown already is left out
+// before it is read at all.
+type KnownResolver interface {
+	// Known is what the citation says, when that is at hand already.
+	Known(ctx context.Context, ref Ref) (model.Tooltip, bool)
+	// VersesOf are the verses a bible citation names by its text, by wol
+	// verse id; none when the text does not say ("+", a bare verse number).
+	VersesOf(ctx context.Context, ref Ref) []int
+}
+
 // Node is one expanded citation together with what its own content cites.
 type Node struct {
 	Ref Ref
@@ -124,6 +138,8 @@ type Node struct {
 	// references, which are Children; nil for a passage, and for any node of
 	// an expansion counted in levels.
 	Parts *Parts
+	// ready says the content was at hand without asking (KnownResolver).
+	ready bool
 }
 
 // Parts is the material of a verse in an expansion counted in bible references

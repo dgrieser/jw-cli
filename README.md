@@ -600,6 +600,14 @@ down an article — leaves it out, and the verse being unfolded is never repeate
 under itself. **Unfold all** shares that across every item of its run, the
 items streaming at once included. A reference covering verses not shown yet (a
 range around one that is) is still shown.
+
+What an expansion reads is kept in memory for the life of the server, by what
+it is rather than by the link it was reached through: a verse by the verses it
+holds, a chapter of the study bible with its study pane and its verses. A
+citation is told by its text ("Joh 1:1") before anything is asked, so a verse
+read once — through any document's link, or as part of its chapter — is not
+read again at a later level, in a later stream or for the next reader, and is
+neither counted nor asked about as a request.
 Every loader has an abort button that stops it and keeps what already came. Every picture on a page — in an article, a verse's
 notes, anything unfolded — opens full size in a new tab, from the wol.jw.org or
 jw.org address it was read from.
