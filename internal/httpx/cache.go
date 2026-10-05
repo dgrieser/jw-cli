@@ -199,6 +199,11 @@ type entry struct {
 	// NoHead is set for a URL whose server answers HEAD with an error but GET
 	// with the body (the CDN's mediator API): a HEAD would be wasted on it
 	NoHead bool `json:"n,omitempty"`
+	// the edition the body is from, when the site says (see Editions);
+	// EdSeen tells a body that says none from one not yet read for it
+	Scope  string `json:"es,omitempty"`
+	Ed     int    `json:"ed,omitempty"`
+	EdSeen bool   `json:"ek,omitempty"`
 }
 
 // entryMagic opens every body file: the header line, then the body.

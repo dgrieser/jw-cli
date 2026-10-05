@@ -109,6 +109,20 @@ func (c *Cache) memoCurrent(ctx context.Context, m memoRecord) bool {
 		if !ok {
 			return false // evicted: rebuilding reads it again
 		}
+		// built from an older edition than the newest seen: rebuilding asks
+		// for the body again
+		if cl != nil && cl.editions != nil {
+			if !e.EdSeen {
+				if full, body, ok := c.loadEntry(id, false); ok {
+					cl.stamp(&full, body)
+					c.saveEntry(id, full, body)
+					e = full
+				}
+			}
+			if cl.behind(e) {
+				return false
+			}
+		}
 		got := e.Hash
 		if !e.fresh(c.fresh) && cl != nil {
 			if got, ok = cl.revalidate(ctx, id, e); !ok {

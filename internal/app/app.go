@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -87,6 +88,11 @@ func (a *App) init() {
 			base.WOL = a.Flags.BaseWOL
 		}
 		opts := []httpx.Option{httpx.WithBaseURLs(base)}
+		// some of wol's servers answer with last year's library; its pages
+		// say which, so an older one is never taken for the newest
+		if u, err := url.Parse(base.WOL); err == nil {
+			opts = append(opts, httpx.WithEditions(wol.Editions{Host: u.Host}))
+		}
 		if a.Flags.Verbose {
 			opts = append(opts, httpx.WithVerbose(func(format string, args ...any) {
 				fmt.Fprintf(a.Stderr, format+"\n", args...)
