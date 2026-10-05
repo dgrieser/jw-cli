@@ -1253,7 +1253,7 @@ tbody tr:hover { background: var(--surface); }
   display: flex;
   align-items: center;
   /* the controls on the right sit close together; the left keeps its room */
-  gap: 0.1rem;
+  gap: 0;
   min-height: calc(var(--bar-h) - 1px);
 }
 .pb-up {
@@ -1283,8 +1283,8 @@ tbody tr:hover { background: var(--surface); }
 .pb-unfold-menu .label { white-space: nowrap; }
 .pb-btn {
   min-height: 2rem;
-  min-width: 1.9rem;
-  padding: 0 0.25rem;
+  min-width: 1.75rem;
+  padding: 0 0.15rem;
   font-size: 0.85rem;
   border-radius: var(--r-small);
   background: transparent;
@@ -1294,6 +1294,10 @@ tbody tr:hover { background: var(--surface); }
 .pb-btn[data-font="-1"], .pb-btn[data-font="1"] { font-size: 1.15rem; }
 .pb .lang-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); margin-right: -0.4rem; }
 html:not(.js) .lang-toggle { display: none; }
+/* away from the bible, a way into it: first of the controls on the right */
+.pb .pb-jump { flex: none; display: inline-flex; align-items: center; justify-content: center; margin-left: auto; color: var(--ink); }
+.pb .pb-jump ~ .pb-unfold, .pb .pb-jump ~ .pb-font { margin-left: 0; }
+html:not(.js) .pb-jump { display: none; }
 .pb-bible {
   flex: 1 1 auto;
   min-width: 0;
@@ -1375,6 +1379,18 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
   padding: 0.5rem 0.75rem 0.75rem;
 }
 .bp-books .bible-nav-heading { margin-top: 0.5rem; }
+/* a book picked in the picker: its chapters as the bible page shows them */
+.bp-book-view {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  max-width: none;
+  padding: 0.75rem;
+}
+.bp-book-view[hidden], .bp-chapters[hidden], .bp-books[hidden] { display: none; }
+.bp-book-view .chapter-grid a.active { background: var(--accent); color: var(--accent-ink); }
 .bp-books .book-grid a.active { outline: 3px solid var(--accent); outline-offset: -3px; }
 /* phones: the picker takes the whole screen, edge to edge */
 @media (max-width: 36rem) {

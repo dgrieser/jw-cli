@@ -18,6 +18,11 @@
     </button>
     <a class="pb-up" href="" hidden><span aria-hidden="true">‹</span> <span class="pb-up-label">{{.T.UIBackToOverview}}</span></a>
     {{- block "pagebar" .}}<span class="pb-title"></span>{{end}}
+    {{- if ne .Path "/bible"}}
+    <button type="button" class="pb-btn pb-jump" aria-haspopup="dialog" title="{{.T.UINavBible}}" aria-label="{{.T.UINavBible}}">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M12 6.6C9.8 5 6.8 4.5 2.8 4.9v13.3c4-.4 7 .1 9.2 1.7 2.2-1.6 5.2-2.1 9.2-1.7V4.9c-4-.4-7 .1-9.2 1.7z"/><path d="M12 6.6v13.3"/></svg>
+    </button>
+    {{- end}}
     <span class="pb-font" role="group" aria-label="{{.T.UIFontReset}}">
       <button type="button" class="pb-btn" data-font="-1" title="{{.T.UIFontSmaller}}" aria-label="{{.T.UIFontSmaller}}"><span aria-hidden="true">−</span></button>
       <button type="button" class="pb-btn" data-font="0" title="{{.T.UIFontReset}}" aria-label="{{.T.UIFontReset}}">A</button>
