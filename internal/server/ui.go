@@ -81,6 +81,7 @@ func (p basePage) UIText() map[string]string {
 	t := p.T
 	return map[string]string{
 		"lang":           p.Lang,
+		"build":          version.String(),
 		"unfold":         t.UIUnfold,
 		"unfoldItem":     t.UIUnfoldItem,
 		"unfoldAll":      t.UIUnfoldAll,

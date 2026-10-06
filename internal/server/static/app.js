@@ -2428,6 +2428,7 @@
     PS.save({
       n: items.length,
       sig: sig,
+      build: T.build || "",
       items: items.map(function (item) {
         if (!item.exp || item.state === "loading" || !item.exp.isConnected) return null;
         return { level: item.level, html: cleanCopy(item.exp) };
@@ -2449,7 +2450,10 @@
   // same number of items — since a position means nothing on another one.
   function restoreState(saved) {
     if (!saved || saved.sig !== sig || !Array.isArray(saved.items)) return 0;
-    if (REFRESH) return refreshState(saved);
+    // what another build of the server brought may be what it no longer
+    // answers — a listing from before it learned to find videos, say — so it
+    // is asked for anew, as a reload past the cache would
+    if (REFRESH || (saved.build || "") !== (T.build || "")) return refreshState(saved);
     var levels = {};
     saved.items.forEach(function (st, i) {
       var item = items[i];
