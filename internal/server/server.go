@@ -24,6 +24,9 @@ type Config struct {
 	// Auth, when it holds users, puts every route behind HTTP basic
 	// authentication.
 	Auth *Credentials
+	// PageCache is how the browser's copy of the pages is used (see
+	// PageCachePolicies); empty is PageCacheAuto.
+	PageCache string
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -32,6 +35,7 @@ type Server struct {
 	defaultLang string
 	logf        func(format string, args ...any)
 	auth        *Credentials
+	pageCache   string
 	// langMemo caches resolved languages per spec, so the language list is not
 	// re-scanned on every request.
 	langMemo sync.Map
@@ -49,6 +53,7 @@ func New(cfg Config) *Server {
 		defaultLang: cfg.DefaultLang,
 		logf:        cfg.Logf,
 		auth:        cfg.Auth,
+		pageCache:   cfg.PageCache,
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}
@@ -63,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 
 	// JSON API
 	mux.HandleFunc("GET /api/v1/languages", s.apiLanguages)
+	mux.HandleFunc("GET /api/v1/open", s.apiOpen)
 	mux.HandleFunc("GET /api/v1/search", s.apiSearch)
 	mux.HandleFunc("GET /api/v1/article", s.apiArticle)
 	mux.HandleFunc("GET /api/v1/bible/read", s.apiBibleRead)
@@ -100,9 +106,11 @@ func (s *Server) Handler() http.Handler {
 
 	// web UI
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	mux.HandleFunc("GET /sw.js", s.serviceWorker)
 	mux.HandleFunc("GET /{$}", s.uiIndex)
 	mux.HandleFunc("GET /search", s.uiSearch)
 	mux.HandleFunc("GET /article", s.uiArticle)
+	mux.HandleFunc("GET /open", s.uiOpen)
 	mux.HandleFunc("GET /bible", s.uiBible)
 	mux.HandleFunc("GET /dailytext", s.uiDailyText)
 	mux.HandleFunc("GET /meetings", s.uiMeetings)

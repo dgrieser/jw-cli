@@ -664,6 +664,43 @@ details.section[open] > summary {
 }
 details.section > summary :is(h1, h2, h3, h4, h5, h6, p) { display: inline; font-size: inherit; margin: 0; }
 details.section > summary a { color: inherit; }
+/* the link of a section headed by a publication: a small button at its end,
+   so the rest of the title opens and closes the section */
+details.section > summary > a.follow {
+  flex: none;
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+details.section > summary > a.follow:hover { color: var(--accent); border-color: var(--accent); }
+/* held, a link is the page's menu, not one the phone offers to share */
+.js main a[href] { -webkit-touch-callout: none; }
+details.section > summary > a.follow { user-select: none; }
+.follow-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.35);
+  font-size: 0.9rem;
+  animation: pop 140ms ease-out;
+}
+.follow-menu[hidden] { display: none; }
+.follow-menu button[hidden] { display: none; }
+.follow-menu button, .follow-menu button.ghost { justify-content: flex-start; text-align: left; min-height: 2.4rem; padding: 0 0.7rem; color: var(--ink); font-weight: 500; }
 details.section .count {
   flex: none;
   min-width: 1.35rem;
@@ -1481,6 +1518,8 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
 }
 .loading[hidden] { display: none; }
 .spinner {
+  /* a circle whatever the text beside it asks of the row */
+  flex: none;
   width: 0.9rem;
   height: 0.9rem;
   border: 2px solid currentColor;
@@ -1516,7 +1555,7 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  details.section.fresh, .unfold-menu, .flash { animation: none; }
+  details.section.fresh, .unfold-menu, .flash, .hist-panel, .toast, .follow-menu { animation: none; }
   *, *::before, *::after { transition: none !important; }
   html.is-loading .progress::before { animation: none; transform: none; width: 100%; opacity: 0.6; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }
@@ -1526,3 +1565,122 @@ html:not(.js) .pb-font { display: none; }
 /* a picture opens full size in a new tab */
 a.img-link { display: inline-block; max-width: 100%; cursor: zoom-in; }
 a.img-link > img { display: block; }
+
+/* a section's history, atop its pages: a step back, the list, a step forward */
+.hist {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0.6rem 0 0.5rem;
+}
+.hist-step {
+  display: inline-grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.hist-step:hover { background: var(--field); color: var(--accent); }
+.hist-step[aria-disabled="true"] { color: var(--line-strong); }
+.hist-step[aria-disabled="true"]:hover { background: none; }
+button.hist-list {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.2rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+button.hist-list:hover, button.hist-list[aria-expanded="true"] { color: var(--ink); border-color: var(--line-strong); background: var(--field); }
+.hist-list .count {
+  min-width: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  line-height: 1.3rem;
+  text-align: center;
+}
+.hist-panel {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  z-index: 15;
+  width: min(30rem, calc(100vw - 2 * var(--gutter)));
+  max-height: min(28rem, 70vh);
+  overflow-y: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.35);
+  animation: pop 140ms ease-out;
+}
+.hist-panel[hidden] { display: none; }
+.hist-panel ol { list-style: none; margin: 0; padding: 0; }
+.hist-panel li { display: flex; align-items: center; border-radius: var(--r-small); }
+.hist-panel li:hover { background: var(--field); }
+.hist-panel li.current { background: var(--accent-soft); }
+.hist-entry {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.6rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+.hist-entry .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; font-weight: 500; }
+.hist-entry .when { color: var(--muted); font-size: 0.78rem; }
+li.current .hist-entry .t { color: var(--accent); }
+button.hist-rm {
+  flex: none;
+  width: 2rem;
+  min-height: 2rem;
+  margin-right: 0.2rem;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+button.hist-rm:hover { border-color: transparent; background: var(--danger-soft); color: var(--danger); }
+.hist-clear { margin: 0.3rem 0.2rem 0.1rem; }
+
+/* a word that comes and goes: what was just done, and where it leads */
+.toast {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: fit-content;
+  max-width: calc(100vw - 2rem);
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 6px 20px -8px rgba(0, 0, 0, 0.45);
+  transition: opacity 0.3s;
+  animation: pop 160ms ease-out;
+}
+.toast[hidden] { display: none; }
+.toast.gone { opacity: 0; }
+.toast a { color: var(--paper); font-weight: 650; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }

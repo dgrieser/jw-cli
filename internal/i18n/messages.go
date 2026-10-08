@@ -286,6 +286,26 @@ type Messages struct {
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string
+	// UIFollow is the button by a quoting publication's title that loads it.
+	UIFollow string
+	// UIFollowHere and UIFollowTab are the choices a long press on that
+	// button offers: unfold it in place, or read it on a page of its own.
+	UIFollowHere string
+	UIFollowTab  string
+	// UIFollowPage goes to a link's own page; UIFollowSection (%s: the
+	// section, as the menu names it) makes it that section's page without
+	// leaving this one, which UIOpenedIn then says (UIShow goes there).
+	UIFollowPage    string
+	UIFollowSection string
+	UIOpenedIn      string
+	// UIHistory* are what a section's history says: its list of the pages
+	// opened in it, a step back and forward through them, taking one off and
+	// emptying it.
+	UIHistory       string
+	UIHistoryBack   string
+	UIHistoryNext   string
+	UIHistoryRemove string
+	UIHistoryClear  string
 	// UIBibleSearch* head a text search of the bible: the hits and the query,
 	// the bibles searched, and the pages read when not all of them were.
 	UIBibleSearchHeader    string

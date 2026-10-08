@@ -113,7 +113,7 @@ func marginalEntry(n unfold.Node, source string, level int, txt *i18n.Messages) 
 	var b strings.Builder
 	writeUnfoldNode(&b, n, level, label, txt)
 	return UnfoldSection{
-		Title: html.EscapeString(label), Body: b.String(), In: marginalKey, Ref: RefPath(n.Ref.Path),
+		Title: nodeTitle(n, label), Body: b.String(), In: marginalKey, Ref: RefPath(n.Ref.Path),
 	}
 }
 

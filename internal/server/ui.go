@@ -13,12 +13,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/unfold"
 	"github.com/dgrieser/jw-cli/internal/version"
 )
 
@@ -72,8 +75,16 @@ func (p basePage) Active(path string) string {
 	if p.Path == path || (path != "/" && strings.HasPrefix(p.Path, path+"/")) {
 		return "active"
 	}
+	// an article is read among the publications, wherever it was opened from
+	if path == "/pub" && p.Path == "/article" {
+		return "active"
+	}
 	return ""
 }
+
+// failed reports a page that shows an upstream failure in place of (or
+// above) what it was asked for: one not to be kept as it is.
+func (p basePage) failed() bool { return p.Error != "" }
 
 // UIText is what the page's script says, in the language of the page, and the
 // language it asks the server in.
@@ -113,6 +124,23 @@ func (p basePage) UIText() map[string]string {
 		"langQuick":      t.UILangQuick,
 		"langAll":        t.UILangAll,
 		"aborted":        t.UIAborted,
+		"follow":         t.UIFollow,
+		"followHere":     t.UIFollowHere,
+		"followTab":      t.UIFollowTab,
+		"followPage":     t.UIFollowPage,
+		"followSection":  t.UIFollowSection,
+		"openedIn":       t.UIOpenedIn,
+		"show":           t.UIShow,
+		"history":        t.UIHistory,
+		"historyBack":    t.UIHistoryBack,
+		"historyNext":    t.UIHistoryNext,
+		"historyRemove":  t.UIHistoryRemove,
+		"historyClear":   t.UIHistoryClear,
+		"secBible":       t.UINavBible,
+		"secPub":         t.UINavPublications,
+		"secMedia":       t.UINavMedia,
+		"secSearch":      t.UINavSearch,
+		"secMeetings":    t.UINavMeetings,
 	}
 }
 
@@ -160,9 +188,18 @@ func (s *Server) render(w http.ResponseWriter, status int, page string, data any
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// the page's script keeps what it was shown so it comes back at once
+	// (static/sw.js); a page that says something went wrong is not kept
+	if f, ok := data.(interface{ failed() bool }); ok && f.failed() {
+		w.Header().Set(keepHeader, "no")
+	}
 	w.WriteHeader(status)
 	_, _ = buf.WriteTo(w)
 }
+
+// keepHeader tells the page cache of the browser (static/sw.js) not to keep
+// a page that answered 200 but shows a failure.
+const keepHeader = "X-JW-Keep"
 
 // errorPage is the UI's failure surface, mapped through the same status codes
 // as the API.
@@ -1015,6 +1052,81 @@ func (s *Server) editionOptions(r *http.Request, current string) []editionOption
 	return out
 }
 
+// openTarget is the page of this site a citation of the library is read on:
+// ?path=/wol/bc/… leads to the bible reader with the verses it quotes, a
+// citation of a publication or a footnote to the article it is part of.
+func (s *Server) openTarget(r *http.Request) (string, error) {
+	path, ok := libraryPath(r.FormValue("path"))
+	if !ok || (!unfold.IsCitation(path) && !service.IsFootnote(path)) {
+		return "", fmt.Errorf("parameter %q is not a citation of the library", "path")
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		return "", err
+	}
+	refs, doc, err := s.svc.CitationPage(r.Context(), lng, path)
+	if err != nil {
+		return "", err
+	}
+	q := url.Values{}
+	if lang := r.FormValue("lang"); lang != "" {
+		q.Set("lang", lang)
+	}
+	switch {
+	case len(refs) > 0:
+		table := s.svc.BookTable(r.Context(), lng)
+		names := make([]string, len(refs))
+		for i, ref := range refs {
+			names[i] = service.RefString(ref, table)
+		}
+		q.Set("ref", strings.Join(names, "; "))
+		if bible := r.FormValue("bible"); bible != "" {
+			q.Set("bible", bible)
+		}
+		return "/bible?" + q.Encode(), nil
+	case doc != "":
+		return articleHref(doc, r.FormValue("lang")), nil
+	}
+	return "", fmt.Errorf("%w: nothing to open at %s", pubmedia.ErrNotFound, path)
+}
+
+// uiOpen goes on to the page a citation is read on: GET /open?path=….
+func (s *Server) uiOpen(w http.ResponseWriter, r *http.Request) {
+	to, err := s.openTarget(r)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
+	http.Redirect(w, r, to, http.StatusFound)
+}
+
+// apiOpen names that page without going there: GET /api/v1/open?path=…
+// answers {"url": "/bible?ref=…"}, for a page that files a citation away
+// for later rather than opening it.
+func (s *Server) apiOpen(w http.ResponseWriter, r *http.Request) {
+	to, err := s.openTarget(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": to})
+}
+
+// vidRef is the passage a verse id (book·1e6 + chapter·1e3 + verse) names, up
+// to the verse to names when it is a later one of the same chapter.
+func vidRef(vid int, to string) (bibleref.Ref, bool) {
+	ref := bibleref.Ref{Book: vid / 1_000_000, Chapter: vid / 1_000 % 1_000, VerseStart: vid % 1_000}
+	ref.VerseEnd = ref.VerseStart
+	if ref.Book < 1 || ref.Book > 66 || ref.Chapter < 1 || ref.VerseStart < 1 {
+		return bibleref.Ref{}, false
+	}
+	var end int
+	if _, err := fmt.Sscan(to, &end); err == nil && end/1_000 == vid/1_000 && end > vid {
+		ref.VerseEnd = end % 1_000
+	}
+	return ref, true
+}
+
 // uiBible is the bible reader: the verses first, what they reference unfolded
 // verse by verse or all at once. The study material of a verse — its notes,
 // cross references, research guide, quotations and media — is what an unfold
@@ -1031,6 +1143,15 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		if chapter, _ := intParam(r, "chapter", 0); chapter > 0 {
 			if lng, err := s.language(r); err == nil {
 				page.Ref = fmt.Sprintf("%s %d", s.svc.BookTable(r.Context(), lng).Name(book), chapter)
+			}
+		}
+	}
+	// so do the verses a section of an unfolded page shows (?vid=, ?to=),
+	// opened on a page of their own
+	if vid, _ := intParam(r, "vid", 0); page.Ref == "" && vid > 0 {
+		if lng, err := s.language(r); err == nil {
+			if ref, ok := vidRef(vid, r.FormValue("to")); ok {
+				page.Ref = service.RefString(ref, s.svc.BookTable(r.Context(), lng))
 			}
 		}
 	}

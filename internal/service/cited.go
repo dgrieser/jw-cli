@@ -109,7 +109,7 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 	var out []model.Result
 	seen := map[string]bool{}
 	for _, term := range terms {
-		for page := 0; page < maxVideoPages; page++ {
+		for page := range maxVideoPages {
 			sp, err := s.Search.Search(ctx, lng.Symbol, search.Params{
 				Query: "(" + term + ")", Facet: "videos",
 				Offset: page * videoPageSize, Limit: videoPageSize,
@@ -277,7 +277,7 @@ func VideoLink(lank, symbol string) string {
 // of: "(Jeremia 31:15) | (Matthäus 2:18)" is Jeremia 31:15 and Matthäus 2:18.
 func citationTerms(query string) []string {
 	var terms []string
-	for _, t := range strings.Split(query, "|") {
+	for t := range strings.SplitSeq(query, "|") {
 		t = strings.TrimSpace(t)
 		t = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, "("), ")"))
 		if t != "" {

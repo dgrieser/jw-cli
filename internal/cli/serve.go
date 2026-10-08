@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -21,9 +23,10 @@ import (
 
 func newServeCmd(a *app.App) *cobra.Command {
 	var (
-		addr     string
-		port     int
-		authFile string
+		addr      string
+		port      int
+		authFile  string
+		pageCache string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -41,6 +44,17 @@ network. HTTP basic authentication protects every route when it is configured:
   $JW_AUTH_USER, $JW_AUTH_PASSWORD   one more user, from the environment
 Both may be set; any of their users gets in. Hashes may be bcrypt
 (htpasswd -B), Apache MD5 (htpasswd -m) or SHA-1 (htpasswd -s).
+
+Over HTTPS (or on localhost) the browser keeps the pages it read, so they
+come back at once and offline. --page-cache says how that copy is used:
+  first      from the copy while it is current, without asking the server
+  fallback   the server first, every time; the copy only while it is down
+  off        no copy
+  auto       fallback behind a login — this server's, or a proxy's that the
+             browser's requests show — first otherwise (the default)
+Behind an authenticating proxy that the requests do not show (one that
+checks a cookie and passes nothing on), set fallback, so a login revoked
+there is never bypassed by the copy.
 
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
@@ -69,8 +83,12 @@ Examples:
 			if auth.Empty() && !loopbackHost(host) {
 				fmt.Fprintf(a.Stderr, "warning: serving without authentication on %s — reachable by anyone on the network\n", listen)
 			}
+			if !slices.Contains(server.PageCachePolicies, pageCache) {
+				return fmt.Errorf("invalid --page-cache %q: want one of %s", pageCache, strings.Join(server.PageCachePolicies, ", "))
+			}
 			srv := server.New(server.Config{
 				Auth:        auth,
+				PageCache:   pageCache,
 				Svc:         a.Service(),
 				DefaultLang: a.Flags.Lang,
 				Logf: func(format string, args ...any) {
@@ -119,6 +137,8 @@ Examples:
 	fl.StringVar(&addr, "addr", "127.0.0.1", "address to bind: a host, or host:port (keep it on localhost without authentication)")
 	fl.IntVar(&port, "port", 8080, "port to bind when --addr names no port")
 	fl.StringVar(&authFile, "auth-file", os.Getenv("JW_AUTH_FILE"), "basic auth users: an .htpasswd or .htaccess file, used when it exists ($JW_AUTH_FILE)")
+	fl.StringVar(&pageCache, "page-cache", cmp.Or(os.Getenv("JW_PAGE_CACHE"), server.PageCacheAuto),
+		"how the browser's copy of the pages is used: auto, first, fallback or off ($JW_PAGE_CACHE)")
 	return cmd
 }
 

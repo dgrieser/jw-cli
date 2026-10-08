@@ -1038,6 +1038,16 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 	return ref + refSeparator + n.Title
 }
 
+// nodeTitle is the heading of an expanded reference as HTML: a passage of a
+// publication links to the document it was taken from, which a page offers
+// to open in full; a verse, and what could not be read, are plain text.
+func nodeTitle(n unfold.Node, label string) string {
+	if n.Ref.IsVerse() || n.Err != nil || n.URL == "" {
+		return html.EscapeString(label)
+	}
+	return fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(n.URL), html.EscapeString(label))
+}
+
 // saysIt reports whether the citation already names what the passage turned out
 // to be, so the heading would say it twice. A research-guide entry cites an
 // article by its own headline — “God So Loved the World”, The Watchtower,
@@ -1256,7 +1266,7 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source string, txt *i18n.Messages) {
 	for _, n := range nodes {
 		label := unfoldHeading(n, source, txt)
-		b.WriteString(headingHTML(level, html.EscapeString(label)))
+		b.WriteString(headingHTML(level, nodeTitle(n, label)))
 		writeUnfoldNode(b, n, level, label, txt)
 	}
 }

@@ -525,6 +525,14 @@ func TestUIArticle(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
+	// an article is read among the publications, and a page that read well
+	// is one the browser may keep
+	if !strings.Contains(body, `<a class="active" href="/pub?lang=en">`) {
+		t.Errorf("the menu does not show the article among the publications")
+	}
+	if resp.Header.Get("X-JW-Keep") != "" {
+		t.Errorf("a good page says X-JW-Keep: %q", resp.Header.Get("X-JW-Keep"))
+	}
 	// script injection cannot survive the sanitizer: the page's own script is
 	// outside the article, nothing from upstream may be inside it
 	start, end := strings.Index(body, "<article"), strings.Index(body, "</article>")

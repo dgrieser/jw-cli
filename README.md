@@ -537,7 +537,7 @@ derived from it (a parsed book grid, a library listing) are rebuilt. When
 upstream cannot be reached, what is kept is used. `--cache-ttl 1h` changes the
 window, `--cache-ttl 0` checks on every use.
 
-The cache is bounded at 1 GB by default; past that, what was used least
+The cache is bounded at 4 GB by default; past that, what was used least
 recently is dropped. `--cache-max 500MB` or `JW_CACHE_MAX=2GB` changes the
 bound, `0` turns the cache off. Downloads and signed-in search requests are
 never kept.
@@ -573,6 +573,44 @@ Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
 opens under the verse's cross references, all of them unfolded at the verse's
 depth, while the verse's other sections — study notes, footnotes, indexes,
 translations, quotations — appear as headings that load once opened.
+
+A section headed by a publication — a passage of the Research Guide or an
+index, a publication quoting a verse — opens and closes on its whole title; the
+small ↗ at its end loads the complete article in place, as a reference (a
+video's ↗ opens its player page). A section showing verses has a ↗ that opens
+them in the bible reader in a new tab. Every link to something the site can
+show — a reference, a footnote, a verse number, an article, a search result, a
+publication in the library — can be held (a long press, or a right click) for
+the rest of the choices: open it as a reference where that is how it opens,
+open its page here or in a new tab, or **open it in** the section it belongs to
+— the bible, the publications, media — without leaving the page: the section's
+menu entry then leads there, and the section's history lists it.
+
+Every page is kept as it was left. What was unfolded, what was open and how far
+down the page was scrolled are kept in the browser (IndexedDB) and put back on
+return without asking the server again — an item that found nothing, or
+failed, stays that way until it is asked for again — and the menu leads back to
+the last page of each section: the bible, the meetings, media, publications
+(an article opened anywhere is read there) and search. Each of those sections
+keeps a history of what was read in it, newest first, shown above its pages: ‹
+and › step back and forth through it, and the list in between jumps to any
+page of it, or drops one. Over HTTPS (or on localhost) the browser also keeps
+the pages themselves, so a page read once comes back at once, and even without
+a connection: a page that reads the same whatever the day for a month, one that
+shows what is current (today's text, this week's meetings, the newest videos
+and issues) for the day. Behind a login, every page is asked of the server
+first, so a revoked or switched login is never bypassed; the kept copy then
+only stands in while the server cannot be reached at all. `--page-cache`
+(`$JW_PAGE_CACHE`) sets that: `auto` (the default) does so behind this
+server's own login, or a proxy's that its requests show (an `Authorization`
+header, or a header naming the user such as `X-Forwarded-User` or
+`Remote-User`), and serves the copy first otherwise; `first` and `fallback`
+choose one way whatever the login, and `off` keeps no pages. Behind an
+authenticating proxy that passes nothing on (one that only checks a cookie),
+set `--page-cache fallback`.
+The reload button in the bar reads the page, and everything unfolded on it,
+anew from jw.org past every cache; a reference followed from a paragraph
+without a button of its own is then left to be followed again.
 
 The server counts the depth in **bible references**, the same way on every page
 and in the API. A verse at depth N brings at once its study notes, its
@@ -669,16 +707,18 @@ no counterpart in the language asked for leads back to the start page. A publica
 publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.
 
-The bible, meeting, media and publication pages remember, in the browser, what
-the reader had in front of them. Per section and language, the menu and the
-start page lead back to the last page read, so going back to **Bible** brings
-back the last reading instead of an empty form. Per page, everything that was
-unfolded, what was open or closed, and how far down the page was scrolled come
-back at once on return, without asking the server again. It is all kept in this
-browser only (`localStorage` and IndexedDB), and pages not revisited for a
-month are forgotten. Without JavaScript the switcher reloads the page unfolded
-server-side, and a level that needs more requests than the server spends
-unasked is offered on a confirmation page first (with JavaScript, a prompt).
+What a page remembers (see above) is kept in this browser only —
+`localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
+at `/sw.js`, which a new build of the server starts anew — and pages not
+revisited for two months are forgotten. A citation held and opened on a page
+of its own goes through `GET /open?path=/wol/bc/…`, which reads it and goes on
+to the bible reader with the verses it quotes, or to the article a citation of
+a publication or a footnote is part of; `GET /api/v1/open?path=…` names that
+page as `{"url": …}` without going there. The bible reader also takes verses by
+id: `/bible?vid=43003016&to=43003017`. Without JavaScript the switcher reloads
+the page unfolded server-side, and a level that needs more requests than the
+server spends unasked is offered on a confirmation page first (with
+JavaScript, a prompt).
 
 The page loads those expansions from two streaming endpoints, answered as
 newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
