@@ -11,9 +11,15 @@
 //
 // The worker is stamped with the build serving it: a new build brings a new
 // worker, which starts its copy anew, since its pages are written for it.
+//
+// Behind a login (AUTH) every page is asked of the server first, so the
+// server decides each time who may read it — a login revoked or switched
+// included; the copy only stands in while the server cannot be reached at
+// all, and a refused login drops every copy.
 "use strict";
 
 var BUILD = "__BUILD__";
+var AUTH = __AUTH__;
 var PAGES = "jw-pages-" + BUILD;
 var STATIC = "jw-static-" + BUILD;
 var META = "jw-meta";
@@ -147,7 +153,11 @@ function page(e, u) {
     return caches.open(PAGES).then(function (cache) {
       var fromServer = function () {
         return fetch(req).then(function (res) {
-          if (res.status === 401) return signIn(u);
+          if (res.status === 401 || res.status === 403) {
+            // not this reader's, or no longer: nothing kept stands in for it
+            e.waitUntil(caches.delete(PAGES));
+            return res.status === 401 ? signIn(u) : res;
+          }
           if (keepable(res)) e.waitUntil(keep(cache, k, res.clone()));
           return res;
         });
@@ -162,7 +172,7 @@ function page(e, u) {
         });
       }
       return cache.match(k).then(function (hit) {
-        if (hit && fresh(hit, u)) return hit;
+        if (hit && fresh(hit, u) && !AUTH) return hit;
         // out of date: anew, and the old copy when the server cannot answer
         return fromServer().catch(function (err) {
           if (hit) return hit;

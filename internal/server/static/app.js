@@ -1212,28 +1212,19 @@
     var h = histLoad(here.id, pageLang);
     var at = reading ? histIndex(h, location.href) : -1;
     if (!h.items.some(function (e, i) { return i !== at; })) return;
-    // back is the page read before this one — or, away from the pages read,
-    // the one the section was at; forward the one read after it
-    var back = at >= 0 ? h.items[at + 1] : h.items[h.cur];
-    var next = at > 0 ? h.items[at - 1] : null;
-
     var bar = document.createElement("nav");
     bar.className = "hist";
     bar.setAttribute("data-ui", "");
     bar.setAttribute("aria-label", T.history || "");
 
-    function step(entry, cls, icon, label) {
-      var el = document.createElement(entry ? "a" : "span");
+    function step(cls, icon) {
+      var el = document.createElement("a");
       el.className = "hist-step " + cls;
       el.innerHTML = icon;
-      el.setAttribute("aria-label", label + (entry && entry.title ? ": " + entry.title : ""));
-      el.title = el.getAttribute("aria-label");
-      if (entry) el.href = entry.href;
-      else el.setAttribute("aria-disabled", "true");
       return el;
     }
-    var prevEl = step(back, "prev", ARROW_L, T.historyBack || "‹");
-    var nextEl = step(next, "next", ARROW_R, T.historyNext || "›");
+    var prevEl = step("prev", ARROW_L);
+    var nextEl = step("next", ARROW_R);
     var listBtn = document.createElement("button");
     listBtn.type = "button";
     listBtn.className = "hist-list";
@@ -1241,7 +1232,28 @@
     listBtn.setAttribute("aria-expanded", "false");
     listBtn.innerHTML = CLOCK + '<span class="label"></span><span class="count"></span>';
     listBtn.querySelector(".label").textContent = T.history || "";
-    listBtn.querySelector(".count").textContent = String(h.items.length);
+
+    function point(el, entry, label) {
+      el.setAttribute("aria-label", label + (entry && entry.title ? ": " + entry.title : ""));
+      el.title = el.getAttribute("aria-label");
+      if (entry) {
+        el.href = entry.href;
+        el.removeAttribute("aria-disabled");
+      } else {
+        el.removeAttribute("href");
+        el.setAttribute("aria-disabled", "true");
+      }
+    }
+
+    // sync points the steps at the history as it is now: back is the page
+    // read before this one — or, away from the pages read, the one the
+    // section was at — and forward the one read after it
+    function sync() {
+      point(prevEl, at >= 0 ? h.items[at + 1] : h.items[h.cur], T.historyBack || "‹");
+      point(nextEl, at > 0 ? h.items[at - 1] : null, T.historyNext || "›");
+      listBtn.querySelector(".count").textContent = String(h.items.length);
+    }
+    sync();
     bar.appendChild(prevEl);
     bar.appendChild(listBtn);
     bar.appendChild(nextEl);
@@ -1281,12 +1293,14 @@
           ev.stopPropagation();
           var fresh = histLoad(here.id, pageLang);
           var j = histIndex(fresh, e.href);
-          if (j >= 0) fresh.items.splice(j, 1);
-          if (fresh.cur > j) fresh.cur--;
+          if (j >= 0) {
+            fresh.items.splice(j, 1);
+            if (fresh.cur > j) fresh.cur--;
+          }
           histSave(here.id, pageLang, fresh);
           h = fresh;
           at = reading ? histIndex(h, location.href) : -1;
-          listBtn.querySelector(".count").textContent = String(h.items.length);
+          sync();
           fill();
         });
         li.appendChild(a);
@@ -1461,21 +1475,31 @@
     return clean(a.textContent) || clean(a.title);
   }
 
-  // fileIn makes a page the one a section is at, without going there: first
-  // in its history, and where its menu entry leads
-  function fileIn(page, title) {
-    var done = function (href, sec) {
-      if (!sec) return;
-      histFile(sec.id, pageLang, href, title);
-      storageSet(lastKey(sec.id, pageLang), pageHref(href));
-      toast(fmt(T.openedIn, sec.name), T.show, pageHref(href));
-    };
-    if (!page.resolve) {
-      done(page.href, page.sec);
-      return;
+  // where citations lead, once the server said: so a citation's page opens
+  // straight from the browser's copy of it, with or without a connection
+  var OPEN_KEY = "jw:open";
+  var OPEN_MAX = 500;
+  function openMap() {
+    try {
+      var m = JSON.parse(storageGet(OPEN_KEY) || "null");
+      return m && typeof m === "object" && Array.isArray(m.k) ? m : { k: [], v: {} };
+    } catch (err) {
+      return { k: [], v: {} };
     }
+  }
+  function knownPage(page) {
+    if (!page.resolve) return page.href;
+    var to = openMap().v[page.href];
+    return typeof to === "string" && to.charAt(0) === "/" ? to : null;
+  }
+
+  // resolvePage settles where a page is read: a citation's, asked of the
+  // server once and remembered
+  function resolvePage(page) {
+    var known = knownPage(page);
+    if (known) return Promise.resolve(known);
     var u = new URL(page.href, location.href);
-    fetch("/api/v1/open" + u.search, { credentials: "same-origin", headers: { Accept: "application/json" } })
+    return fetch("/api/v1/open" + u.search, { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (res) {
         return res.json().then(function (j) {
           if (!res.ok) throw new Error((j && j.error && j.error.message) || res.statusText);
@@ -1484,10 +1508,28 @@
       })
       .then(function (j) {
         var to = new URL(j.url, location.href);
-        done(to.pathname + to.search, sectionOf(to.pathname) || page.sec);
-      }, function (err) {
-        toast(String(err && err.message || err));
+        var href = to.pathname + to.search;
+        var m = openMap();
+        if (!(page.href in m.v)) m.k.push(page.href);
+        m.v[page.href] = href;
+        while (m.k.length > OPEN_MAX) delete m.v[m.k.shift()];
+        storageSet(OPEN_KEY, JSON.stringify(m));
+        return href;
       });
+  }
+
+  // fileIn makes a page the one a section is at, without going there: first
+  // in its history, and where its menu entry leads
+  function fileIn(page, title) {
+    resolvePage(page).then(function (href) {
+      var sec = sectionOf(new URL(href, location.href).pathname) || page.sec;
+      if (!sec) return;
+      histFile(sec.id, pageLang, href, title);
+      storageSet(lastKey(sec.id, pageLang), pageHref(href));
+      toast(fmt(T.openedIn, sec.name), T.show, pageHref(href));
+    }, function (err) {
+      toast(String(err && err.message || err));
+    });
   }
 
   // --- holding a link: where to open it ------------------------------------
@@ -1536,9 +1578,14 @@
     }
     if (page) {
       if (!samePage(page.href, location.href)) {
-        menuItem(T.followPage || "→", function () { location.assign(page.href); });
+        // a citation goes where it was found to lead before, else is asked
+        // where, else the server is left to lead there itself (/open)
+        menuItem(T.followPage || "→", function () {
+          resolvePage(page).then(function (href) { location.assign(href); }, function () { location.assign(page.href); });
+        });
       }
-      menuItem(T.followTab || "↗", function () { window.open(page.href, "_blank", "noopener"); });
+      // a new tab opens with the click itself, or the browser blocks it
+      menuItem(T.followTab || "↗", function () { window.open(knownPage(page) || page.href, "_blank", "noopener"); });
       if (page.sec && !samePage(page.href, location.href)) {
         menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
       }
@@ -3243,7 +3290,8 @@
 
   // refreshState is restoreState for a reload past the cache: what was open
   // opens again, and every item is asked for anew, to the level it had,
-  // instead of being put back as it was kept
+  // instead of being put back as it was kept; links followed from other
+  // blocks are left to be followed again
   var refreshTodo = [];
   function refreshState(st) {
     st.items.forEach(function (r, i) {
@@ -3252,7 +3300,8 @@
       item.restored = true;
       refreshTodo.push({ item: item, level: r.level });
     });
-    restoreBlocks(st);
+    // what was followed from a block that is no item is not put back as it
+    // was kept: it would pass for read anew. Followed again, it is.
     restoreOpen(st);
     return st;
   }
@@ -3273,12 +3322,18 @@
     syncTools();
     PS.restoreScroll();
     markLevel(auto || (st && st.level) || pageLevel);
-    // what the address asks for goes on from what came back: only the items
-    // nothing was kept for are asked for
+    // what the address asks for goes on from what came back: the items
+    // nothing was kept for, and those kept at a lower level than asked; an
+    // item kept at that level or deeper, or found to cite nothing, is not
+    // asked again
     var todo = refreshTodo.slice();
     if (auto > 0) {
       items.forEach(function (item) {
-        if (!item.restored && !item.exp && item.state !== "empty") todo.push({ item: item, level: auto });
+        if (item.state === "empty" || item.state === "loading") return;
+        if (item.exp && item.state !== "error" && item.level >= auto) return;
+        if (item.state === "error" && item.restored) return;
+        if (refreshTodo.some(function (t) { return t.item === item; })) return;
+        todo.push({ item: item, level: auto });
       });
     }
     runAll(todo);

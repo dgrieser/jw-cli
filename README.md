@@ -598,8 +598,12 @@ page of it, or drops one. Over HTTPS (or on localhost) the browser also keeps
 the pages themselves, so a page read once comes back at once, and even without
 a connection: a page that reads the same whatever the day for a month, one that
 shows what is current (today's text, this week's meetings, the newest videos
-and issues) for the day. The reload button in the bar reads the page, and
-everything unfolded on it, anew from jw.org past every cache.
+and issues) for the day. Behind a login (basic authentication), every page is
+asked of the server first, so a revoked or switched login is never bypassed;
+the kept copy then only stands in while the server cannot be reached at all.
+The reload button in the bar reads the page, and everything unfolded on it,
+anew from jw.org past every cache; a reference followed from a paragraph
+without a button of its own is then left to be followed again.
 
 The server counts the depth in **bible references**, the same way on every page
 and in the API. A verse at depth N brings at once its study notes, its

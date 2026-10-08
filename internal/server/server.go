@@ -101,7 +101,7 @@ func (s *Server) Handler() http.Handler {
 
 	// web UI
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
-	mux.HandleFunc("GET /sw.js", serviceWorker)
+	mux.HandleFunc("GET /sw.js", s.serviceWorker)
 	mux.HandleFunc("GET /{$}", s.uiIndex)
 	mux.HandleFunc("GET /search", s.uiSearch)
 	mux.HandleFunc("GET /article", s.uiArticle)

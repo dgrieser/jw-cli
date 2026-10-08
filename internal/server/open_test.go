@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/i18n"
@@ -44,6 +45,25 @@ func TestRenderKeep(t *testing.T) {
 		s.render(w, http.StatusOK, "error", page)
 		if got := w.Header().Get(keepHeader); got != c.want {
 			t.Errorf("Error %q: %s = %q, want %q", c.err, keepHeader, got, c.want)
+		}
+	}
+}
+
+func TestServiceWorkerAuth(t *testing.T) {
+	for _, c := range []struct {
+		users bool
+		want  string
+	}{{false, "var AUTH = false;"}, {true, "var AUTH = true;"}} {
+		var creds Credentials
+		if c.users {
+			creds.Add("anne", "secret")
+		}
+		s := New(Config{Auth: &creds})
+		w := httptest.NewRecorder()
+		s.serviceWorker(w, httptest.NewRequest(http.MethodGet, "/sw.js", nil))
+		body := w.Body.String()
+		if !strings.Contains(body, c.want) || strings.Contains(body, "__AUTH__") || strings.Contains(body, "__BUILD__") {
+			t.Errorf("users %v: want %q in the worker", c.users, c.want)
 		}
 	}
 }
