@@ -36,3 +36,26 @@ func TestOpenCitation(t *testing.T) {
 		t.Errorf("a path that is no citation was followed to %q", resp.Header.Get("Location"))
 	}
 }
+
+func TestOpenCitationAPI(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	resp, body := get(t, srv, "/api/v1/open?lang=en&path="+url.QueryEscape("/en/wol/pc/r1/lp-e/1204433/5/0"))
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, `"url"`) || !strings.Contains(body, "/article?") {
+		t.Errorf("status %d body %.300s", resp.StatusCode, body)
+	}
+	resp, _ = get(t, srv, "/api/v1/open?lang=en&path="+url.QueryEscape("/en/wol/d/r1/lp-e/1"))
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("a document that is no citation: status %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestServiceWorker(t *testing.T) {
+	srv := newTestServer(t, studyMux(t))
+	resp, body := get(t, srv, "/sw.js")
+	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
+		t.Fatalf("status %d type %q", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+	if strings.Contains(body, "__BUILD__") || !strings.Contains(body, `var BUILD = "`) {
+		t.Errorf("the worker is not stamped with the build: %.400s", body)
+	}
+}

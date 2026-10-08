@@ -71,8 +71,10 @@ const (
 	// checked again: the library's pages change rarely, and a day is what a
 	// reader asks the same thing again within.
 	DefaultFresh = 24 * time.Hour
-	// DefaultMaxBytes bounds the cache at 1 GiB.
-	DefaultMaxBytes = 1 << 30
+	// DefaultMaxBytes bounds the cache at 4 GiB: room for every page an
+	// unfolded study walks through, which is what lets a page come back
+	// without asking jw.org again.
+	DefaultMaxBytes = 4 << 30
 )
 
 // OpenCache returns a cache rooted at <UserCacheDir>/jw with default options.

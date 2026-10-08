@@ -63,6 +63,7 @@ func (s *Server) Handler() http.Handler {
 
 	// JSON API
 	mux.HandleFunc("GET /api/v1/languages", s.apiLanguages)
+	mux.HandleFunc("GET /api/v1/open", s.apiOpen)
 	mux.HandleFunc("GET /api/v1/search", s.apiSearch)
 	mux.HandleFunc("GET /api/v1/article", s.apiArticle)
 	mux.HandleFunc("GET /api/v1/bible/read", s.apiBibleRead)
@@ -100,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 
 	// web UI
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	mux.HandleFunc("GET /sw.js", serviceWorker)
 	mux.HandleFunc("GET /{$}", s.uiIndex)
 	mux.HandleFunc("GET /search", s.uiSearch)
 	mux.HandleFunc("GET /article", s.uiArticle)

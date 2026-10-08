@@ -84,7 +84,7 @@ type sizeValue struct {
 	raw string
 }
 
-const defaultCacheMax = "1GB"
+const defaultCacheMax = "4GB"
 
 func newSizeValue(n *int64, env string) *sizeValue {
 	v := &sizeValue{n: n}

@@ -2,10 +2,12 @@
 // screens, a visible "loading" state while the server talks to jw.org, and the
 // unfolding of a document after it is on screen: every verse or paragraph that
 // cites something gets a button that loads what it references, section by
-// section, as the server finds it. The bible, meeting, media and publication
-// pages remember what the reader had in front of them — which page, what was
-// unfolded, what was open, how far down — and bring it back on their return.
-// Every page works without it; this only makes reading, waiting and
+// section, as the server finds it. A link of a document opens what it points
+// at in place; held, any link offers where else to open it. Every page keeps
+// what the reader had in front of it — what was unfolded, what was open, how
+// far down — and brings it back on return without asking the server again;
+// the sections of the menu remember their last page and what was read in
+// them. Every page works without it; this only makes reading, waiting and
 // navigating nicer.
 (function () {
   "use strict";
@@ -140,12 +142,15 @@
     var crumbs = document.querySelectorAll("main .crumbs a[href]");
     if (crumbs.length) href = crumbs[crumbs.length - 1].getAttribute("href");
     var nav = document.querySelector(".site-nav a.active[href]");
-    if (!href && nav) {
+    // an article is read among the publications, but leads back to where it
+    // was opened: a search, another article, a verse
+    var opened = location.pathname === "/article";
+    if (!href && nav && !opened) {
       var u = new URL(nav.href, location.href);
       if (u.pathname !== location.pathname) href = nav.getAttribute("href");
     }
     // a page of its own, outside the menu's sections: back where it was opened
-    if (!href && !nav && document.referrer) {
+    if (!href && (!nav || opened) && document.referrer) {
       try {
         var r = new URL(document.referrer);
         if (r.origin === location.origin && (r.pathname !== location.pathname || r.search !== location.search)) {
@@ -155,6 +160,7 @@
         // no way back to name
       }
     }
+    if (!href && opened && nav) href = nav.getAttribute("href");
     if (href) {
       up.setAttribute("href", href);
       up.hidden = false;
@@ -833,54 +839,96 @@
     T = {};
   }
 
+  // fmt fills %d and %s in order, as the catalogs write them
+  function fmt(s) {
+    var args = Array.prototype.slice.call(arguments, 1);
+    var i = 0;
+    return String(s || "").replace(/%[ds]/g, function () {
+      return i < args.length ? String(args[i++]) : "";
+    });
+  }
+
+  function clean(s) {
+    return String(s || "").replace(/\s+/g, " ").trim();
+  }
+
   // --- remembering where the reader was -------------------------------------
   //
-  // Per section and language, the last page read: the menu and the start page
-  // lead back to it. Per page, what was on screen — the verses and paragraphs
-  // unfolded and what they brought, what was open, how far down — kept in
-  // IndexedDB, so coming back shows it at once instead of asking the server
-  // again. All of it stays in this browser; storage that is unavailable or
-  // full only means nothing is remembered.
+  // Every page keeps what the reader had in front of it — what was unfolded,
+  // what was open, how far down — in IndexedDB, and puts it back on the
+  // reader's return without asking the server again; the browser keeps the
+  // page itself (static/sw.js). The pages of a section of the menu — the
+  // bible, the meetings, media, publications, search — are that section's
+  // too: the menu leads back to the last one, and the section keeps a history
+  // of what was read in it. All of it stays in this browser; storage that is
+  // unavailable or full only means nothing is remembered.
 
+  var always = function () { return true; };
   var SECTIONS = [
-    ["bible", /^\/bible$/, function (q) { return !!(q.get("ref") || "").trim(); }],
-    ["meetings", /^\/meetings(\/(midweek|weekend))?$/, function () { return true; }],
-    ["media", /^\/media(\/(category|item)\/[^/]+)?$/, function () { return true; }],
-    ["pub", /^\/pub(\/(library|publication)\/.+)?$/, function () { return true; }]
+    { id: "bible", path: /^\/bible$/, name: T.secBible,
+      keep: function (q) { return !!(clean(q.get("ref")) || q.get("book") || q.get("vid")); } },
+    { id: "meetings", path: /^\/meetings(\/(midweek|weekend))?$/, name: T.secMeetings, keep: always },
+    { id: "media", path: /^\/media(\/(category|item)\/[^/]+)?$/, name: T.secMedia, keep: always },
+    // an article is read among the publications, wherever it was opened from
+    { id: "pub", path: /^\/(pub(\/(library|publication)\/.+)?|article)$/, name: T.secPub,
+      keep: function (q, path) { return path !== "/article" || !!clean(q.get("target")); } },
+    { id: "search", path: /^\/search$/, name: T.secSearch, keep: function (q) { return !!clean(q.get("q")); } }
   ];
 
   function sectionOf(path) {
     for (var i = 0; i < SECTIONS.length; i++) {
-      if (SECTIONS[i][1].test(path)) return SECTIONS[i];
+      if (SECTIONS[i].path.test(path)) return SECTIONS[i];
     }
     return null;
   }
 
-  function storageGet(key) {
+  function storageGet(key, store) {
     try {
-      return window.localStorage.getItem(key);
+      return (store || window.localStorage).getItem(key);
     } catch (err) {
       return null;
     }
   }
 
-  function storageSet(key, value) {
+  function storageSet(key, value, store) {
     try {
-      window.localStorage.setItem(key, value);
+      (store || window.localStorage).setItem(key, value);
     } catch (err) {
       // private mode or full: nothing is remembered
     }
   }
 
-  // pageKey names a page whatever level it was asked at: the level is part of
-  // what is remembered about it, not of which page it is
+  function storageDrop(key, store) {
+    try {
+      (store || window.localStorage).removeItem(key);
+    } catch (err) {
+      // nothing was remembered
+    }
+  }
+
+  // what says how a page was brought up rather than which page it is: the
+  // level it unfolds to (part of what is remembered about it), a reload past
+  // the cache, the way past the browser's copy to a login
+  var TRANSIENT = ["lazy", "force", "unfold", "refresh", "nosw"];
+
+  // pageKey names a page, for the records kept about it
   function pageKey(u) {
     var q = new URLSearchParams(u.search);
-    ["lazy", "force", "unfold", "refresh"].forEach(function (k) { q.delete(k); });
-    var pairs = [];
-    q.forEach(function (v, k) { pairs.push([k, v]); });
-    pairs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] < b[1] ? -1 : 1; });
-    return u.pathname + "?" + pairs.map(function (p) { return p[0] + "=" + p[1]; }).join("&");
+    TRANSIENT.forEach(function (k) { q.delete(k); });
+    q.sort();
+    return u.pathname + "?" + q.toString();
+  }
+
+  // pageHref is a page's address as a section keeps it: the page itself,
+  // which brings back the level it was unfolded to on its own
+  function pageHref(href) {
+    var u = new URL(href, location.href);
+    TRANSIENT.forEach(function (k) { u.searchParams.delete(k); });
+    return u.pathname + u.search;
+  }
+
+  function samePage(a, b) {
+    return pageKey(new URL(a, location.href)) === pageKey(new URL(b, location.href));
   }
 
   function lastKey(section, lang) {
@@ -888,38 +936,38 @@
   }
 
   var here = sectionOf(location.pathname);
-  var pageLang = new URLSearchParams(location.search).get("lang") || "";
+  var hereQuery = new URLSearchParams(location.search);
+  var pageLang = hereQuery.get("lang") || "";
   // a page that failed, or asks before spending, is not a place to come back to
   var failed = !!document.querySelector("main .notice, main > .error");
-  var PS = { key: null, restoreScroll: function () {} };
+  var inSection = !!here && !failed && here.keep(hereQuery, location.pathname);
+  // a page read, as opposed to one to pick something from: what a section's
+  // history lists
+  var reading = inSection && (!!document.querySelector(".document[data-unfold]") ||
+    /^\/media\/item\//.test(location.pathname) || here.id === "search");
 
-  if (here && !failed && here[2](new URLSearchParams(location.search))) {
-    PS.key = pageKey(location);
-    var scrollKey = "jw:scroll:" + PS.key;
-    PS.remember = function () {
-      var u = new URL(location.href);
-      u.searchParams.delete("force");
-      storageSet(lastKey(here[0], pageLang), u.pathname + u.search);
-    };
-    PS.remember();
-
-    // the page puts its own content back first, then its scroll position
-    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-    var scrollTimer = null;
-    var saveScroll = function () {
-      storageSet(scrollKey, String(Math.round(window.scrollY)));
-    };
-    window.addEventListener("scroll", function () {
-      clearTimeout(scrollTimer);
-      scrollTimer = setTimeout(saveScroll, 250);
-    }, { passive: true });
-    window.addEventListener("pagehide", saveScroll);
-    PS.restoreScroll = function () {
-      if (location.hash) return;
-      var y = parseInt(storageGet(scrollKey), 10);
-      if (y > 0) window.scrollTo(0, y);
-    };
+  // the way past the browser's copy to a login leaves the address at once
+  if (hereQuery.has("nosw")) {
+    var noSW = new URL(location.href);
+    noSW.searchParams.delete("nosw");
+    history.replaceState(history.state, "", noSW.pathname + noSW.search + noSW.hash);
   }
+
+  // the title the page goes by in a history: the bar's, as the page put it
+  var hereTitle = (function () {
+    if (here && here.id === "search") return clean(hereQuery.get("q"));
+    var t = document.querySelector(".page-bar .pb-title");
+    return clean(t && t.textContent) || clean(document.title.replace(/\s*·\s*JW$/, ""));
+  })();
+
+  var PS = { key: failed ? null : pageKey(location), record: null, loaded: false, restored: false };
+  PS.remember = function () {
+    if (!inSection) return;
+    var u = new URL(location.href);
+    u.searchParams.delete("force");
+    storageSet(lastKey(here.id, pageLang), u.pathname + u.search);
+  };
+  PS.remember();
 
   // the menu and the start page lead back to the last page of each section
   document.querySelectorAll(".site-nav a[href], .destinations a[href]").forEach(function (a) {
@@ -935,9 +983,656 @@
     var linkLang = q.get("lang") || "";
     q.delete("lang");
     if (q.toString() !== "") return;
-    var last = storageGet(lastKey(sec[0], linkLang));
+    var last = storageGet(lastKey(sec.id, linkLang));
     if (last && last.charAt(0) === "/") a.href = last;
   });
+
+  // page records: one per page, dropped after two months unvisited
+  var STATE_MAX_AGE = 60 * 24 * 3600 * 1000;
+  var dbPromise = null;
+  // the open database, once it is: the last save of a page that is being left
+  // has to start before the page goes, with no promise to wait on first
+  var dbHandle = null;
+
+  function openDB() {
+    if (!dbPromise) {
+      dbPromise = new Promise(function (resolve) {
+        try {
+          var req = window.indexedDB.open("jw-serve", 1);
+          req.onupgradeneeded = function () { req.result.createObjectStore("pages"); };
+          req.onsuccess = function () {
+            dbHandle = req.result;
+            resolve(req.result);
+          };
+          req.onerror = function () { resolve(null); };
+          req.onblocked = function () { resolve(null); };
+        } catch (err) {
+          resolve(null);
+        }
+      });
+    }
+    return dbPromise;
+  }
+
+  // load reads this page's record once; what it holds is PS.record
+  var loading = null;
+  PS.load = function () {
+    if (loading) return loading;
+    loading = !PS.key ? Promise.resolve(null) : openDB().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (resolve) {
+        try {
+          var req = db.transaction("pages").objectStore("pages").get(PS.key);
+          req.onsuccess = function () {
+            var v = req.result;
+            resolve(v && Date.now() - v.t < STATE_MAX_AGE ? v : null);
+          };
+          req.onerror = function () { resolve(null); };
+        } catch (err) {
+          resolve(null);
+        }
+      });
+    });
+    return loading.then(function (v) {
+      PS.record = v || {};
+      PS.loaded = true;
+      return v;
+    });
+  };
+
+  // update merges fields into the record and writes it. Nothing is written
+  // before the record was read, so an early write never drops what it held.
+  PS.update = function (fields) {
+    if (!PS.key) return;
+    if (!PS.loaded) {
+      PS.load().then(function () { PS.update(fields); });
+      return;
+    }
+    var rec = PS.record;
+    Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
+    rec.t = Date.now();
+    var put = function (db) {
+      if (!db) return;
+      try {
+        db.transaction("pages", "readwrite").objectStore("pages").put(rec, PS.key);
+      } catch (err) {
+        // quota or a closed database: this page is simply not remembered
+      }
+    };
+    if (dbHandle) put(dbHandle);
+    else openDB().then(put);
+  };
+
+  // how far down the page was: kept as the reader scrolls, put back once
+  // the page put back its content
+  PS.restoreScroll = function () {
+    if (PS.restored) return;
+    PS.restored = true;
+    if (location.hash || !PS.record) return;
+    var y = PS.record.y;
+    if (y > 0) window.scrollTo(0, y);
+  };
+  if (PS.key) {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+    var scrollTimer = null;
+    var saveScroll = function () {
+      if (PS.restored) PS.update({ y: Math.round(window.scrollY) });
+    };
+    window.addEventListener("scroll", function () {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(saveScroll, 300);
+    }, { passive: true });
+    window.addEventListener("pagehide", saveScroll);
+    PS.load();
+  }
+
+  // once per page load, the records of pages not seen for a while go, and
+  // with them the scroll positions an older version kept elsewhere
+  setTimeout(function () {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf("jw:scroll:") === 0) localStorage.removeItem(k);
+      }
+    } catch (err) {
+      // nothing kept there
+    }
+    openDB().then(function (db) {
+      if (!db) return;
+      try {
+        var req = db.transaction("pages", "readwrite").objectStore("pages").openCursor();
+        req.onsuccess = function () {
+          var c = req.result;
+          if (!c) return;
+          if (!c.value || Date.now() - c.value.t > STATE_MAX_AGE) c.delete();
+          c.continue();
+        };
+      } catch (err) {
+        // nothing to sweep
+      }
+    });
+  }, 3000);
+
+  // --- a section's history ------------------------------------------------
+  //
+  // What was read in a section, newest first: every page read there, and
+  // every page filed there from another one (a link's "open in …"). Going to
+  // one of its pages by the history itself — its arrows or its list — leaves
+  // its order alone, the way a browser's back and forward do; reading a page
+  // any other way puts it first.
+
+  var HIST_MAX = 60;
+  var HIST_NAV = "jw:hist-nav";
+
+  function histKey(id, lng) {
+    return "jw:hist:" + id + ":" + (lng || "");
+  }
+
+  function histLoad(id, lng) {
+    try {
+      var h = JSON.parse(storageGet(histKey(id, lng)) || "null");
+      if (h && Array.isArray(h.items)) {
+        var items = h.items.filter(function (e) {
+          return e && typeof e.href === "string" && e.href.charAt(0) === "/";
+        });
+        return { items: items, cur: Math.min(Math.max(h.cur | 0, 0), Math.max(items.length - 1, 0)) };
+      }
+    } catch (err) {
+      // nothing usable kept
+    }
+    return { items: [], cur: 0 };
+  }
+
+  function histSave(id, lng, h) {
+    h.items = h.items.slice(0, HIST_MAX);
+    h.cur = Math.min(Math.max(h.cur, 0), Math.max(h.items.length - 1, 0));
+    storageSet(histKey(id, lng), JSON.stringify(h));
+  }
+
+  function histIndex(h, href) {
+    for (var i = 0; i < h.items.length; i++) {
+      if (samePage(h.items[i].href, href)) return i;
+    }
+    return -1;
+  }
+
+  // histFile puts a page first in a section's history, as the page it is at
+  function histFile(id, lng, href, title) {
+    var h = histLoad(id, lng);
+    var i = histIndex(h, href);
+    var old = i >= 0 ? h.items.splice(i, 1)[0] : null;
+    h.items.unshift({ href: pageHref(href), title: title || (old && old.title) || "", t: Date.now() });
+    h.cur = 0;
+    histSave(id, lng, h);
+  }
+
+  if (reading) {
+    var viaHistory = storageGet(HIST_NAV, window.sessionStorage);
+    storageDrop(HIST_NAV, window.sessionStorage);
+    var h0 = histLoad(here.id, pageLang);
+    var i0 = histIndex(h0, location.href);
+    if (viaHistory && i0 >= 0 && samePage(viaHistory, location.href)) {
+      h0.cur = i0;
+      if (hereTitle) h0.items[i0].title = hereTitle;
+      histSave(here.id, pageLang, h0);
+    } else {
+      histFile(here.id, pageLang, location.href, hereTitle);
+    }
+  }
+
+  var ARROW_L = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+  var ARROW_R = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+  var CLOCK = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/>' +
+    '<path d="M3 4v4.5h4.5M12 7.5V12l3 2"/></svg>';
+
+  function ago(t) {
+    var s = (Date.now() - t) / 1000;
+    if (!window.Intl || !Intl.RelativeTimeFormat) return "";
+    var rtf;
+    try {
+      rtf = new Intl.RelativeTimeFormat(root.lang || undefined, { numeric: "auto" });
+    } catch (err) {
+      return "";
+    }
+    if (s < 60) return rtf.format(0, "second");
+    if (s < 3600) return rtf.format(-Math.round(s / 60), "minute");
+    if (s < 86400) return rtf.format(-Math.round(s / 3600), "hour");
+    if (s < 30 * 86400) return rtf.format(-Math.round(s / 86400), "day");
+    return new Date(t).toLocaleDateString(root.lang || undefined);
+  }
+
+  // the history's bar, atop a section's pages: a step back and forward
+  // through what was read, and the list of it
+  (function () {
+    var main = document.querySelector("main");
+    if (!here || failed || !main) return;
+    var h = histLoad(here.id, pageLang);
+    var at = reading ? histIndex(h, location.href) : -1;
+    if (!h.items.some(function (e, i) { return i !== at; })) return;
+    // back is the page read before this one — or, away from the pages read,
+    // the one the section was at; forward the one read after it
+    var back = at >= 0 ? h.items[at + 1] : h.items[h.cur];
+    var next = at > 0 ? h.items[at - 1] : null;
+
+    var bar = document.createElement("nav");
+    bar.className = "hist";
+    bar.setAttribute("data-ui", "");
+    bar.setAttribute("aria-label", T.history || "");
+
+    function step(entry, cls, icon, label) {
+      var el = document.createElement(entry ? "a" : "span");
+      el.className = "hist-step " + cls;
+      el.innerHTML = icon;
+      el.setAttribute("aria-label", label + (entry && entry.title ? ": " + entry.title : ""));
+      el.title = el.getAttribute("aria-label");
+      if (entry) el.href = entry.href;
+      else el.setAttribute("aria-disabled", "true");
+      return el;
+    }
+    var prevEl = step(back, "prev", ARROW_L, T.historyBack || "‹");
+    var nextEl = step(next, "next", ARROW_R, T.historyNext || "›");
+    var listBtn = document.createElement("button");
+    listBtn.type = "button";
+    listBtn.className = "hist-list";
+    listBtn.setAttribute("aria-haspopup", "true");
+    listBtn.setAttribute("aria-expanded", "false");
+    listBtn.innerHTML = CLOCK + '<span class="label"></span><span class="count"></span>';
+    listBtn.querySelector(".label").textContent = T.history || "";
+    listBtn.querySelector(".count").textContent = String(h.items.length);
+    bar.appendChild(prevEl);
+    bar.appendChild(listBtn);
+    bar.appendChild(nextEl);
+
+    var panel = document.createElement("div");
+    panel.className = "hist-panel";
+    panel.hidden = true;
+    bar.appendChild(panel);
+
+    function fill() {
+      panel.textContent = "";
+      var list = document.createElement("ol");
+      h.items.forEach(function (e, i) {
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.href = e.href;
+        a.className = "hist-entry";
+        if (i === at) {
+          a.setAttribute("aria-current", "page");
+          li.className = "current";
+        }
+        var title = document.createElement("span");
+        title.className = "t";
+        title.textContent = e.title || e.href;
+        var when = document.createElement("span");
+        when.className = "when";
+        when.textContent = e.t ? ago(e.t) : "";
+        a.appendChild(title);
+        a.appendChild(when);
+        var rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "hist-rm";
+        rm.textContent = "×";
+        rm.setAttribute("aria-label", (T.historyRemove || "×") + ": " + (e.title || ""));
+        rm.title = T.historyRemove || "";
+        rm.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var fresh = histLoad(here.id, pageLang);
+          var j = histIndex(fresh, e.href);
+          if (j >= 0) fresh.items.splice(j, 1);
+          if (fresh.cur > j) fresh.cur--;
+          histSave(here.id, pageLang, fresh);
+          h = fresh;
+          at = reading ? histIndex(h, location.href) : -1;
+          listBtn.querySelector(".count").textContent = String(h.items.length);
+          fill();
+        });
+        li.appendChild(a);
+        li.appendChild(rm);
+        list.appendChild(li);
+      });
+      panel.appendChild(list);
+      var clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "small ghost hist-clear";
+      clear.textContent = T.historyClear || "×";
+      clear.addEventListener("click", function () {
+        storageDrop(histKey(here.id, pageLang));
+        bar.remove();
+      });
+      panel.appendChild(clear);
+    }
+
+    function setOpen(open) {
+      if (open) fill();
+      panel.hidden = !open;
+      listBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        var cur = panel.querySelector("li.current a") || panel.querySelector("a");
+        if (cur) cur.scrollIntoView({ block: "nearest" });
+      }
+    }
+    listBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(panel.hidden);
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !panel.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        listBtn.focus();
+      }
+    });
+    // a page reached through the history keeps the history's order
+    bar.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest("a[href]") : null;
+      if (a) storageSet(HIST_NAV, a.getAttribute("href"), window.sessionStorage);
+    });
+    main.insertBefore(bar, main.firstChild);
+  })();
+
+  // --- a word that comes and goes ------------------------------------------
+
+  var toastEl = null;
+  var toastTimer = null;
+  function toast(text, action, href) {
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.className = "toast";
+      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-live", "polite");
+      toastEl.setAttribute("data-ui", "");
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = "";
+    toastEl.appendChild(document.createTextNode(text));
+    if (action && href) {
+      var a = document.createElement("a");
+      a.href = href;
+      a.textContent = action;
+      toastEl.appendChild(a);
+    }
+    toastEl.hidden = false;
+    toastEl.classList.remove("gone");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toastEl.classList.add("gone");
+      toastTimer = setTimeout(function () { toastEl.hidden = true; }, 300);
+    }, 4500);
+  }
+
+  // --- links: what one points at, and where it is read on its own ----------
+
+  // linkTarget says what a link of a document points at, and the key its
+  // section carries once it is opened in place
+  function linkTarget(a) {
+    var u;
+    try {
+      u = new URL(a.getAttribute("href"), location.href);
+    } catch (err) {
+      return null;
+    }
+    var path = u.pathname;
+    if (/\/wol\/fn\//.test(path)) return { kind: "footnote", key: path, url: u };
+    if (/\/wol\/(bc|pc)\//.test(path)) return { kind: "ref", key: path, url: u };
+    // a verse number — the chapter number, on a chapter's first verse
+    if ((a.classList.contains("vl") || a.classList.contains("cl")) && a.closest(".item[data-vid] > .item-text")) {
+      return { kind: "translations", key: "translations", url: u };
+    }
+    var host = u.hostname.toLowerCase();
+    // a video quoting a verse: its player page here, not a document to unfold
+    if (/(^|\.)jw\.org$/.test(host) && u.searchParams.get("lank")) {
+      return { kind: "media", key: u.searchParams.get("lank"), url: u };
+    }
+    // a document, or a table-of-contents link ("App. C") wol redirects to one
+    if (/\/wol\/(d|tc)\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
+      return { kind: "article", key: path, url: u };
+    }
+    return null;
+  }
+
+  // the pages of this site, as a link names them
+  var SITE_PAGE = /^\/(search|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?|open)?$/;
+
+  // pageOf is the page of this site a link is read on by itself: {href, sec}
+  // — sec being the section it belongs to, when there is one — or null for a
+  // link that leads elsewhere. A citation's page is known once the server
+  // read it (/open); resolve says so.
+  function pageOf(a) {
+    var u;
+    try {
+      u = new URL(a.getAttribute("href"), location.href);
+    } catch (err) {
+      return null;
+    }
+    var q = new URLSearchParams();
+    if (pageLang) q.set("lang", pageLang);
+    var passage = a.closest(".passage[data-bible]");
+    var bible = passage ? passage.getAttribute("data-bible") : hereQuery.get("bible");
+    if (u.origin === location.origin) {
+      // a place on this very page is no page of its own
+      if (!SITE_PAGE.test(u.pathname) || (u.hash && samePage(u.href, location.href))) return null;
+      if (u.pathname === "/open") return citationPage(u.searchParams.get("path") || "", u.pathname + u.search);
+      return { href: u.pathname + u.search, sec: sectionOf(u.pathname) };
+    }
+    var target = linkTarget(a);
+    if (!target) return null;
+    switch (target.kind) {
+      case "media":
+        return { href: "/media/item/" + encodeURIComponent(target.key) + (pageLang ? "?" + q.toString() : ""), sec: sectionOf("/media/item/x") };
+      case "article":
+        q.set("target", u.href);
+        return { href: "/article?" + q.toString(), sec: sectionOf("/article") };
+      case "ref":
+      case "footnote":
+        q.set("path", u.pathname);
+        if (bible) q.set("bible", bible);
+        return citationPage(u.pathname, "/open?" + q.toString());
+      case "translations":
+        var verse = a.closest(".item[data-vid]");
+        if (!verse) return null;
+        q.set("vid", verse.getAttribute("data-vid"));
+        if (bible) q.set("bible", bible);
+        return { href: "/bible?" + q.toString(), sec: sectionOf("/bible") };
+    }
+    return null;
+  }
+
+  // a citation is read in the bible when it quotes the bible, among the
+  // publications when it quotes one; a footnote can be either
+  function citationPage(path, href) {
+    var sec = /\/wol\/bc\//.test(path) ? sectionOf("/bible") : /\/wol\/pc\//.test(path) ? sectionOf("/pub") : null;
+    return { href: href, sec: sec, resolve: true };
+  }
+
+  // linkTitle is what a link is called in a history: its words, or the
+  // title of the section it is the button of
+  function linkTitle(a) {
+    var s = a.closest("summary");
+    if (s && a.classList.contains("follow")) {
+      var copy = s.cloneNode(true);
+      copy.querySelectorAll("a.follow, .count").forEach(function (el) { el.remove(); });
+      return clean(copy.textContent);
+    }
+    return clean(a.textContent) || clean(a.title);
+  }
+
+  // fileIn makes a page the one a section is at, without going there: first
+  // in its history, and where its menu entry leads
+  function fileIn(page, title) {
+    var done = function (href, sec) {
+      if (!sec) return;
+      histFile(sec.id, pageLang, href, title);
+      storageSet(lastKey(sec.id, pageLang), pageHref(href));
+      toast(fmt(T.openedIn, sec.name), T.show, pageHref(href));
+    };
+    if (!page.resolve) {
+      done(page.href, page.sec);
+      return;
+    }
+    var u = new URL(page.href, location.href);
+    fetch("/api/v1/open" + u.search, { credentials: "same-origin", headers: { Accept: "application/json" } })
+      .then(function (res) {
+        return res.json().then(function (j) {
+          if (!res.ok) throw new Error((j && j.error && j.error.message) || res.statusText);
+          return j;
+        });
+      })
+      .then(function (j) {
+        var to = new URL(j.url, location.href);
+        done(to.pathname + to.search, sectionOf(to.pathname) || page.sec);
+      }, function (err) {
+        toast(String(err && err.message || err));
+      });
+  }
+
+  // --- holding a link: where to open it ------------------------------------
+  //
+  // A click does what a link of the page does — inside a document, what it
+  // points at opens right there, as a reference; elsewhere it leads to its
+  // page. Held for half a second (a right click, or the long press a phone
+  // reports as a context menu), any link to a page of the site offers the
+  // rest: as a reference, where that is how it opens; its page, here or in
+  // a new tab; or filed in the section it belongs to, to read there later.
+
+  // the document's part of it: whether a link opens in place, and opening it
+  var LM = { inPlace: function () { return false; } };
+
+  var linkMenu = document.createElement("div");
+  linkMenu.className = "follow-menu";
+  linkMenu.setAttribute("role", "menu");
+  linkMenu.setAttribute("data-ui", "");
+  linkMenu.hidden = true;
+  document.body.appendChild(linkMenu);
+
+  function menuItem(label, run) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "ghost";
+    b.setAttribute("role", "menuitem");
+    b.textContent = label;
+    b.addEventListener("click", function (e) {
+      e.stopPropagation();
+      closeLinkMenu();
+      run();
+    });
+    linkMenu.appendChild(b);
+    return b;
+  }
+
+  function openLinkMenu(a) {
+    var page = pageOf(a);
+    linkMenu.textContent = "";
+    linkMenu.link = a;
+    if (LM.inPlace(a)) {
+      menuItem(T.followHere || "↳", function () {
+        held = null;
+        a.click();
+      });
+    }
+    if (page) {
+      if (!samePage(page.href, location.href)) {
+        menuItem(T.followPage || "→", function () { location.assign(page.href); });
+      }
+      menuItem(T.followTab || "↗", function () { window.open(page.href, "_blank", "noopener"); });
+      if (page.sec && !samePage(page.href, location.href)) {
+        menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
+      }
+    }
+    if (!linkMenu.firstChild) return;
+    linkMenu.hidden = false;
+    var r = a.getBoundingClientRect();
+    var w = linkMenu.offsetWidth, h = linkMenu.offsetHeight;
+    var left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    linkMenu.style.left = left + "px";
+    linkMenu.style.top = top + "px";
+    linkMenu.firstChild.focus({ preventScroll: true });
+  }
+
+  function closeLinkMenu() {
+    linkMenu.hidden = true;
+    linkMenu.link = null;
+  }
+
+  document.addEventListener("click", function (e) {
+    if (!linkMenu.hidden && !linkMenu.contains(e.target)) closeLinkMenu();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || linkMenu.hidden) return;
+    var a = linkMenu.link;
+    closeLinkMenu();
+    if (a) a.focus();
+  });
+  window.addEventListener("scroll", function () {
+    if (!linkMenu.hidden) closeLinkMenu();
+  }, { passive: true });
+
+  var held = null;
+  function heldLink(e) {
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || !mainEl || !mainEl.contains(a) || a.closest("[data-ui]") || a.hasAttribute("download")) return null;
+    return LM.inPlace(a) || pageOf(a) ? a : null;
+  }
+  document.addEventListener("pointerdown", function (e) {
+    var a = heldLink(e);
+    if (!a || e.button !== 0) return;
+    held = { a: a, x: e.clientX, y: e.clientY, shown: false };
+    held.timer = setTimeout(function () {
+      if (!held || held.a !== a) return;
+      held.shown = true;
+      openLinkMenu(a);
+    }, 500);
+  });
+  function letGo(e) {
+    if (!held) return;
+    if (e.type === "pointermove" && Math.abs(e.clientX - held.x) < 10 && Math.abs(e.clientY - held.y) < 10) return;
+    clearTimeout(held.timer);
+    if (!held.shown) held = null;
+  }
+  ["pointerup", "pointercancel", "pointermove"].forEach(function (type) {
+    document.addEventListener(type, letGo);
+  });
+  document.addEventListener("contextmenu", function (e) {
+    var a = heldLink(e);
+    if (!a) return;
+    e.preventDefault();
+    if (held) clearTimeout(held.timer);
+    held = { a: a, shown: true };
+    openLinkMenu(a);
+  });
+  // the click that ends a press which opened the menu is not a click
+  document.addEventListener("click", function (e) {
+    if (!held || !held.shown) return;
+    var a = held.a;
+    held = null;
+    if (e.target.closest && e.target.closest("a[href]") === a) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    }
+  }, true);
+
+  // --- the browser's copy of the pages -------------------------------------
+  //
+  // static/sw.js keeps every page read, so going back to one is at once,
+  // and works without the server. It needs a secure origin (https, or
+  // localhost); elsewhere pages come from the server as before. It is told
+  // the language the reader last picked, which a page without ?lang= is
+  // read in.
+  if ("serviceWorker" in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register("/sw.js").then(function () {
+      return navigator.serviceWorker.ready;
+    }).then(function (reg) {
+      var m = /(?:^|;\s*)lang=([^;]*)/.exec(document.cookie);
+      var to = navigator.serviceWorker.controller || reg.active;
+      if (to) to.postMessage({ type: "lang", lang: m ? decodeURIComponent(m[1]) : "" });
+    }).catch(function () {});
+  }
 
   // --- bible navigation ----------------------------------------------------
 
@@ -980,88 +1675,6 @@
     });
   }
 
-  // page states: one record per page, dropped after a month unvisited
-  var STATE_MAX_AGE = 30 * 24 * 3600 * 1000;
-  var dbPromise = null;
-  // the open database, once it is: the last save of a page that is being left
-  // has to start before the page goes, with no promise to wait on first
-  var dbHandle = null;
-
-  function openDB() {
-    if (!dbPromise) {
-      dbPromise = new Promise(function (resolve) {
-        try {
-          var req = window.indexedDB.open("jw-serve", 1);
-          req.onupgradeneeded = function () { req.result.createObjectStore("pages"); };
-          req.onsuccess = function () {
-            dbHandle = req.result;
-            resolve(req.result);
-          };
-          req.onerror = function () { resolve(null); };
-          req.onblocked = function () { resolve(null); };
-        } catch (err) {
-          resolve(null);
-        }
-      });
-    }
-    return dbPromise;
-  }
-
-  PS.load = function () {
-    if (!PS.key) return Promise.resolve(null);
-    return openDB().then(function (db) {
-      if (!db) return null;
-      return new Promise(function (resolve) {
-        try {
-          var req = db.transaction("pages").objectStore("pages").get(PS.key);
-          req.onsuccess = function () {
-            var v = req.result;
-            resolve(v && Date.now() - v.t < STATE_MAX_AGE ? v : null);
-          };
-          req.onerror = function () { resolve(null); };
-        } catch (err) {
-          resolve(null);
-        }
-      });
-    });
-  };
-
-  PS.save = function (value) {
-    if (!PS.key) return;
-    value.t = Date.now();
-    var put = function (db) {
-      if (!db) return;
-      try {
-        db.transaction("pages", "readwrite").objectStore("pages").put(value, PS.key);
-      } catch (err) {
-        // quota or a closed database: this page is simply not remembered
-      }
-    };
-    if (dbHandle) put(dbHandle);
-    else openDB().then(put);
-  };
-
-  // once per page load, the records of pages not seen for a month go
-  if (PS.key) {
-    openDB();
-    setTimeout(function () {
-      openDB().then(function (db) {
-        if (!db) return;
-        try {
-          var req = db.transaction("pages", "readwrite").objectStore("pages").openCursor();
-          req.onsuccess = function () {
-            var c = req.result;
-            if (!c) return;
-            if (!c.value || Date.now() - c.value.t > STATE_MAX_AGE) c.delete();
-            c.continue();
-          };
-        } catch (err) {
-          // nothing to sweep
-        }
-      });
-    }, 3000);
-  }
-
   // --- unfolding ----------------------------------------------------------
 
   // carousels on the media start page: the track scrolls on its own (swipe,
@@ -1089,17 +1702,8 @@
 
   var doc = document.querySelector(".document[data-unfold]");
   if (!doc || !window.fetch) {
-    PS.restoreScroll();
+    PS.load().then(PS.restoreScroll);
     return;
-  }
-
-  // fmt fills %d and %s in order, as the catalogs write them
-  function fmt(s) {
-    var args = Array.prototype.slice.call(arguments, 1);
-    var i = 0;
-    return String(s || "").replace(/%[ds]/g, function () {
-      return i < args.length ? String(args[i++]) : "";
-    });
   }
 
   function make(tag, cls, text) {
@@ -1265,150 +1869,13 @@
     return first ? [first, last] : null;
   }
 
-  // a held section button offers where to open what it links to: unfolded
-  // in place, as a click does, or on a page of its own in a new tab
-  var followMenu = make("div", "follow-menu");
-  followMenu.setAttribute("role", "menu");
-  followMenu.setAttribute("data-ui", "");
-  followMenu.hidden = true;
-  var followHere = button("ghost", null, "");
-  var followTab = button("ghost", null, T.followTab || "↗");
-  followHere.setAttribute("role", "menuitem");
-  followTab.setAttribute("role", "menuitem");
-  followMenu.appendChild(followHere);
-  followMenu.appendChild(followTab);
-  document.body.appendChild(followMenu);
-
-  function pageOf(a) {
+  // a link of the document opens in place, as a reference: what the menu of a
+  // held link offers first
+  LM.inPlace = function (a) {
+    if (!doc.contains(a) || a.target || a.closest("[data-ui]")) return false;
     var target = linkTarget(a);
-    if (!target) return null;
-    var q = new URLSearchParams();
-    if (target.kind === "media") {
-      if (lang) q.set("lang", lang);
-      var qs = q.toString();
-      return "/media/item/" + encodeURIComponent(target.key) + (qs ? "?" + qs : "");
-    }
-    if (lang) q.set("lang", lang);
-    var passage = a.closest(".passage[data-bible]");
-    var bible = passage ? passage.getAttribute("data-bible") : new URLSearchParams(location.search).get("bible");
-    switch (target.kind) {
-      case "article":
-        q.set("target", a.href);
-        return "/article?" + q.toString();
-      case "ref":
-      case "footnote":
-        // the server reads the citation and goes on to the verses it quotes
-        // or the article it is part of
-        q.set("path", target.key);
-        if (bible) q.set("bible", bible);
-        return "/open?" + q.toString();
-      case "translations":
-        var verse = a.closest(".item[data-vid]");
-        if (!verse) return null;
-        q.set("vid", verse.getAttribute("data-vid"));
-        if (bible) q.set("bible", bible);
-        return "/bible?" + q.toString();
-    }
-    return null;
-  }
-
-  function openFollowMenu(a) {
-    var target = linkTarget(a);
-    followHere.textContent = target && target.kind === "media" ? (T.follow || "Open") : (T.followHere || T.follow || "Open");
-    followMenu.link = a;
-    followTab.hidden = !pageOf(a);
-    followMenu.hidden = false;
-    var r = a.getBoundingClientRect();
-    var w = followMenu.offsetWidth, h = followMenu.offsetHeight;
-    var left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
-    var top = r.bottom + 6;
-    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
-    followMenu.style.left = left + "px";
-    followMenu.style.top = top + "px";
-    followHere.focus();
-  }
-
-  function closeFollowMenu() {
-    followMenu.hidden = true;
-    followMenu.link = null;
-  }
-
-  followHere.addEventListener("click", function (e) {
-    e.stopPropagation();
-    var a = followMenu.link;
-    closeFollowMenu();
-    // the same as a click on the button
-    if (a) a.click();
-  });
-  followTab.addEventListener("click", function (e) {
-    e.stopPropagation();
-    var a = followMenu.link;
-    closeFollowMenu();
-    var page = a && pageOf(a);
-    if (page) window.open(page, "_blank", "noopener");
-  });
-  document.addEventListener("click", function (e) {
-    if (!followMenu.hidden && !followMenu.contains(e.target)) closeFollowMenu();
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || followMenu.hidden) return;
-    var a = followMenu.link;
-    closeFollowMenu();
-    if (a) a.focus();
-  });
-  window.addEventListener("scroll", function () {
-    if (!followMenu.hidden) closeFollowMenu();
-  }, { passive: true });
-
-  // what holds a link down: a press of half a second, a right click, or
-  // the long press a phone reports as a context menu. Every link the page
-  // follows in place offers the choice — a section's button, a citation, a
-  // footnote, a verse number; a bible button opens its new page at once and
-  // has nothing to choose.
-  var held = null;
-  function heldButton(e) {
-    var a = e.target.closest ? e.target.closest("a[href]") : null;
-    if (!a || a.target || !doc.contains(a) || a.closest("[data-ui]")) return null;
-    return linkTarget(a) ? a : null;
-  }
-  doc.addEventListener("pointerdown", function (e) {
-    var a = heldButton(e);
-    if (!a || e.button !== 0) return;
-    var x = e.clientX, y = e.clientY;
-    held = { a: a, x: x, y: y, shown: false };
-    held.timer = setTimeout(function () {
-      if (!held || held.a !== a) return;
-      held.shown = true;
-      openFollowMenu(a);
-    }, 500);
-  });
-  function letGo(e) {
-    if (!held) return;
-    if (e.type === "pointermove" && Math.abs(e.clientX - held.x) < 10 && Math.abs(e.clientY - held.y) < 10) return;
-    clearTimeout(held.timer);
-    if (!held.shown) held = null;
-  }
-  ["pointerup", "pointercancel", "pointermove"].forEach(function (type) {
-    doc.addEventListener(type, letGo);
-  });
-  doc.addEventListener("contextmenu", function (e) {
-    var a = heldButton(e);
-    if (!a) return;
-    e.preventDefault();
-    if (held) clearTimeout(held.timer);
-    held = { a: a, shown: true };
-    openFollowMenu(a);
-  });
-  // the click that ends a press which opened the menu is not a click
-  document.addEventListener("click", function (e) {
-    if (!held || !held.shown) return;
-    var a = held.a;
-    held = null;
-    if (e.target.closest && e.target.closest("a[href]") === a) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, true);
+    return !!onThisPage(a) || (!!target && target.kind !== "media");
+  };
 
   // citingBlocks makes every block of root that cites something an item of
   // its own: a paragraph of the document, or — nested — a paragraph of a
@@ -1442,11 +1909,9 @@
   // what the server already unfolded can be unfolded further, too
   doc.querySelectorAll(".expansion").forEach(function (exp) { citingBlocks(exp, true); });
 
-  if (!items.length) {
-    PS.restoreScroll();
-    return;
-  }
-  doc.classList.add("has-unfold");
+  // a document without anything to unfold still opens its links in place,
+  // and keeps them
+  if (items.length) doc.classList.add("has-unfold");
 
   // batch is the unfold-all run this item is part of: what it already cost,
   // so the server weighs its budget over the whole run rather than item by
@@ -1547,6 +2012,7 @@
 
   function setState(item, state) {
     item.state = state;
+    touch(item.el);
     syncTools();
     // what an item brought is written at once: a reader may leave the moment
     // it is there, and a write begun as the page goes is not always kept
@@ -1794,8 +2260,9 @@
         var body = sec.querySelector(":scope > .section-body");
         while (body && body.firstChild) got.appendChild(body.firstChild);
       });
+      var at = got.firstChild;
       list.replaceWith(got);
-      saveState();
+      saveState(at && at.parentNode ? at.parentNode : null);
     });
   }
 
@@ -1818,6 +2285,7 @@
     exp.appendChild(list);
     placeExpansion(item, exp);
     item.exp = exp;
+    item.tried = depth;
     setState(item, "loading");
 
     var url = streamURL(item, depth, opts.force, opts.batch);
@@ -1854,6 +2322,8 @@
         exp.remove();
         item.exp = null;
         setLevel(item, 0);
+        // found to cite nothing: not asked again, at this level or deeper
+        item.emptyAt = depth;
         setState(item, "empty");
         if (!opts.batch) hint(item, T.nothing || "∅");
         return;
@@ -2034,7 +2504,7 @@
   var allBtn = null;
   var allMenu = null;
   var pb = document.querySelector(".page-bar .pb");
-  if (bar && levelLinks.length && pb) {
+  if (bar && levelLinks.length && pb && items.length) {
     allBtn = button("unfold-btn pb-unfold", T.unfoldAll || "Unfold all");
     allBtn.innerHTML = ICON + '<span class="lvl" aria-hidden="true"></span>';
     allBtn.setAttribute("aria-haspopup", "true");
@@ -2178,7 +2648,10 @@
       items.forEach(removeExpansion);
       return;
     }
-    var todo = items.filter(function (item) { return item.level !== level || item.state === "error"; });
+    // what found nothing has nothing at any level
+    var todo = items.filter(function (item) {
+      return item.state === "error" || (item.level !== level && item.state !== "empty");
+    });
     runAll(todo.map(function (item) { return { item: item, level: level }; }));
   }
 
@@ -2279,7 +2752,7 @@
         vanish(d, body);
         return;
       }
-      saveState();
+      saveState(d);
     });
   }
 
@@ -2297,9 +2770,10 @@
     setTimeout(function () { d.classList.add("gone"); }, VANISH_AFTER);
     setTimeout(function () {
       var group = d.parentElement;
+      touch(d);
       d.remove();
       if (group && group.classList.contains("sections") && !group.children.length) group.remove();
-      saveState();
+      saveState(d);
     }, VANISH_AFTER + VANISH_FADE);
   }
 
@@ -2342,33 +2816,6 @@
 
   function cssString(v) {
     return '"' + String(v).replace(/["\\]/g, "\\$&") + '"';
-  }
-
-  // linkTarget says what a link points at, and the key its section carries
-  function linkTarget(a) {
-    var u;
-    try {
-      u = new URL(a.getAttribute("href"), location.href);
-    } catch (err) {
-      return null;
-    }
-    var path = u.pathname;
-    if (/\/wol\/fn\//.test(path)) return { kind: "footnote", key: path, url: u };
-    if (/\/wol\/(bc|pc)\//.test(path)) return { kind: "ref", key: path, url: u };
-    // a verse number — the chapter number, on a chapter's first verse
-    if ((a.classList.contains("vl") || a.classList.contains("cl")) && a.closest(".item[data-vid] > .item-text")) {
-      return { kind: "translations", key: "translations", url: u };
-    }
-    var host = u.hostname.toLowerCase();
-    // a video quoting a verse: its player page here, not a document to unfold
-    if (/(^|\.)jw\.org$/.test(host) && u.searchParams.get("lank")) {
-      return { kind: "media", key: u.searchParams.get("lank"), url: u };
-    }
-    // a document, or a table-of-contents link ("App. C") wol redirects to one
-    if (/\/wol\/(d|tc)\//.test(path) || (/(^|\.)jw\.org$/.test(host) && host !== "wol.jw.org" && path.length > 4)) {
-      return { kind: "article", key: path, url: u };
-    }
-    return null;
   }
 
   // onThisPage is where a link to a document already on the page points: a
@@ -2505,7 +2952,7 @@
       var el = findRef(scopeOf(owner), target.key);
       if (el) reveal(el);
       else hint(owner.item || { el: a.closest(BLOCKS) || a.parentElement }, T.nothing || "∅");
-      saveState();
+      saveState(a);
     };
     var q = new URLSearchParams();
     if (lang) q.set("lang", lang);
@@ -2617,6 +3064,27 @@
     });
   }
 
+  // topBlocks are the blocks of the document itself, outside whatever was
+  // unfolded into it: what a link followed from a block that is no item
+  // opens its expansion under, kept by position
+  function topBlocks() {
+    return Array.prototype.filter.call(doc.querySelectorAll(BLOCKS), function (b) {
+      return !b.closest(".expansion");
+    });
+  }
+
+  function blockExpansions() {
+    var out = [];
+    topBlocks().forEach(function (b, i) {
+      if (b._unfold) return;
+      var next = b.nextElementSibling;
+      var exp = b.tagName === "LI" ? b.querySelector(":scope > .expansion")
+        : next && next.classList.contains("expansion") ? next : null;
+      if (exp) out.push({ b: i, el: exp });
+    });
+    return out;
+  }
+
   // signature tells this page's items from another page's under the same
   // address — /meetings is a new week every week — by what they cite
   function signature() {
@@ -2635,96 +3103,184 @@
   var restoring = true;
   var stateTimer = null;
 
-  function saveState() {
+  // what changed is copied anew when the page is kept; what did not is
+  // kept as it was copied last — a page unfolded deep holds thousands of
+  // sections, which are not copied again for every section opened
+  function itemOf(el) {
+    var exp = el && el.closest ? el.closest(".expansion") : null;
+    for (var up = exp; up; up = up.parentElement && up.parentElement.closest(".expansion")) exp = up;
+    var owner = exp ? null : el && el._unfold;
+    for (var i = 0; i < items.length; i++) {
+      if ((exp && items[i].exp === exp) || items[i] === owner) return items[i];
+    }
+    return null;
+  }
+
+  // touch marks the item el is part of as changed — every item, when what
+  // changed is not said
+  function touch(el) {
+    if (!el) {
+      items.forEach(function (it) { it.dirty = true; });
+      return;
+    }
+    var item = itemOf(el);
+    if (item) item.dirty = true;
+  }
+
+  function saveState(el) {
+    touch(el);
     if (!PS.key || restoring) return;
     clearTimeout(stateTimer);
     stateTimer = setTimeout(writeState, 300);
   }
 
+  // an item as it is kept: what it brought, that it found nothing (so it is
+  // not asked again), or what failed (with a way to ask again)
+  function itemRecord(item) {
+    if (item.state === "empty") return { st: "empty", level: item.emptyAt || 1 };
+    if (!item.exp || item.state === "loading" || !item.exp.isConnected) return null;
+    if (item.kept && !item.dirty) return item.kept;
+    var error = item.state === "error";
+    item.kept = { st: error ? "error" : "done", level: error ? item.level || item.tried || 1 : item.level, html: cleanCopy(item.exp) };
+    item.dirty = false;
+    return item.kept;
+  }
+
   function writeState() {
     clearTimeout(stateTimer);
     if (!PS.key || restoring) return;
-    PS.save({
-      n: items.length,
-      sig: sig,
-      items: items.map(function (item) {
-        if (!item.exp || item.state === "loading" || !item.exp.isConnected) return null;
-        return { level: item.level, html: cleanCopy(item.exp) };
-      }),
-      open: pageDetails().map(function (d) { return d.open; })
+    PS.update({
+      s: {
+        sig: sig,
+        level: anchorLevel,
+        items: items.map(itemRecord),
+        blocks: blockExpansions().map(function (x) { return { b: x.b, html: cleanCopy(x.el) }; }),
+        open: pageDetails().map(function (d) { return d.open; })
+      }
     });
   }
 
   document.addEventListener("toggle", function (e) {
-    if (doc.contains(e.target)) saveState();
+    if (doc.contains(e.target)) saveState(e.target);
   }, true);
   window.addEventListener("pagehide", writeState);
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") writeState();
   });
 
-  // restoreState puts back what the page had: an expansion under every item
-  // that had one, open what was open. Only for the same page as it was — the
-  // same number of items — since a position means nothing on another one.
-  function restoreState(saved) {
-    if (!saved || saved.sig !== sig || !Array.isArray(saved.items)) return 0;
-    if (REFRESH) return refreshState(saved);
-    var levels = {};
-    saved.items.forEach(function (st, i) {
+  // retryButtons gives what failed under an item that came back a way to be
+  // asked again
+  function retryButtons(item, exp, level) {
+    exp.querySelectorAll(":scope > .unfold-msg").forEach(function (msg) {
+      if (msg.querySelector("button")) return;
+      var retry = button("small", null, T.retry || "Retry");
+      retry.addEventListener("click", function () { unfold(item, level || 1); });
+      msg.appendChild(document.createTextNode(" "));
+      msg.appendChild(retry);
+    });
+  }
+
+  // restoreState puts back what the page had: under every item what it
+  // brought, found nothing for, or failed at; under every other block the
+  // links followed from it; open what was open. Only for the same page as it
+  // was — the same items — since a position means nothing on another one.
+  // Nothing of it is asked of the server again.
+  function restoreState(rec) {
+    var st = rec && rec.s;
+    if (!st || st.sig !== sig || !Array.isArray(st.items)) return null;
+    if (REFRESH) return refreshState(st);
+    st.items.forEach(function (r, i) {
       var item = items[i];
-      if (!st || !item || item.exp || !st.html) return;
-      var exp = fromHTML(st.html);
+      if (!r || !item || item.exp) return;
+      if (r.st === "empty") {
+        item.restored = true;
+        item.emptyAt = r.level;
+        setState(item, "empty");
+        return;
+      }
+      var exp = r.html ? fromHTML(r.html) : null;
       if (!exp) return;
+      item.restored = true;
       placeExpansion(item, exp);
       item.exp = exp;
-      setLevel(item, st.level);
-      setState(item, "done");
+      setLevel(item, r.st === "error" && !exp.querySelector("details") ? 0 : r.level);
       citingBlocks(exp, true);
-      levels[st.level] = true;
+      if (r.st === "error") {
+        item.tried = r.level;
+        retryButtons(item, exp, r.level);
+        setState(item, "error");
+      } else {
+        setState(item, "done");
+      }
+      // what came back is what would be kept: not copied again until it changes
+      item.kept = r;
+      item.dirty = false;
     });
-    var open = Array.isArray(saved.open) ? saved.open : [];
+    restoreBlocks(st);
+    restoreOpen(st);
+    return st;
+  }
+
+  function restoreBlocks(st) {
+    var blocks = topBlocks();
+    (Array.isArray(st.blocks) ? st.blocks : []).forEach(function (x) {
+      var b = x && blocks[x.b];
+      if (!b || b._unfold) return;
+      var exp = x.html ? fromHTML(x.html) : null;
+      if (!exp) return;
+      if (b.tagName === "LI") b.appendChild(exp);
+      else b.insertAdjacentElement("afterend", exp);
+      citingBlocks(exp, true);
+    });
+  }
+
+  function restoreOpen(st) {
+    var open = Array.isArray(st.open) ? st.open : [];
     pageDetails().forEach(function (d, i) {
       if (i < open.length) d.open = !!open[i];
     });
-    // the switcher shows the level that came back, when there was one
-    var ls = Object.keys(levels);
-    return ls.length === 1 ? parseInt(ls[0], 10) : 0;
   }
 
   // refreshState is restoreState for a reload past the cache: what was open
-  // opens again, and what was unfolded is asked for anew, each item to the
-  // level it had, instead of being put back as it was kept
+  // opens again, and every item is asked for anew, to the level it had,
+  // instead of being put back as it was kept
   var refreshTodo = [];
-  function refreshState(saved) {
-    var levels = {};
-    saved.items.forEach(function (st, i) {
+  function refreshState(st) {
+    st.items.forEach(function (r, i) {
       var item = items[i];
-      if (!st || !item || item.exp || !(st.level > 0)) return;
-      refreshTodo.push({ item: item, level: st.level });
-      levels[st.level] = true;
+      if (!r || !item || item.exp || !(r.level > 0)) return;
+      item.restored = true;
+      refreshTodo.push({ item: item, level: r.level });
     });
-    var open = Array.isArray(saved.open) ? saved.open : [];
-    pageDetails().forEach(function (d, i) {
-      if (i < open.length) d.open = !!open[i];
-    });
-    var ls = Object.keys(levels);
-    return ls.length === 1 ? parseInt(ls[0], 10) : 0;
+    restoreBlocks(st);
+    restoreOpen(st);
+    return st;
+  }
+
+  // autoLevel is the level the address asks the page to unfold itself to,
+  // once it is on screen (?unfold=…&lazy=1)
+  function autoLevel() {
+    var q = new URLSearchParams(location.search);
+    var n = q.get("lazy") === "1" ? parseInt(q.get("unfold"), 10) : 0;
+    return n > 0 ? Math.min(n, MAX_DEPTH) : 0;
   }
 
   syncTools();
-  var auto = parseInt(doc.getAttribute("data-auto"), 10) || 0;
-  PS.load().then(function (saved) {
-    var restored = restoreState(saved);
+  var auto = autoLevel();
+  PS.load().then(function (rec) {
+    var st = restoreState(rec);
     restoring = false;
     syncTools();
     PS.restoreScroll();
-    // what the address asks for goes on from what came back: items already
-    // at that level are left as they are
+    markLevel(auto || (st && st.level) || pageLevel);
+    // what the address asks for goes on from what came back: only the items
+    // nothing was kept for are asked for
+    var todo = refreshTodo.slice();
     if (auto > 0) {
-      unfoldAll(Math.min(auto, MAX_DEPTH));
-    } else {
-      markLevel(restored || pageLevel);
-      runAll(refreshTodo);
+      items.forEach(function (item) {
+        if (!item.restored && !item.exp && item.state !== "empty") todo.push({ item: item, level: auto });
+      });
     }
+    runAll(todo);
   });
 })();

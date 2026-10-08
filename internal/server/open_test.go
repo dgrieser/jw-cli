@@ -1,7 +1,11 @@
 package server
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/dgrieser/jw-cli/internal/i18n"
 
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 )
@@ -25,6 +29,21 @@ func TestVidRef(t *testing.T) {
 		got, ok := vidRef(c.vid, c.to)
 		if ok != c.ok || got != c.want {
 			t.Errorf("vidRef(%d, %q) = %+v, %v; want %+v, %v", c.vid, c.to, got, ok, c.want, c.ok)
+		}
+	}
+}
+
+func TestRenderKeep(t *testing.T) {
+	s := New(Config{})
+	for _, c := range []struct {
+		err  string
+		want string
+	}{{"", ""}, {"upstream failed", "no"}} {
+		w := httptest.NewRecorder()
+		page := errorPage{basePage: basePage{Title: "x", Path: "/search", T: i18n.EN.Text(), Error: c.err}}
+		s.render(w, http.StatusOK, "error", page)
+		if got := w.Header().Get(keepHeader); got != c.want {
+			t.Errorf("Error %q: %s = %q, want %q", c.err, keepHeader, got, c.want)
 		}
 	}
 }
