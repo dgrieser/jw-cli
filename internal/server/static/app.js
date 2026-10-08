@@ -946,11 +946,22 @@
   var reading = inSection && (!!document.querySelector(".document[data-unfold]") ||
     /^\/media\/item\//.test(location.pathname) || here.id === "search");
 
+  // cookieLang is the language the reader last picked, as the cookie keeps
+  // it; one that cannot be read counts as none
+  function cookieLang() {
+    var m = /(?:^|;\s*)lang=([^;]*)/.exec(document.cookie);
+    if (!m) return "";
+    try {
+      return decodeURIComponent(m[1]);
+    } catch (err) {
+      return "";
+    }
+  }
+
   // the language a page names is the one the reader last picked: the server
   // says so in a cookie, which a page the browser kept never asked it for
   if (pageLang) {
-    var langCookie = /(?:^|;\s*)lang=([^;]*)/.exec(document.cookie);
-    if (!langCookie || decodeURIComponent(langCookie[1]) !== pageLang) {
+    if (cookieLang() !== pageLang) {
       document.cookie = "lang=" + encodeURIComponent(pageLang) + "; path=/; max-age=31536000; samesite=lax";
     }
   }
@@ -1695,9 +1706,8 @@
     navigator.serviceWorker.register("/sw.js").then(function () {
       return navigator.serviceWorker.ready;
     }).then(function (reg) {
-      var m = /(?:^|;\s*)lang=([^;]*)/.exec(document.cookie);
       var to = navigator.serviceWorker.controller || reg.active;
-      if (to) to.postMessage({ type: "lang", lang: m ? decodeURIComponent(m[1]) : "" });
+      if (to) to.postMessage({ type: "lang", lang: cookieLang() });
     }).catch(function () {});
   }
 

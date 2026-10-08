@@ -78,7 +78,13 @@ function currentLang() {
   };
   if (!self.cookieStore) return kept();
   return self.cookieStore.get("lang").then(function (c) {
-    return c ? decodeURIComponent(c.value) : kept();
+    if (!c) return kept();
+    try {
+      return decodeURIComponent(c.value);
+    } catch (err) {
+      // a cookie that cannot be read names no language
+      return "";
+    }
   }, kept);
 }
 
