@@ -723,7 +723,8 @@ details.section .count {
 }
 .section-body > :first-child { margin-top: 0; }
 /* inside a section, no box in a box: a closed entry is a light chip, an open
-   one a heading line over its text, set off by one thin rule on the left */
+   one a heading line over its text — no rule and no indent of its own, so a
+   reference however deep reads at the full width of the one it is in */
 .section-body .sections { margin: 0.5rem 0 0.35rem; gap: 0.3rem; }
 .section-body details.section {
   background: transparent;
@@ -745,9 +746,9 @@ details.section .count {
   color: var(--accent);
 }
 .section-body details.section[open] > .section-body {
-  padding: 0.1rem 0 0.2rem 0.75rem;
-  margin-left: 0.4rem;
-  border-left: 2px solid var(--line);
+  padding: 0.1rem 0 0.2rem;
+  margin-left: 0;
+  border-left: 0;
 }
 .sections + hr, .section-body > hr:last-child { display: none; }
 details.section.fresh { animation: pop 260ms ease-out; }
@@ -1547,7 +1548,6 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
   .document { font-size: 1.03rem; line-height: 1.65; }
   .document { --unfold-room: 2.2rem; --unfold-out: -0.55rem; }
   .section-body { padding: 0.5rem 0.6rem 0.3rem; }
-  .section-body details.section[open] > .section-body { padding-left: 0.55rem; margin-left: 0.2rem; }
   .unfold-tools { margin-left: 0; }
   .loading { left: 1rem; right: 1rem; justify-content: center; bottom: max(1rem, env(safe-area-inset-bottom)); }
 }
