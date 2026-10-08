@@ -814,19 +814,26 @@
   // --- sections -----------------------------------------------------------
 
   // an opened section takes a row of its own; keep its title in sight when
-  // that moves it. Only for a section the reader opened: one opened by the
-  // page putting back what it had must not move the page from where it was
+  // that moves it. Only for the very section the reader opened, right as it
+  // opens: one opened by the page — putting back what it had, or showing
+  // what a link loaded — never moves the page
   var touched = 0;
+  var touchedSummary = null;
   ["pointerdown", "keydown"].forEach(function (type) {
     document.addEventListener(type, function (e) {
-      if (e.target && e.target.closest && e.target.closest("summary")) touched = Date.now();
+      var s = e.target && e.target.closest ? e.target.closest("summary") : null;
+      if (!s) return;
+      touched = Date.now();
+      touchedSummary = s;
     }, true);
   });
   document.addEventListener("toggle", function (e) {
     var d = e.target;
     if (!(d instanceof HTMLElement) || !d.matches("details.section") || !d.open) return;
-    if (Date.now() - touched > 1500) return;
+    if (Date.now() - touched > 800) return;
     var s = d.querySelector(":scope > summary");
+    if (s !== touchedSummary) return;
+    touchedSummary = null;
     if (!s || !s.getBoundingClientRect) return;
     var r = s.getBoundingClientRect();
     if (r.top < 0 || r.bottom > window.innerHeight) s.scrollIntoView({ block: "nearest" });
@@ -976,16 +983,38 @@
   // the title the page goes by in a history: the bar's, as the page put it
   var hereTitle = (function () {
     if (here && here.id === "search") return clean(hereQuery.get("q"));
+    if (here && here.id === "meetings") return meetingTitle();
     var t = document.querySelector(".page-bar .pb-title");
     return clean(t && t.textContent) || clean(document.title.replace(/\s*·\s*JW$/, ""));
   })();
 
+  // meetingTitle names a meeting page by which meeting and which week:
+  // "Zusammenkünfte am Wochenende · 5.–11. Okt. 2026"
+  function meetingTitle() {
+    var name = T.secMeetings || "";
+    var tab = document.querySelector("main nav.tabs:not(.unfold) a.active");
+    if (tab && /^\/meetings\/./.test(location.pathname)) name += " " + clean(tab.textContent);
+    var art = document.querySelector(".document[data-week]");
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(art ? art.getAttribute("data-week") : "");
+    if (!m) return name;
+    var from = new Date(+m[1], +m[2] - 1, +m[3]);
+    var to = new Date(+m[1], +m[2] - 1, +m[3] + 6);
+    var week = "";
+    try {
+      var df = new Intl.DateTimeFormat(root.lang || undefined, { day: "numeric", month: "short", year: "numeric" });
+      week = df.formatRange ? df.formatRange(from, to) : df.format(from) + " – " + df.format(to);
+    } catch (err) {
+      week = from.toDateString() + " – " + to.toDateString();
+    }
+    return name + " · " + week;
+  }
+
   var PS = { key: failed ? null : pageKey(location), record: null, loaded: false, restored: false };
+  // the last page of a section is the page itself, never a level to unfold
+  // it to on the way back
   PS.remember = function () {
     if (!inSection) return;
-    var u = new URL(location.href);
-    u.searchParams.delete("force");
-    storageSet(lastKey(here.id, pageLang), u.pathname + u.search);
+    storageSet(lastKey(here.id, pageLang), pageHref(location.href));
   };
   PS.remember();
 
@@ -1004,7 +1033,7 @@
     q.delete("lang");
     if (q.toString() !== "") return;
     var last = storageGet(lastKey(sec.id, linkLang));
-    if (last && last.charAt(0) === "/") a.href = last;
+    if (last && last.charAt(0) === "/") a.href = pageHref(last);
   });
 
   // page records: one per page, dropped after two months unvisited
@@ -1088,7 +1117,8 @@
   PS.restoreScroll = function () {
     if (PS.restored) return;
     PS.restored = true;
-    if (location.hash || !PS.record) return;
+    // a reader who already moved is not moved back
+    if (location.hash || !PS.record || window.scrollY > 0) return;
     var y = PS.record.y;
     if (y > 0) window.scrollTo(0, y);
   };
@@ -1177,28 +1207,39 @@
   }
 
   // histFile puts a page first in a section's history, as the page it is at
-  function histFile(id, lng, href, title) {
+  // sec is the section a page belongs to, which the overall history names
+  function histFile(id, lng, href, title, sec) {
     var h = histLoad(id, lng);
     var i = histIndex(h, href);
     var old = i >= 0 ? h.items.splice(i, 1)[0] : null;
-    h.items.unshift({ href: pageHref(href), title: title || (old && old.title) || "", t: Date.now() });
+    var entry = { href: pageHref(href), title: title || (old && old.title) || "", t: Date.now() };
+    sec = sec || (old && old.s);
+    if (sec) entry.s = sec;
+    h.items.unshift(entry);
     h.cur = 0;
     histSave(id, lng, h);
   }
 
-  if (reading) {
-    var viaHistory = storageGet(HIST_NAV, window.sessionStorage);
-    storageDrop(HIST_NAV, window.sessionStorage);
-    var h0 = histLoad(here.id, pageLang);
-    var i0 = histIndex(h0, location.href);
-    if (viaHistory && i0 >= 0 && samePage(viaHistory, location.href)) {
-      h0.cur = i0;
-      if (hereTitle) h0.items[i0].title = hereTitle;
-      histSave(here.id, pageLang, h0);
+  // histVisit records this page in a history: first, or — reached through
+  // that history — where it already stands
+  var viaHistory = storageGet(HIST_NAV, window.sessionStorage);
+  storageDrop(HIST_NAV, window.sessionStorage);
+  function histVisit(id) {
+    var h = histLoad(id, pageLang);
+    var i = histIndex(h, location.href);
+    if (viaHistory && i >= 0 && samePage(viaHistory, location.href)) {
+      h.cur = i;
+      if (hereTitle) h.items[i].title = hereTitle;
+      histSave(id, pageLang, h);
     } else {
-      histFile(here.id, pageLang, location.href, hereTitle);
+      histFile(id, pageLang, location.href, hereTitle, here ? here.id : "");
     }
   }
+
+  // ALL is the overall history: every page read anywhere on the site
+  var ALL = "all";
+  if (reading) histVisit(here.id);
+  if (PS.key && location.pathname !== "/") histVisit(ALL);
 
   var ARROW_L = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" ' +
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -1367,6 +1408,137 @@
       if (a) storageSet(HIST_NAV, a.getAttribute("href"), window.sessionStorage);
     });
     main.insertBefore(bar, main.firstChild);
+  })();
+
+  // --- the overall history: every page read, behind the bar's clock ---------
+  //
+  // One list of the pages read anywhere on the site, newest first, each
+  // with the section it belongs to; a step back and forward through it at
+  // its top. Every page comes back as it was left — what was unfolded and
+  // open on it included.
+
+  (function () {
+    var bar = document.querySelector(".page-bar .pb");
+    var before = bar && bar.querySelector(".pb-refresh");
+    if (!bar || !before) return;
+    var names = {};
+    SECTIONS.forEach(function (s) { names[s.id] = s.name; });
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pb-btn pb-history";
+    btn.setAttribute("aria-haspopup", "true");
+    btn.setAttribute("aria-expanded", "false");
+    btn.setAttribute("aria-label", T.history || "");
+    btn.title = T.history || "";
+    btn.innerHTML = CLOCK.replace(/width="17" height="17"/, 'width="20" height="20"');
+    bar.insertBefore(btn, before);
+
+    var panel = document.createElement("div");
+    panel.className = "hist-panel pb-history-panel";
+    panel.setAttribute("data-ui", "");
+    panel.hidden = true;
+    bar.appendChild(panel);
+
+    function stepLink(entry, cls, icon, label) {
+      var a = document.createElement("a");
+      a.className = "hist-step " + cls;
+      a.innerHTML = icon + '<span class="t"></span>';
+      a.querySelector(".t").textContent = label;
+      a.setAttribute("aria-label", label + (entry && entry.title ? ": " + entry.title : ""));
+      if (entry) a.href = entry.href;
+      else a.setAttribute("aria-disabled", "true");
+      return a;
+    }
+
+    function fill() {
+      var h = histLoad(ALL, pageLang);
+      var at = histIndex(h, location.href);
+      panel.textContent = "";
+      var steps = document.createElement("div");
+      steps.className = "hist-steps";
+      steps.appendChild(stepLink(at >= 0 ? h.items[at + 1] : h.items[h.cur], "prev", ARROW_L, T.historyBack || "‹"));
+      steps.appendChild(stepLink(at > 0 ? h.items[at - 1] : null, "next", ARROW_R, T.historyNext || "›"));
+      panel.appendChild(steps);
+      var list = document.createElement("ol");
+      h.items.forEach(function (e, i) {
+        var li = document.createElement("li");
+        if (i === at) li.className = "current";
+        var a = document.createElement("a");
+        a.href = e.href;
+        a.className = "hist-entry";
+        if (i === at) a.setAttribute("aria-current", "page");
+        var t = document.createElement("span");
+        t.className = "t";
+        t.textContent = e.title || e.href;
+        var when = document.createElement("span");
+        when.className = "when";
+        // the section, unless the title says it already
+        var sec = names[e.s] && (e.title || "").indexOf(names[e.s]) !== 0 ? names[e.s] : "";
+        when.textContent = [sec, e.t ? ago(e.t) : ""].filter(Boolean).join(" · ");
+        a.appendChild(t);
+        a.appendChild(when);
+        var rm = document.createElement("button");
+        rm.type = "button";
+        rm.className = "hist-rm";
+        rm.textContent = "×";
+        rm.setAttribute("aria-label", (T.historyRemove || "×") + ": " + (e.title || ""));
+        rm.title = T.historyRemove || "";
+        rm.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var fresh = histLoad(ALL, pageLang);
+          var j = histIndex(fresh, e.href);
+          if (j >= 0) {
+            fresh.items.splice(j, 1);
+            if (fresh.cur > j) fresh.cur--;
+          }
+          histSave(ALL, pageLang, fresh);
+          fill();
+        });
+        li.appendChild(a);
+        li.appendChild(rm);
+        list.appendChild(li);
+      });
+      panel.appendChild(list);
+      var clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "small ghost hist-clear";
+      clear.textContent = T.historyClear || "×";
+      clear.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        storageDrop(histKey(ALL, pageLang));
+        fill();
+      });
+      panel.appendChild(clear);
+    }
+
+    function setOpen(open) {
+      if (open) fill();
+      panel.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        var cur = panel.querySelector("li.current a") || panel.querySelector("ol a");
+        if (cur) cur.scrollIntoView({ block: "nearest" });
+      }
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      setOpen(panel.hidden);
+    });
+    document.addEventListener("click", function (e) {
+      if (!panel.hidden && !panel.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !panel.hidden) {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+    // a page reached through the history keeps the history's order
+    panel.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest("a[href]") : null;
+      if (a) storageSet(HIST_NAV, a.getAttribute("href"), window.sessionStorage);
+    });
   })();
 
   // --- a word that comes and goes ------------------------------------------
@@ -2672,34 +2844,31 @@
     });
   }
 
-  // the address keeps the level, so a reload or a shared link unfolds the
-  // same way — lazily, after the page is shown
-  function rememberLevel(level) {
-    var u = new URL(location.href);
-    u.searchParams.delete("force");
-    if (level > 0) {
-      u.searchParams.set("unfold", String(level));
-      u.searchParams.set("lazy", "1");
-    } else if (mode === "verse" || u.searchParams.has("unfold")) {
-      u.searchParams.delete("unfold");
-      u.searchParams.delete("lazy");
-    }
-    history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+  // the level a page was unfolded to is kept with what it brought, not in
+  // its address: a page is never unfolded by being visited, only by the
+  // reader asking
+  function rememberLevel() {
+    cleanAddress();
     if (PS.remember) PS.remember();
-    document.querySelectorAll('form input[name="unfold"]').forEach(function (input) {
-      input.value = String(level);
+  }
+
+  // cleanAddress takes a level off the address — and off the forms and tabs
+  // that would carry it to the next page — so that no page, this one
+  // reloaded or another, unfolds itself on its own
+  function cleanAddress() {
+    var u = new URL(location.href);
+    if (u.searchParams.has("unfold") || u.searchParams.has("lazy") || u.searchParams.has("force")) {
+      ["unfold", "lazy", "force"].forEach(function (k) { u.searchParams.delete(k); });
+      history.replaceState(history.state, "", u.pathname + u.search + u.hash);
+    }
+    document.querySelectorAll('form input[name="unfold"], form input[name="lazy"]').forEach(function (input) {
+      input.remove();
     });
-    document.querySelectorAll("nav.tabs:not(.unfold) a[href]").forEach(function (a) {
+    document.querySelectorAll("main nav.tabs:not(.unfold) a[href]").forEach(function (a) {
       var t = new URL(a.href, location.href);
-      if (t.origin !== location.origin || !t.searchParams.has("unfold") && level === 0) return;
-      if (t.pathname !== u.pathname && t.pathname.split("/")[1] !== u.pathname.split("/")[1]) return;
-      if (level > 0) {
-        t.searchParams.set("unfold", String(level));
-        t.searchParams.set("lazy", "1");
-      } else {
-        t.searchParams.delete("unfold");
-        t.searchParams.delete("lazy");
-      }
+      if (t.origin !== location.origin || !(t.searchParams.has("unfold") || t.searchParams.has("lazy"))) return;
+      t.searchParams.delete("unfold");
+      t.searchParams.delete("lazy");
       a.href = t.pathname + t.search;
     });
   }
@@ -2720,7 +2889,7 @@
     stopAll();
     closeMenu();
     markLevel(level);
-    rememberLevel(level);
+    rememberLevel();
     if (level === 0) {
       items.forEach(removeExpansion);
       return;
@@ -2777,15 +2946,9 @@
     });
   });
 
-  // forms and links that ask for a level ask for it lazily from here on
-  document.querySelectorAll("form").forEach(function (form) {
-    if (!form.querySelector('input[name="unfold"]') || form.querySelector('input[name="lazy"]')) return;
-    var lazy = make("input");
-    lazy.type = "hidden";
-    lazy.name = "lazy";
-    lazy.value = "1";
-    form.appendChild(lazy);
-  });
+  // an address that asked for a level — an old bookmark, a page left before
+  // this — asks for nothing any more
+  cleanAddress();
 
   // --- sections that load once they are opened -------------------------------
 
@@ -2971,7 +3134,11 @@
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // reveal opens el and every section around it, and brings it into view
-  function reveal(el) {
+  //
+  // The page moves only at the click: to what was followed when it is there,
+  // else to where it is loading. Once something has loaded it is opened and
+  // marked, never scrolled to — the reader may have read on meanwhile.
+  function reveal(el, still) {
     for (var d = el.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) {
       if (!d.open) d.open = true;
     }
@@ -2979,7 +3146,15 @@
     el.classList.remove("flash");
     void el.offsetWidth;
     el.classList.add("flash");
-    at.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+    if (!still) at.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  // inView brings el into view, at the click, when it is not in view already
+  function inView(el) {
+    var r = el.getBoundingClientRect();
+    var top = pageBar ? pageBar.offsetHeight : 0;
+    if (r.top >= top && r.bottom <= window.innerHeight) return;
+    el.scrollIntoView({ block: "center", behavior: reduceMotion ? "auto" : "smooth" });
   }
 
   function findRef(scope, key) {
@@ -3008,9 +3183,11 @@
     return Math.min(Math.max(l || 1, 1), MAX_DEPTH);
   }
 
+  // streamOne loads one followed link into list, showing where it loads
   function streamOne(url, list) {
     var loader = makeLoader();
     list.appendChild(loader);
+    if (loader.isConnected) inView(loader);
     return streamSections(url, list, loader, null);
   }
 
@@ -3027,7 +3204,7 @@
     var done = function () {
       if (owner.item) setState(owner.item, "done");
       var el = findRef(scopeOf(owner), target.key);
-      if (el) reveal(el);
+      if (el) reveal(el, true);
       else hint(owner.item || { el: a.closest(BLOCKS) || a.parentElement }, T.nothing || "∅");
       saveState(a);
     };
@@ -3067,6 +3244,7 @@
           // the verse's footnotes, not loaded yet: all of them, then this one
           var loading = loadLazy(existing);
           existing.open = true;
+          inView(existing);
           loading.then(done);
           return true;
         }
@@ -3075,6 +3253,8 @@
           // into the same section
           var tmp = make("div", "sections");
           var body = existing.querySelector(":scope > .section-body");
+          existing.open = true;
+          inView(existing);
           streamOne("/unfold/footnote?" + q.toString(), tmp).then(function () {
             tmp.querySelectorAll(".footnote").forEach(function (f) { body.appendChild(f); });
             done();
@@ -3336,36 +3516,15 @@
     return st;
   }
 
-  // autoLevel is the level the address asks the page to unfold itself to,
-  // once it is on screen (?unfold=…&lazy=1)
-  function autoLevel() {
-    var q = new URLSearchParams(location.search);
-    var n = q.get("lazy") === "1" ? parseInt(q.get("unfold"), 10) : 0;
-    return n > 0 ? Math.min(n, MAX_DEPTH) : 0;
-  }
-
   syncTools();
-  var auto = autoLevel();
   PS.load().then(function (rec) {
     var st = restoreState(rec);
     restoring = false;
     syncTools();
     PS.restoreScroll();
-    markLevel(auto || (st && st.level) || pageLevel);
-    // what the address asks for goes on from what came back: the items
-    // nothing was kept for, and those kept at a lower level than asked; an
-    // item kept at that level or deeper, or found to cite nothing, is not
-    // asked again
-    var todo = refreshTodo.slice();
-    if (auto > 0) {
-      items.forEach(function (item) {
-        if (item.state === "empty" || item.state === "loading") return;
-        if (item.exp && item.state !== "error" && item.level >= auto) return;
-        if (item.state === "error" && item.restored) return;
-        if (refreshTodo.some(function (t) { return t.item === item; })) return;
-        todo.push({ item: item, level: auto });
-      });
-    }
-    runAll(todo);
+    markLevel((st && st.level) || pageLevel);
+    // visiting a page unfolds nothing: what it had comes back as it was
+    // kept, and only the reload asks for it anew
+    runAll(refreshTodo);
   });
 })();
