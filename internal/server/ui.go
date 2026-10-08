@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
@@ -594,7 +595,10 @@ type documentPage struct {
 	URL     string
 	Date    string
 	Part    string // meetings: "", "midweek" or "weekend"
-	Unfold  int
+	// Week is the Monday of the week a meeting page shows (2006-01-02), by
+	// which its history names it
+	Week   string
+	Unfold int
 	// AutoUnfold is the level the browser unfolds the page to once it is
 	// shown, zero for none.
 	AutoUnfold int
@@ -706,6 +710,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		URL:          art.URL,
 		Date:         r.FormValue("date"),
 		Part:         part,
+		Week:         date.AddDate(0, 0, -(int(date.Weekday())+6)%7).Format(time.DateOnly),
 		Unfold:       depth,
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),

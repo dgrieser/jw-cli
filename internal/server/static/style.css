@@ -669,6 +669,8 @@ details.section > summary a { color: inherit; }
 details.section > summary > a.follow {
   flex: none;
   margin-left: auto;
+  /* nearer the pill's rounded end, so its circle sits in it as in a socket */
+  margin-right: -0.5rem;
   display: inline-grid;
   place-items: center;
   width: 1.7rem;
@@ -1640,7 +1642,15 @@ button.hist-list:hover, button.hist-list[aria-expanded="true"] { color: var(--in
   color: var(--ink);
   text-decoration: none;
 }
-.hist-entry .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.92rem; font-weight: 500; }
+.hist-entry .t {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: 0.92rem;
+  font-weight: 500;
+}
 .hist-entry .when { color: var(--muted); font-size: 0.78rem; }
 li.current .hist-entry .t { color: var(--accent); }
 button.hist-rm {
@@ -1684,3 +1694,21 @@ button.hist-rm:hover { border-color: transparent; background: var(--danger-soft)
 .toast[hidden] { display: none; }
 .toast.gone { opacity: 0; }
 .toast a { color: var(--paper); font-weight: 650; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
+
+/* the overall history: a clock in the bar, the pages read under it */
+.pb .pb-history { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+.pb .pb-history[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
+.pb-history-panel { left: auto; right: 0; top: calc(100% + 0.2rem); }
+.hist-steps { display: flex; gap: 0.3rem; padding: 0.15rem 0.15rem 0.4rem; border-bottom: 1px solid var(--line); margin-bottom: 0.3rem; }
+.hist-steps .hist-step {
+  flex: 1;
+  width: auto;
+  justify-content: center;
+  gap: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.hist-steps .hist-step.next { flex-direction: row-reverse; }

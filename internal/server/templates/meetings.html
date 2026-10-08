@@ -16,7 +16,7 @@
 </nav>
 
 {{template "unfold" .}}
-<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
+<article class="document" data-unfold="refs" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}} data-week="{{.Week}}">
 {{- if .Heading}}<h2>{{.Heading}}</h2>{{end}}
 {{.Body}}
 </article>

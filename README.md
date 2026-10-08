@@ -558,8 +558,9 @@ margin: pick a depth (1–3) and what it references streams in right under it,
 one collapsible section at a time, with the progress of the slow parts shown
 in place (nothing is added when there is nothing to unfold). **Unfold all
 0 1 2 3** above the text does the same for every item in turn, with a Stop
-button; the level is kept in the address (`?unfold=N&lazy=1`), so a reload or a
-shared link unfolds the same way. Sections start collapsed and sit side by
+button. A page never unfolds itself by being visited: only the reader asks
+for references, and what they brought is kept with the page (see below), not
+in its address. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
 opens on its own. Every paragraph of an unfolded passage that cites something
 has a button of its own, so an expansion can be followed as deep as wanted.
@@ -567,8 +568,10 @@ has a button of its own, so an expansion can be followed as deep as wanted.
 Links open in place instead of leaving the page: a marginal reference (`+`), a
 footnote (`*`), a bible reference or a link to an article — a table-of-contents
 link like "App. C" included — opens its section under the verse or paragraph it
-is in and scrolls to it, loading just that one reference when it is not there
-yet; a verse number opens the verse in the other bibles of the language.
+is in and scrolls to it — or, when it is not there yet, to where it loads,
+loading just that one reference; once loaded it is opened and marked, but the
+page does not move again. A verse number opens the verse in the other bibles
+of the language.
 Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
 opens under the verse's cross references, all of them unfolded at the verse's
 depth, while the verse's other sections — study notes, footnotes, indexes,
@@ -594,7 +597,10 @@ the last page of each section: the bible, the meetings, media, publications
 (an article opened anywhere is read there) and search. Each of those sections
 keeps a history of what was read in it, newest first, shown above its pages: ‹
 and › step back and forth through it, and the list in between jumps to any
-page of it, or drops one. Over HTTPS (or on localhost) the browser also keeps
+page of it, or drops one (a meeting is named by which meeting and which week).
+The clock in the bar holds the overall history: every page read anywhere on
+the site, newest first with the section it belongs to, and a step back and
+forward through it. Over HTTPS (or on localhost) the browser also keeps
 the pages themselves, so a page read once comes back at once, and even without
 a connection: a page that reads the same whatever the day for a month, one that
 shows what is current (today's text, this week's meetings, the newest videos
