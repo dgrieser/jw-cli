@@ -1057,7 +1057,7 @@ func (s *Server) editionOptions(r *http.Request, current string) []editionOption
 // citation of a publication or a footnote to the article it is part of.
 func (s *Server) openTarget(r *http.Request) (string, error) {
 	path, ok := libraryPath(r.FormValue("path"))
-	if !ok || !(unfold.IsCitation(path) || service.IsFootnote(path)) {
+	if !ok || (!unfold.IsCitation(path) && !service.IsFootnote(path)) {
 		return "", fmt.Errorf("parameter %q is not a citation of the library", "path")
 	}
 	lng, err := s.language(r)
