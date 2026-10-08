@@ -1481,6 +1481,8 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
 }
 .loading[hidden] { display: none; }
 .spinner {
+  /* a circle whatever the text beside it asks of the row */
+  flex: none;
   width: 0.9rem;
   height: 0.9rem;
   border: 2px solid currentColor;

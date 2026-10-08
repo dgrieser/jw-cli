@@ -2363,6 +2363,16 @@
     if (!target) return;
     e.preventDefault();
     if (target.kind === "media") {
+      // a video heading the passage it quotes a verse in: its title opens and
+      // closes that passage, like any publication's; the player page is a
+      // link only where the video stands on its own
+      var summary = a.closest("summary");
+      if (summary && summary.parentElement.matches("details")) {
+        var d = summary.parentElement;
+        if (d.open) d.open = false;
+        else reveal(d);
+        return;
+      }
       location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
       return;
     }
