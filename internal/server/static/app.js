@@ -1212,6 +1212,12 @@
       while (a.firstChild) title.appendChild(a.firstChild);
       s.replaceChild(title, a);
       a.className = "follow";
+      // the whole document, not the passage the section already shows
+      try {
+        var u = new URL(a.getAttribute("href"), location.href);
+        u.hash = "";
+        a.setAttribute("href", u.href);
+      } catch (err) {}
       var label = (T.follow || "↗") + ": " + (title.textContent || "").replace(/\s+/g, " ").trim();
       a.setAttribute("aria-label", label);
       a.setAttribute("title", label);
@@ -2199,6 +2205,9 @@
     // the copy the link is in first, then the first on the page
     var root = a.closest(cls) || doc.querySelector(cls);
     if (!root) return null;
+    // a section's button asks for the whole document: a passage of it,
+    // unfolded somewhere, is not that
+    if (a.classList.contains("follow") && root !== doc && root.closest(".expansion, .section-body")) return null;
     var p = /^#(?:h=|p)(\d+)/.exec(u.hash);
     if (!p) return root;
     return root.querySelector('[data-pid="' + p[1] + '"]');

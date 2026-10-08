@@ -317,7 +317,7 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 			var b strings.Builder
 			writeUnfoldNode(&b, n, SectionLevel, label, txt)
 			out.Section(UnfoldSection{
-				Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
+				Title: nodeTitle(n, label), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
 				Doc: wol.DocIDFromURL(n.URL),
 			})
 		}
