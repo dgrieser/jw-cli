@@ -288,6 +288,10 @@ type Messages struct {
 	UIAborted string
 	// UIFollow is the button by a quoting publication's title that loads it.
 	UIFollow string
+	// UIFollowHere and UIFollowTab are the choices a long press on that
+	// button offers: unfold it in place, or read it on a page of its own.
+	UIFollowHere string
+	UIFollowTab  string
 	// UIBibleSearch* head a text search of the bible: the hits and the query,
 	// the bibles searched, and the pages read when not all of them were.
 	UIBibleSearchHeader    string

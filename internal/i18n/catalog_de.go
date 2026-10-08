@@ -196,6 +196,8 @@ var de = Messages{
 	UIAbort:                "Abbrechen",
 	UIAborted:              "Abgebrochen.",
 	UIFollow:               "Öffnen",
+	UIFollowHere:           "Als Verweis öffnen",
+	UIFollowTab:            "In neuem Tab öffnen",
 	UIBibleSearchHeader:    "%d Treffer für „%s“",
 	UIBibleSearchEditions:  "Durchsucht: %s",
 	UIBibleSearchTruncated: "Nur die ersten %d Ergebnisseiten wurden gelesen.",

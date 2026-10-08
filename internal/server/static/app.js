@@ -1196,35 +1196,196 @@
   }
 
   // titleLinks makes a section headed by a link — a publication quoting a
-  // verse — open and close on its whole title like any other: the title is
-  // plain text, and the link moves to a small button at the summary's end
-  // that does what following it did
+  // verse, a passage of one — open and close on its whole title like any
+  // other: the title is plain text, and the link moves to a small button at
+  // the summary's end that does what following it did; held, it offers to
+  // open the document on a page of its own instead. A section showing verses
+  // gets a button too, which opens them in the bible on a new page.
   function titleLinks(root) {
     var heads = root.matches && root.matches("details.section") ? [root] : [];
     root.querySelectorAll("details.section").forEach(function (d) { heads.push(d); });
     heads.forEach(function (d) {
       var s = d.querySelector(":scope > summary");
-      var a = s && s.querySelector(":scope > a[href]:not(.follow)");
-      if (!a) return;
-      var target = linkTarget(a);
-      if (!target || (target.kind !== "article" && target.kind !== "media")) return;
-      var title = make("span", "title");
-      while (a.firstChild) title.appendChild(a.firstChild);
-      s.replaceChild(title, a);
-      a.className = "follow";
-      // the whole document, not the passage the section already shows
-      try {
-        var u = new URL(a.getAttribute("href"), location.href);
-        u.hash = "";
-        a.setAttribute("href", u.href);
-      } catch (err) {}
-      var label = (T.follow || "↗") + ": " + (title.textContent || "").replace(/\s+/g, " ").trim();
-      a.setAttribute("aria-label", label);
-      a.setAttribute("title", label);
-      a.textContent = "↗";
-      s.appendChild(a);
+      if (!s || s.querySelector(":scope > a.follow")) return;
+      var a = s.querySelector(":scope > a[href]");
+      var target = a && linkTarget(a);
+      if (target && (target.kind === "article" || target.kind === "media")) {
+        var title = make("span", "title");
+        while (a.firstChild) title.appendChild(a.firstChild);
+        s.replaceChild(title, a);
+        a.className = "follow";
+        // the whole document, not the passage the section already shows
+        try {
+          var u = new URL(a.getAttribute("href"), location.href);
+          u.hash = "";
+          a.setAttribute("href", u.href);
+        } catch (err) {}
+        labelFollow(a, T.follow, s);
+        s.appendChild(a);
+        return;
+      }
+      var verses = ownVerses(d);
+      if (!verses) return;
+      var q = new URLSearchParams({ vid: String(verses[0]) });
+      if (verses[1] > verses[0]) q.set("to", String(verses[1]));
+      var passage = d.closest(".passage[data-bible]");
+      var bible = passage ? passage.getAttribute("data-bible") : new URLSearchParams(location.search).get("bible");
+      if (bible) q.set("bible", bible);
+      if (lang) q.set("lang", lang);
+      var go = make("a", "follow");
+      go.href = "/bible?" + q.toString();
+      go.target = "_blank";
+      go.rel = "noopener";
+      labelFollow(go, T.followTab, s);
+      s.appendChild(go);
     });
   }
+
+  function labelFollow(a, what, summary) {
+    var label = (what || "↗") + ": " + (summary.textContent || "").replace(/\s+/g, " ").trim();
+    a.setAttribute("aria-label", label);
+    a.setAttribute("title", label);
+    a.textContent = "↗";
+  }
+
+  // ownVerses is the first and last verse id a section shows itself — not in
+  // the sections it holds — or null when it shows none
+  function ownVerses(d) {
+    var body = d.querySelector(":scope > .section-body");
+    if (!body) return null;
+    var first = 0, last = 0;
+    body.querySelectorAll('[id^="v"]').forEach(function (el) {
+      var m = /^v(\d+)-(\d+)-(\d+)-\d+$/.exec(el.id);
+      if (!m || el.closest("details.section") !== d) return;
+      var vid = +m[1] * 1000000 + +m[2] * 1000 + +m[3];
+      if (!first) first = vid;
+      // a passage running into the next chapter opens where it starts
+      if (Math.floor(vid / 1000) === Math.floor(first / 1000)) last = Math.max(last, vid);
+    });
+    return first ? [first, last] : null;
+  }
+
+  // a held section button offers where to open what it links to: unfolded
+  // in place, as a click does, or on a page of its own in a new tab
+  var followMenu = make("div", "follow-menu");
+  followMenu.setAttribute("role", "menu");
+  followMenu.setAttribute("data-ui", "");
+  followMenu.hidden = true;
+  var followHere = button("ghost", null, "");
+  var followTab = button("ghost", null, T.followTab || "↗");
+  followHere.setAttribute("role", "menuitem");
+  followTab.setAttribute("role", "menuitem");
+  followMenu.appendChild(followHere);
+  followMenu.appendChild(followTab);
+  document.body.appendChild(followMenu);
+
+  function pageOf(a) {
+    var target = linkTarget(a);
+    if (!target) return null;
+    var q = new URLSearchParams();
+    if (target.kind === "media") {
+      if (lang) q.set("lang", lang);
+      var qs = q.toString();
+      return "/media/item/" + encodeURIComponent(target.key) + (qs ? "?" + qs : "");
+    }
+    q.set("target", a.href);
+    if (lang) q.set("lang", lang);
+    return "/article?" + q.toString();
+  }
+
+  function openFollowMenu(a) {
+    var target = linkTarget(a);
+    followHere.textContent = target && target.kind === "media" ? (T.follow || "Open") : (T.followHere || T.follow || "Open");
+    followMenu.link = a;
+    followMenu.hidden = false;
+    var r = a.getBoundingClientRect();
+    var w = followMenu.offsetWidth, h = followMenu.offsetHeight;
+    var left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    followMenu.style.left = left + "px";
+    followMenu.style.top = top + "px";
+    followHere.focus();
+  }
+
+  function closeFollowMenu() {
+    followMenu.hidden = true;
+    followMenu.link = null;
+  }
+
+  followHere.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var a = followMenu.link;
+    closeFollowMenu();
+    // the same as a click on the button
+    if (a) a.click();
+  });
+  followTab.addEventListener("click", function (e) {
+    e.stopPropagation();
+    var a = followMenu.link;
+    closeFollowMenu();
+    var page = a && pageOf(a);
+    if (page) window.open(page, "_blank", "noopener");
+  });
+  document.addEventListener("click", function (e) {
+    if (!followMenu.hidden && !followMenu.contains(e.target)) closeFollowMenu();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || followMenu.hidden) return;
+    var a = followMenu.link;
+    closeFollowMenu();
+    if (a) a.focus();
+  });
+  window.addEventListener("scroll", function () {
+    if (!followMenu.hidden) closeFollowMenu();
+  }, { passive: true });
+
+  // what holds a button down: a press of half a second, a right click, or
+  // the long press a phone reports as a context menu. A bible button opens
+  // its new page at once and has nothing to choose.
+  var held = null;
+  function heldButton(e) {
+    var a = e.target.closest ? e.target.closest("summary > a.follow") : null;
+    return a && !a.target && doc.contains(a) ? a : null;
+  }
+  doc.addEventListener("pointerdown", function (e) {
+    var a = heldButton(e);
+    if (!a || e.button !== 0) return;
+    var x = e.clientX, y = e.clientY;
+    held = { a: a, x: x, y: y, shown: false };
+    held.timer = setTimeout(function () {
+      if (!held || held.a !== a) return;
+      held.shown = true;
+      openFollowMenu(a);
+    }, 500);
+  });
+  function letGo(e) {
+    if (!held) return;
+    if (e.type === "pointermove" && Math.abs(e.clientX - held.x) < 10 && Math.abs(e.clientY - held.y) < 10) return;
+    clearTimeout(held.timer);
+    if (!held.shown) held = null;
+  }
+  ["pointerup", "pointercancel", "pointermove"].forEach(function (type) {
+    doc.addEventListener(type, letGo);
+  });
+  doc.addEventListener("contextmenu", function (e) {
+    var a = heldButton(e);
+    if (!a) return;
+    e.preventDefault();
+    if (held) clearTimeout(held.timer);
+    held = { a: a, shown: true };
+    openFollowMenu(a);
+  });
+  // the click that ends a press which opened the menu is not a click
+  document.addEventListener("click", function (e) {
+    if (!held || !held.shown) return;
+    var a = held.a;
+    held = null;
+    if (e.target.closest && e.target.closest("a.follow") === a) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);
 
   // citingBlocks makes every block of root that cites something an item of
   // its own: a paragraph of the document, or — nested — a paragraph of a

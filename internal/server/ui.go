@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -114,6 +115,8 @@ func (p basePage) UIText() map[string]string {
 		"langAll":        t.UILangAll,
 		"aborted":        t.UIAborted,
 		"follow":         t.UIFollow,
+		"followHere":     t.UIFollowHere,
+		"followTab":      t.UIFollowTab,
 	}
 }
 
@@ -1016,6 +1019,21 @@ func (s *Server) editionOptions(r *http.Request, current string) []editionOption
 	return out
 }
 
+// vidRef is the passage a verse id (book·1e6 + chapter·1e3 + verse) names, up
+// to the verse to names when it is a later one of the same chapter.
+func vidRef(vid int, to string) (bibleref.Ref, bool) {
+	ref := bibleref.Ref{Book: vid / 1_000_000, Chapter: vid / 1_000 % 1_000, VerseStart: vid % 1_000}
+	ref.VerseEnd = ref.VerseStart
+	if ref.Book < 1 || ref.Book > 66 || ref.Chapter < 1 || ref.VerseStart < 1 {
+		return bibleref.Ref{}, false
+	}
+	var end int
+	if _, err := fmt.Sscan(to, &end); err == nil && end/1_000 == vid/1_000 && end > vid {
+		ref.VerseEnd = end % 1_000
+	}
+	return ref, true
+}
+
 // uiBible is the bible reader: the verses first, what they reference unfolded
 // verse by verse or all at once. The study material of a verse — its notes,
 // cross references, research guide, quotations and media — is what an unfold
@@ -1032,6 +1050,15 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		if chapter, _ := intParam(r, "chapter", 0); chapter > 0 {
 			if lng, err := s.language(r); err == nil {
 				page.Ref = fmt.Sprintf("%s %d", s.svc.BookTable(r.Context(), lng).Name(book), chapter)
+			}
+		}
+	}
+	// so do the verses a section of an unfolded page shows (?vid=, ?to=),
+	// opened on a page of their own
+	if vid, _ := intParam(r, "vid", 0); page.Ref == "" && vid > 0 {
+		if lng, err := s.language(r); err == nil {
+			if ref, ok := vidRef(vid, r.FormValue("to")); ok {
+				page.Ref = service.RefString(ref, s.svc.BookTable(r.Context(), lng))
 			}
 		}
 	}

@@ -681,6 +681,24 @@ details.section > summary > a.follow {
   text-decoration: none;
 }
 details.section > summary > a.follow:hover { color: var(--accent); border-color: var(--accent); }
+/* held, the button is a menu, not a link the phone offers to share */
+details.section > summary > a.follow { -webkit-touch-callout: none; user-select: none; }
+.follow-menu {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.35);
+  font-size: 0.9rem;
+  animation: pop 140ms ease-out;
+}
+.follow-menu[hidden] { display: none; }
+.follow-menu button { justify-content: flex-start; text-align: left; min-height: 2.4rem; padding: 0 0.7rem; color: var(--ink); font-weight: 500; }
 details.section .count {
   flex: none;
   min-width: 1.35rem;
