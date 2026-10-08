@@ -195,6 +195,7 @@ var en = Messages{
 
 	UIAbort:                "Abort",
 	UIAborted:              "Aborted.",
+	UIFollow:               "Open",
 	UIBibleSearchHeader:    "%d hits for “%s”",
 	UIBibleSearchEditions:  "Searched: %s",
 	UIBibleSearchTruncated: "Only the first %d pages of results were read.",

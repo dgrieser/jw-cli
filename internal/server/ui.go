@@ -113,6 +113,7 @@ func (p basePage) UIText() map[string]string {
 		"langQuick":      t.UILangQuick,
 		"langAll":        t.UILangAll,
 		"aborted":        t.UIAborted,
+		"follow":         t.UIFollow,
 	}
 }
 

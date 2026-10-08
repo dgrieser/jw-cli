@@ -1195,11 +1195,37 @@
     citingBlocks(doc, false);
   }
 
+  // titleLinks makes a section headed by a link — a publication quoting a
+  // verse — open and close on its whole title like any other: the title is
+  // plain text, and the link moves to a small button at the summary's end
+  // that does what following it did
+  function titleLinks(root) {
+    var heads = root.matches && root.matches("details.section") ? [root] : [];
+    root.querySelectorAll("details.section").forEach(function (d) { heads.push(d); });
+    heads.forEach(function (d) {
+      var s = d.querySelector(":scope > summary");
+      var a = s && s.querySelector(":scope > a[href]:not(.follow)");
+      if (!a) return;
+      var target = linkTarget(a);
+      if (!target || (target.kind !== "article" && target.kind !== "media")) return;
+      var title = make("span", "title");
+      while (a.firstChild) title.appendChild(a.firstChild);
+      s.replaceChild(title, a);
+      a.className = "follow";
+      var label = (T.follow || "↗") + ": " + (title.textContent || "").replace(/\s+/g, " ").trim();
+      a.setAttribute("aria-label", label);
+      a.setAttribute("title", label);
+      a.textContent = "↗";
+      s.appendChild(a);
+    });
+  }
+
   // citingBlocks makes every block of root that cites something an item of
   // its own: a paragraph of the document, or — nested — a paragraph of a
   // passage an unfold brought, so what that cites unfolds in turn.
   function citingBlocks(root, nested) {
     failedRefs(root);
+    titleLinks(root);
     var byBlock = new Map();
     root.querySelectorAll('a[href*="/bc/"], a[href*="/pc/"]').forEach(function (a) {
       if (a.closest("summary, [data-ui]")) return;
@@ -2363,16 +2389,6 @@
     if (!target) return;
     e.preventDefault();
     if (target.kind === "media") {
-      // a video heading the passage it quotes a verse in: its title opens and
-      // closes that passage, like any publication's; the player page is a
-      // link only where the video stands on its own
-      var summary = a.closest("summary");
-      if (summary && summary.parentElement.matches("details")) {
-        var d = summary.parentElement;
-        if (d.open) d.open = false;
-        else reveal(d);
-        return;
-      }
       location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
       return;
     }

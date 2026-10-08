@@ -286,6 +286,8 @@ type Messages struct {
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string
+	// UIFollow is the button by a quoting publication's title that loads it.
+	UIFollow string
 	// UIBibleSearch* head a text search of the bible: the hits and the query,
 	// the bibles searched, and the pages read when not all of them were.
 	UIBibleSearchHeader    string

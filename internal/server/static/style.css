@@ -664,6 +664,23 @@ details.section[open] > summary {
 }
 details.section > summary :is(h1, h2, h3, h4, h5, h6, p) { display: inline; font-size: inherit; margin: 0; }
 details.section > summary a { color: inherit; }
+/* the link of a section headed by a publication: a small button at its end,
+   so the rest of the title opens and closes the section */
+details.section > summary > a.follow {
+  flex: none;
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+details.section > summary > a.follow:hover { color: var(--accent); border-color: var(--accent); }
 details.section .count {
   flex: none;
   min-width: 1.35rem;
