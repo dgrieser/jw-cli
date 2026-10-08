@@ -24,6 +24,9 @@ type Config struct {
 	// Auth, when it holds users, puts every route behind HTTP basic
 	// authentication.
 	Auth *Credentials
+	// PageCache is how the browser's copy of the pages is used (see
+	// PageCachePolicies); empty is PageCacheAuto.
+	PageCache string
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -32,6 +35,7 @@ type Server struct {
 	defaultLang string
 	logf        func(format string, args ...any)
 	auth        *Credentials
+	pageCache   string
 	// langMemo caches resolved languages per spec, so the language list is not
 	// re-scanned on every request.
 	langMemo sync.Map
@@ -49,6 +53,7 @@ func New(cfg Config) *Server {
 		defaultLang: cfg.DefaultLang,
 		logf:        cfg.Logf,
 		auth:        cfg.Auth,
+		pageCache:   cfg.PageCache,
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}

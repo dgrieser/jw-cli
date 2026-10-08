@@ -946,6 +946,15 @@
   var reading = inSection && (!!document.querySelector(".document[data-unfold]") ||
     /^\/media\/item\//.test(location.pathname) || here.id === "search");
 
+  // the language a page names is the one the reader last picked: the server
+  // says so in a cookie, which a page the browser kept never asked it for
+  if (pageLang) {
+    var langCookie = /(?:^|;\s*)lang=([^;]*)/.exec(document.cookie);
+    if (!langCookie || decodeURIComponent(langCookie[1]) !== pageLang) {
+      document.cookie = "lang=" + encodeURIComponent(pageLang) + "; path=/; max-age=31536000; samesite=lax";
+    }
+  }
+
   // the way past the browser's copy to a login leaves the address at once
   if (hereQuery.has("nosw")) {
     var noSW = new URL(location.href);
@@ -1584,8 +1593,19 @@
           resolvePage(page).then(function (href) { location.assign(href); }, function () { location.assign(page.href); });
         });
       }
-      // a new tab opens with the click itself, or the browser blocks it
-      menuItem(T.followTab || "↗", function () { window.open(knownPage(page) || page.href, "_blank", "noopener"); });
+      // a new tab opens with the click itself, or the browser blocks it: a
+      // citation not resolved yet is resolved into the tab opened for it
+      menuItem(T.followTab || "↗", function () {
+        var known = knownPage(page);
+        if (known) {
+          window.open(known, "_blank", "noopener");
+          return;
+        }
+        var tab = window.open("", "_blank");
+        if (!tab) return;
+        tab.opener = null;
+        resolvePage(page).then(function (href) { tab.location.replace(href); }, function () { tab.location.replace(page.href); });
+      });
       if (page.sec && !samePage(page.href, location.href)) {
         menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
       }

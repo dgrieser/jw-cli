@@ -598,9 +598,16 @@ page of it, or drops one. Over HTTPS (or on localhost) the browser also keeps
 the pages themselves, so a page read once comes back at once, and even without
 a connection: a page that reads the same whatever the day for a month, one that
 shows what is current (today's text, this week's meetings, the newest videos
-and issues) for the day. Behind a login (basic authentication), every page is
-asked of the server first, so a revoked or switched login is never bypassed;
-the kept copy then only stands in while the server cannot be reached at all.
+and issues) for the day. Behind a login, every page is asked of the server
+first, so a revoked or switched login is never bypassed; the kept copy then
+only stands in while the server cannot be reached at all. `--page-cache`
+(`$JW_PAGE_CACHE`) sets that: `auto` (the default) does so behind this
+server's own login, or a proxy's that its requests show (an `Authorization`
+header, or a header naming the user such as `X-Forwarded-User` or
+`Remote-User`), and serves the copy first otherwise; `first` and `fallback`
+choose one way whatever the login, and `off` keeps no pages. Behind an
+authenticating proxy that passes nothing on (one that only checks a cookie),
+set `--page-cache fallback`.
 The reload button in the bar reads the page, and everything unfolded on it,
 anew from jw.org past every cache; a reference followed from a paragraph
 without a button of its own is then left to be followed again.

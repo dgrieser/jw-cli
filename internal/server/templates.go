@@ -10,7 +10,6 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
-	"strconv"
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/version"
@@ -43,12 +42,56 @@ func parseTemplates() map[string]*template.Template {
 	return out
 }
 
+// The ways the browser's copy of the pages (static/sw.js) is used:
+//
+//   - PageCacheFirst: a page read once comes back from the copy, without the
+//     server, until it is out of date — at once, and offline;
+//   - PageCacheFallback: every page is asked of the server first, so whoever
+//     decides who may read it (a login here, or in front of the server) does,
+//     every time; the copy only stands in while the server cannot be reached;
+//   - PageCacheOff: no page is kept;
+//   - PageCacheAuto: PageCacheFallback behind a login — this server's own, or
+//     one in front of it that the request for the worker shows (an
+//     Authorization header, or a header naming the user a proxy let in) —
+//     and PageCacheFirst otherwise.
+const (
+	PageCacheAuto     = "auto"
+	PageCacheFirst    = "first"
+	PageCacheFallback = "fallback"
+	PageCacheOff      = "off"
+)
+
+// PageCachePolicies are the values Config.PageCache takes.
+var PageCachePolicies = []string{PageCacheAuto, PageCacheFirst, PageCacheFallback, PageCacheOff}
+
+// proxyUserHeaders are where authenticating proxies name the user they let
+// through (oauth2-proxy, Authelia, Authentik, Cloudflare Access, Apache).
+var proxyUserHeaders = []string{
+	"Authorization", "X-Forwarded-User", "X-Forwarded-Email", "X-Auth-Request-User",
+	"X-Auth-Request-Email", "Remote-User", "X-Remote-User", "Cf-Access-Authenticated-User-Email",
+}
+
+// pageCachePolicy is the way this request's worker uses its copy.
+func (s *Server) pageCachePolicy(r *http.Request) string {
+	switch s.pageCache {
+	case PageCacheFirst, PageCacheFallback, PageCacheOff:
+		return s.pageCache
+	}
+	if !s.auth.Empty() {
+		return PageCacheFallback
+	}
+	for _, h := range proxyUserHeaders {
+		if r.Header.Get(h) != "" {
+			return PageCacheFallback
+		}
+	}
+	return PageCacheFirst
+}
+
 // serviceWorker serves static/sw.js from the root, so it may keep every page
-// of the site, stamped with the build serving it: another build is a new
-// worker, which drops what the old one kept. Behind a login, the worker asks
-// the server for every page first, so its answer — and a revoked login with
-// it — is never bypassed; the kept copy then only stands in while the server
-// cannot be reached at all.
+// of the site, stamped with the build serving it — another build is a new
+// worker, which drops what the old one kept — and with the way it uses its
+// copy (pageCachePolicy).
 func (s *Server) serviceWorker(w http.ResponseWriter, r *http.Request) {
 	src, err := staticFS.ReadFile("static/sw.js")
 	if err != nil {
@@ -57,8 +100,10 @@ func (s *Server) serviceWorker(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
+	// a worker fetched through a login is not one to hand to another
+	w.Header().Set("Vary", "Authorization")
 	src = bytes.ReplaceAll(src, []byte("__BUILD__"), []byte(buildStamp()))
-	src = bytes.ReplaceAll(src, []byte("__AUTH__"), []byte(strconv.FormatBool(!s.auth.Empty())))
+	src = bytes.ReplaceAll(src, []byte("__POLICY__"), []byte(s.pageCachePolicy(r)))
 	_, _ = w.Write(src)
 }
 

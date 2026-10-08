@@ -49,21 +49,39 @@ func TestRenderKeep(t *testing.T) {
 	}
 }
 
-func TestServiceWorkerAuth(t *testing.T) {
+func TestServiceWorkerPolicy(t *testing.T) {
 	for _, c := range []struct {
-		users bool
-		want  string
-	}{{false, "var AUTH = false;"}, {true, "var AUTH = true;"}} {
+		name   string
+		policy string
+		users  bool
+		header string
+		want   string
+	}{
+		{"open", "", false, "", PageCacheFirst},
+		{"own login", "", true, "", PageCacheFallback},
+		{"proxy basic auth", "", false, "Authorization", PageCacheFallback},
+		{"proxy user", PageCacheAuto, false, "X-Forwarded-User", PageCacheFallback},
+		{"asked first", PageCacheFirst, true, "", PageCacheFirst},
+		{"asked fallback", PageCacheFallback, false, "", PageCacheFallback},
+		{"off", PageCacheOff, false, "", PageCacheOff},
+	} {
 		var creds Credentials
 		if c.users {
 			creds.Add("anne", "secret")
 		}
-		s := New(Config{Auth: &creds})
+		s := New(Config{Auth: &creds, PageCache: c.policy})
+		r := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
+		if c.header != "" {
+			r.Header.Set(c.header, "anne")
+		}
 		w := httptest.NewRecorder()
-		s.serviceWorker(w, httptest.NewRequest(http.MethodGet, "/sw.js", nil))
+		s.serviceWorker(w, r)
 		body := w.Body.String()
-		if !strings.Contains(body, c.want) || strings.Contains(body, "__AUTH__") || strings.Contains(body, "__BUILD__") {
-			t.Errorf("users %v: want %q in the worker", c.users, c.want)
+		if want := `var POLICY = "` + c.want + `";`; !strings.Contains(body, want) {
+			t.Errorf("%s: want %q in the worker", c.name, want)
+		}
+		if strings.Contains(body, "__POLICY__") || strings.Contains(body, "__BUILD__") {
+			t.Errorf("%s: the worker is not stamped", c.name)
 		}
 	}
 }

@@ -12,14 +12,16 @@
 // The worker is stamped with the build serving it: a new build brings a new
 // worker, which starts its copy anew, since its pages are written for it.
 //
-// Behind a login (AUTH) every page is asked of the server first, so the
-// server decides each time who may read it — a login revoked or switched
-// included; the copy only stands in while the server cannot be reached at
-// all, and a refused login drops every copy.
+// How the copy is used is the server's to say (POLICY, see --page-cache):
+// "first" serves a page from it while it is current; "fallback" asks the
+// server for every page first, so whoever decides who may read it — a
+// login, here or in a proxy in front — does every time, and the copy only
+// stands in while the server cannot be reached at all; "off" keeps none.
+// A login refused drops every page kept.
 "use strict";
 
 var BUILD = "__BUILD__";
-var AUTH = __AUTH__;
+var POLICY = "__POLICY__";
 var PAGES = "jw-pages-" + BUILD;
 var STATIC = "jw-static-" + BUILD;
 var META = "jw-meta";
@@ -40,8 +42,11 @@ self.addEventListener("install", function (e) {
 
 self.addEventListener("activate", function (e) {
   e.waitUntil(caches.keys().then(function (names) {
+    // only this site's own copies of other builds: the origin's other caches
+    // are not this worker's to drop
     return Promise.all(names.filter(function (n) {
-      return n !== PAGES && n !== STATIC && n !== META;
+      if (n === PAGES && POLICY === "off") return true;
+      return /^jw-(pages|static)-/.test(n) && n !== PAGES && n !== STATIC;
     }).map(function (n) { return caches.delete(n); }));
   }).then(function () { return self.clients.claim(); }));
 });
@@ -172,7 +177,7 @@ function page(e, u) {
         });
       }
       return cache.match(k).then(function (hit) {
-        if (hit && fresh(hit, u) && !AUTH) return hit;
+        if (hit && fresh(hit, u) && POLICY === "first") return hit;
         // out of date: anew, and the old copy when the server cannot answer
         return fromServer().catch(function (err) {
           if (hit) return hit;
@@ -205,6 +210,6 @@ self.addEventListener("fetch", function (e) {
     e.respondWith(asset(req));
     return;
   }
-  if (req.mode !== "navigate" || !PAGE.test(u.pathname) || u.searchParams.has("nosw")) return;
+  if (POLICY === "off" || req.mode !== "navigate" || !PAGE.test(u.pathname) || u.searchParams.has("nosw")) return;
   e.respondWith(page(e, u));
 });
