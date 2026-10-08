@@ -408,3 +408,18 @@ func appendNote(notes []string, note string) []string {
 }
 
 func joinNotes(notes []string) string { return strings.Join(notes, " ") }
+
+// CitationPage is where a citation of the library leads when it is read on a
+// page of its own: the bible text it quotes, or else the document it was
+// taken from (docURL, without the anchor naming the passage).
+func (s *Service) CitationPage(ctx context.Context, lng model.Language, path string) (refs []bibleref.Ref, docURL string, err error) {
+	tip, err := newTooltipResolver(s, lng, nil).Resolve(ctx, path)
+	if err != nil {
+		return nil, "", err
+	}
+	if refs = passageRefs(tip.ContentHTML); len(refs) > 0 {
+		return refs, "", nil
+	}
+	docURL, _, _ = strings.Cut(tip.URL, "#")
+	return nil, docURL, nil
+}

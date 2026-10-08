@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.uiIndex)
 	mux.HandleFunc("GET /search", s.uiSearch)
 	mux.HandleFunc("GET /article", s.uiArticle)
+	mux.HandleFunc("GET /open", s.uiOpen)
 	mux.HandleFunc("GET /bible", s.uiBible)
 	mux.HandleFunc("GET /dailytext", s.uiDailyText)
 	mux.HandleFunc("GET /meetings", s.uiMeetings)

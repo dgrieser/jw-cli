@@ -20,6 +20,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/unfold"
 	"github.com/dgrieser/jw-cli/internal/version"
 )
 
@@ -1017,6 +1018,48 @@ func (s *Server) editionOptions(r *http.Request, current string) []editionOption
 		out = append(out, editionOption{Symbol: current, Label: current})
 	}
 	return out
+}
+
+// uiOpen reads a citation of the library on a page of its own: GET
+// /open?path=/wol/bc/… goes on to the bible reader with the verses it quotes,
+// a citation of a publication or a footnote to the article it is part of.
+func (s *Server) uiOpen(w http.ResponseWriter, r *http.Request) {
+	path, ok := libraryPath(r.FormValue("path"))
+	if !ok || !(unfold.IsCitation(path) || service.IsFootnote(path)) {
+		s.failUI(w, r, fmt.Errorf("parameter %q is not a citation of the library", "path"))
+		return
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
+	refs, doc, err := s.svc.CitationPage(r.Context(), lng, path)
+	if err != nil {
+		s.failUI(w, r, err)
+		return
+	}
+	q := url.Values{}
+	if lang := r.FormValue("lang"); lang != "" {
+		q.Set("lang", lang)
+	}
+	switch {
+	case len(refs) > 0:
+		table := s.svc.BookTable(r.Context(), lng)
+		names := make([]string, len(refs))
+		for i, ref := range refs {
+			names[i] = service.RefString(ref, table)
+		}
+		q.Set("ref", strings.Join(names, "; "))
+		if bible := r.FormValue("bible"); bible != "" {
+			q.Set("bible", bible)
+		}
+		http.Redirect(w, r, "/bible?"+q.Encode(), http.StatusFound)
+	case doc != "":
+		http.Redirect(w, r, articleHref(doc, r.FormValue("lang")), http.StatusFound)
+	default:
+		s.failUI(w, r, fmt.Errorf("nothing to open at %s", path))
+	}
 }
 
 // vidRef is the passage a verse id (book·1e6 + chapter·1e3 + verse) names, up

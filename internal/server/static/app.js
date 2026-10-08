@@ -1288,15 +1288,35 @@
       var qs = q.toString();
       return "/media/item/" + encodeURIComponent(target.key) + (qs ? "?" + qs : "");
     }
-    q.set("target", a.href);
     if (lang) q.set("lang", lang);
-    return "/article?" + q.toString();
+    var passage = a.closest(".passage[data-bible]");
+    var bible = passage ? passage.getAttribute("data-bible") : new URLSearchParams(location.search).get("bible");
+    switch (target.kind) {
+      case "article":
+        q.set("target", a.href);
+        return "/article?" + q.toString();
+      case "ref":
+      case "footnote":
+        // the server reads the citation and goes on to the verses it quotes
+        // or the article it is part of
+        q.set("path", target.key);
+        if (bible) q.set("bible", bible);
+        return "/open?" + q.toString();
+      case "translations":
+        var verse = a.closest(".item[data-vid]");
+        if (!verse) return null;
+        q.set("vid", verse.getAttribute("data-vid"));
+        if (bible) q.set("bible", bible);
+        return "/bible?" + q.toString();
+    }
+    return null;
   }
 
   function openFollowMenu(a) {
     var target = linkTarget(a);
     followHere.textContent = target && target.kind === "media" ? (T.follow || "Open") : (T.followHere || T.follow || "Open");
     followMenu.link = a;
+    followTab.hidden = !pageOf(a);
     followMenu.hidden = false;
     var r = a.getBoundingClientRect();
     var w = followMenu.offsetWidth, h = followMenu.offsetHeight;
@@ -1340,13 +1360,16 @@
     if (!followMenu.hidden) closeFollowMenu();
   }, { passive: true });
 
-  // what holds a button down: a press of half a second, a right click, or
-  // the long press a phone reports as a context menu. A bible button opens
-  // its new page at once and has nothing to choose.
+  // what holds a link down: a press of half a second, a right click, or
+  // the long press a phone reports as a context menu. Every link the page
+  // follows in place offers the choice — a section's button, a citation, a
+  // footnote, a verse number; a bible button opens its new page at once and
+  // has nothing to choose.
   var held = null;
   function heldButton(e) {
-    var a = e.target.closest ? e.target.closest("summary > a.follow") : null;
-    return a && !a.target && doc.contains(a) ? a : null;
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.target || !doc.contains(a) || a.closest("[data-ui]")) return null;
+    return linkTarget(a) ? a : null;
   }
   doc.addEventListener("pointerdown", function (e) {
     var a = heldButton(e);
@@ -1381,7 +1404,7 @@
     if (!held || !held.shown) return;
     var a = held.a;
     held = null;
-    if (e.target.closest && e.target.closest("a.follow") === a) {
+    if (e.target.closest && e.target.closest("a[href]") === a) {
       e.preventDefault();
       e.stopPropagation();
     }

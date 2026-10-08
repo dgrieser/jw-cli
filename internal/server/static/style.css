@@ -681,8 +681,9 @@ details.section > summary > a.follow {
   text-decoration: none;
 }
 details.section > summary > a.follow:hover { color: var(--accent); border-color: var(--accent); }
-/* held, the button is a menu, not a link the phone offers to share */
-details.section > summary > a.follow { -webkit-touch-callout: none; user-select: none; }
+/* held, a link is a menu, not one the phone offers to share */
+.document[data-unfold] a[href] { -webkit-touch-callout: none; }
+details.section > summary > a.follow { user-select: none; }
 .follow-menu {
   position: fixed;
   z-index: 20;
@@ -698,6 +699,7 @@ details.section > summary > a.follow { -webkit-touch-callout: none; user-select:
   animation: pop 140ms ease-out;
 }
 .follow-menu[hidden] { display: none; }
+.follow-menu button[hidden] { display: none; }
 .follow-menu button { justify-content: flex-start; text-align: left; min-height: 2.4rem; padding: 0 0.7rem; color: var(--ink); font-weight: 500; }
 details.section .count {
   flex: none;
