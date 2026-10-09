@@ -35,8 +35,12 @@
   color-scheme: light dark;
 }
 
+/* the theme follows the system unless the settings pick one: data-theme on
+   the root is "light" or "dark" then */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --paper: #16171a;
     --ink: #e7e8eb;
     --muted: #9b9fa8;
@@ -56,6 +60,26 @@
     --book-light: #5079ad;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239b9fa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   }
+}
+:root[data-theme="dark"] {
+  --paper: #16171a;
+  --ink: #e7e8eb;
+  --muted: #9b9fa8;
+  --accent: #94adf0;
+  --accent-hover: #aabdf3;
+  --accent-ink: #0f1627;
+  --accent-soft: #232b3f;
+  --line: #2a2c32;
+  --line-strong: #3c3f47;
+  --field: #1f2126;
+  --field-hover: #26282e;
+  --surface: #1c1d21;
+  --danger: #f28b82;
+  --danger-soft: #3a2422;
+  --book-dark: #2f548a;
+  --book-mid: #3a67a6;
+  --book-light: #5079ad;
+  --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239b9fa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
 
 /* base ---------------------------------------------------------------- */
@@ -1355,6 +1379,11 @@ button.ps-item:hover { background: var(--field); border-color: transparent; }
 .ps-steps { flex: none; display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.6rem; }
 .ps-steps button { min-width: 2.2rem; min-height: 2.2rem; padding: 0 0.45rem; border-radius: 999px; font-size: 1.15rem; }
 .ps-steps .ps-size { min-width: 3.4rem; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.ps-seg { flex: none; display: inline-flex; gap: 0.15rem; margin-left: 0.6rem; padding: 0.15rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--field); }
+.ps-seg button { min-width: 2.3rem; min-height: 1.9rem; padding: 0 0.5rem; border-color: transparent; border-radius: 999px; background: transparent; color: var(--muted); }
+.ps-seg button:hover { border-color: transparent; background: var(--field-hover); color: var(--ink); }
+.ps-seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+.ps-theme { padding-right: 0.2rem; }
 .pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
 .page-bar .pb { position: relative; }
 /* the diamond that unfolds the whole page sits in the bar, not beside a line */

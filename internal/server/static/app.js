@@ -81,8 +81,51 @@
     });
   });
 
-  // the text size, the language and the reload are a panel behind one
-  // button: open until a click elsewhere or Escape, so a size can be stepped
+  // --- the theme: light, dark, or the system's ---------------------------
+
+  // kept in this browser like the size; the head of the page sets
+  // data-theme before anything is drawn, and "system" is its absence
+  (function () {
+    var seg = document.querySelectorAll(".ps-theme [data-theme-set]");
+    if (!seg.length) return;
+    var meta = document.querySelector('meta[name="color-scheme"]');
+    function show() {
+      var cur = root.getAttribute("data-theme") || "system";
+      seg.forEach(function (b) {
+        var on = b.getAttribute("data-theme-set") === cur;
+        b.setAttribute("aria-checked", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+      });
+    }
+    function set(theme) {
+      if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
+      else root.removeAttribute("data-theme");
+      if (meta) meta.content = root.getAttribute("data-theme") || "light dark";
+      try {
+        if (theme === "light" || theme === "dark") window.localStorage.setItem("jw:theme", theme);
+        else window.localStorage.removeItem("jw:theme");
+      } catch (err) {
+        // not kept: the theme holds for this page only
+      }
+      show();
+    }
+    seg.forEach(function (b, i) {
+      b.addEventListener("click", function () { set(b.getAttribute("data-theme-set")); });
+      // a radio group: the arrows move the choice along it
+      b.addEventListener("keydown", function (e) {
+        var step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+        if (!step) return;
+        e.preventDefault();
+        var next = seg[(i + step + seg.length) % seg.length];
+        set(next.getAttribute("data-theme-set"));
+        next.focus();
+      });
+    });
+    show();
+  })();
+
+  // the text size, the theme, the language and the reload are a panel
+  // behind one button: open until a click elsewhere or Escape, so a size can be stepped
   // through; the language and the reload close it as they go
   var closeSettings = function () {};
   (function () {

@@ -325,6 +325,12 @@ type Messages struct {
 	UISettings string
 	UITextSize string
 	UIRefresh  string
+	// UITheme heads the theme's choice in the settings: UIThemeLight,
+	// UIThemeDark, or UIThemeSystem, which follows the system's.
+	UITheme       string
+	UIThemeLight  string
+	UIThemeDark   string
+	UIThemeSystem string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 }
