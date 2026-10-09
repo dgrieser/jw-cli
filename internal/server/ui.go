@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/subtitles"
 	"github.com/dgrieser/jw-cli/internal/unfold"
 	"github.com/dgrieser/jw-cli/internal/version"
 )
@@ -906,15 +909,26 @@ type mediaItemPage struct {
 	// Stream is the rendition the page plays: up to 720p, which is plenty
 	// for a phone and spares its data plan
 	Stream *model.MediaFile
+	// Text is what the item says in words — a song's lyrics, the document a
+	// recording reads, the transcript of its subtitles — and Paragraphs the
+	// transcript as running text. JWLink is the item's page on jw.org.
+	Text       *model.MediaText
+	Paragraphs [][]model.Cue
+	JWLink     string
+	// HasResolution says a rendition has a picture size to show.
+	HasResolution bool
 }
 
 const streamQuality = "720p"
 
 type mediaFileView struct {
-	Label     string
-	Size      string
-	URL       string
-	Subtitles string
+	Label      string
+	Size       string
+	URL        string
+	Subtitles  string
+	Resolution string
+	// BurnedIn says the rendition shows its subtitles in the picture.
+	BurnedIn bool
 }
 
 func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
@@ -932,12 +946,23 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, item.Title),
 		Item:     item,
 		Image:    service.BestImage(item.Images),
+		JWLink:   service.VideoLink(item.LANK, lng.Symbol),
 	}
 	var primary *model.CategoryRef
 	if item.PrimaryCategory != "" {
 		primary = &model.CategoryRef{Key: item.PrimaryCategory}
 	}
+	// the words are read while the trail is: neither waits on the other, and
+	// a page without them is still the item's page
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		if text, err := s.svc.MediaText(r.Context(), lng.Symbol, item); err == nil && !text.Empty() {
+			page.Text = &text
+			page.Paragraphs = subtitles.Paragraphs(text.Transcript)
+		}
+	})
 	page.Crumbs = s.mediaCrumbs(r.Context(), lng, primary, page.basePage)
+	wg.Wait()
 	if f, err := download.PickVideo(item.Files, streamQuality); err == nil {
 		page.Stream = &f
 	}
@@ -946,12 +971,23 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		if label == "" {
 			label = f.MimeType
 		}
-		page.Files = append(page.Files, mediaFileView{
-			Label: label, Size: humanSize(f.Filesize), URL: f.URL, Subtitles: f.SubtitlesURL,
-		})
+		v := mediaFileView{
+			Label: label, Size: humanSize(f.Filesize), URL: f.URL, Subtitles: f.SubtitlesURL, BurnedIn: f.Subtitled,
+		}
+		if f.FrameWidth > 0 && f.FrameHeight > 0 {
+			v.Resolution = fmt.Sprintf("%d × %d", f.FrameWidth, f.FrameHeight)
+			if f.FrameRate > 0 {
+				v.Resolution += fmt.Sprintf(" · %s fps", strconv.FormatFloat(math.Round(f.FrameRate*100)/100, 'f', -1, 64))
+			}
+			page.HasResolution = true
+		}
+		page.Files = append(page.Files, v)
 	}
 	s.render(w, http.StatusOK, "media_item", page)
 }
+
+// Clock writes a time in a recording the way a player shows it.
+func (mediaItemPage) Clock(sec float64) string { return subtitles.Clock(sec) }
 
 type biblePage struct {
 	basePage

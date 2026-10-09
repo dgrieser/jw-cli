@@ -82,6 +82,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/media/categories", s.apiMediaCategories)
 	mux.HandleFunc("GET /api/v1/media/categories/{key}", s.apiMediaCategory)
 	mux.HandleFunc("GET /api/v1/media/items/{lank}", s.apiMediaItem)
+	mux.HandleFunc("GET /api/v1/media/items/{lank}/text", s.apiMediaText)
 	mux.HandleFunc("GET /api/v1/pub", s.apiPub)
 	mux.HandleFunc("GET /api/v1/pub/library", s.apiPubLibrary)
 	mux.HandleFunc("GET /api/v1/pub/library/{path...}", s.apiPubLibrary)

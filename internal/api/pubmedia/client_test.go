@@ -98,8 +98,33 @@ func TestLinksBook(t *testing.T) {
 	if len(pm.Files["X"]["PDF"]) != 1 || len(pm.Files["X"]["MP3"]) != 1 {
 		t.Fatalf("unexpected files: %+v", pm.Files)
 	}
-	if mp3 := pm.Files["X"]["MP3"][0]; mp3.Track != 1 || mp3.URL == "" {
+	mp3 := pm.Files["X"]["MP3"][0]
+	if mp3.Track != 1 || mp3.URL == "" {
 		t.Errorf("unexpected MP3 entry: %+v", mp3)
+	}
+	// the recording times the paragraphs of the document it reads
+	m := mp3.Markers
+	if m == nil || m.DocID != 1102025970 || len(m.Paragraphs) == 0 {
+		t.Fatalf("markers = %+v", m)
+	}
+	if p := m.Paragraphs[0]; p.PID != 1 || p.Start != 3.809 || p.Duration != 3.458 {
+		t.Errorf("first marker = %+v", p)
+	}
+	if pdf := pm.Files["X"]["PDF"][0]; pdf.Markers != nil {
+		t.Errorf("a PDF has no markers: %+v", pdf.Markers)
+	}
+}
+
+func TestClockSeconds(t *testing.T) {
+	for in, want := range map[string]float64{"00:00:12.714": 12.714, "01:02:03.5": 3723.5, "02:03.25": 123.25} {
+		if got, err := clockSeconds(in); err != nil || got != want {
+			t.Errorf("clockSeconds(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"", "12", "a:b", "-1:00"} {
+		if _, err := clockSeconds(in); err == nil {
+			t.Errorf("clockSeconds(%q) should fail", in)
+		}
 	}
 }
 

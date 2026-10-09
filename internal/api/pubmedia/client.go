@@ -4,6 +4,7 @@
 package pubmedia
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,13 +51,34 @@ type wireFile struct {
 	TrackImage *struct {
 		URL string `json:"url"`
 	} `json:"trackImage"`
-	Duration float64 `json:"duration"`
-	Filesize int64   `json:"filesize"`
-	Label    string  `json:"label"`
-	Track    flexNum `json:"track"`
-	DocID    flexNum `json:"docid"`
-	BookNum  flexNum `json:"booknum"`
-	MimeType string  `json:"mimetype"`
+	Duration float64      `json:"duration"`
+	Filesize int64        `json:"filesize"`
+	Label    string       `json:"label"`
+	Track    flexNum      `json:"track"`
+	DocID    flexNum      `json:"docid"`
+	BookNum  flexNum      `json:"booknum"`
+	MimeType string       `json:"mimetype"`
+	Markers  *wireMarkers `json:"markers"`
+}
+
+// wireMarkers are the times of a recording's paragraphs: an object, or — for
+// a file that has none — null or an empty string.
+type wireMarkers struct {
+	DocumentID flexNum `json:"documentId"`
+	Markers    []struct {
+		ParagraphID flexNum `json:"mepsParagraphId"`
+		StartTime   string  `json:"startTime"`
+		Duration    string  `json:"duration"`
+	} `json:"markers"`
+}
+
+func (m *wireMarkers) UnmarshalJSON(b []byte) error {
+	if !bytes.HasPrefix(bytes.TrimSpace(b), []byte("{")) {
+		*m = wireMarkers{}
+		return nil
+	}
+	type plain wireMarkers
+	return json.Unmarshal(b, (*plain)(m))
 }
 
 // Links queries GETPUBMEDIALINKS and returns the available files grouped by
@@ -200,12 +222,52 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 				pf.Track, _ = atoiNum(f.Track)
 				pf.DocID, _ = atoiNum(f.DocID)
 				pf.BookNum, _ = atoiNum(f.BookNum)
+				pf.Markers = markers(f)
 				out = append(out, pf)
 			}
 			pm.Files[sym][format] = out
 		}
 	}
 	return pm, nil
+}
+
+// markers are the times of a recording's paragraphs, nil when it has none.
+func markers(f wireFile) *model.Markers {
+	if f.Markers == nil || len(f.Markers.Markers) == 0 {
+		return nil
+	}
+	m := &model.Markers{}
+	m.DocID, _ = atoiNum(f.Markers.DocumentID)
+	for _, w := range f.Markers.Markers {
+		pid, err := atoiNum(w.ParagraphID)
+		start, serr := clockSeconds(w.StartTime)
+		if err != nil || serr != nil || pid <= 0 {
+			continue
+		}
+		dur, _ := clockSeconds(w.Duration)
+		m.Paragraphs = append(m.Paragraphs, model.ParaMarker{PID: pid, Start: start, Duration: dur})
+	}
+	if len(m.Paragraphs) == 0 {
+		return nil
+	}
+	return m
+}
+
+// clockSeconds reads "00:01:02.345" (or "01:02.345") as seconds.
+func clockSeconds(s string) (float64, error) {
+	parts := strings.Split(strings.TrimSpace(s), ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0, fmt.Errorf("not a time: %q", s)
+	}
+	var total float64
+	for _, p := range parts {
+		v, err := strconv.ParseFloat(p, 64)
+		if err != nil || v < 0 {
+			return 0, fmt.Errorf("not a time: %q", s)
+		}
+		total = total*60 + v
+	}
+	return total, nil
 }
 
 // flexNum is a numeric field the API sends in whatever shape it likes: a

@@ -344,6 +344,27 @@ func (s *Server) apiMediaItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+// apiMediaText is /api/v1/media/items/{lank}/text: the item's lyrics, the
+// document its recording reads, and the transcript of its subtitles.
+func (s *Server) apiMediaText(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	item, err := s.svc.MediaItem(r.Context(), lng.Symbol, r.PathValue("lank"))
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	text, err := s.svc.MediaText(r.Context(), lng.Symbol, item)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, text)
+}
+
 // pubResponse is /api/v1/pub: the publication's names plus its files as
 // listing rows, each with its direct download URL.
 type pubResponse struct {

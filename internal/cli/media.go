@@ -12,6 +12,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 	"github.com/dgrieser/jw-cli/internal/service"
+	"github.com/dgrieser/jw-cli/internal/subtitles"
 )
 
 func newMediaCmd(a *app.App) *cobra.Command {
@@ -19,7 +20,7 @@ func newMediaCmd(a *app.App) *cobra.Command {
 		Use:   "media",
 		Short: "Browse videos and audio (JW Broadcasting media library)",
 	}
-	cmd.AddCommand(newMediaBrowseCmd(a), newMediaInfoCmd(a))
+	cmd.AddCommand(newMediaBrowseCmd(a), newMediaInfoCmd(a), newMediaTextCmd(a))
 	return cmd
 }
 
@@ -171,5 +172,153 @@ func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {
 		}
 		fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
 	}
+	fmt.Fprintf(&b, "\n"+txt.MediaTextHint+"\n", m.LANK)
 	return b.String()
+}
+
+func newMediaTextCmd(a *app.App) *cobra.Command {
+	var transcript, timestamps bool
+	cmd := &cobra.Command{
+		Use:   "text <LANK>",
+		Short: "Show the lyrics, text or transcript of a video or audio item",
+		Long: `Show the words of a media item.
+
+A song's lyrics come from its page on jw.org: the songs of the songbook —
+for the meetings, sung by a choir, instrumental, sung by children — are the
+songbook's song of that number in the content language, as are the original
+songs and the children's songs. A recording read from a publication shows the
+document it reads. Any other video shows the transcript of its subtitles.
+
+When a song's lyrics are found, its subtitles are not shown; --transcript
+shows them as well. --timestamps sets each line's time in the recording
+before it, where it is known.
+
+Examples:
+  jw media text pub-sjjm_1_VIDEO
+  jw media text pub-osg_118_AUDIO -l de
+  jw media text pub-mwbv_202705_1_VIDEO --timestamps`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lng, err := a.Lang(cmd.Context())
+			if err != nil {
+				return err
+			}
+			item, err := a.Service().MediaItem(cmd.Context(), lng.Symbol, args[0])
+			if err != nil {
+				return err
+			}
+			text, err := a.Service().MediaText(cmd.Context(), lng.Symbol, item)
+			if err != nil {
+				return err
+			}
+			format, err := a.Format()
+			if err != nil {
+				return err
+			}
+			if format == render.JSON {
+				return a.WriteJSON(text)
+			}
+			if text.Empty() {
+				return fmt.Errorf(a.Text().NoMediaText, item.LANK)
+			}
+			return a.WriteMarkdown(mediaTextMarkdown(item, text, a.Text(), transcript, timestamps, a.Flags.NoURLs))
+		},
+	}
+	fl := cmd.Flags()
+	fl.BoolVar(&transcript, "transcript", false, "also show the subtitles' transcript when lyrics or a document were found")
+	fl.BoolVar(&timestamps, "timestamps", false, "show each line's time in the recording")
+	return cmd
+}
+
+// mediaTextMarkdown writes the words of item: the document it sings or reads,
+// stanza by stanza, and the transcript of its subtitles, paragraph by
+// paragraph.
+func mediaTextMarkdown(item model.MediaItem, text model.MediaText, txt *i18n.Messages, transcript, timestamps, noURLs bool) string {
+	var b strings.Builder
+	if d := text.Document; d != nil {
+		title := d.Title
+		if title == "" {
+			title = item.Title
+		}
+		fmt.Fprintf(&b, "# %s\n\n", title)
+		if d.Context != "" {
+			fmt.Fprintf(&b, "*%s*\n\n", d.Context)
+		}
+		if d.Theme != "" {
+			fmt.Fprintf(&b, "%s\n\n", d.Theme)
+		}
+		for _, blk := range d.Blocks {
+			var lines []string
+			for _, l := range blk.Lines {
+				line := l.Text
+				if timestamps && d.Synced && l.End > 0 {
+					line = "`" + subtitles.Clock(l.Start) + "` " + line
+				}
+				lines = append(lines, line)
+			}
+			switch blk.Kind {
+			case model.BlockHeading:
+				fmt.Fprintf(&b, "## %s\n\n", strings.Join(lines, " "))
+			case model.BlockChorus:
+				if blk.Label != "" {
+					lines = append([]string{"**" + blk.Label + "**"}, lines...)
+				}
+				fmt.Fprintf(&b, "> %s\n\n", strings.Join(lines, "  \n> "))
+			default:
+				if len(lines) > 0 && !timestamps {
+					lines[0] = escapeListMarker(lines[0])
+				}
+				if blk.Label != "" {
+					lines[0] = "**" + blk.Label + "** " + lines[0]
+				}
+				fmt.Fprintf(&b, "%s\n\n", strings.Join(lines, "  \n"))
+			}
+		}
+		if d.Closing != "" {
+			fmt.Fprintf(&b, "%s\n\n", d.Closing)
+		}
+		var facts []string
+		if d.PubName != "" {
+			facts = append(facts, fmt.Sprintf("- %s: %s", txt.LabelPublication, d.PubName))
+		}
+		if !noURLs {
+			facts = append(facts, fmt.Sprintf("- %s: <%s>", txt.LabelSource, d.URL))
+			if d.PrintedEdition != "" {
+				facts = append(facts, fmt.Sprintf("- %s: <%s>", txt.PrintedEdition, d.PrintedEdition))
+			}
+			for _, l := range d.Downloads {
+				facts = append(facts, fmt.Sprintf("- %s: <%s>", l.Label, l.URL))
+			}
+		}
+		if len(facts) > 0 {
+			b.WriteString(strings.Join(facts, "\n") + "\n\n")
+		}
+	}
+	if len(text.Transcript) > 0 && (text.Document == nil || transcript) {
+		if text.Document == nil {
+			fmt.Fprintf(&b, "# %s\n\n", item.Title)
+		}
+		fmt.Fprintf(&b, "## %s\n\n", txt.TranscriptHeading)
+		for _, para := range subtitles.Paragraphs(text.Transcript) {
+			var parts []string
+			for _, c := range para {
+				if timestamps {
+					parts = append(parts, "`"+subtitles.Clock(c.Start)+"` "+c.Text)
+				} else {
+					parts = append(parts, c.Text)
+				}
+			}
+			sep := " "
+			if timestamps {
+				sep = "  \n"
+			} else {
+				parts[0] = escapeListMarker(parts[0])
+			}
+			fmt.Fprintf(&b, "%s\n\n", strings.Join(parts, sep))
+		}
+		if !noURLs && text.SubtitlesURL != "" {
+			fmt.Fprintf(&b, "- %s: <%s>\n", txt.LabelSource, text.SubtitlesURL)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n") + "\n"
 }

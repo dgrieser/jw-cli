@@ -105,3 +105,70 @@ func TestMediaInfo(t *testing.T) {
 		}
 	}
 }
+
+// textMux adds a song and a subtitled video: the song's lyrics come from its
+// page, timed by the recording; the video's words from its subtitles.
+func textMux(t *testing.T) *http.ServeMux {
+	mux := mediaMux(t)
+	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-sjjm_1_VIDEO", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"media": [{
+			"languageAgnosticNaturalKey": "pub-sjjm_1_VIDEO", "type": "video", "title": "1. Jehovah's Attributes", "duration": 140.78,
+			"files": [{"progressiveDownloadURL": "http://%[1]s/files/s.mp4", "label": "720p", "frameHeight": 720, "mimetype": "video/mp4", "filesize": 5,
+				"subtitles": {"url": "http://%[1]s/s.vtt"}}]
+		}]}`, r.Host)
+	})
+	mux.HandleFunc("/s.vtt", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nFirst words.\n\n00:00:05.000 --> 00:00:06.000\nThen more.\n")
+	})
+	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("pub") != "sjjm" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"pubName": "Sing Out Joyfully—Meetings", "pub": "sjjm", "files": {"E": {"MP3": [{
+			"title": "1.", "track": 1, "docid": 1102016801, "duration": 139.55, "file": {"url": "u", "checksum": "c"},
+			"markers": {"documentId": 1102016801, "markers": [{"mepsParagraphId": 4, "startTime": "00:00:11.671", "duration": "00:00:10.033"}]}
+		}]}}}`)
+	})
+	mux.HandleFunc("/finder", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<article id="article" class="docClass-31"><header><p class="contextTtl">SONG 1</p><h1>Jehovah’s Attributes</h1></header>
+<div class="bodyTxt"><ol class="source"><li><p data-pid="4"><span class="txtSrcBullet">1. </span>Jehovah our God,</p><p data-pid="5">Creator of life.</p></li></ol>
+<div class="chorus"></div></div><div class="closingContent"><p>(See also Ps. 36:9.)</p></div></article>`)
+	})
+	return mux
+}
+
+func TestMediaText(t *testing.T) {
+	out, err := runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--timestamps", "--transcript")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"# Jehovah’s Attributes", "*SONG 1*",
+		"**1.** `0:11` Jehovah our God,  \nCreator of life.",
+		"(See also Ps. 36:9.)",
+		"- Publication: Sing Out Joyfully—Meetings",
+		"## Transcript", "`0:01` First words.\n\n`0:05` Then more.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+
+	// without --transcript the lyrics stand alone
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--no-urls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "Transcript") || strings.Contains(out, "`0:11`") || strings.Contains(out, "http") {
+		t.Errorf("unexpected output:\n%s", out)
+	}
+
+	// a video with nothing but subtitles is its transcript
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-abc_1_VIDEO", "-l", "en")
+	if err == nil || !strings.Contains(err.Error(), "No lyrics, text or subtitles found for pub-abc_1_VIDEO") {
+		t.Errorf("expected nothing found, got %v:\n%s", err, out)
+	}
+}

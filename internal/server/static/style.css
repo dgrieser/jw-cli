@@ -1055,6 +1055,77 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 }
 .player.audio img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: var(--r); background: var(--field); margin-bottom: 0.75rem; }
 .player audio { display: block; width: 100%; }
+.mediaactions { margin: 1rem 0 0; }
+
+/* the words of a media item: a song's lyrics, the document a recording
+   reads, the transcript of its subtitles. A line the player is at is marked;
+   with a script, a timed line plays from its time when pressed. */
+
+.mediatext { max-width: 60rem; margin-bottom: 1.5rem; }
+.lyrics { max-width: var(--measure); }
+.lyrics p { margin: 0; }
+.lyr-context { color: var(--muted); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.04em; }
+.lyrics .lyr-title { margin: 0.15rem 0 0.35rem; }
+.lyrics h3 { margin: 1.25rem 0 0.5rem; }
+.lyr-theme, .lyr-closing { color: var(--muted); font-size: 0.95rem; }
+.lyr-closing { margin-top: 1rem !important; }
+.lyrics:not(.song) .lyr-block { margin: 0 0 0.85rem; }
+.lyrics.song .lyr-block { position: relative; margin: 1rem 0 0; padding-left: 2rem; }
+.lyrics.song .lyr-block.chorus { padding-left: 3rem; font-style: italic; }
+.lyrics.song .lyr-block.stanza:not(:has(.lyr-label)) { margin-top: 0.6rem; }
+.lyr-label { position: absolute; left: 0; color: var(--muted); font-weight: 600; font-style: normal; }
+.lyr-block.chorus .lyr-label { position: static; display: block; font-size: 0.85rem; letter-spacing: 0.04em; }
+.lyr-links { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
+
+.mediatext .line,
+.mediatext .cue {
+  border-radius: var(--r-small);
+  transition: background-color 160ms, color 160ms;
+}
+.mediatext .line { margin-left: -0.35rem; padding: 0.05rem 0.35rem; }
+.mediatext .cue { padding: 0.05rem 0.1rem; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.mediatext.playable [data-start] { cursor: pointer; }
+.mediatext.playable [data-start]:hover { color: var(--accent); }
+.mediatext .now { background: var(--accent-soft); color: var(--ink); }
+
+.transcript {
+  max-width: var(--measure);
+  max-height: min(32rem, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  position: relative;
+  padding: 0.25rem 0.75rem 0.25rem 0;
+}
+.transcript p { margin: 0 0 0.85rem; }
+.cue-time {
+  min-height: 0;
+  padding: 0 0.3rem;
+  margin-right: 0.15rem;
+  border: 0;
+  border-radius: var(--r-small);
+  background: var(--field);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  vertical-align: 0.1em;
+}
+.cue-time:hover { color: var(--accent); }
+details.transcript-wrap {
+  max-width: var(--measure);
+  margin-top: 1.25rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+}
+details.transcript-wrap > summary {
+  padding: 0.5rem 0.8rem;
+  cursor: pointer;
+  font-weight: 550;
+}
+details.transcript-wrap > summary:hover { color: var(--accent); }
+details.transcript-wrap[open] > summary { border-bottom: 1px solid var(--line); }
+details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 /* media start page: a featured video and carousels ------------------- */
 

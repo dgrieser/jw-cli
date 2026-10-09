@@ -790,6 +790,76 @@
     }
   }
 
+  // --- the words of a media item, as it plays --------------------------------
+
+  // a song's lines and a transcript's captions carry their time in the
+  // recording: the one the player is at is marked, and pressing one plays
+  // from it. The transcript scrolls in its box to keep the caption in view,
+  // unless the reader scrolled it themselves a moment ago.
+  (function () {
+    var text = document.querySelector(".mediatext");
+    var player = document.querySelector(".mediaitem video, .mediaitem audio");
+    if (!text || !player) return;
+    var timed = Array.prototype.map.call(text.querySelectorAll("[data-start]"), function (el) {
+      return { el: el, start: parseFloat(el.getAttribute("data-start")), end: parseFloat(el.getAttribute("data-end")) };
+    }).filter(function (t) { return t.start >= 0 && t.end > t.start; });
+    if (!timed.length) return;
+    text.classList.add("playable");
+    text.querySelectorAll(".cue-time").forEach(function (b) { b.hidden = false; });
+    var box = text.querySelector(".transcript");
+    var touched = 0;
+    if (box) {
+      ["wheel", "touchstart", "keydown"].forEach(function (ev) {
+        box.addEventListener(ev, function () { touched = Date.now(); }, { passive: true });
+      });
+    }
+    var current = null;
+    function mark(t) {
+      if (current === t) return;
+      if (current) {
+        current.el.classList.remove("now");
+        current.el.removeAttribute("aria-current");
+      }
+      current = t;
+      if (!t) return;
+      t.el.classList.add("now");
+      t.el.setAttribute("aria-current", "true");
+      if (box && box.contains(t.el) && box.clientHeight && Date.now() - touched > 4000) {
+        var top = t.el.offsetTop, bottom = top + t.el.offsetHeight;
+        if (top < box.scrollTop || bottom > box.scrollTop + box.clientHeight) {
+          box.scrollTo({ top: Math.max(0, top - box.clientHeight / 3), behavior: "smooth" });
+        }
+      }
+    }
+    function sync() {
+      var now = player.currentTime;
+      if (current && now >= current.start && now < current.end) return;
+      var at = null;
+      for (var i = 0; i < timed.length; i++) {
+        if (now >= timed[i].start && now < timed[i].end) {
+          at = timed[i];
+          break;
+        }
+      }
+      mark(at);
+    }
+    player.addEventListener("timeupdate", sync);
+    player.addEventListener("seeked", sync);
+    text.addEventListener("click", function (e) {
+      if (e.target.closest("a")) return;
+      var el = e.target.closest("[data-start]");
+      if (!el || !text.contains(el)) return;
+      // a selection being made is reading, not a jump
+      var sel = window.getSelection && window.getSelection();
+      if (sel && !sel.isCollapsed && !e.target.closest(".cue-time")) return;
+      player.currentTime = parseFloat(el.getAttribute("data-start")) || 0;
+      if (player.paused) {
+        var p = player.play();
+        if (p && p.catch) p.catch(function () {});
+      }
+    });
+  })();
+
   // --- focus ---------------------------------------------------------------
 
   // the page's main field takes the focus where typing needs no keyboard to
