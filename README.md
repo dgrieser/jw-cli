@@ -200,6 +200,18 @@ video counts as newer than a publication of the same year from July on; one
 whose date cannot be read, and every video of an `-s occ` listing, closes the
 listing. A video that shows no transcript passage and names no verse in its
 title (a song matched by its theme text) is left out.
+
+The search's passage is a few lines of the subtitles that stop where the verse
+is named, before anything is said about it. With excerpts on, each video's
+subtitles are read (through the cache, like every page) and the passage is
+found in them word for word. It is widened to the paragraphs it belongs to and
+then to whole paragraphs before and after, until at least 150 words of context
+stand on each side: the reading of the verse and what the speaker makes of it.
+The reference is marked where it is said. A video found only by the verse in
+its title has no passage; its excerpt is where its subtitles first say the
+verse. A video without subtitles, or whose subtitles do not hold the passage,
+keeps the search's passage.
+
 `--no-videos` leaves the videos out altogether, and so does `--include`, which
 names the publications to cover.
 

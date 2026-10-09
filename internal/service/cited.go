@@ -98,15 +98,17 @@ var refInTitle = regexp.MustCompile(`\d+:\d+`)
 // search that fails leaves out what it would have found.
 //
 // The snippet is the passage of the transcript the verse is quoted in; with
-// excerpts on it stands as the excerpt, the way a publication's passage does,
-// and a video that shows no such passage and names no verse in its title — a
-// song matched by its theme text — is left out, as keepTelling leaves out the
-// publications that only name a verse.
+// excerpts on it stands as the excerpt, the way a publication's passage does
+// — widened to what is said around it, where the video's subtitles can be
+// read (see dateVideos) — and a video that shows no such passage and names
+// no verse in its title — a song matched by its theme text — is left out, as
+// keepTelling leaves out the publications that only name a verse.
 func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []string, excerpts bool) []datedVideo {
 	if s.Search == nil {
 		return nil
 	}
 	var out []model.Result
+	var found []string // the reference each video was found by
 	seen := map[string]bool{}
 	for _, term := range terms {
 		for page := range maxVideoPages {
@@ -127,13 +129,18 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 					continue
 				}
 				out = append(out, videoResult(r, lng, excerpts))
+				found = append(found, term)
 			}
 			if len(sp.Results) < videoPageSize {
 				break
 			}
 		}
 	}
-	return s.dateVideos(ctx, lng, out)
+	var refs []string
+	if excerpts {
+		refs = found
+	}
+	return s.dateVideos(ctx, lng, out, refs)
 }
 
 // datedVideo is a video of a citation listing and the day it was first
@@ -147,7 +154,12 @@ type datedVideo struct {
 // not say, the mediator's media item does. The day heads the video's line, in
 // the place a publication names its issue. Best effort: a video whose item
 // cannot be read stays undated.
-func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []model.Result) []datedVideo {
+//
+// With refs, the reference each video was found by, its excerpt is widened
+// from the item's subtitles (see transcriptExcerpt). Best effort as well: a
+// video whose subtitles cannot be read, or do not hold the search's passage,
+// keeps the passage as the search gave it.
+func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []model.Result, refs []string) []datedVideo {
 	out := make([]datedVideo, len(videos))
 	var (
 		wg  sync.WaitGroup
@@ -170,6 +182,11 @@ func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []m
 			if t, err := time.Parse(time.RFC3339, item.FirstPublished); err == nil {
 				out[i].published = t
 				out[i].Context = t.Format(time.DateOnly)
+			}
+			if i < len(refs) {
+				if excerpt, ok := s.widenExcerpt(ctx, item, v.Snippet, refs[i]); ok {
+					out[i].Excerpt = excerpt
+				}
 			}
 		}()
 	}

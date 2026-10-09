@@ -548,6 +548,8 @@ blockquote.snippet, blockquote.excerpt {
 blockquote.excerpt { color: var(--ink); }
 blockquote.snippet p, blockquote.excerpt p { margin: 0 0 0.4rem; }
 blockquote.snippet p:last-child, blockquote.excerpt p:last-child { margin-bottom: 0; }
+/* a hit inside a passage: the verse where a video's transcript names it */
+mark { background: var(--accent-soft); color: inherit; border-radius: 3px; padding: 0 0.15em; font-weight: 600; }
 
 .pager {
   display: flex;
