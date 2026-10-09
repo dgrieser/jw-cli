@@ -66,7 +66,11 @@ type wireFile struct {
 	MimeType               string  `json:"mimetype"`
 	Label                  string  `json:"label"`
 	FrameHeight            int     `json:"frameHeight"`
+	FrameWidth             int     `json:"frameWidth"`
+	FrameRate              float64 `json:"frameRate"`
+	BitRate                float64 `json:"bitRate"`
 	Duration               float64 `json:"duration"`
+	Subtitled              bool    `json:"subtitled"`
 	Subtitles              *struct {
 		URL string `json:"url"`
 	} `json:"subtitles"`
@@ -106,8 +110,12 @@ func (w wireMediaItem) toModel() model.MediaItem {
 			MimeType:    f.MimeType,
 			Checksum:    f.Checksum,
 			FrameHeight: f.FrameHeight,
+			FrameWidth:  f.FrameWidth,
+			FrameRate:   f.FrameRate,
+			BitRate:     f.BitRate,
 			Filesize:    f.Filesize,
 			Duration:    f.Duration,
+			Subtitled:   f.Subtitled,
 		}
 		if f.Subtitles != nil {
 			mf.SubtitlesURL = f.Subtitles.URL

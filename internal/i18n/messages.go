@@ -90,6 +90,20 @@ type Messages struct {
 	DownloadHintIndex string
 	// PressToDownload is the TUI hint for a directly downloadable item.
 	PressToDownload string
+	// TranscriptHeading heads the words of a video as its subtitles carry
+	// them; LabelSource names the page a text is from, LabelPublication the
+	// publication a recording belongs to, PrintedEdition the picture of the
+	// printed page.
+	TranscriptHeading string
+	// TranscriptAIHeading heads the transcript of machine-made subtitles.
+	TranscriptAIHeading string
+	LabelSource         string
+	LabelPublication    string
+	PrintedEdition      string
+	// NoMediaText takes the media item's LANK.
+	NoMediaText string
+	// MediaTextHint takes the media item's LANK.
+	MediaTextHint string
 
 	// --- languages table --------------------------------------------------
 	ColSymbol     string
@@ -333,6 +347,24 @@ type Messages struct {
 	UIThemeSystem string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
+	// UILyrics, UIText and UITranscript head the words of a media item: a
+	// song's lyrics, the document a recording reads, the transcript its
+	// subtitles carry. UIPlayFrom is what a line's time does when pressed.
+	UILyrics     string
+	UIText       string
+	UITranscript string
+	// UITranscriptAI heads the transcript of machine-made subtitles.
+	UITranscriptAI string
+	UIPlayFrom     string
+	// UIPublication, UIResolution and UIPrintedEdition label what the page
+	// knows of a media item: the publication it belongs to, the picture size
+	// of a rendition, the printed page of a song. UIBurnedIn marks a rendition
+	// with its subtitles in the picture; UIOnJWOrg links the item's own page.
+	UIPublication    string
+	UIResolution     string
+	UIPrintedEdition string
+	UIBurnedIn       string
+	UIOnJWOrg        string
 }
 
 // Date renders t as a full date in the language's own word order.

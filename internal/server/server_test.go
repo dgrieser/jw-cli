@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -179,16 +180,50 @@ func mediaMux(t *testing.T) *http.ServeMux {
 	})
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-abc_1_VIDEO", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"media": [{
+		fmt.Fprintf(w, `{"media": [{
 			"languageAgnosticNaturalKey": "pub-abc_1_VIDEO", "type": "video",
 			"title": "A New Video", "description": "About something.", "primaryCategory": "BJF",
 			"durationFormattedMinSec": "5:00", "availableLanguages": ["E","X"],
 			"files": [
 				{"progressiveDownloadURL": "https://cdn.example/v_r240P.mp4", "label": "240p", "frameHeight": 240, "mimetype": "video/mp4", "filesize": 5},
-				{"progressiveDownloadURL": "https://cdn.example/v_r720P.mp4", "label": "720p", "frameHeight": 720, "mimetype": "video/mp4", "filesize": 9,
-				 "subtitles": {"url": "https://cdn.example/v.vtt"}}
+				{"progressiveDownloadURL": "https://cdn.example/v_r720P.mp4", "label": "720p", "frameHeight": 720, "frameWidth": 1280, "frameRate": 29.97002997, "mimetype": "video/mp4", "filesize": 9,
+				 "subtitles": {"url": "http://%s/v.vtt"}}
 			]
+		}]}`, r.Host)
+	})
+	mux.HandleFunc("/v.vtt", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nHello <i>world</i>.\n\n00:00:04.000 --> 00:00:05.000\nNext thought.\n")
+	})
+	// a song of the songbook: the choir's recording, which times the lines of
+	// its page
+	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-sjjc_1_AUDIO", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"media": [{
+			"languageAgnosticNaturalKey": "pub-sjjc_1_AUDIO", "type": "audio", "title": "1. Jehovah's Attributes",
+			"duration": 158.98, "files": [{"progressiveDownloadURL": "https://cdn.example/sjjc_E_001.mp3", "mimetype": "audio/mpeg", "checksum": "c1", "filesize": 9}]
 		}]}`)
+	})
+	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("pub") != "sjjc" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"pubName": "Sing Out Joyfully—Vocals", "pub": "sjjc", "files": {"E": {"MP3": [{
+			"title": "1. Jehovah's Attributes", "track": 1, "docid": 1102016801, "duration": 158.98,
+			"file": {"url": "https://cdn.example/sjjc_E_001.mp3", "checksum": "c1"},
+			"markers": {"documentId": 1102016801, "markers": [{"mepsParagraphId": 4, "startTime": "00:00:16.016", "duration": "00:00:08.000"}]}
+		}]}}}`)
+	})
+	mux.HandleFunc("/finder", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("docid") != "1102016801" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprint(w, `<article id="article" class="docClass-31"><header><p class="contextTtl">SONG 1</p><h1>Jehovah’s Attributes</h1></header>
+<p class="themeScrp">(Revelation 4:11)</p>
+<div class="bodyTxt"><ol class="source"><li><p data-pid="4"><span class="txtSrcBullet">1. </span>Jehovah our God, exalted in might,</p>
+<p data-pid="5">Creator of life.</p></li></ol></div></article>`)
 	})
 	return mux
 }
@@ -361,11 +396,57 @@ func TestUIMedia(t *testing.T) {
 	}
 	resp, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
 	if resp.StatusCode != 200 || !strings.Contains(body, `<source src="https://cdn.example/v_r720P.mp4"`) ||
-		!strings.Contains(body, `<track kind="subtitles" src="https://cdn.example/v.vtt"`) {
+		!regexp.MustCompile(`<track kind="subtitles" src="http://[^"]+/v.vtt"`).MatchString(body) {
 		t.Errorf("item page should play the video: status %d body %.3000s", resp.StatusCode, body)
 	}
 	if strings.Contains(body, `href="/download/media/`) {
 		t.Errorf("item page still links the best rendition")
+	}
+}
+
+// The item page shows the words: a song's lyrics from its page, each line
+// timed by the recording it plays; a video's transcript from its subtitles.
+func TestUIMediaItemText(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	resp, body := get(t, srv, "/media/item/pub-sjjc_1_AUDIO?lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`<h2>Lyrics</h2>`,
+		`<p class="lyr-context">SONG 1</p>`,
+		`<p class="lyr-theme">(Revelation 4:11)</p>`,
+		`<div class="lyrics song synced">`,
+		`<span class="lyr-label">1.</span>`,
+		`<p class="line" data-start="16.016" data-end="24.016">Jehovah our God, exalted in might,</p>`,
+		`<p class="line">Creator of life.</p>`,
+		`<dt>Publication</dt><dd>Sing Out Joyfully—Vocals</dd>`,
+		`/finder?docid=1102016801&amp;wtlocale=E" target="_blank" rel="noopener">Open on site</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("song page lacks %s: %.4000s", want, body)
+		}
+	}
+
+	_, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
+	for _, want := range []string{
+		`<h2>Transcript</h2>`,
+		`data-start="1" data-end="2"><button type="button" class="cue-time" title="Play from here" aria-label="Play from here 0:01" hidden>0:01</button> Hello world.</span>`,
+		`<span class="cue" data-start="4" data-end="5"><button`,
+		`<td class="hint">1280 × 720 · 29.97 fps</td>`,
+		`href="https://www.jw.org/finder?lank=pub-abc_1_VIDEO&amp;wtlocale=E"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("video page lacks %s: %.5000s", want, body)
+		}
+	}
+	if strings.Contains(body, "<h2>Lyrics</h2>") {
+		t.Error("a video without a document has no lyrics")
+	}
+
+	resp, body = get(t, srv, "/api/v1/media/items/pub-sjjc_1_AUDIO/text?lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `"docid": 1102016801`) || !strings.Contains(body, `"synced": true`) {
+		t.Errorf("api: status %d body %.2000s", resp.StatusCode, body)
 	}
 }
 
@@ -421,7 +502,7 @@ func TestDownloadMediaRedirect(t *testing.T) {
 		t.Errorf("quality selection: %q", loc)
 	}
 	resp, _ = get(t, srv, "/download/media/pub-abc_1_VIDEO?lang=en&subtitles=true")
-	if loc := resp.Header.Get("Location"); loc != "https://cdn.example/v.vtt" {
+	if loc := resp.Header.Get("Location"); !strings.HasPrefix(loc, "http://") || !strings.HasSuffix(loc, "/v.vtt") {
 		t.Errorf("subtitles: %q", loc)
 	}
 }

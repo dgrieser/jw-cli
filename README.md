@@ -294,7 +294,43 @@ jw media browse                              # top-level categories
 jw media browse VideoOnDemand                # drill into a category
 jw media browse LatestVideos -n 25 -i        # interactive
 jw media info pub-jwb_202401_1_VIDEO         # renditions of one item
+jw media text pub-sjjm_1_VIDEO               # a song's lyrics
+jw media text pub-osg_118_AUDIO -l de        # an original song, in German
+jw media text pub-mwbv_202705_1_VIDEO        # a video's transcript
+jw media text pub-sjjc_1_AUDIO --timestamps  # each line's time in the recording
 ```
+
+`jw media text` prints the words of a video or audio item, from the first of
+these that has them:
+
+- **The document the recording sings or reads.** pub-media lists, with the MP3
+  of a publication's track, the jw.org document it belongs to and *markers*: the
+  time each paragraph of that document starts in the recording. The document is
+  read through the jw.org finder (`/finder?docid=…&wtlocale=…`), so it comes in
+  the content language. For a song that is its lyrics — stanzas, choruses and
+  bridge, the theme scripture, "See also", the printed edition and the lead
+  sheet PDF when the page offers one. The songs of the songbook — for the
+  meetings (`sjjm`), the vocals (`sjjc`), instrumental (`sjji`), sung by
+  children (`pksjj`) — are the songbook's song of that number, whatever page
+  the recording names. The original songs (`osg`), the children's songs
+  (`pkon`) and the older songbook's recordings (`snv`) have their own pages.
+- **The subtitles.** A video's WebVTT subtitles (linked by the mediator) are
+  its transcript, joined into paragraphs at the pauses between sentences.
+- **The machine-made subtitles.** For an item without subtitles of its own,
+  pub-media may list an `AIVTT` file (only when the query names no file
+  format). It is often listed before it is written, as an empty WebVTT file,
+  and its link is signed for a few minutes only. So it is always tried when
+  listed, and kept by its checksum rather than its link: an empty file is not
+  downloaded again until pub-media lists a file with a new checksum (when its
+  cached answer is renewed, or on a reload past the cache), and a link whose
+  signature ran out is asked of pub-media anew. The transcript is labelled
+  *automatic*.
+
+Where the recording that times a document's lines is the one played (or a
+rendition of the same length), each line carries its time: `--timestamps`
+prints it. `--transcript` adds the subtitles' transcript under a song's lyrics.
+`-o json` is the whole model: the document's blocks and lines (paragraph id,
+start, end) and the transcript's cues.
 
 ### Publications & downloads
 
@@ -466,6 +502,14 @@ jw serve --addr 0.0.0.0           # expose on the network (see below)
 server-rendered **web site** (no JavaScript required) and a **JSON API** under
 `/api/v1`. Both are driven by the same code the commands use, so output and
 behavior match the CLI.
+
+A media item's page plays the item and shows its words under the player: a
+song's lyrics, the document a recording reads, or the transcript of a video's
+subtitles (behind a fold when lyrics are shown too). The line being sung or
+said is highlighted as the item plays, and pressing a line or a caption's time
+plays from there. The page also names the recording's publication, links the
+item's page on jw.org, the printed edition and the lead sheet, and lists each
+rendition's picture size and frame rate.
 
 The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
 it is about to listen on a non-loopback address without authentication.
@@ -763,6 +807,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
+| `GET /api/v1/media/items/{lank}/text` | — | `jw media text` |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
 | `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
 | `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents) |

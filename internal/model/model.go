@@ -71,8 +71,13 @@ type MediaFile struct {
 	Checksum     string  `json:"checksum,omitempty"`
 	SubtitlesURL string  `json:"subtitlesUrl,omitempty"`
 	FrameHeight  int     `json:"frameHeight,omitempty"`
+	FrameWidth   int     `json:"frameWidth,omitempty"`
+	FrameRate    float64 `json:"frameRate,omitempty"`
+	BitRate      float64 `json:"bitRate,omitempty"` // kbit/s
 	Filesize     int64   `json:"filesize"`
 	Duration     float64 `json:"duration,omitempty"`
+	// Subtitled says the subtitles are burned into the picture.
+	Subtitled bool `json:"subtitled,omitempty"`
 }
 
 // MediaItem is one video/audio item from the mediator API.
@@ -88,6 +93,98 @@ type MediaItem struct {
 	Files              []MediaFile                  `json:"files,omitempty"`
 	Images             map[string]map[string]string `json:"images,omitempty"` // type -> size -> url
 	AvailableLanguages []string                     `json:"availableLanguages,omitempty"`
+}
+
+// MediaText is what a media item says in words: the document it sings or
+// reads — a song's lyrics in the songbook, an article read aloud — and the
+// transcript its subtitles carry. Either can be missing.
+type MediaText struct {
+	LANK       string         `json:"lank"`
+	Document   *MediaDocument `json:"document,omitempty"`
+	Transcript []Cue          `json:"transcript,omitempty"`
+	// SubtitlesURL is the WebVTT file the transcript is read from.
+	SubtitlesURL string `json:"subtitlesUrl,omitempty"`
+	// AITranscript says the transcript is the machine-made subtitles
+	// pub-media lists for an item without subtitles of its own.
+	AITranscript bool `json:"aiTranscript,omitempty"`
+}
+
+// Empty says there is no text at all.
+func (t MediaText) Empty() bool { return t.Document == nil && len(t.Transcript) == 0 }
+
+// MediaDocument is the jw.org document a recording sings or reads.
+type MediaDocument struct {
+	DocID int    `json:"docid"`
+	URL   string `json:"url"`
+	// Pub and PubName are the publication of the recording the document was
+	// found by: "sjjm", "“Sing Out Joyfully” to Jehovah—Meetings".
+	Pub     string `json:"pub,omitempty"`
+	PubName string `json:"pubName,omitempty"`
+	// Context is the line over the title: "SONG 1".
+	Context string `json:"context,omitempty"`
+	Title   string `json:"title"`
+	// Theme is the scripture a song is written on: "(Revelation 4:11)";
+	// Closing what follows the text: "(See also Ps. 36:9; ...)".
+	Theme   string      `json:"theme,omitempty"`
+	Blocks  []TextBlock `json:"blocks"`
+	Closing string      `json:"closing,omitempty"`
+	// PrintedEdition is the picture of the page as printed, with the notes of
+	// a song.
+	PrintedEdition string `json:"printedEdition,omitempty"`
+	// Downloads are the files the page offers with the text: a lead sheet.
+	Downloads []Link `json:"downloads,omitempty"`
+	// Synced says the lines carry their times in the recording the item
+	// plays.
+	Synced bool `json:"synced,omitempty"`
+}
+
+// Lyrics says the document is a song's: it is made of stanzas.
+func (d MediaDocument) Lyrics() bool {
+	for _, b := range d.Blocks {
+		if b.Kind == BlockStanza {
+			return true
+		}
+	}
+	return false
+}
+
+// The kinds of a TextBlock.
+const (
+	BlockStanza    = "stanza"
+	BlockChorus    = "chorus"
+	BlockHeading   = "heading"
+	BlockParagraph = "paragraph"
+)
+
+// TextBlock is a stanza or chorus of a song, or a heading or paragraph of
+// any other document.
+type TextBlock struct {
+	Kind string `json:"kind"`
+	// Label is a stanza's number ("1.") or a chorus's name ("(CHORUS)").
+	Label string     `json:"label,omitempty"`
+	Lines []TextLine `json:"lines"`
+}
+
+// TextLine is one paragraph of the page: a line of a song. Start and End are
+// where the recording sings it, in seconds, when it is known.
+type TextLine struct {
+	PID   int     `json:"pid,omitempty"`
+	Text  string  `json:"text"`
+	Start float64 `json:"start,omitempty"`
+	End   float64 `json:"end,omitempty"`
+}
+
+// Cue is one caption of a transcript, Start and End in seconds.
+type Cue struct {
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Text  string  `json:"text"`
+}
+
+// Link is a labelled URL.
+type Link struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }
 
 // Category is a mediator category tree node.
@@ -129,6 +226,23 @@ type PubFile struct {
 	Duration float64 `json:"duration,omitempty"`
 	Modified string  `json:"modified,omitempty"`
 	ImageURL string  `json:"imageUrl,omitempty"`
+	// Markers time a recording against the document it reads or sings.
+	Markers *Markers `json:"markers,omitempty"`
+}
+
+// Markers say where in a recording each paragraph of the document it reads or
+// sings begins, in seconds.
+type Markers struct {
+	DocID      int          `json:"docid"`
+	Paragraphs []ParaMarker `json:"paragraphs"`
+}
+
+// ParaMarker is one paragraph of a document, by its id on the page, as a
+// recording reads it.
+type ParaMarker struct {
+	PID      int     `json:"pid"`
+	Start    float64 `json:"start"`
+	Duration float64 `json:"duration"`
 }
 
 // PubMedia is the pub-media API response for one publication.
