@@ -319,10 +319,18 @@ type Messages struct {
 	UIFontSmaller string
 	UIFontLarger  string
 	UIFontReset   string
-	// UITextSize opens the text size controls, UIRefresh reloads the page
-	// past the cache.
+	// UISettings opens the bar's settings: the text size, the content
+	// language and UIRefresh, which reloads the page past the cache;
+	// UITextSize heads the text size controls in it.
+	UISettings string
 	UITextSize string
 	UIRefresh  string
+	// UITheme heads the theme's choice in the settings: UIThemeLight,
+	// UIThemeDark, or UIThemeSystem, which follows the system's.
+	UITheme       string
+	UIThemeLight  string
+	UIThemeDark   string
+	UIThemeSystem string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 }

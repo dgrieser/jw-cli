@@ -214,7 +214,12 @@ var en = Messages{
 	UIFontSmaller:          "Smaller text",
 	UIFontLarger:           "Larger text",
 	UIFontReset:            "Default text size",
+	UISettings:             "Settings",
+	UITheme:                "Appearance",
+	UIThemeLight:           "Light",
+	UIThemeDark:            "Dark",
+	UIThemeSystem:          "System",
 	UITextSize:             "Text size",
-	UIRefresh:              "Reload, bypassing the cache",
+	UIRefresh:              "Reload",
 	UIBackToOverview:       "Overview",
 }

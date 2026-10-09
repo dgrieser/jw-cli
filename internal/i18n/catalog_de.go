@@ -214,7 +214,12 @@ var de = Messages{
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
 	UIFontReset:            "Normale Schriftgröße",
+	UISettings:             "Einstellungen",
+	UITheme:                "Darstellung",
+	UIThemeLight:           "Hell",
+	UIThemeDark:            "Dunkel",
+	UIThemeSystem:          "System",
 	UITextSize:             "Schriftgröße",
-	UIRefresh:              "Neu laden, ohne Cache",
+	UIRefresh:              "Neu laden",
 	UIBackToOverview:       "Übersicht",
 }

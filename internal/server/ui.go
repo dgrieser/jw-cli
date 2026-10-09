@@ -46,8 +46,9 @@ type basePage struct {
 	Locale string
 	T      *i18n.Messages
 	// LangSymbol is the resolved content language, which the language
-	// picker shows as chosen.
+	// picker shows as chosen; LangName names it in the settings.
 	LangSymbol string
+	LangName   string
 }
 
 // Version is the build serving the page, for the footer: a release tag or
@@ -176,6 +177,10 @@ func (s *Server) base(r *http.Request, title string) basePage {
 	page := basePage{Title: title, Lang: lang, Path: r.URL.Path, Hidden: hidden, Locale: "en", T: i18n.EN.Text()}
 	if lng, err := s.language(r); err == nil {
 		page.Locale, page.T, page.LangSymbol = lng.Locale, text(lng), lng.Symbol
+		page.LangName = lng.Vernacular
+		if page.LangName == "" {
+			page.LangName = lng.Symbol
+		}
 	}
 	return page
 }
