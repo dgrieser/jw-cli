@@ -104,6 +104,9 @@ type MediaText struct {
 	Transcript []Cue          `json:"transcript,omitempty"`
 	// SubtitlesURL is the WebVTT file the transcript is read from.
 	SubtitlesURL string `json:"subtitlesUrl,omitempty"`
+	// AITranscript says the transcript is the machine-made subtitles
+	// pub-media lists for an item without subtitles of its own.
+	AITranscript bool `json:"aiTranscript,omitempty"`
 }
 
 // Empty says there is no text at all.

@@ -95,9 +95,11 @@ type Messages struct {
 	// publication a recording belongs to, PrintedEdition the picture of the
 	// printed page.
 	TranscriptHeading string
-	LabelSource       string
-	LabelPublication  string
-	PrintedEdition    string
+	// TranscriptAIHeading heads the transcript of machine-made subtitles.
+	TranscriptAIHeading string
+	LabelSource         string
+	LabelPublication    string
+	PrintedEdition      string
 	// NoMediaText takes the media item's LANK.
 	NoMediaText string
 	// MediaTextHint takes the media item's LANK.
@@ -351,7 +353,9 @@ type Messages struct {
 	UILyrics     string
 	UIText       string
 	UITranscript string
-	UIPlayFrom   string
+	// UITranscriptAI heads the transcript of machine-made subtitles.
+	UITranscriptAI string
+	UIPlayFrom     string
 	// UIPublication, UIResolution and UIPrintedEdition label what the page
 	// knows of a media item: the publication it belongs to, the picture size
 	// of a rendition, the printed page of a song. UIBurnedIn marks a rendition

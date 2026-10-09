@@ -28,15 +28,23 @@ func New(hc *httpx.Client) *Client { return &Client{hc: hc} }
 
 // Query identifies the publication (or part) to fetch links for.
 type Query struct {
-	Pub      string   // publication symbol: w, g, nwt, sjj, ...
-	DocID    int      // alternative to Pub: MEPS document id
-	Issue    string   // YYYYMM for periodicals
-	BookNum  int      // bible book 1-66
-	Track    int      // audio track / chapter
-	Formats  []string // PDF, EPUB, MP3, ... (empty = all common formats)
-	Lang     string   // JW language symbol (required)
-	AllLangs bool
+	Pub     string   // publication symbol: w, g, nwt, sjj, ...
+	DocID   int      // alternative to Pub: MEPS document id
+	Issue   string   // YYYYMM for periodicals
+	BookNum int      // bible book 1-66
+	Track   int      // audio track / chapter
+	Formats []string // PDF, EPUB, MP3, ... (empty = all common formats)
+	// AnyFormat asks for every format there is, unfiltered: the only way
+	// pub-media lists some, like the machine-made subtitles (AIVTT), which
+	// it leaves out of any filtered answer. Formats is ignored.
+	AnyFormat bool
+	Lang      string // JW language symbol (required)
+	AllLangs  bool
 }
+
+// FormatAIVTT is the machine-made subtitles of a track: a WebVTT file,
+// listed only for a query of AnyFormat.
+const FormatAIVTT = "AIVTT"
 
 // DefaultFormats requested when the user does not narrow the format down.
 var DefaultFormats = []string{"PDF", "EPUB", "JWPUB", "RTF", "MP3", "MP4", "AAC", "ZIP"}
@@ -130,7 +138,9 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 	v.Set("output", "json")
 	v.Set("langwritten", q.Lang)
 	v.Set("txtCMSLang", q.Lang)
-	v.Set("fileformat", strings.Join(formats, ","))
+	if !q.AnyFormat {
+		v.Set("fileformat", strings.Join(formats, ","))
+	}
 	if q.AllLangs {
 		v.Set("alllangs", "1")
 	} else {

@@ -40,7 +40,8 @@ func textUpstream(t *testing.T) (*Service, string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if q.Get("fileformat") != "MP3" || q.Get("langwritten") != "E" {
+		// a track is asked for in every format, which is what lists AIVTT
+		if (q.Get("pub") != "" && q.Has("fileformat")) || q.Get("langwritten") != "E" {
 			http.Error(w, "unexpected query "+r.URL.RawQuery, http.StatusBadRequest)
 			return
 		}
@@ -155,5 +156,123 @@ func TestMediaTextNothing(t *testing.T) {
 	item := model.MediaItem{LANK: "pub-xyz_1_VIDEO", Files: []model.MediaFile{{SubtitlesURL: up + "/missing.vtt"}}}
 	if _, err := s.MediaText(context.Background(), "E", item); err == nil {
 		t.Error("a subtitles file that cannot be read, with nothing else, is an error")
+	}
+}
+
+// aiUpstream lists machine-made subtitles for track 1 of "xyz": the file
+// whose checksum pub-media names, behind a link signed per answer. A link
+// signed before the last answer has run out.
+type aiUpstream struct {
+	srv      *httptest.Server
+	checksum string // what pub-media lists
+	body     string // the file of that checksum
+	answers  int    // pub-media answers given: the signature of the last
+	fetched  int    // files read
+	subs     bool   // the mediator links subtitles too
+}
+
+func newAIUpstream(t *testing.T) (*Service, *aiUpstream) {
+	t.Helper()
+	up := &aiUpstream{checksum: "empty", body: "WEBVTT\n"}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/apis/pub-media/GETPUBMEDIALINKS", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("fileformat") {
+			// as pub-media does: a filtered answer never lists AIVTT
+			fmt.Fprint(w, `{"pub": "xyz", "files": {"E": {"MP4": [{"track": 1, "file": {"url": "v.mp4"}}]}}}`)
+			return
+		}
+		up.answers++
+		fmt.Fprintf(w, `{"pubName": "Videos", "pub": "xyz", "files": {"E": {
+			"MP4": [{"track": 1, "file": {"url": "v.mp4"}}],
+			"AIVTT": [{"track": 1, "filesize": %d, "mimetype": "text/vtt",
+				"file": {"url": "%s/a/1/o/xyz_E_01.aivtt?Expires=1&Signature=s%d", "checksum": %q}}]}}}`,
+			len(up.body), up.srv.URL, up.answers, up.checksum)
+	})
+	mux.HandleFunc("/a/1/o/xyz_E_01.aivtt", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("Signature") != fmt.Sprintf("s%d", up.answers) {
+			http.Error(w, "expired", http.StatusForbidden)
+			return
+		}
+		up.fetched++
+		fmt.Fprint(w, up.body)
+	})
+	mux.HandleFunc("/subs.vtt", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nReal subtitles.\n")
+	})
+	up.srv = httptest.NewServer(mux)
+	t.Cleanup(up.srv.Close)
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.srv.URL, JWOrg: up.srv.URL, WOL: up.srv.URL}))
+	return New(hc, httpx.OpenCacheAt(t.TempDir())), up
+}
+
+func (up *aiUpstream) item() model.MediaItem {
+	item := model.MediaItem{LANK: "pub-xyz_1_VIDEO", Files: []model.MediaFile{{URL: "v.mp4"}}}
+	if up.subs {
+		item.Files[0].SubtitlesURL = up.srv.URL + "/subs.vtt"
+	}
+	return item
+}
+
+// Listed before they are written, the machine-made subtitles are an empty
+// file: kept as such, and not read again until pub-media lists a changed
+// file — which is read, and is the item's transcript.
+func TestMediaTextAIVTT(t *testing.T) {
+	s, up := newAIUpstream(t)
+	ctx := context.Background()
+	for range 2 {
+		text, err := s.MediaText(ctx, "E", up.item())
+		if err != nil || !text.Empty() {
+			t.Fatalf("an empty file is no text: %+v, %v", text, err)
+		}
+	}
+	if up.fetched != 1 {
+		t.Errorf("the empty file was read %d times, want once: it is kept", up.fetched)
+	}
+
+	// pub-media lists the written file: read past the cache, as a reload does
+	up.checksum, up.body = "written", "WEBVTT\n\n00:00:03.000 --> 00:00:04.000\nSpoken words.\n"
+	text, err := s.MediaText(httpx.WithRefresh(ctx), "E", up.item())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !text.AITranscript || len(text.Transcript) != 1 || text.Transcript[0].Text != "Spoken words." || text.SubtitlesURL != "" {
+		t.Errorf("text = %+v", text)
+	}
+	if up.fetched != 2 {
+		t.Errorf("files read = %d, want 2", up.fetched)
+	}
+}
+
+// pub-media's answer is kept for longer than its links are signed: a link
+// refused for its signature is asked of pub-media anew.
+func TestMediaTextAIVTTExpired(t *testing.T) {
+	s, up := newAIUpstream(t)
+	up.body = "WEBVTT\n\n00:00:03.000 --> 00:00:04.000\nSpoken words.\n"
+	ctx := context.Background()
+	// pub-media's answer is kept: its link signed with s1
+	if _, err := s.trackFiles(ctx, "E", track{Pub: "xyz", Track: 1}); err != nil {
+		t.Fatal(err)
+	}
+	up.answers++ // s1 has run out
+	text, err := s.MediaText(ctx, "E", up.item())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(text.Transcript) != 1 || !text.AITranscript || up.answers != 3 || up.fetched != 1 {
+		t.Errorf("text = %+v; pub-media answers %d, files read %d", text, up.answers, up.fetched)
+	}
+}
+
+// Subtitles of its own are an item's transcript, not the machine-made ones.
+func TestMediaTextSubtitlesBeforeAIVTT(t *testing.T) {
+	s, up := newAIUpstream(t)
+	up.subs = true
+	up.checksum, up.body = "written", "WEBVTT\n\n00:00:03.000 --> 00:00:04.000\nSpoken words.\n"
+	text, err := s.MediaText(context.Background(), "E", up.item())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if text.AITranscript || len(text.Transcript) != 1 || text.Transcript[0].Text != "Real subtitles." {
+		t.Errorf("text = %+v", text)
 	}
 }

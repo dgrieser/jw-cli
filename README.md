@@ -316,6 +316,15 @@ these that has them:
   (`pkon`) and the older songbook's recordings (`snv`) have their own pages.
 - **The subtitles.** A video's WebVTT subtitles (linked by the mediator) are
   its transcript, joined into paragraphs at the pauses between sentences.
+- **The machine-made subtitles.** For an item without subtitles of its own,
+  pub-media may list an `AIVTT` file (only when the query names no file
+  format). It is often listed before it is written, as an empty WebVTT file,
+  and its link is signed for a few minutes only. So it is always tried when
+  listed, and kept by its checksum rather than its link: an empty file is not
+  downloaded again until pub-media lists a file with a new checksum (when its
+  cached answer is renewed, or on a reload past the cache), and a link whose
+  signature ran out is asked of pub-media anew. The transcript is labelled
+  *automatic*.
 
 Where the recording that times a document's lines is the one played (or a
 rendition of the same length), each line carries its time: `--timestamps`

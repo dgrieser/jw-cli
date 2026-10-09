@@ -187,7 +187,10 @@ A song's lyrics come from its page on jw.org: the songs of the songbook —
 for the meetings, sung by a choir, instrumental, sung by children — are the
 songbook's song of that number in the content language, as are the original
 songs and the children's songs. A recording read from a publication shows the
-document it reads. Any other video shows the transcript of its subtitles.
+document it reads. Any other video shows the transcript of its subtitles, or —
+without subtitles — of the machine-made subtitles (AIVTT) pub-media lists for
+it. Those are often listed before they are written, as an empty file; the
+file is kept by its checksum and read again once pub-media lists a new one.
 
 When a song's lyrics are found, its subtitles are not shown; --transcript
 shows them as well. --timestamps sets each line's time in the recording
@@ -298,7 +301,11 @@ func mediaTextMarkdown(item model.MediaItem, text model.MediaText, txt *i18n.Mes
 		if text.Document == nil {
 			fmt.Fprintf(&b, "# %s\n\n", item.Title)
 		}
-		fmt.Fprintf(&b, "## %s\n\n", txt.TranscriptHeading)
+		heading := txt.TranscriptHeading
+		if text.AITranscript {
+			heading = txt.TranscriptAIHeading
+		}
+		fmt.Fprintf(&b, "## %s\n\n", heading)
 		for _, para := range subtitles.Paragraphs(text.Transcript) {
 			var parts []string
 			for _, c := range para {

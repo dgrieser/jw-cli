@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"testing"
 
@@ -168,5 +169,20 @@ func TestStripLangSuffix(t *testing.T) {
 		if got != tc.want || ok != tc.ok {
 			t.Errorf("stripLangSuffix(%q, %q) = %q, %v; want %q, %v", tc.pub, tc.lang, got, ok, tc.want, tc.ok)
 		}
+	}
+}
+
+// AnyFormat names no format: pub-media lists AIVTT only to such a query.
+func TestLinksAnyFormat(t *testing.T) {
+	var query url.Values
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.Query()
+		serveFile(t, "testdata/wcg_X.json")(w, r)
+	})
+	if _, err := c.Links(context.Background(), Query{Pub: "wcg", Track: 1, Lang: "X", AnyFormat: true, Formats: []string{"MP3"}}); err != nil {
+		t.Fatal(err)
+	}
+	if query.Has("fileformat") || query.Get("track") != "1" {
+		t.Errorf("query = %v", query)
 	}
 }

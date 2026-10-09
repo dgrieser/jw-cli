@@ -41,7 +41,7 @@
 </div>
 
 {{- with .Text}}
-<section class="mediatext" aria-label="{{if .Document}}{{if .Document.Lyrics}}{{$.T.UILyrics}}{{else}}{{$.T.UIText}}{{end}}{{else}}{{$.T.UITranscript}}{{end}}">
+<section class="mediatext" aria-label="{{if .Document}}{{if .Document.Lyrics}}{{$.T.UILyrics}}{{else}}{{$.T.UIText}}{{end}}{{else if .AITranscript}}{{$.T.UITranscriptAI}}{{else}}{{$.T.UITranscript}}{{end}}">
 {{- with .Document}}
 <h2>{{if .Lyrics}}{{$.T.UILyrics}}{{else}}{{$.T.UIText}}{{end}}</h2>
 <div class="lyrics{{if .Lyrics}} song{{end}}{{if .Synced}} synced{{end}}">
@@ -71,9 +71,9 @@
 {{- if .Transcript}}
 {{- if .Document}}
 <details class="transcript-wrap">
-<summary>{{$.T.UITranscript}}</summary>
+<summary>{{if .AITranscript}}{{$.T.UITranscriptAI}}{{else}}{{$.T.UITranscript}}{{end}}</summary>
 {{- else}}
-<h2>{{$.T.UITranscript}}</h2>
+<h2>{{if .AITranscript}}{{$.T.UITranscriptAI}}{{else}}{{$.T.UITranscript}}{{end}}</h2>
 {{- end}}
 <div class="transcript">
   {{- range $.Paragraphs}}
