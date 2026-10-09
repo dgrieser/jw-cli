@@ -214,6 +214,7 @@ var de = Messages{
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
 	UIFontReset:            "Normale Schriftgröße",
+	UISettings:             "Einstellungen",
 	UITextSize:             "Schriftgröße",
 	UIRefresh:              "Neu laden, ohne Cache",
 	UIBackToOverview:       "Übersicht",

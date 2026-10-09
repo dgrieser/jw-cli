@@ -1310,16 +1310,55 @@ tbody tr:hover { background: var(--surface); }
   white-space: nowrap;
   font-weight: 650;
 }
-.pb-font { flex: none; display: inline-flex; position: relative; margin-left: auto; }
-.pb .pb-font-toggle, .pb .pb-refresh { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
-.pb-font-menu { top: calc(100% + 0.2rem); right: 0; }
-.pb-font-menu [data-font="-1"], .pb-font-menu [data-font="1"] { font-size: 1.25rem; }
-html:not(.js) .pb-refresh { display: none; }
+/* the first of the controls on the right takes the room before it */
+.pb > :is(.pb-jump, .pb-unfold, .pb-history, .pb-settings):not(:is(.pb-jump, .pb-unfold, .pb-history, .pb-settings) ~ *) { margin-left: auto; }
+/* the settings: the text size, the language and the reload, behind one button */
+.pb-settings { flex: none; display: inline-flex; position: relative; margin-right: -0.4rem; }
+.pb .pb-settings-toggle { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+.pb .pb-settings-toggle[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
+.pb-settings-panel {
+  position: absolute;
+  top: calc(100% + 0.2rem);
+  right: 0.4rem;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  width: max-content;
+  max-width: calc(100vw - 2 * var(--gutter));
+  padding: 0.35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  box-shadow: 0 8px 24px -10px rgba(0, 0, 0, 0.35);
+  font-size: 0.9rem;
+  line-height: 1.2;
+  animation: pop 140ms ease-out;
+}
+.pb-settings-panel[hidden] { display: none; }
+.ps-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.5rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+  border-radius: var(--r-small);
+  color: var(--ink);
+  font-weight: 500;
+}
+.ps-row > svg { flex: none; color: var(--muted); }
+.ps-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.ps-value { flex: none; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-weight: 500; }
+button.ps-item { justify-content: flex-start; width: 100%; padding-right: 0.6rem; border-color: transparent; background: transparent; font-size: inherit; font-weight: 500; }
+button.ps-item:hover { background: var(--field); border-color: transparent; }
+.ps-font { padding-right: 0.2rem; }
+.ps-steps { flex: none; display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.6rem; }
+.ps-steps button { min-width: 2.2rem; min-height: 2.2rem; padding: 0 0.45rem; border-radius: 999px; font-size: 1.15rem; }
+.ps-steps .ps-size { min-width: 3.4rem; font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
 .page-bar .pb { position: relative; }
 /* the diamond that unfolds the whole page sits in the bar, not beside a line */
-.pb .pb-unfold { position: relative; top: auto; right: auto; flex: none; margin-left: auto; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; }
-.pb .pb-unfold + .pb-font { margin-left: 0; }
+.pb .pb-unfold { position: relative; top: auto; right: auto; flex: none; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; }
 .pb .pb-unfold.on { color: var(--accent); background: var(--accent-soft); }
 .pb .pb-unfold.busy svg { animation: spin-pulse 1.2s ease-in-out infinite; }
 @keyframes spin-pulse { 50% { opacity: 0.35; } }
@@ -1335,11 +1374,8 @@ html:not(.js) .pb-refresh { display: none; }
   border-color: transparent;
   color: var(--muted);
 }
-.pb .lang-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); margin-right: -0.4rem; }
-html:not(.js) .lang-toggle { display: none; }
 /* away from the bible, a way into it: first of the controls on the right */
-.pb .pb-jump { flex: none; display: inline-flex; align-items: center; justify-content: center; margin-left: auto; color: var(--ink); }
-.pb .pb-jump ~ .pb-unfold, .pb .pb-jump ~ .pb-font { margin-left: 0; }
+.pb .pb-jump { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
 html:not(.js) .pb-jump { display: none; }
 .pb-bible {
   flex: 1 1 auto;
@@ -1557,12 +1593,12 @@ html.is-loading main { opacity: 0.55; transition: opacity 400ms 300ms; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  details.section.fresh, .unfold-menu, .flash, .hist-panel, .toast, .follow-menu { animation: none; }
+  details.section.fresh, .unfold-menu, .flash, .hist-panel, .pb-settings-panel, .toast, .follow-menu { animation: none; }
   *, *::before, *::after { transition: none !important; }
   html.is-loading .progress::before { animation: none; transform: none; width: 100%; opacity: 0.6; }
   .spinner, [aria-busy="true"]::after { animation-duration: 1.6s; }
 }
-html:not(.js) .pb-font { display: none; }
+html:not(.js) .pb-settings { display: none; }
 
 /* a picture opens full size in a new tab */
 a.img-link { display: inline-block; max-width: 100%; cursor: zoom-in; }

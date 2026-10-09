@@ -49,7 +49,12 @@
     var f = parseFloat(root.style.fontSize);
     return f > 0 ? f : 100;
   }
-  document.querySelectorAll(".pb-font [data-font]").forEach(function (b) {
+  var sizeLabel = document.querySelector(".pb-settings .ps-size");
+  function showSize() {
+    if (sizeLabel) sizeLabel.textContent = Math.round(fontSize()) + "%";
+  }
+  showSize();
+  document.querySelectorAll(".pb-settings [data-font]").forEach(function (b) {
     b.addEventListener("click", function () {
       var dir = parseInt(b.getAttribute("data-font"), 10) || 0;
       var cur = fontSize();
@@ -66,6 +71,7 @@
         }
       }
       root.style.fontSize = next === 100 ? "" : next + "%";
+      showSize();
       try {
         if (next === 100) window.localStorage.removeItem("jw:font");
         else window.localStorage.setItem("jw:font", String(next));
@@ -75,22 +81,28 @@
     });
   });
 
-  // the size controls are a menu behind one button: open until a click
-  // elsewhere or Escape, so a size can be stepped through
+  // the text size, the language and the reload are a panel behind one
+  // button: open until a click elsewhere or Escape, so a size can be stepped
+  // through; the language and the reload close it as they go
+  var closeSettings = function () {};
   (function () {
-    var btn = document.querySelector(".pb-font-toggle");
-    var menu = document.getElementById("font-menu");
+    var btn = document.querySelector(".pb-settings-toggle");
+    var menu = document.getElementById("settings-menu");
     if (!btn || !menu) return;
     function setOpen(open) {
       menu.hidden = !open;
       btn.setAttribute("aria-expanded", open ? "true" : "false");
     }
-    btn.addEventListener("click", function (e) {
-      e.stopPropagation();
+    closeSettings = function () { setOpen(false); };
+    btn.addEventListener("click", function () {
       setOpen(menu.hidden);
+      if (!menu.hidden) {
+        var first = menu.querySelector("button");
+        if (first) first.focus({ preventScroll: true });
+      }
     });
     document.addEventListener("click", function (e) {
-      if (!menu.hidden && !menu.contains(e.target)) setOpen(false);
+      if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) setOpen(false);
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && !menu.hidden) {
@@ -589,6 +601,7 @@
     }
 
     btn.addEventListener("click", function () {
+      closeSettings();
       if (!dialog) buildDialog();
       if (dialog.showModal) dialog.showModal();
       else dialog.setAttribute("open", "");
@@ -1419,7 +1432,7 @@
 
   (function () {
     var bar = document.querySelector(".page-bar .pb");
-    var before = bar && bar.querySelector(".pb-refresh");
+    var before = bar && bar.querySelector(".pb-settings");
     if (!bar || !before) return;
     var names = {};
     SECTIONS.forEach(function (s) { names[s.id] = s.name; });
@@ -1523,6 +1536,7 @@
     }
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
+      closeSettings();
       setOpen(panel.hidden);
     });
     document.addEventListener("click", function (e) {
@@ -2784,8 +2798,8 @@
       allBtn.focus();
     });
     allMenu.appendChild(allRemove);
-    var font = pb.querySelector(".pb-font");
-    pb.insertBefore(allBtn, font);
+    var beside = pb.querySelector(".pb-history") || pb.querySelector(".pb-settings");
+    pb.insertBefore(allBtn, beside);
     pb.appendChild(allMenu);
     bar.classList.add("has-pb-unfold");
     if (anchorLevel > 0) {
@@ -2801,6 +2815,7 @@
         return;
       }
       closeMenu();
+      closeSettings();
       allMenu.querySelectorAll("button.depth").forEach(function (b) {
         b.setAttribute("aria-pressed", String(parseInt(b.getAttribute("data-depth"), 10) === anchorLevel));
       });

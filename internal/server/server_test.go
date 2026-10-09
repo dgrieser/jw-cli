@@ -482,7 +482,7 @@ func TestUIIndexAndLanguages(t *testing.T) {
 	if resp.StatusCode != 404 {
 		t.Errorf("languages page: status %d, want 404", resp.StatusCode)
 	}
-	if _, body = get(t, srv, "/?lang=de"); !strings.Contains(body, `class="pb-btn lang-toggle" data-current="X"`) {
+	if _, body = get(t, srv, "/?lang=de"); !strings.Contains(body, `class="ps-row ps-item lang-toggle" data-current="X"`) {
 		t.Errorf("no language button naming the current language")
 	}
 

@@ -214,6 +214,7 @@ var en = Messages{
 	UIFontSmaller:          "Smaller text",
 	UIFontLarger:           "Larger text",
 	UIFontReset:            "Default text size",
+	UISettings:             "Settings",
 	UITextSize:             "Text size",
 	UIRefresh:              "Reload, bypassing the cache",
 	UIBackToOverview:       "Overview",
