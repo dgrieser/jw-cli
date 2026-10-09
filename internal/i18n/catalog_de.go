@@ -220,6 +220,6 @@ var de = Messages{
 	UIThemeDark:            "Dunkel",
 	UIThemeSystem:          "System",
 	UITextSize:             "Schriftgröße",
-	UIRefresh:              "Neu laden, ohne Cache",
+	UIRefresh:              "Neu laden",
 	UIBackToOverview:       "Übersicht",
 }

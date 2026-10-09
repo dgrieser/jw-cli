@@ -220,6 +220,6 @@ var en = Messages{
 	UIThemeDark:            "Dark",
 	UIThemeSystem:          "System",
 	UITextSize:             "Text size",
-	UIRefresh:              "Reload, bypassing the cache",
+	UIRefresh:              "Reload",
 	UIBackToOverview:       "Overview",
 }
