@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	htmlpkg "html"
 	"strings"
 
@@ -98,4 +99,33 @@ func outlineItemHTML(it model.OutlineItem, emphasis bool) string {
 		return title
 	}
 	return title + " (" + htmlpkg.EscapeString(it.Label) + ")"
+}
+
+// FormatBookOutline renders a book's outline in the requested format: under
+// its title, an outline of contents chapter by chapter ("Genesis 1"), an
+// overview as the one list it is. JSON is not a rendering; callers handle it.
+func FormatBookOutline(o BookOutline, bookName string, format render.Format, opts render.Options) (string, error) {
+	var html strings.Builder
+	html.WriteString("<h2>" + htmlpkg.EscapeString(o.Title) + "</h2>")
+	group := func(items []model.OutlineItem) {
+		if len(items) > 0 {
+			html.WriteString(outlineHTML(items, format))
+		}
+	}
+	if !o.ByChapter() {
+		group(o.Items)
+	} else {
+		var run []model.OutlineItem
+		chapter := 0
+		for _, it := range o.Items {
+			if ch := it.Start / 1_000 % 1_000; ch != chapter {
+				group(run)
+				run, chapter = nil, ch
+				html.WriteString("<h3>" + htmlpkg.EscapeString(fmt.Sprintf("%s %d", bookName, ch)) + "</h3>")
+			}
+			run = append(run, it)
+		}
+		group(run)
+	}
+	return render.Render(html.String(), format, opts)
 }

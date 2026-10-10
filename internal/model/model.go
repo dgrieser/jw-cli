@@ -263,6 +263,57 @@ type Verse struct {
 	HTML     string `json:"html"`
 }
 
+// Fact is one labelled fact about a bible book: "Writer: Matthew".
+type Fact struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// Video is a video embedded in a library page, with its renditions as the
+// player lists them.
+type Video struct {
+	Title  string      `json:"title"`
+	Poster string      `json:"poster,omitempty"`
+	Files  []MediaFile `json:"files"`
+}
+
+// BookIntro is the introduction of a bible book: its video, the facts about
+// its writing, and the noteworthy facts written under the video — or, where
+// nothing is written there, what the video says.
+type BookIntro struct {
+	Book  int    `json:"book"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+	Video *Video `json:"video,omitempty"`
+	Facts []Fact `json:"facts,omitempty"`
+	// NotesHTML is the text under the video, its heading included.
+	NotesHTML string `json:"notesHtml,omitempty"`
+	// Transcript is the video's subtitles, read when there is no text.
+	Transcript []Cue `json:"transcript,omitempty"`
+}
+
+// GalleryTile is one picture or video of a book's media gallery.
+type GalleryTile struct {
+	Title     string `json:"title"`
+	URL       string `json:"url"` // its gallery page
+	Thumbnail string `json:"thumbnail,omitempty"`
+	Image     string `json:"image,omitempty"` // the large rendition
+	Video     bool   `json:"video,omitempty"`
+}
+
+// GalleryGroup is the tiles listed under one chapter.
+type GalleryGroup struct {
+	Heading string        `json:"heading"` // "Matthew 2"
+	Items   []GalleryTile `json:"items"`
+}
+
+// BookGallery is a bible book's media gallery, chapter by chapter.
+type BookGallery struct {
+	Title  string         `json:"title"`
+	URL    string         `json:"url"`
+	Groups []GalleryGroup `json:"groups"`
+}
+
 // OutlineItem is one heading of a bible book's outline of contents — or, for
 // the Gospels and Acts, of its overview: what a stretch of verses is about.
 type OutlineItem struct {
@@ -304,8 +355,9 @@ type MediaAsset struct {
 	Description  string `json:"description,omitempty"` // the long caption of a gallery item
 	Width        int    `json:"width,omitempty"`
 	Height       int    `json:"height,omitempty"`
-	SourceURL    string `json:"sourceUrl,omitempty"`  // page carrying the metadata (wol gallery item)
-	FinderLink   string `json:"finderLink,omitempty"` // jw.org finder deep link (videos w/ timestamps)
+	SourceURL    string `json:"sourceUrl,omitempty"`   // page carrying the metadata (wol gallery item)
+	FinderLink   string `json:"finderLink,omitempty"`  // jw.org finder deep link (videos w/ timestamps)
+	VideoSource  string `json:"videoSource,omitempty"` // wol video link of a gallery video (see wol.Client.Video)
 }
 
 // Meta condenses the asset's metadata into the record a listing row carries.

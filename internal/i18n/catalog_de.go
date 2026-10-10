@@ -51,6 +51,7 @@ var de = Messages{
 	TranscriptHeading:   "Transkript",
 	TranscriptAIHeading: "Transkript (automatisch)",
 	LabelSource:         "Quelle",
+	LabelVideo:          "Video",
 	LabelPublication:    "Publikation",
 	PrintedEdition:      "Druckausgabe",
 	NoMediaText:         "Kein Liedtext, Text oder Untertitel zu %s gefunden.",

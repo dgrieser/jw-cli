@@ -10,7 +10,8 @@
 // day it was read, and for a few hours of it.
 //
 // The worker is stamped with the build serving it: a new build brings a new
-// worker, which starts its copy anew, since its pages are written for it.
+// worker, which starts its copy anew, since its pages are written for it, and
+// reads the pages open at the time anew from the server.
 //
 // How the copy is used is the server's to say (POLICY, see --page-cache):
 // "first" serves a page from it while it is current; "fallback" asks the
@@ -41,15 +42,33 @@ self.addEventListener("install", function (e) {
 });
 
 self.addEventListener("activate", function (e) {
+  var replaced = false;
   e.waitUntil(caches.keys().then(function (names) {
     // only this site's own copies of other builds: the origin's other caches
     // are not this worker's to drop
     return Promise.all(names.filter(function (n) {
       if (n === PAGES && POLICY === "off") return true;
-      return /^jw-(pages|static)-/.test(n) && n !== PAGES && n !== STATIC;
+      var other = /^jw-(pages|static)-/.test(n) && n !== PAGES && n !== STATIC;
+      if (other && n.indexOf("jw-pages-") === 0) replaced = true;
+      return other;
     }).map(function (n) { return caches.delete(n); }));
-  }).then(function () { return self.clients.claim(); }));
+  }).then(function () {
+    return self.clients.claim();
+  }).then(function () {
+    // a page open while the build changed is the old build's copy, kept by
+    // the old worker and drawn by the old script: it is read anew, once, so
+    // what the new build shows shows without the reader reloading it. Not
+    // waited for: the page's request is this worker's to answer, which it
+    // only does once it is active.
+    if (replaced) reopen();
+  }));
 });
+
+function reopen() {
+  self.clients.matchAll({ type: "window" }).then(function (wins) {
+    wins.forEach(function (w) { w.navigate(w.url).catch(function () {}); });
+  });
+}
 
 // --- the language a page without ?lang= is read in --------------------------
 //

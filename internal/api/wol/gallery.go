@@ -40,7 +40,7 @@ func (c *Client) GalleryItem(ctx context.Context, itemURL string) (model.MediaAs
 	if i := strings.IndexByte(fetchURL, '#'); i >= 0 {
 		fetchURL = fetchURL[:i]
 	}
-	asset, err := httpx.Memo(ctx, c.cache, "gallery2-"+fetchURL, func(ctx context.Context) (model.MediaAsset, error) {
+	asset, err := httpx.Memo(ctx, c.cache, "gallery3-"+fetchURL, func(ctx context.Context) (model.MediaAsset, error) {
 		doc, err := c.hc.GetHTML(ctx, fetchURL)
 		if err != nil {
 			return model.MediaAsset{}, err
@@ -68,6 +68,13 @@ func parseGalleryItem(sel *goquery.Selection, base string) (model.MediaAsset, er
 		src, _ := img.Attr("src")
 		asset.URL = absURL(base, src)
 		asset.Alt = cleanSpace(img.AttrOr("alt", ""))
+	}
+	// a video names the link its player reads the renditions from
+	if v := item.Find(selVideoSrc).First(); v.Length() > 0 {
+		asset.VideoSource = absURL(base, v.AttrOr("data-json-src", ""))
+		if asset.URL == "" {
+			asset.ThumbnailURL = absURL(base, v.AttrOr("data-img-src", ""))
+		}
 	}
 	wrapper := item.Find(selGalleryCaption).First()
 	asset.Credit = cleanSpace(wrapper.Find(selGalleryCredit).First().Text())

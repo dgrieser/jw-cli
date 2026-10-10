@@ -26,6 +26,9 @@ func newBibleCmd(a *app.App) *cobra.Command {
 		newBibleMediaCmd(a),
 		newBibleResearchCmd(a),
 		newBibleCitedCmd(a),
+		newBibleIntroCmd(a),
+		newBibleOutlineCmd(a),
+		newBibleGalleryCmd(a),
 		newBibleBooksCmd(a),
 	)
 	return cmd
