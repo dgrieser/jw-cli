@@ -55,6 +55,8 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		Edition:   valueOr(r, "bible", "nwtsty"),
 		AllBibles: boolParam(r, "all"),
 		Unfold:    unfoldConfig(depth, forceParam(r)),
+		// ?outlines=0 where the CLI takes --no-outlines
+		NoOutlines: !boolParamOr(r, "outlines", true),
 	}, text(lng))
 	if err != nil {
 		failJSON(w, r, err)

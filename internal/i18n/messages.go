@@ -345,6 +345,9 @@ type Messages struct {
 	UIThemeLight  string
 	UIThemeDark   string
 	UIThemeSystem string
+	// UIOutlines switches the headings of a book's outline between the verses
+	// of the bible reader on and off, in the settings.
+	UIOutlines string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 	// UILyrics, UIText and UITranscript head the words of a media item: a

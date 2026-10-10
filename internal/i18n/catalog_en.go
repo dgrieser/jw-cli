@@ -226,6 +226,7 @@ var en = Messages{
 	UIThemeLight:           "Light",
 	UIThemeDark:            "Dark",
 	UIThemeSystem:          "System",
+	UIOutlines:             "Outline",
 	UITextSize:             "Text size",
 	UIRefresh:              "Reload",
 	UIBackToOverview:       "Overview",

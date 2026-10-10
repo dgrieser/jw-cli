@@ -4,6 +4,15 @@
 </button>
 {{- if .BookNames}}<script type="application/json" id="bible-books">{{.BookNames}}</script>{{end}}
 {{end}}
+{{define "settings"}}
+{{- if and .Ref (not .Search)}}
+        <button type="button" class="ps-row ps-item ps-outlines" role="switch" aria-checked="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M8 12h12M8 18h12"/></svg>
+          <span class="ps-label">{{.T.UIOutlines}}</span>
+          <span class="ps-switch" aria-hidden="true"></span>
+        </button>
+{{- end}}
+{{end}}
 {{define "content"}}
 <h1>{{.T.UINavBible}}</h1>
 <form class="form bible-form" method="get" action="/bible">

@@ -1318,6 +1318,27 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 	page.Nav = &nav
 }
 
+// outlineBlock is the headings of the book's outline ahead of a verse, small
+// and indented by their depth in the outline. They are always on the page; the
+// reader's setting hides them in the browser, so switching costs no reload.
+func outlineBlock(items []model.OutlineItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<div class="bible-outline">`)
+	for _, it := range items {
+		fmt.Fprintf(&b, `<p class="ol-item ol-d%d"><span class="ol-title">%s</span>`,
+			min(it.Depth, 3), template.HTMLEscapeString(it.Title))
+		if it.Label != "" {
+			fmt.Fprintf(&b, ` <span class="ol-ref">(%s)</span>`, template.HTMLEscapeString(it.Label))
+		}
+		b.WriteString(`</p>`)
+	}
+	b.WriteString(`</div>`)
+	return b.String()
+}
+
 // passagesHTML lays a reading out for the page: every passage under its
 // heading, and every verse an item of its own, which is what the page unfolds
 // one at a time. A verse the server already unfolded carries its expansion
@@ -1329,6 +1350,7 @@ func (s *Server) passagesHTML(res service.ReadResult, edition string, depth int)
 		fmt.Fprintf(&b, `<section class="passage" data-bible="%s"><h2>%s</h2><div class="items">`,
 			template.HTMLEscapeString(firstNonEmpty(p.Bible, edition)), template.HTMLEscapeString(p.Heading()))
 		for _, v := range p.Verses {
+			b.WriteString(outlineBlock(v.Outline))
 			level := ""
 			if depth > 0 {
 				level = fmt.Sprintf(` data-level="%d"`, min(depth, maxUnfoldDepth))
