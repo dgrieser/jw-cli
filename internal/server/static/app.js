@@ -178,6 +178,18 @@
     });
   })();
 
+  // --- a poster laid over a video --------------------------------------------
+
+  // a library poster cannot be the video's own (see .poster-cover): it covers
+  // the player until the video plays, and pressing it starts the video
+  document.querySelectorAll(".player .poster-cover").forEach(function (img) {
+    var player = img.parentElement;
+    var video = player.querySelector("video");
+    if (!video) return;
+    img.addEventListener("click", function () { video.play(); });
+    video.addEventListener("play", function () { player.classList.add("played"); });
+  });
+
   // --- the outline in the bible reader --------------------------------------
 
   // the headings of a book's outline between the verses are always on the

@@ -1008,6 +1008,9 @@ type biblePage struct {
 	Nav      *wol.BibleNav
 	BookNav  *wol.BookNav
 	BookName string
+	// Doc is one of the documents listed below the chapter grid, opened from
+	// it (?view=): the book's introduction, outline or media gallery.
+	Doc *bookDocView
 	// Search is what a text search found, when what was typed is not a
 	// reference.
 	Search *bibleSearchView
@@ -1304,6 +1307,9 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
+			if view := r.FormValue("view"); view != "" {
+				s.bookDoc(r, lng, view, page)
+			}
 			return
 		}
 		page.Error = err.Error()

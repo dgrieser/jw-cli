@@ -3,6 +3,7 @@ package wol
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -52,5 +53,30 @@ func TestBookNav(t *testing.T) {
 	}
 	if len(nav.Chapters) != 28 || nav.Chapters[0] != 1 || nav.Chapters[27] != 28 {
 		t.Errorf("chapters = %v", nav.Chapters)
+	}
+	// the documents below the chapters, told apart by their address
+	var kinds []string
+	for _, l := range nav.Links {
+		kinds = append(kinds, l.Kind)
+		if l.Title == "" || !strings.HasPrefix(l.URL, "http") {
+			t.Errorf("link = %+v", l)
+		}
+	}
+	if got := strings.Join(kinds, ","); got != "introduction,overview,gallery" {
+		t.Errorf("link kinds = %q", got)
+	}
+}
+
+func TestBookLinkKind(t *testing.T) {
+	for href, want := range map[string]string{
+		"/en/wol/bibledocument/r1/lp-e/nwtsty/1/introduction": BookIntroduction,
+		"/en/wol/bibledocument/r1/lp-e/nwtsty/1/outline":      BookOutline,
+		"/en/wol/bibledocument/r1/lp-e/nwtsty/40/overview":    BookOverview,
+		"/en/wol/gallery/r1/lp-e/nwtsty/40":                   BookGallery,
+		"/en/wol/b/r1/lp-e/nwtsty/40/1":                       "",
+	} {
+		if got := bookLinkKind(href); got != want {
+			t.Errorf("%s: got %q, want %q", href, got, want)
+		}
 	}
 }

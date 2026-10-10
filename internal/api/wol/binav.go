@@ -47,16 +47,35 @@ type BookNav struct {
 	Book     int    `json:"book"`
 	Title    string `json:"title"` // "Das Evangelium nach Matthäus"
 	Chapters []int  `json:"chapters"`
+	// Links are the documents the library lists under the chapter grid: the
+	// book's introduction, its outline or overview, its media gallery.
+	Links []BookLink `json:"links,omitempty"`
+}
+
+// The kinds of document a book's page links to below its chapters.
+const (
+	BookIntroduction = "introduction"
+	BookOutline      = "outline"
+	BookOverview     = "overview"
+	BookGallery      = "gallery"
+)
+
+// BookLink is one document listed below a book's chapters.
+type BookLink struct {
+	Kind  string `json:"kind"`  // BookIntroduction, BookOutline, BookOverview or BookGallery
+	Title string `json:"title"` // as the library names it: "Introduction to Matthew"
+	URL   string `json:"url"`
 }
 
 const (
-	selNavBooks    = "ul.books"       // one section of the book grid
-	selNavHeading  = "div.group.grid" // the heading printed before it
-	selNavBook     = "li.book"        // one book, its class the group
-	selNavBookLink = "a.bookLink"     // carrying data-bookid
-	selNavBookName = "h1.navBook"     // the book's title, on the chapter grid
-	selNavChapter  = "li.chapter a"   // one chapter link
-	selNavPubTitle = "header h1"      // the bible's title, on the book grid
+	selNavBooks     = "ul.books"       // one section of the book grid
+	selNavHeading   = "div.group.grid" // the heading printed before it
+	selNavBook      = "li.book"        // one book, its class the group
+	selNavBookLink  = "a.bookLink"     // carrying data-bookid
+	selNavBookName  = "h1.navBook"     // the book's title, on the chapter grid
+	selNavChapter   = "li.chapter a"   // one chapter link
+	selNavPubTitle  = "header h1"
+	selNavBookLinks = "ul.bibleAdditionalLinks li a" // introduction, outline, gallery      // the bible's title, on the book grid
 )
 
 var chapterHref = regexp.MustCompile(`/b/[^/]+/[^/]+/[^/]+/(\d+)/(\d+)$`)
@@ -132,7 +151,7 @@ func (c *Client) BookNav(ctx context.Context, cfg Config, edition string, book i
 		edition = "nwtsty"
 	}
 	u := c.url(cfg, "binav", fmt.Sprintf("/%s/%d", edition, book))
-	return httpx.Memo(ctx, c.cache, "binav2-"+u, func(ctx context.Context) (BookNav, error) {
+	return httpx.Memo(ctx, c.cache, "binav3-"+u, func(ctx context.Context) (BookNav, error) {
 		return c.bookNav(ctx, u, edition, book)
 	})
 }
@@ -158,8 +177,37 @@ func (c *Client) bookNav(ctx context.Context, u, edition string, book int) (Book
 			nav.Chapters = append(nav.Chapters, ch)
 		}
 	})
+	doc.Find(selNavBookLinks).Each(func(_ int, a *goquery.Selection) {
+		href := a.AttrOr("href", "")
+		kind := bookLinkKind(href)
+		if kind == "" {
+			return
+		}
+		title := cleanSpace(a.Find(".title").First().Text())
+		if title == "" {
+			title = cleanSpace(a.Text())
+		}
+		nav.Links = append(nav.Links, BookLink{Kind: kind, Title: title, URL: absURL(c.hc.Base.WOL, href)})
+	})
 	if len(nav.Chapters) == 0 {
 		return BookNav{}, fmt.Errorf("no chapters found at %s (book missing in %s, or page layout changed)", u, edition)
 	}
 	return nav, nil
+}
+
+// bookLinkKind tells the documents below a book's chapters apart by their
+// address, which is the same in every language: /bibledocument/.../introduction,
+// .../outline, .../overview, and /gallery/... for the media gallery.
+func bookLinkKind(href string) string {
+	if strings.Contains(href, "/gallery/") {
+		return BookGallery
+	}
+	if !strings.Contains(href, "/bibledocument/") {
+		return ""
+	}
+	switch kind := href[strings.LastIndexByte(href, '/')+1:]; kind {
+	case BookIntroduction, BookOutline, BookOverview:
+		return kind
+	}
+	return ""
 }

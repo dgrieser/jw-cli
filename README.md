@@ -617,6 +617,18 @@ headings covering the verses read are shown. `--no-outlines` leaves them out
 switch in the settings hides and shows them, remembered per browser. An edition
 without an outline (Rbi8, int, ...) simply prints none.
 
+The bible page's chapter grid lists, as the library does, the book's
+**introduction**, its **outline of contents** (the **overview** for the Gospels
+and Acts) and its **media gallery** where the edition has them, each opened on
+the page itself. The introduction plays the book's video and lists the facts
+of its writing — writer, place, when completed, time covered — taking those the
+text under the video leaves out from the study edition's table of the books of
+the Bible, so a book introduced by the video alone still has them. Below them
+come the noteworthy facts written under the video or, where nothing is
+written, the video's transcript, following along as it plays. The outline
+links every heading into the reader at its verses; the gallery shows the
+pictures and videos chapter by chapter, each with its caption and description.
+
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
 parts — shows the text first and unfolds afterwards. Every verse of a reading,

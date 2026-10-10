@@ -61,6 +61,8 @@
 <article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}
 </article>
+{{- else if .Doc}}
+{{template "bookdoc" .}}
 {{- else if .BookNav}}
 <nav class="bible-nav chapters-nav" aria-label="{{.T.UIChapters}}">
   <p class="bible-nav-back"><a href="{{.BooksLink}}">‹ {{.T.UIAllBooks}}</a></p>
@@ -71,6 +73,13 @@
     <li><a href="{{$.ChapterLink $c}}">{{$c}}</a></li>
     {{- end}}
   </ul>
+  {{- with .DocLinks}}
+  <ul class="book-docs">
+    {{- range .}}
+    <li><a class="book-doc {{.Kind}}" href="{{.Href}}"><span class="book-doc-icon" aria-hidden="true">{{template "bookdocicon" .Kind}}</span><span>{{.Title}}</span></a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
 </nav>
 {{- else if .Nav}}
 <nav class="bible-nav" aria-label="{{.T.UIBook}}">
@@ -83,5 +92,104 @@
   </ul>
   {{- end}}
 </nav>
+{{- end}}
+{{end}}
+
+{{define "bookdocicon"}}
+{{- if eq . "introduction"}}<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>
+{{- else if eq . "gallery"}}<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5.5-5 4 3.5 2.5-2 4 3.5"/></svg>
+{{- else}}<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6.5h.01M4 12h.01M4 17.5h.01M8 6.5h12M8 12h12M8 17.5h12"/></svg>
+{{- end}}
+{{end}}
+{{define "bookdoc"}}
+{{- with .Doc}}
+<article class="book-doc-page {{.View}}">
+  <p class="bible-nav-back">
+    {{- if .Item}}<a href="{{$.GalleryLink}}">‹ {{$.GalleryTitle}}</a>
+    {{- else}}<a href="{{$.BookPageLink}}">‹ {{$.BookNav.Title}}</a>{{end}}
+  </p>
+  <h2>{{.Title}}</h2>
+
+  {{- with .Intro}}
+  <div class="mediaitem{{if $.Doc.Stream}} has-player{{end}}">
+    {{- with $.Doc.Stream}}
+    <div class="player">
+      {{- with $.Doc.Intro.Video}}{{if .Poster}}<img class="poster-cover" src="{{.Poster}}" alt="">{{end}}{{end}}
+      <video controls playsinline preload="metadata" crossorigin="anonymous">
+        <source src="{{.URL}}"{{if .MimeType}} type="{{.MimeType}}"{{end}}>
+        {{- if .SubtitlesURL}}
+        <track kind="subtitles" src="{{.SubtitlesURL}}" label="{{$.T.UISubtitles}}">
+        {{- end}}
+      </video>
+    </div>
+    {{- end}}
+    {{- if .Facts}}
+    <div class="mediabody">
+      <dl class="facts book-facts">
+        {{- range .Facts}}
+        <dt>{{.Label}}</dt><dd>{{.Value}}</dd>
+        {{- end}}
+      </dl>
+    </div>
+    {{- end}}
+  </div>
+  {{- if $.Doc.Notes}}
+  <section class="book-notes document">{{$.Doc.Notes}}</section>
+  {{- else if $.Doc.Paragraphs}}
+  <section class="mediatext" aria-label="{{$.T.UITranscript}}">
+    <h2>{{$.T.UITranscript}}</h2>
+    <div class="transcript">
+      {{- range $.Doc.Paragraphs}}
+      <p>
+        {{- range $i, $c := .}}
+        <span class="cue" data-start="{{$c.Start}}" data-end="{{$c.End}}">{{if eq $i 0}}<button type="button" class="cue-time" title="{{$.T.UIPlayFrom}}" aria-label="{{$.T.UIPlayFrom}} {{$.Clock $c.Start}}" hidden>{{$.Clock $c.Start}}</button> {{end}}{{$c.Text}}</span>
+        {{- end}}
+      </p>
+      {{- end}}
+    </div>
+  </section>
+  {{- end}}
+  {{- end}}
+
+  {{- with .Outline}}
+  <div class="book-outline">
+    {{- range .}}
+    {{- if .Chapter}}<h3 class="bo-chapter">{{.Chapter}}</h3>{{end}}
+    <p class="bo-item ol-d{{.Depth}}"><a href="{{.Href}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
+    {{- end}}
+  </div>
+  {{- end}}
+
+  {{- with .Gallery}}
+  {{- range .Groups}}
+  {{- if .Heading}}<h3 class="bible-nav-heading">{{.Heading}}</h3>{{end}}
+  <ul class="gallery-grid">
+    {{- range .Items}}
+    <li><a class="gallery-tile{{if .Video}} video{{end}}" href="{{$.GalleryItemLink .URL}}">
+      <span class="poster">{{if .Thumbnail}}<img src="{{.Thumbnail}}" alt="" loading="lazy">{{end}}{{if .Video}}<span class="play" aria-hidden="true">▶</span>{{end}}</span>
+      <span class="cap">{{.Title}}</span>
+    </a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
+  {{- end}}
+
+  {{- with .Item}}
+  {{- if $.Doc.Stream}}{{with $.Doc.Stream}}
+  <div class="player">
+    {{- if $.Doc.Item.ThumbnailURL}}<img class="poster-cover" src="{{$.Doc.Item.ThumbnailURL}}" alt="">{{end}}
+    <video controls playsinline preload="metadata" crossorigin="anonymous">
+      <source src="{{.URL}}"{{if .MimeType}} type="{{.MimeType}}"{{end}}>
+      {{- if .SubtitlesURL}}<track kind="subtitles" src="{{.SubtitlesURL}}" label="{{$.T.UISubtitles}}">{{end}}
+    </video>
+  </div>
+  {{- end}}
+  {{- else if .URL}}
+  <figure class="gallery-figure"><img src="{{.URL}}" alt="{{or .Alt .Caption}}"></figure>
+  {{- end}}
+  {{- if .Description}}<p class="lead">{{.Description}}</p>{{end}}
+  {{- if .Credit}}<p class="hint">{{.Credit}}</p>{{end}}
+  {{- end}}
+</article>
 {{- end}}
 {{end}}
