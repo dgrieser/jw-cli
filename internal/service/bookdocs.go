@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -28,7 +29,8 @@ func (s *Service) BookLink(ctx context.Context, lng model.Language, edition stri
 			}
 		}
 	}
-	return wol.BookLink{}, ErrNoBookDoc
+	return wol.BookLink{}, fmt.Errorf("%s (%s): no %s: %w",
+		s.BookTable(ctx, lng).Name(book), edition, strings.Join(kinds, " or "), ErrNoBookDoc)
 }
 
 // BookIntro is a bible book's introduction: the video, the facts about the
@@ -133,4 +135,55 @@ func (s *Service) BookGalleryItem(ctx context.Context, lng model.Language, editi
 		}
 	}
 	return e, nil
+}
+
+// ParseBook resolves a bible book named the way a reference names it — "Mt",
+// "Matthäus", "matthew" — or by its number.
+func (s *Service) ParseBook(ctx context.Context, lng model.Language, input string) (int, error) {
+	input = strings.TrimSpace(input)
+	if n, err := strconv.Atoi(input); err == nil {
+		if n < 1 || n > 66 {
+			return 0, fmt.Errorf("invalid book %d (want 1-66)", n)
+		}
+		return n, nil
+	}
+	if book, ok := s.BookTable(ctx, lng).Lookup(input); ok {
+		return book, nil
+	}
+	return 0, fmt.Errorf("unknown bible book %q (try a name, an abbreviation, or a number 1-66)", input)
+}
+
+// BookOutline is a book's outline of contents — or the overview of the Gospels
+// and Acts — under the name the library gives it.
+type BookOutline struct {
+	Book  int    `json:"book"`
+	Title string `json:"title"`
+	// Kind is wol.BookOutline, whose verses count by chapter, or
+	// wol.BookOverview, whose headings name their chapters themselves.
+	Kind  string              `json:"kind"`
+	URL   string              `json:"url"`
+	Items []model.OutlineItem `json:"items"`
+}
+
+// ByChapter reports whether the headings are grouped under their chapters.
+func (o BookOutline) ByChapter() bool { return o.Kind == wol.BookOutline }
+
+// BookOutlineDoc reads a book's outline or overview as one document.
+func (s *Service) BookOutlineDoc(ctx context.Context, lng model.Language, edition string, book int) (BookOutline, error) {
+	link, err := s.BookLink(ctx, lng, edition, book, wol.BookOutline, wol.BookOverview)
+	if err != nil {
+		return BookOutline{}, err
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return BookOutline{}, err
+	}
+	items, err := s.WOL.Outline(ctx, cfg, edition, book)
+	if err != nil {
+		return BookOutline{}, err
+	}
+	if len(items) == 0 {
+		return BookOutline{}, fmt.Errorf("no headings in %s at %s (page layout changed?)", link.Title, link.URL)
+	}
+	return BookOutline{Book: book, Title: link.Title, Kind: link.Kind, URL: link.URL, Items: items}, nil
 }

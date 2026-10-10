@@ -51,6 +51,7 @@ var en = Messages{
 	TranscriptHeading:   "Transcript",
 	TranscriptAIHeading: "Transcript (automatic)",
 	LabelSource:         "Source",
+	LabelVideo:          "Video",
 	LabelPublication:    "Publication",
 	PrintedEdition:      "Printed edition",
 	NoMediaText:         "No lyrics, text or subtitles found for %s.",

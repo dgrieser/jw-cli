@@ -253,6 +253,10 @@ jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text, each headed
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
 jw bible research John 3:16 -x               # research guide + excerpts
+jw bible intro Genesis                       # facts, noteworthy facts or transcript, video
+jw bible intro Mt --download -q 480p         # the introduction's video
+jw bible outline Genesis                     # outline of contents (overview for Mt-Acts)
+jw bible gallery Matthew                     # media gallery by chapter; --download pictures
 jw bible cited "Jer 31:15"                   # publications citing that verse
 jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
 jw bible cited "Jer 31:15; Mt 2:18"          # either verse, every page
@@ -628,6 +632,8 @@ come the noteworthy facts written under the video or, where nothing is
 written, the video's transcript, following along as it plays. The outline
 links every heading into the reader at its verses; the gallery shows the
 pictures and videos chapter by chapter, each with its caption and description.
+`jw bible intro`, `jw bible outline` and `jw bible gallery` print the same on
+the command line (`-o json` for the data).
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend

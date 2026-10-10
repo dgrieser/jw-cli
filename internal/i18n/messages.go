@@ -98,8 +98,10 @@ type Messages struct {
 	// TranscriptAIHeading heads the transcript of machine-made subtitles.
 	TranscriptAIHeading string
 	LabelSource         string
-	LabelPublication    string
-	PrintedEdition      string
+	// LabelVideo names the video of a bible book's introduction.
+	LabelVideo       string
+	LabelPublication string
+	PrintedEdition   string
 	// NoMediaText takes the media item's LANK.
 	NoMediaText string
 	// MediaTextHint takes the media item's LANK.

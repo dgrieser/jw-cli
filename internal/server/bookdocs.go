@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -140,18 +139,13 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		}
 		doc.Paragraphs = subtitles.Paragraphs(intro.Transcript)
 	case viewOutline:
-		var link wol.BookLink
-		link, err = s.svc.BookLink(ctx, lng, page.Edition, book, wol.BookOutline, wol.BookOverview)
+		var o service.BookOutline
+		o, err = s.svc.BookOutlineDoc(ctx, lng, page.Edition, book)
 		if err != nil {
 			break
 		}
-		doc.Title = link.Title
-		items := s.svc.Outline(ctx, lng, page.Edition, book)
-		if len(items) == 0 {
-			err = fmt.Errorf("could not read %s", link.Title)
-			break
-		}
-		doc.Outline = outlineRows(items, link.Kind == wol.BookOutline, page)
+		doc.Title = o.Title
+		doc.Outline = outlineRows(o.Items, o.ByChapter(), page)
 	case viewGallery:
 		if item := r.FormValue("item"); item != "" {
 			var e service.GalleryEntry
@@ -177,9 +171,6 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		err = fmt.Errorf("unknown view %q (want %s, %s or %s)", view, viewIntro, viewOutline, viewGallery)
 	}
 	if err != nil {
-		if errors.Is(err, service.ErrNoBookDoc) {
-			err = fmt.Errorf("%s: %w", page.BookName, err)
-		}
 		page.Error = err.Error()
 		return
 	}
