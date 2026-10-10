@@ -350,6 +350,7 @@
     var names = opts.names || {};
     var dialog = null;
     var row = null;
+    var rowDocs = null;
     var rowTitle = null;
     var grid = null;
     var view = null;
@@ -377,6 +378,41 @@
       return "/bible?" + q.toString();
     }
 
+    // the documents the library lists below a book's chapters — its
+    // introduction, outline, gallery — as the bible page links them
+    var DOC_VIEW = { introduction: "intro", outline: "outline", overview: "outline", gallery: "gallery" };
+    var DOC_ICON = {
+      introduction: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.01"/></svg>',
+      gallery: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="1.5"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5.5-5 4 3.5 2.5-2 4 3.5"/></svg>',
+      list: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6.5h.01M4 12h.01M4 17.5h.01M8 6.5h12M8 12h12M8 17.5h12"/></svg>'
+    };
+
+    function docLinks(book, nav, compact) {
+      var ul = document.createElement("ul");
+      ul.className = compact ? "book-docs compact" : "book-docs";
+      (nav.links || []).forEach(function (l) {
+        var view = DOC_VIEW[l.kind];
+        if (!view) return;
+        var q = new URLSearchParams({ bible: edition, book: String(book), view: view });
+        if (lang) q.set("lang", lang);
+        var li = document.createElement("li");
+        var a = document.createElement("a");
+        a.className = "book-doc " + l.kind;
+        a.href = "/bible?" + q.toString();
+        var icon = document.createElement("span");
+        icon.className = "book-doc-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = DOC_ICON[l.kind] || DOC_ICON.list;
+        var t = document.createElement("span");
+        t.textContent = l.title;
+        a.appendChild(icon);
+        a.appendChild(t);
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+      return ul.children.length ? ul : null;
+    }
+
     function markBook(book) {
       grid.querySelectorAll(".book a").forEach(function (a) {
         a.classList.toggle("active", parseInt(a.getAttribute("data-book"), 10) === book);
@@ -388,6 +424,8 @@
       view.hidden = true;
       grid.hidden = false;
       row.textContent = "";
+      rowDocs.textContent = "";
+      rowDocs.hidden = true;
       var book = cur.book;
       markBook(book);
       if (!book) {
@@ -421,6 +459,11 @@
         });
         var target = chosen || row.firstElementChild;
         if (target) row.scrollLeft = Math.max(0, target.offsetLeft - row.clientWidth / 2 + target.offsetWidth / 2);
+        var docs = docLinks(book, nav, true);
+        if (docs) {
+          rowDocs.appendChild(docs);
+          rowDocs.hidden = false;
+        }
       }, function (err) {
         row.textContent = String(err && err.message || err);
       });
@@ -430,6 +473,7 @@
     // one book's chapters as the bible page lays them out: the row is gone
     function showBook(book) {
       row.hidden = true;
+      rowDocs.hidden = true;
       grid.hidden = true;
       view.hidden = false;
       rowTitle.textContent = names[book] || "";
@@ -437,6 +481,8 @@
       var heading = view.querySelector("h2");
       heading.textContent = names[book] || "";
       list.textContent = T.loading || "…";
+      var docsBox = view.querySelector(".bp-docs");
+      docsBox.textContent = "";
       view.scrollTop = 0;
       view.setAttribute("data-book", String(book));
       api(book).then(function (nav) {
@@ -455,6 +501,8 @@
           li.appendChild(a);
           list.appendChild(li);
         });
+        var docs = docLinks(book, nav, false);
+        if (docs) docsBox.appendChild(docs);
         var first = list.querySelector("a");
         if (first) first.focus({ preventScroll: true });
       }, function (err) {
@@ -468,11 +516,12 @@
       dialog.setAttribute("aria-label", T.pickBook || "");
       dialog.innerHTML = '<div class="bp-head"><strong class="bp-book"></strong>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
-        '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>' +
+        '<div class="bp-chapters" role="list"></div><div class="bp-row-docs" hidden></div><div class="bp-books"></div>' +
         '<div class="bp-book-view bible-nav chapters-nav" hidden>' +
         '<p class="bible-nav-back"><a href="#" class="bp-back"></a></p><h2></h2>' +
-        '<h3 class="bible-nav-heading"></h3><ul class="chapter-grid"></ul></div>';
+        '<h3 class="bible-nav-heading"></h3><ul class="chapter-grid"></ul><div class="bp-docs"></div></div>';
       row = dialog.querySelector(".bp-chapters");
+      rowDocs = dialog.querySelector(".bp-row-docs");
       rowTitle = dialog.querySelector(".bp-book");
       grid = dialog.querySelector(".bp-books");
       view = dialog.querySelector(".bp-book-view");
