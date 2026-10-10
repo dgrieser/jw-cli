@@ -22,6 +22,10 @@ type Verse struct {
 	// Unfold is the expansion of everything this verse references, as an HTML
 	// appendix to its text.
 	Unfold string `json:"unfold,omitempty"`
+	// Outline is the headings of the book's outline printed ahead of this
+	// verse: those that begin here, and on the first verse read those it is
+	// already inside of.
+	Outline []model.OutlineItem `json:"outline,omitempty"`
 }
 
 // Passage is one reference read, in one bible edition.
@@ -54,6 +58,8 @@ type ReadRequest struct {
 	Edition   string // one edition; ignored with AllBibles
 	AllBibles bool
 	Unfold    UnfoldConfig
+	// NoOutlines leaves the headings of the book's outline out.
+	NoOutlines bool
 }
 
 // ReadResult is what a read produced: the passages, the references an edition
@@ -79,6 +85,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 	}
 	out := ReadResult{Table: table}
 	chapters := map[string]*wol.ChapterDoc{}
+	outlines := map[string][]model.OutlineItem{}
 	// one expander for every passage read, so they share the chapter pages
 	// their study panes come from
 	var expander *tooltipResolver
@@ -161,6 +168,15 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				}
 				p.Verses = append(p.Verses, verse)
 			}
+			if !req.NoOutlines {
+				key := fmt.Sprintf("%s-%d", ed.Symbol, ref.Book)
+				items, ok := outlines[key]
+				if !ok {
+					items = s.Outline(ctx, lng, ed.Symbol, ref.Book)
+					outlines[key] = items
+				}
+				placeOutline(items, p.Verses)
+			}
 			out.Passages = append(out.Passages, p)
 		}
 		if len(skipped) > 0 {
@@ -182,10 +198,14 @@ func FormatPassages(res ReadResult, format render.Format, opts render.Options) (
 		}
 		var html strings.Builder
 		for _, run := range verseRuns(p.Verses) {
-			if cite := runCitation(run, res.Table); cite != "" {
-				html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
-			}
-			for _, v := range run {
+			for j, v := range run {
+				// a verse's headings stand ahead of everything printed for it
+				html.WriteString(outlineHTML(v.Outline, format))
+				if j == 0 {
+					if cite := runCitation(run, res.Table); cite != "" {
+						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
+					}
+				}
 				html.WriteString(v.HTML)
 				html.WriteString(" ")
 				if v.Unfold != "" {

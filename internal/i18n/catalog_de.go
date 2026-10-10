@@ -226,6 +226,7 @@ var de = Messages{
 	UIThemeLight:           "Hell",
 	UIThemeDark:            "Dunkel",
 	UIThemeSystem:          "System",
+	UIOutlines:             "Übersicht",
 	UITextSize:             "Schriftgröße",
 	UIRefresh:              "Neu laden",
 	UIBackToOverview:       "Übersicht",

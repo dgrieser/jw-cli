@@ -263,6 +263,16 @@ type Verse struct {
 	HTML     string `json:"html"`
 }
 
+// OutlineItem is one heading of a bible book's outline of contents — or, for
+// the Gospels and Acts, of its overview: what a stretch of verses is about.
+type OutlineItem struct {
+	Depth int    `json:"depth"`           // 0 for a top-level heading, 1 below it, ...
+	Title string `json:"title"`           // "Six days of preparing the earth"
+	Label string `json:"label,omitempty"` // the verses as the outline names them: "3-31", "1:18–3:17"
+	Start int    `json:"start"`           // first verse covered, BBCCCVVV
+	End   int    `json:"end"`             // last verse covered, BBCCCVVV
+}
+
 // StudyNote is one study note attached to a verse (nwtsty).
 type StudyNote struct {
 	Lemma string `json:"lemma,omitempty"` // the bolded phrase the note explains

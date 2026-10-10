@@ -178,6 +178,32 @@
     });
   })();
 
+  // --- the outline in the bible reader --------------------------------------
+
+  // the headings of a book's outline between the verses are always on the
+  // page; the switch hides them, kept in this browser like the theme, and the
+  // head of the page applies a kept "off" before anything is drawn
+  (function () {
+    var sw = document.querySelector(".ps-outlines");
+    if (!sw) return;
+    function show() {
+      sw.setAttribute("aria-checked", root.getAttribute("data-outlines") === "off" ? "false" : "true");
+    }
+    sw.addEventListener("click", function () {
+      var off = root.getAttribute("data-outlines") !== "off";
+      if (off) root.setAttribute("data-outlines", "off");
+      else root.removeAttribute("data-outlines");
+      try {
+        if (off) window.localStorage.setItem("jw:outlines", "off");
+        else window.localStorage.removeItem("jw:outlines");
+      } catch (err) {
+        // not kept: the choice holds for this page only
+      }
+      show();
+    });
+    show();
+  })();
+
   // --- the page's header ------------------------------------------------------
 
   // the bar that stays in view names what the page shows and leads up to the

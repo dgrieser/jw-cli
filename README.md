@@ -248,6 +248,7 @@ jw bible read "Psalm 83" --bible nwt         # other editions: nwt, Rbi8, int, .
 jw bible read "Joh 3:16" --bible-all         # every edition of the language, compared
 jw bible read John 3:16 --unfold 1           # verse + study notes + its references
 jw bible read -l de "Matthäus 24:14"         # localized book names
+jw bible read "Ge 1" --no-outlines           # without the book outline's headings
 jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text, each headed
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
@@ -606,6 +607,16 @@ endpoints render bodies as sanitized HTML by default; `?format=markdown` and
 `404` (nothing there upstream), `422` (an unfold that would need more upstream
 requests than an unattended server spends), or `502` (upstream failure).
 
+`jw bible read` prints the headings of the book's outline of contents between
+the verses — for the Gospels and Acts, the headings of their overview — where
+the part of the book they name begins, small and indented by depth: a nested
+list in markdown, indented lines in text, and `outline` on each verse in JSON.
+A passage opened in the middle of a heading is headed by it too, and only the
+headings covering the verses read are shown. `--no-outlines` leaves them out
+(`outlines=0` on `/api/v1/bible/read`); in the web reader the **Outline**
+switch in the settings hides and shows them, remembered per browser. An edition
+without an outline (Rbi8, int, ...) simply prints none.
+
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
 parts — shows the text first and unfolds afterwards. Every verse of a reading,
@@ -809,7 +820,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
 | `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=0` | `jw search` |
 | `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3) | `jw article` (images and scripture refs are fields of the response) |
-| `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `format` | `jw bible read` |
+| `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `outlines=0`, `format` | `jw bible read` |
 | `GET /api/v1/bible/notes` | `ref`* | `jw bible notes` |
 | `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
 | `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |

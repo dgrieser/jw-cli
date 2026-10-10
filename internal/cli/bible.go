@@ -33,10 +33,11 @@ func newBibleCmd(a *app.App) *cobra.Command {
 
 func newBibleReadCmd(a *app.App) *cobra.Command {
 	var (
-		edition   string
-		allBibles bool
-		depth     int
-		assumeYes bool
+		edition    string
+		allBibles  bool
+		depth      int
+		assumeYes  bool
+		noOutlines bool
 	)
 	cmd := &cobra.Command{
 		Use:   "read <reference...>",
@@ -49,6 +50,11 @@ A reference reads a verse ("Pr 8:8"), a list of them ("Pr 8:8, 9"), a range
 ("Pr 8:8-11"), a whole chapter ("Pr 8"), a range of chapters ("Pr 8-9"), or a
 span running from one chapter into another ("Pr 8:30-9:6"). A span is printed
 one chapter at a time, since that is how the library serves it.
+
+The headings of the book's outline of contents — or, for the Gospels and Acts,
+of its overview — are printed between the verses, where the part of the book
+they name begins; a passage opened in the middle of one is headed by it too.
+--no-outlines leaves them out.
 
 With --unfold the study material of every verse is printed under that verse:
 its study notes, and the text behind every reference it carries — the marginal
@@ -69,7 +75,8 @@ Examples:
   jw bible read "Psalm 83" --bible nwt
   jw bible read "Joh 3:16" --bible-all
   jw bible read -l de "Matthäus 24:14"
-  jw bible read John 3:16 --unfold 1`,
+  jw bible read John 3:16 --unfold 1
+  jw bible read "Ge 1" --no-outlines`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -86,7 +93,8 @@ Examples:
 			}
 			res, err := a.Service().ReadPassages(ctx, lng, service.ReadRequest{
 				Refs: strings.Join(args, " "), Edition: edition, AllBibles: allBibles,
-				Unfold: unfoldConfig(a, depth, assumeYes),
+				Unfold:     unfoldConfig(a, depth, assumeYes),
+				NoOutlines: noOutlines,
 			}, a.Text())
 			if err != nil {
 				return err
@@ -105,6 +113,7 @@ Examples:
 	cmd.Flags().BoolVar(&allBibles, "bible-all", false, "read the passage in every bible available in the selected language")
 	cmd.Flags().IntVar(&depth, "unfold", 0, "print the study notes and the text behind every reference, following references this many levels deep")
 	cmd.Flags().BoolVarP(&assumeYes, "yes", "y", false, "do not ask before an unfold that needs many requests")
+	cmd.Flags().BoolVar(&noOutlines, "no-outlines", false, "leave out the headings of the book's outline between the verses")
 	return cmd
 }
 

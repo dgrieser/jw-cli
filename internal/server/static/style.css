@@ -620,6 +620,18 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .reading .items { display: flex; flex-direction: column; gap: 0.15rem; }
 .reading .item { padding: 0.2rem 0; border-radius: var(--r-small); }
 .reading .item-text { min-width: 0; }
+/* the book's outline between the verses: small, muted and indented by depth,
+   so it guides the reading without taking its room */
+.bible-outline { margin: 0.7rem 0 0.15rem; color: var(--muted); font-size: 0.82em; line-height: 1.35; }
+.bible-outline:first-child { margin-top: 0.1rem; }
+.bible-outline .ol-item { margin: 0.1rem 0; }
+.bible-outline .ol-d1 { padding-left: 1.1em; }
+.bible-outline .ol-d2 { padding-left: 2.2em; }
+.bible-outline .ol-d3 { padding-left: 3.3em; }
+.bible-outline .ol-title { color: var(--ink); font-weight: 600; }
+.bible-outline .ol-d1 .ol-title, .bible-outline .ol-d2 .ol-title, .bible-outline .ol-d3 .ol-title { font-weight: 500; }
+.bible-outline .ol-ref { font-variant-numeric: tabular-nums; }
+html[data-outlines="off"] .bible-outline { display: none; }
 .note { color: var(--muted); font-style: italic; font-size: 0.95rem; }
 
 /* sections: what a verse or a paragraph brought, folded away until it is
@@ -1457,6 +1469,11 @@ button.ps-item:hover { background: var(--field); border-color: transparent; }
 .ps-seg button:hover { border-color: transparent; background: var(--field-hover); color: var(--ink); }
 .ps-seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
 .ps-theme { padding-right: 0.2rem; }
+/* an on/off setting: a small track with a knob, accent-filled when on */
+.ps-switch { position: relative; flex: none; width: 2.2rem; height: 1.25rem; margin-left: 0.6rem; border-radius: 999px; background: var(--line-strong); transition: background 120ms; }
+.ps-switch::after { content: ""; position: absolute; top: 0.15rem; left: 0.15rem; width: 0.95rem; height: 0.95rem; border-radius: 50%; background: var(--paper); transition: transform 120ms; }
+[aria-checked="true"] > .ps-switch { background: var(--accent); }
+[aria-checked="true"] > .ps-switch::after { transform: translateX(0.95rem); }
 .pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
 .page-bar .pb { position: relative; }
 /* the diamond that unfolds the whole page sits in the bar, not beside a line */
