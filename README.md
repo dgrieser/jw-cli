@@ -624,7 +624,9 @@ without an outline (Rbi8, int, ...) simply prints none.
 The bible page's chapter grid lists, as the library does, the book's
 **introduction**, its **outline of contents** (the **overview** for the Gospels
 and Acts) and its **media gallery** where the edition has them, each opened on
-the page itself. The introduction plays the book's video and lists the facts
+the page itself. The book picker the header opens lists them too: under a
+book's chapters, and as small links under the chapter row of the book being
+read. The introduction plays the book's video and lists the facts
 of its writing — writer, place, when completed, time covered — taking those the
 text under the video leaves out from the study edition's table of the books of
 the Bible, so a book introduced by the video alone still has them. Below them

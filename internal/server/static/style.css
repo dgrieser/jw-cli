@@ -1627,7 +1627,15 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
   max-width: none;
   padding: 0.75rem;
 }
-.bp-book-view[hidden], .bp-chapters[hidden], .bp-books[hidden] { display: none; }
+.bp-book-view[hidden], .bp-chapters[hidden], .bp-books[hidden], .bp-row-docs[hidden] { display: none; }
+/* the book's introduction, outline and gallery: under its chapters in the
+   picker's book view, and as a strip of small links under the row */
+.bp-docs .book-docs { margin-top: 1rem; }
+.bp-row-docs { flex: none; padding: 0 0.75rem 0.5rem; border-bottom: 1px solid var(--line); }
+.bp-chapters:has(+ .bp-row-docs:not([hidden])) { border-bottom: 0; }
+.book-docs.compact { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; max-width: none; }
+.book-docs.compact .book-doc { min-height: 2rem; padding: 0.2rem 0.65rem; gap: 0.4rem; border-radius: 999px; font-size: 0.85rem; }
+.book-docs.compact .book-doc-icon svg { width: 16px; height: 16px; }
 .bp-book-view .chapter-grid a.active { background: var(--accent); color: var(--accent-ink); }
 .bp-books .book-grid a.active { outline: 3px solid var(--accent); outline-offset: -3px; }
 /* phones: the picker takes the whole screen, edge to edge */
