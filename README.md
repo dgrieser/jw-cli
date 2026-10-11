@@ -635,7 +635,10 @@ written, the video's transcript, following along as it plays. The outline
 links every heading into the reader at its verses; the gallery shows the
 pictures and videos chapter by chapter, each with its caption and description.
 `jw bible intro`, `jw bible outline` and `jw bible gallery` print the same on
-the command line (`-o json` for the data).
+the command line (`-o json` for the data). In the reader, the diamond at a
+chapter's heading opens the same for that chapter: the outline's headings that
+cover it, the book's introduction (its video as a link to the introduction's
+page) and the chapter's part of the gallery.
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
@@ -763,7 +766,10 @@ opened from), and buttons for a smaller, the default or a larger text size —
 kept in this browser. On the bible reader the header names the book, chapter
 and verses in view and opens a book picker: the chapters of the current book in
 one row that scrolls sideways, the book grid under it, and a book picked there
-shows its chapters in that row. Typing words instead of a reference into the
+shows its chapters in that row; the arrows beside the book's name step to the
+book before or after it. Below a reading, links lead to the chapters before
+and after it, and a passage showing part of a chapter leads, above and below
+its verses, to the whole chapter. Typing words instead of a reference into the
 bible's field searches the text of the bible being read and of the other
 bibles its translations section shows, and lists every hit, grouped by bible,
 each passage a link into the reader.

@@ -37,3 +37,11 @@ func TestOutlineRows(t *testing.T) {
 		}
 	}
 }
+
+func TestHeadingChapter(t *testing.T) {
+	for h, want := range map[string]int{"Matthew 2": 2, "1. Mose 12": 12, "Psalm 119.": 119, "": 0, "Intro": 0} {
+		if got := headingChapter(h); got != want {
+			t.Errorf("headingChapter(%q) = %d, want %d", h, got, want)
+		}
+	}
+}

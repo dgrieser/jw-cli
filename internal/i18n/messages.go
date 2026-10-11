@@ -331,6 +331,17 @@ type Messages struct {
 	// its book grid.
 	UIPickBook string
 	UIBooks    string
+	// UIPrevBook and UINextBook step the book picker to the book before or
+	// after the one it shows.
+	UIPrevBook string
+	UINextBook string
+	// UIWholeChapter reads the whole chapter of a passage that shows part of
+	// it; UIChapterStudy opens what the library has on a chapter — its outline,
+	// the book's introduction, its media — under the chapter's heading, and
+	// UIWatchVideo leads from there to the introduction's video.
+	UIWholeChapter string
+	UIChapterStudy string
+	UIWatchVideo   string
 	// UIFont* are the text size controls of every page.
 	UIFontSmaller string
 	UIFontLarger  string

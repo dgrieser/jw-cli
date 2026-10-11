@@ -352,6 +352,8 @@
     var row = null;
     var rowDocs = null;
     var rowTitle = null;
+    var prevBtn = null;
+    var nextBtn = null;
     var grid = null;
     var view = null;
     var navCache = {};
@@ -419,8 +421,28 @@
       });
     }
 
+    // the arrows beside the title step to the book before or after the one
+    // shown, in the same view; with no book shown there is nothing to step from
+    var shown = 0;
+    function setShown(book) {
+      shown = book;
+      prevBtn.hidden = !book || book <= 1;
+      nextBtn.hidden = !book || book >= 66;
+    }
+    function step(d) {
+      var book = shown + d;
+      if (book < 1 || book > 66) return;
+      if (!view.hidden) {
+        showBook(book);
+        return;
+      }
+      cur = { book: book, chapter: 0 };
+      showBooks();
+    }
+
     // the books, with the chapters of the book being read in the row above
     function showBooks() {
+      setShown(cur.book);
       view.hidden = true;
       grid.hidden = false;
       row.textContent = "";
@@ -459,6 +481,10 @@
         });
         var target = chosen || row.firstElementChild;
         if (target) row.scrollLeft = Math.max(0, target.offsetLeft - row.clientWidth / 2 + target.offsetWidth / 2);
+        // another showBooks may have filled the strip already: the book list
+        // arriving while the picker opens shows the books once more
+        rowDocs.textContent = "";
+        rowDocs.hidden = true;
         var docs = docLinks(book, nav, true);
         if (docs) {
           rowDocs.appendChild(docs);
@@ -472,6 +498,7 @@
 
     // one book's chapters as the bible page lays them out: the row is gone
     function showBook(book) {
+      setShown(book);
       row.hidden = true;
       rowDocs.hidden = true;
       grid.hidden = true;
@@ -502,6 +529,7 @@
           list.appendChild(li);
         });
         var docs = docLinks(book, nav, false);
+        docsBox.textContent = "";
         if (docs) docsBox.appendChild(docs);
         var first = list.querySelector("a");
         if (first) first.focus({ preventScroll: true });
@@ -514,7 +542,8 @@
       dialog = document.createElement("dialog");
       dialog.className = "bible-picker";
       dialog.setAttribute("aria-label", T.pickBook || "");
-      dialog.innerHTML = '<div class="bp-head"><strong class="bp-book"></strong>' +
+      dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>‹</button>' +
+        '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>›</button>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
         '<div class="bp-chapters" role="list"></div><div class="bp-row-docs" hidden></div><div class="bp-books"></div>' +
         '<div class="bp-book-view bible-nav chapters-nav" hidden>' +
@@ -523,6 +552,15 @@
       row = dialog.querySelector(".bp-chapters");
       rowDocs = dialog.querySelector(".bp-row-docs");
       rowTitle = dialog.querySelector(".bp-book");
+      prevBtn = dialog.querySelector(".bp-prev");
+      nextBtn = dialog.querySelector(".bp-next");
+      [[prevBtn, -1, T.prevBook], [nextBtn, 1, T.nextBook]].forEach(function (s) {
+        if (s[2]) {
+          s[0].title = s[2];
+          s[0].setAttribute("aria-label", s[2]);
+        }
+        s[0].addEventListener("click", function () { step(s[1]); });
+      });
       grid = dialog.querySelector(".bp-books");
       view = dialog.querySelector(".bp-book-view");
       var back = view.querySelector(".bp-back");
@@ -1058,6 +1096,73 @@
   } catch (err) {
     T = {};
   }
+
+  // --- what the library has on a chapter, behind the diamond at its heading --
+  //
+  // The headings of the book's outline that cover the chapter, the book's
+  // introduction and the chapter's media, read once when first asked for and
+  // folded away again with the same diamond.
+  (function () {
+    var heads = document.querySelectorAll(".reading .passage[data-book][data-chapter] > h2");
+    if (!heads.length) return;
+    var lang = T.lang || new URLSearchParams(location.search).get("lang") || "";
+    var ICON = '<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" focusable="false">' +
+      '<path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" ' +
+      'd="M4.2 2.5h7.6L15 6.2 8 14 1 6.2zM1 6.2h14M5.9 2.5 5 6.2 8 14l3-7.8-.9-3.7M5 6.2 8 2.5l3 3.7"/></svg>';
+    Array.prototype.forEach.call(heads, function (h) {
+      var passage = h.parentNode;
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "unfold-btn chapter-study-btn";
+      b.setAttribute("data-ui", "");
+      b.setAttribute("aria-expanded", "false");
+      b.title = T.chapterStudy || "";
+      b.setAttribute("aria-label", T.chapterStudy || "");
+      b.innerHTML = ICON;
+      h.classList.add("chapter-head");
+      h.appendChild(b);
+      var panel = null;
+      var loading = false;
+      b.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (panel) {
+          panel.hidden = !panel.hidden;
+          b.setAttribute("aria-expanded", String(!panel.hidden));
+          return;
+        }
+        if (loading) return;
+        loading = true;
+        b.setAttribute("aria-busy", "true");
+        var q = new URLSearchParams({
+          bible: passage.getAttribute("data-bible") || "",
+          book: passage.getAttribute("data-book"),
+          chapter: passage.getAttribute("data-chapter")
+        });
+        if (lang) q.set("lang", lang);
+        fetch("/bible/chapter?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
+          return res.text().then(function (t) {
+            if (!res.ok) throw new Error(t.trim() || res.status + " " + res.statusText);
+            return t;
+          });
+        }).then(function (html) {
+          var t = document.createElement("template");
+          t.innerHTML = html.trim();
+          panel = t.content.firstElementChild || document.createElement("div");
+        }, function (err) {
+          panel = document.createElement("p");
+          panel.className = "note";
+          panel.textContent = String(err && err.message || err);
+        }).then(function () {
+          loading = false;
+          b.removeAttribute("aria-busy");
+          panel.setAttribute("data-ui", "");
+          h.insertAdjacentElement("afterend", panel);
+          b.setAttribute("aria-expanded", "true");
+        });
+      });
+    });
+  })();
 
   // fmt fills %d and %s in order, as the catalogs write them
   function fmt(s) {

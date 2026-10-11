@@ -123,6 +123,9 @@ func (p basePage) UIText() map[string]string {
 		"footnotes":      t.FootnotesHeading,
 		"pickBook":       t.UIPickBook,
 		"allBooks":       t.UIAllBooks,
+		"prevBook":       t.UIPrevBook,
+		"nextBook":       t.UINextBook,
+		"chapterStudy":   t.UIChapterStudy,
 		"chapters":       t.UIChapters,
 		"abort":          t.UIAbort,
 		"language":       t.UILanguage,
@@ -1017,6 +1020,9 @@ type biblePage struct {
 	// BookNames are the books as the language names them, by number: what
 	// the page's header calls the book of the verses in view.
 	BookNames map[int]string
+	// ChapterNav leads on from the reading: to the chapters before and after
+	// it, and to all of the chapter it shows part of.
+	ChapterNav *chapterNavView
 }
 
 // bibleSearchView is a text search of the bible as the page lists it: the
@@ -1235,7 +1241,8 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
-	page.Body = s.passagesHTML(res, page.Edition, depth)
+	page.Body = s.passagesHTML(res, &page, depth)
+	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
 	if res.Table != nil {
 		page.BookNames = map[int]string{}
 		for b := 1; b <= 66; b++ {
@@ -1349,12 +1356,25 @@ func outlineBlock(items []model.OutlineItem) string {
 // heading, and every verse an item of its own, which is what the page unfolds
 // one at a time. A verse the server already unfolded carries its expansion
 // folded under it, and says to what level.
-func (s *Server) passagesHTML(res service.ReadResult, edition string, depth int) template.HTML {
+func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int) template.HTML {
 	wolBase := s.svc.HTTP.Base.WOL
 	var b strings.Builder
-	for _, p := range res.Passages {
-		fmt.Fprintf(&b, `<section class="passage" data-bible="%s"><h2>%s</h2><div class="items">`,
-			template.HTMLEscapeString(firstNonEmpty(p.Bible, edition)), template.HTMLEscapeString(p.Heading()))
+	for i, p := range res.Passages {
+		edition := firstNonEmpty(p.Bible, page.Edition)
+		fmt.Fprintf(&b, `<section class="passage" data-bible="%s"`, template.HTMLEscapeString(edition))
+		if p.Book > 0 && p.Chapter > 0 {
+			fmt.Fprintf(&b, ` data-book="%d" data-chapter="%d"`, p.Book, p.Chapter)
+		}
+		fmt.Fprintf(&b, `><h2>%s</h2>`, template.HTMLEscapeString(p.Heading()))
+		// part of a chapter leads to all of it, above the verses and below
+		whole := ""
+		if !p.Whole && p.Book > 0 && p.Chapter > 0 && res.Table != nil {
+			whole = fmt.Sprintf(`<p class="whole-chapter"><a class="btn" href="%s">%s</a></p>`,
+				template.HTMLEscapeString(page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)),
+				template.HTMLEscapeString(page.T.UIWholeChapter))
+		}
+		b.WriteString(whole)
+		b.WriteString(`<div class="items">`)
 		for _, v := range p.Verses {
 			b.WriteString(outlineBlock(v.Outline))
 			level := ""
@@ -1371,6 +1391,10 @@ func (s *Server) passagesHTML(res service.ReadResult, edition string, depth int)
 			b.WriteString(`</div>`)
 		}
 		b.WriteString(`</div>`)
+		// the last one's is in the chapter nav under the reading
+		if i < len(res.Passages)-1 {
+			b.WriteString(whole)
+		}
 		if p.UnfoldNote != "" {
 			fmt.Fprintf(&b, `<p class="note">%s</p>`, template.HTMLEscapeString(p.UnfoldNote))
 		}
