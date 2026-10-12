@@ -772,7 +772,11 @@ one row that scrolls sideways, the book grid under it, and a book picked there
 shows its chapters in that row; the arrows beside the book's name step to the
 book before or after it. Below a reading, links lead to the chapters before
 and after it, and a passage showing part of a chapter leads, above and below
-its verses, to the whole chapter. Typing words instead of a reference into the
+its verses, to the whole chapter. While a reference is typed into the bible's
+field, suggestions complete it without sending it: the books whose name (or
+abbreviation, or name without its number — "Tim" offers both letters to
+Timothy) starts so, then the book's chapters, after ":" the chapter's verses,
+and after "-" the chapters or verses that can end the range. Typing words instead of a reference into the
 bible's field searches the text of the bible being read and of the other
 bibles its translations section shows, and lists every hit, grouped by bible,
 each passage a link into the reader.
