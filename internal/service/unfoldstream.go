@@ -298,7 +298,13 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 				tip, err = r.Resolve(ctx, ref.Path)
 				sess.Spend(1)
 			}
-			if passages := passageRefs(tip.ContentHTML); err == nil && len(passages) > 0 {
+			passages := passageRefs(tip.ContentHTML)
+			if len(passages) == 0 {
+				// the verses as a chapter read before holds them, which carry
+				// no ids: the ones the citation names
+				passages = verseIDRefs(r.VersesOf(ctx, ref))
+			}
+			if err == nil && len(passages) > 0 {
 				if cfg.Verses.Shown(unfold.VerseIDs(tip.ContentHTML)) {
 					continue
 				}
@@ -356,7 +362,7 @@ func (s *Service) streamCitedPassage(ctx context.Context, lng model.Language, i 
 		}
 		pcfg := cfg
 		pcfg.Spent = sess.Requests()
-		note, requests, err := s.StreamPassageUnfold(ctx, lng, "", passage, pcfg, txt, UnfoldStream{
+		note, requests, err := s.StreamPassageParts(ctx, lng, "", passage, PassageParts{Lazy: cfg.LazyPassages}, pcfg, txt, UnfoldStream{
 			Section: func(sec UnfoldSection) {
 				// the passage's sections go into the citation's, and its own
 				// groups are named apart from those of any other passage
@@ -393,6 +399,21 @@ func passageRefs(passage string) []bibleref.Ref {
 		book, _ := strconv.Atoi(m[1])
 		chapter, _ := strconv.Atoi(m[2])
 		verse, _ := strconv.Atoi(m[3])
+		if n := len(out); n > 0 && out[n-1].Book == book && out[n-1].Chapter == chapter {
+			out[n-1].VerseStart = min(out[n-1].VerseStart, verse)
+			out[n-1].VerseEnd = max(out[n-1].VerseEnd, verse)
+			continue
+		}
+		out = append(out, bibleref.Ref{Book: book, Chapter: chapter, VerseStart: verse, VerseEnd: verse})
+	}
+	return out
+}
+
+// verseIDRefs is passageRefs for verse ids (book*1e6 + chapter*1e3 + verse).
+func verseIDRefs(ids []int) []bibleref.Ref {
+	var out []bibleref.Ref
+	for _, id := range ids {
+		book, chapter, verse := id/1_000_000, id/1_000%1_000, id%1_000
 		if n := len(out); n > 0 && out[n-1].Book == book && out[n-1].Chapter == chapter {
 			out[n-1].VerseStart = min(out[n-1].VerseStart, verse)
 			out[n-1].VerseEnd = max(out[n-1].VerseEnd, verse)

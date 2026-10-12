@@ -59,6 +59,10 @@ type UnfoldConfig struct {
 	// quotes a verse and the other translations always load once opened.
 	// Cited and CitedDepth are not read.
 	Hops bool
+	// LazyPassages has a citation that leads to bible verses bring their text
+	// only, every section of theirs a heading that loads once opened: what a
+	// link followed on a page asks for, quick to come.
+	LazyPassages bool
 	// Verses are the verses already shown, which an expansion counted in
 	// bible references adds to and never shows again: the pieces of one page
 	// unfolded together share them. Nil starts afresh.

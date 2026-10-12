@@ -6,6 +6,7 @@ import (
 	"html"
 	"net/url"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -69,10 +70,76 @@ func footnotesHTML(ctx context.Context, r unfold.Resolver, paths []string) (stri
 		if err != nil || strings.TrimSpace(tip.ContentHTML) == "" {
 			continue
 		}
+		body := paragraph(tip.ContentHTML)
+		// a footnote that only says where to read on — "See Glossary." —
+		// says what is read there instead
+		if path, label, ok := pointerFootnote(tip.ContentHTML); ok {
+			entry, err := r.Resolve(ctx, path)
+			requests++
+			if err == nil && strings.TrimSpace(entry.ContentHTML) != "" {
+				if entry.Title != "" && !saysIt(label, entry.Title) {
+					label += refSeparator + entry.Title
+				}
+				body = fmt.Sprintf(`<p class="fn-title"><strong>%s</strong></p>%s`,
+					html.EscapeString(label), withoutHeader(entry.ContentHTML))
+			}
+		}
 		fmt.Fprintf(&b, `<div class="footnote" data-ref="%s">%s</div>`,
-			html.EscapeString(RefPath(p)), paragraph(tip.ContentHTML))
+			html.EscapeString(RefPath(p)), body)
 	}
 	return b.String(), requests
+}
+
+// pointerFootnote reports whether a footnote does no more than point at one
+// passage of a publication ("Siehe Worterklärungen."): the passage's path,
+// and the link's text, which names it.
+func pointerFootnote(fragment string) (path, label string, ok bool) {
+	if !strings.Contains(fragment, "/pc/") {
+		return "", "", false
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return "", "", false
+	}
+	links := doc.Find("a[href]")
+	if links.Length() != 1 {
+		return "", "", false
+	}
+	href := links.AttrOr("href", "")
+	if !strings.Contains(href, "/pc/") {
+		return "", "", false
+	}
+	label = strings.Join(strings.Fields(links.Text()), " ")
+	// besides the link, a word or two: "Siehe", "See", "Voir"
+	rest := strings.Replace(doc.Text(), links.Text(), "", 1)
+	rest = strings.TrimFunc(rest, func(r rune) bool { return r == '.' || r == ',' || r == ':' || unicode.IsSpace(r) })
+	if label == "" || len(strings.Fields(rest)) > 2 {
+		return "", "", false
+	}
+	u, err := url.Parse(href)
+	if err != nil {
+		return "", "", false
+	}
+	return u.Path, label, true
+}
+
+// withoutHeader is a passage without the header it opens with, the title its
+// footnote's heading already says.
+func withoutHeader(fragment string) string {
+	if !strings.Contains(fragment, "<header") {
+		return fragment
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	body := doc.Find("body")
+	body.Find("header").Remove()
+	out, err := body.Html()
+	if err != nil {
+		return fragment
+	}
+	return strings.TrimSpace(out)
 }
 
 // EditionVerse is a verse as one bible edition renders it.

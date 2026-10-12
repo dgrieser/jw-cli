@@ -385,6 +385,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%v", err)
 		return
 	}
+	cfg.LazyPassages = boolParam(r, "lazy")
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
