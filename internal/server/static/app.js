@@ -3236,13 +3236,17 @@
   // open and close all only once there is something to open
   function syncTools() {
     if (!tools) return;
-    tools.hidden = !doc.querySelector("details.section");
+    var none = !doc.querySelector("details.section");
+    tools.hidden = none;
+    openAll.disabled = closeAll.disabled = none;
   }
 
   openAll.addEventListener("click", function () {
+    closeAllMenu();
     doc.querySelectorAll("details.section").forEach(function (d) { d.open = true; });
   });
   closeAll.addEventListener("click", function () {
+    closeAllMenu();
     doc.querySelectorAll("details.section").forEach(function (d) { d.open = false; });
   });
 
@@ -3278,8 +3282,9 @@
   }
 
   // the page bar's diamond unfolds everything, the way a held link unfolds
-  // its item: a menu of depths, and × to fold it all away. The level
-  // links under the heading stay for a browser without a script.
+  // its item: a menu of depths, × to fold it all away, and beside them
+  // opening and closing every section there is. The level links under the
+  // heading stay for a browser without a script.
   var allBtn = null;
   var allMenu = null;
   var pb = document.querySelector(".page-bar .pb");
@@ -3293,7 +3298,7 @@
     allMenu.setAttribute("aria-label", T.unfoldAll || "Unfold all");
     allMenu.setAttribute("data-ui", "");
     allMenu.hidden = true;
-    allMenu.appendChild(make("span", "label", T.unfoldAll || "Unfold all"));
+    allMenu.appendChild(make("span", "label", T.depth || "Depth"));
     for (var ad = 1; ad <= MAX_DEPTH; ad++) {
       (function (depth) {
         var b = button("depth", fmt(T.depthN, depth), String(depth));
@@ -3314,6 +3319,19 @@
       allBtn.focus();
     });
     allMenu.appendChild(allRemove);
+    // open and close all move here, as glyphs: chevrons apart and together
+    var glyph = function (b, label, d) {
+      b.className = "glyph";
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>';
+      allMenu.appendChild(b);
+    };
+    allMenu.appendChild(make("span", "sep"));
+    glyph(openAll, T.openAll || "Open all", "M7 15l5 5 5-5M7 9l5-5 5 5");
+    glyph(closeAll, T.closeAll || "Close all", "M7 20l5-5 5 5M7 4l5 5 5-5");
+    tools.remove();
     var beside = pb.querySelector(".pb-history") || pb.querySelector(".pb-settings");
     pb.insertBefore(allBtn, beside);
     pb.appendChild(allMenu);

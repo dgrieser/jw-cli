@@ -652,7 +652,8 @@ the verse or paragraph references then streams in to that depth, one section
 at a time, with the progress of the slow parts shown in place (nothing is
 added when there is nothing to unfold). The diamond in the bar (or **Unfold
 all 0 1 2 3** above the text, without scripts) does the same for every item
-in turn, with a Stop button. A page never unfolds itself by being visited: only the reader asks
+in turn, with a Stop button; its menu also opens or closes every section on
+the page at once. A page never unfolds itself by being visited: only the reader asks
 for references, and what they brought is kept with the page (see below), not
 in its address. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
