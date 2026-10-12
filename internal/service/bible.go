@@ -556,6 +556,19 @@ func (s *Service) BibleNav(ctx context.Context, lng model.Language, edition stri
 }
 
 // BookNav is the chapter grid of one book in an edition.
+// VerseCount is how many verses a chapter has in an edition: the number of
+// its last verse.
+func (s *Service) VerseCount(ctx context.Context, lng model.Language, edition string, book, chapter int) (int, error) {
+	if book < 1 || book > 66 || chapter < 1 {
+		return 0, fmt.Errorf("invalid chapter %d:%d", book, chapter)
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return 0, err
+	}
+	return s.WOL.VerseCount(ctx, cfg, edition, book, chapter)
+}
+
 func (s *Service) BookNav(ctx context.Context, lng model.Language, edition string, book int) (wol.BookNav, error) {
 	if book < 1 || book > 66 {
 		return wol.BookNav{}, fmt.Errorf("invalid book %d (want 1-66)", book)

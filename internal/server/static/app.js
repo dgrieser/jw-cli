@@ -2231,6 +2231,256 @@
       bibleForm.querySelectorAll("[data-nav-only]").forEach(function (el) { el.disabled = false; });
       document.querySelectorAll(".bible-nav").forEach(function (el) { el.hidden = false; });
     });
+    if (bibleRef) refSuggest(bibleForm, bibleRef);
+  }
+
+  // --- suggesting a reference while it is typed --------------------------
+  //
+  // Suggestions come with every key from what the browser has: the books'
+  // names, then the chapters a book has, after ":" the verses of the chapter,
+  // after "-" what can end the range. Each is asked of the edition being read
+  // once — the chapters of a book as soon as it is named, the verses of a
+  // chapter as soon as it is — and kept in this browser. A suggestion
+  // completes the text only; the reader still sends it.
+
+  function refSuggest(form, input) {
+    var edition = form.querySelector("select.edition");
+    var langInput = form.querySelector('input[name="lang"]');
+    var lang = langInput ? langInput.value : new URLSearchParams(location.search).get("lang") || "";
+    var books = null;
+    // what is known of the edition: chapters by book, verses by "book:chapter"
+    var known = {};
+    var box = document.createElement("div");
+    box.className = "ref-suggest";
+    box.setAttribute("role", "listbox");
+    box.hidden = true;
+    input.setAttribute("autocomplete", "off");
+    input.setAttribute("aria-autocomplete", "list");
+    input.parentNode.appendChild(box);
+    var active = -1;
+    // what a suggestion was picked into: not suggested on again until typed on
+    var picked = null;
+
+    function ed() {
+      return edition ? edition.value : "nwtsty";
+    }
+
+    // fetched asks the API for path once, from this browser's copy when it
+    // has one, and shows the suggestions again once it is there
+    var pending = {};
+    function fetched(key, path, pick) {
+      var k = "jw:refs:" + ed() + ":" + lang + ":" + key;
+      if (k in known) return known[k];
+      try {
+        var kept = window.localStorage.getItem(k);
+        if (kept) return (known[k] = JSON.parse(kept));
+      } catch (err) {
+        // nothing kept: asked for below
+      }
+      if (pending[k]) return null;
+      pending[k] = true;
+      var q = new URLSearchParams(path[1]);
+      q.set("bible", ed());
+      if (lang) q.set("lang", lang);
+      fetch(path[0] + "?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
+        if (!res.ok) throw new Error(res.status);
+        return res.json();
+      }).then(function (j) {
+        known[k] = pick(j);
+        try {
+          window.localStorage.setItem(k, JSON.stringify(known[k]));
+        } catch (err) {
+          // not kept: asked for again on the next page
+        }
+        delete pending[k];
+        if (document.activeElement === input) render();
+      }, function () {
+        delete pending[k];
+      });
+      return null;
+    }
+
+    // chaptersOf is the chapters a book has, or null until they are known
+    function chaptersOf(book) {
+      return fetched("c" + book, ["/api/v1/bible/nav", { book: String(book) }], function (nav) {
+        return nav.chapters || [];
+      });
+    }
+
+    // versesOf is how many verses a chapter has, or null until it is known
+    function versesOf(book, chapter) {
+      return fetched("v" + book + ":" + chapter, ["/api/v1/bible/verses", { book: String(book), chapter: String(chapter) }], function (j) {
+        return j.verses || 0;
+      });
+    }
+
+    // load knows the books of the edition, once asked for
+    function load() {
+      books = fetched("b", ["/api/v1/bible/nav", {}], function (nav) {
+        var list = [];
+        (nav.sections || []).forEach(function (sec) {
+          (sec.books || []).forEach(function (b) {
+            if (b.number < 1 || b.number > 66) return;
+            var bare = norm(b.name).replace(/^\d+ /, "");
+            list.push({ number: b.number, name: b.name, keys: [norm(b.name), bare, norm(b.abbreviation || "")].filter(Boolean) });
+          });
+        });
+        return list;
+      });
+    }
+
+    // norm is text as it is compared: lower case, without dots, one space
+    // between words and none around ":" and "-"
+    function norm(s) {
+      return String(s || "").toLowerCase().replace(/\./g, "").replace(/[–—]/g, "-")
+        .replace(/\s*([:-])\s*/g, "$1").replace(/\s+/g, " ").replace(/^ /, "");
+    }
+
+    // parse finds the book the text starts with — its longest name that is
+    // followed by a space, else the one book whose name starts so — and what
+    // comes after it
+    function parse(text) {
+      var t = norm(text);
+      var best = null;
+      (books || []).forEach(function (b) {
+        b.keys.forEach(function (k) {
+          if (t.length > k.length && t.slice(0, k.length + 1) === k + " " && (!best || k.length > best.len)) {
+            best = { book: b, len: k.length, rest: t.slice(k.length + 1) };
+          }
+        });
+      });
+      if (best) return best;
+      // the start of one book's name only, and a number after it: "Psalm 23"
+      var m = /^(.*\D) (\d[\d:-]*)?$/.exec(t);
+      if (!m) return null;
+      var head = m[1];
+      var hits = (books || []).filter(function (b) {
+        return b.keys.some(function (k) { return k.indexOf(head) === 0; });
+      });
+      return hits.length === 1 ? { book: hits[0], len: head.length, rest: m[2] || "" } : null;
+    }
+
+    function range(from, to, typed) {
+      var out = [];
+      for (var n = from; n <= to; n++) {
+        if (String(n).indexOf(typed) === 0) out.push(n);
+      }
+      return out;
+    }
+
+    function hasChapter(chapters, c) {
+      return chapters.indexOf(+c) >= 0;
+    }
+
+    // suggestions are [{label, value}] for the text as it is
+    function suggestions(text) {
+      load();
+      if (!books) return [];
+      var p = parse(text);
+      if (!p) {
+        var q = norm(text).replace(/ $/, "");
+        if (!q) return [];
+        return books.filter(function (b) {
+          return b.keys.some(function (k) { return k.indexOf(q) === 0; });
+        }).slice(0, 8).map(function (b) {
+          return { label: b.name, value: b.name + " " };
+        });
+      }
+      var book = p.book.number;
+      var chapters = chaptersOf(book);
+      if (!chapters) return [];
+      var name = p.book.name + " ";
+      var m = /^(\d+)/.exec(p.rest);
+      // the verses of a chapter named are asked for before the ":"
+      var verses = m && hasChapter(chapters, m[1]) ? versesOf(book, +m[1]) : null;
+      if ((m = /^(\d*)$/.exec(p.rest))) {
+        return chapters.filter(function (c) { return String(c).indexOf(m[1]) === 0; }).map(function (c) {
+          return { label: String(c), value: name + c };
+        });
+      }
+      if ((m = /^(\d+)-(\d*)$/.exec(p.rest)) && hasChapter(chapters, m[1])) {
+        return chapters.filter(function (c) { return c > +m[1] && String(c).indexOf(m[2]) === 0; }).map(function (c) {
+          return { label: String(c), value: name + m[1] + "-" + c };
+        });
+      }
+      if (!verses) return [];
+      if ((m = /^(\d+):(\d*)$/.exec(p.rest))) {
+        return range(1, verses, m[2]).map(function (v) {
+          return { label: String(v), value: name + m[1] + ":" + v };
+        });
+      }
+      if ((m = /^(\d+):(\d+)-(\d*)$/.exec(p.rest))) {
+        return range(+m[2] + 1, verses, m[3]).map(function (v) {
+          return { label: String(v), value: name + m[1] + ":" + m[2] + "-" + v };
+        });
+      }
+      return [];
+    }
+
+    function render() {
+      // asked for even when not shown: what comes next is then there
+      var list = suggestions(input.value);
+      if (picked === input.value) list = [];
+      // a number typed in full that leads nowhere else needs no suggestion
+      if (list.length === 1 && norm(list[0].value) === norm(input.value)) list = [];
+      box.textContent = "";
+      active = -1;
+      box.classList.toggle("numbers", !!list.length && /^\d+$/.test(list[0].label));
+      list.forEach(function (s) {
+        var o = document.createElement("button");
+        o.type = "button";
+        o.tabIndex = -1;
+        o.setAttribute("role", "option");
+        o.textContent = s.label;
+        o.addEventListener("pointerdown", function (e) { e.preventDefault(); });
+        o.addEventListener("click", function () { choose(s); });
+        box.appendChild(o);
+      });
+      box.hidden = !list.length;
+    }
+
+    function choose(s) {
+      input.value = s.value;
+      picked = s.value;
+      input.focus();
+      // a book goes on to its chapters at once
+      if (/ $/.test(s.value)) picked = null;
+      render();
+    }
+
+    function move(d) {
+      var opts = box.querySelectorAll("button");
+      if (!opts.length) return;
+      if (active >= 0) opts[active].removeAttribute("aria-selected");
+      active = (active + d + opts.length) % opts.length;
+      opts[active].setAttribute("aria-selected", "true");
+      opts[active].scrollIntoView({ block: "nearest" });
+    }
+
+    input.addEventListener("focus", function () {
+      load();
+      render();
+    });
+    input.addEventListener("input", function () {
+      picked = null;
+      load();
+      render();
+    });
+    input.addEventListener("keydown", function (e) {
+      if (box.hidden) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        move(e.key === "ArrowDown" ? 1 : -1);
+      } else if (e.key === "Enter" && active >= 0) {
+        e.preventDefault();
+        box.querySelectorAll("button")[active].click();
+      } else if (e.key === "Escape") {
+        picked = input.value;
+        box.hidden = true;
+      }
+    });
+    input.addEventListener("blur", function () { box.hidden = true; });
+    if (edition) edition.addEventListener("change", function () { books = null; });
   }
 
   // --- unfolding ----------------------------------------------------------
@@ -3200,7 +3450,9 @@
   // time it is opened, and again after a failure
   function loadLazy(d) {
     var url = d.getAttribute("data-lazy");
-    if (!url || d.getAttribute("data-loaded")) return Promise.resolve();
+    if (!url) return Promise.resolve();
+    // loading or loaded already: settles with that
+    if (d.getAttribute("data-loaded")) return d._loading || Promise.resolve();
     d.setAttribute("data-loaded", "1");
     // a section the server folded names what to load without the language
     if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
@@ -3219,7 +3471,7 @@
     if (!list) list = body.appendChild(make("div", "sections"));
     var loader = makeLoader();
     list.appendChild(loader);
-    return streamSections(url, list, loader, null).then(function (res) {
+    d._loading = streamSections(url, list, loader, null).then(function (res) {
       if (res.stopped) {
         // called off before anything came: opened again, it loads again
         if (res.count <= 0) {
@@ -3238,6 +3490,7 @@
       }
       saveState(d);
     });
+    return d._loading;
   }
 
   doc.addEventListener("toggle", function (e) {
@@ -3503,6 +3756,18 @@
         return true;
       case "ref":
         var depth = anchorDepth(owner);
+        // a verse unfolded already has its cross references as a section of
+        // their own: the reference opens in there, loading them all when
+        // they are not yet
+        var marginal = scopeOf(owner);
+        marginal = marginal && marginal.querySelector(':scope > .sections > details.section[data-lazy*="part=marginal"]');
+        if (marginal) {
+          var loadingRefs = loadLazy(marginal);
+          marginal.open = true;
+          inView(marginal);
+          loadingRefs.then(done);
+          return true;
+        }
         if (owner.item && owner.item.params.kind === "verse") {
           // a marginal reference of a verse: the verse's references as they
           // unfold, under their heading, and its other sections as headings

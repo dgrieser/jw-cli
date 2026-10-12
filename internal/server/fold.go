@@ -166,3 +166,45 @@ func attr(n *nethtml.Node, key string) string {
 	}
 	return ""
 }
+
+// foldPrintEditions puts the pictures of a document's printed pages — wol's
+// "Printed edition" thumbnails, one block per spread, the later ones hidden
+// behind a click on wol — into one disclosure under their common title,
+// collapsed: they repeat what the text says, and push it far down the page.
+func foldPrintEditions(fragment string) string {
+	if !strings.Contains(fragment, "alternatePresentation") {
+		return fragment
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	doc.Find("div.alternatePresentation").Each(func(_ int, div *goquery.Selection) {
+		// a run of them is folded from its first
+		if prev := div.Prev(); prev.Length() > 0 && prev.HasClass("alternatePresentation") {
+			return
+		}
+		run := div
+		for next := div.Next(); next.Length() > 0 && next.HasClass("alternatePresentation"); next = next.Next() {
+			run = run.AddSelection(next)
+		}
+		title := strings.TrimSpace(div.Find(".title").First().Text())
+		var body strings.Builder
+		run.Find(".thumbnail img").Each(func(_ int, img *goquery.Selection) {
+			if h, err := goquery.OuterHtml(img); err == nil {
+				body.WriteString(h)
+			}
+		})
+		if body.Len() == 0 {
+			return
+		}
+		div.BeforeHtml(`<details class="section print-edition"><summary>` + nethtml.EscapeString(title) +
+			`</summary><div class="section-body">` + body.String() + `</div></details>`)
+		run.Remove()
+	})
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return fragment
+	}
+	return out
+}

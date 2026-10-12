@@ -99,6 +99,41 @@ func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, 
 
 var verseID = regexp.MustCompile(`^v(\d+)-(\d+)-(\d+)-\d+$`)
 
+// VerseCount is the number of the last verse of a chapter in an edition, as
+// its page numbers them: what a reference to the chapter can name. It is kept
+// as a memo of its own, the page read once.
+func (c *Client) VerseCount(ctx context.Context, cfg Config, edition string, book, chapter int) (int, error) {
+	if edition == "" {
+		edition = "nwtsty"
+	}
+	u := c.url(cfg, "b", fmt.Sprintf("/%s/%d/%d", edition, book, chapter))
+	return httpx.Memo(ctx, c.cache, "verses1-"+u, func(ctx context.Context) (int, error) {
+		d, err := c.Chapter(ctx, cfg, edition, book, chapter)
+		if err != nil {
+			return 0, err
+		}
+		return d.LastVerse(), nil
+	})
+}
+
+// LastVerse is the highest verse number of the chapter on its page.
+func (d *ChapterDoc) LastVerse() int {
+	last := 0
+	d.doc.Find(selVerse).Each(func(_ int, s *goquery.Selection) {
+		m := verseID.FindStringSubmatch(s.AttrOr("id", ""))
+		if m == nil {
+			return
+		}
+		book, _ := strconv.Atoi(m[1])
+		ch, _ := strconv.Atoi(m[2])
+		v, _ := strconv.Atoi(m[3])
+		if book == d.Book && ch == d.Chapter {
+			last = max(last, v)
+		}
+	})
+	return last
+}
+
 // Verses returns verses from..to (inclusive); 0,0 means the whole chapter.
 // Multi-segment verses are concatenated.
 func (d *ChapterDoc) Verses(from, to int) ([]model.Verse, error) {

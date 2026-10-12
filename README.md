@@ -772,7 +772,13 @@ one row that scrolls sideways, the book grid under it, and a book picked there
 shows its chapters in that row; the arrows beside the book's name step to the
 book before or after it. Below a reading, links lead to the chapters before
 and after it, and a passage showing part of a chapter leads, above and below
-its verses, to the whole chapter. Typing words instead of a reference into the
+its verses, to the whole chapter. While a reference is typed into the bible's
+field, suggestions complete it without sending it: the books whose name (or
+abbreviation, or name without its number — "Tim" offers both letters to
+Timothy) starts so, then the book's chapters, after ":" the chapter's verses,
+and after "-" the chapters or verses that can end the range. The chapters
+and verses are those of the edition being read, asked of it once and kept in
+the browser. Typing words instead of a reference into the
 bible's field searches the text of the bible being read and of the other
 bibles its translations section shows, and lists every hit, grouped by bible,
 each passage a link into the reader.
@@ -857,6 +863,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0`, `videos=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
+| `GET /api/v1/bible/verses` | `bible`, `book`, `chapter` | — (the chapter's page: how many verses it has) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
 | `GET /api/v1/media/items/{lank}/text` | — | `jw media text` |

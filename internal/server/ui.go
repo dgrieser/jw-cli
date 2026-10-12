@@ -344,7 +344,7 @@ func (s *Server) sanitized(fragment, baseURL string) template.HTML {
 	if err != nil {
 		return ""
 	}
-	return template.HTML(out) //nolint:gosec // bluemonday-sanitized above
+	return template.HTML(foldPrintEditions(out)) //nolint:gosec // bluemonday-sanitized above
 }
 
 // inlineText flattens a fragment with inline markup ("<strong>Jesus</strong>")
