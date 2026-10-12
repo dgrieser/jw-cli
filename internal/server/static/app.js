@@ -2201,6 +2201,32 @@
   // --- bible navigation ----------------------------------------------------
 
 
+  // the chapters before and after a reading name their book short, both of
+  // them, when either name does not fit beside "whole chapter"
+  document.querySelectorAll(".chapter-nav").forEach(function (nav) {
+    var labels = nav.querySelectorAll(".lbl[data-short]");
+    if (!labels.length) return;
+    labels.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
+    // each side has half of what "whole chapter" leaves of the row
+    function fit() {
+      labels.forEach(function (l) { l.textContent = l.getAttribute("data-full"); });
+      var whole = nav.querySelector(".whole");
+      var gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
+      var room = (nav.clientWidth - (whole ? whole.offsetWidth : 0)) / 2 - gap;
+      // a button's width with its label in full, which it cuts when narrower
+      var cut = Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
+        var l = b.querySelector(".lbl");
+        return b.offsetWidth + (l ? l.scrollWidth - l.clientWidth : 0) > room;
+      });
+      if (cut) labels.forEach(function (l) { l.textContent = l.getAttribute("data-short"); });
+    }
+    fit();
+    // the page's own font is narrower than the one it is measured in first
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    window.addEventListener("load", fit);
+    window.addEventListener("resize", fit);
+  });
+
   var bibleForm = document.querySelector("form.bible-form");
   if (bibleForm) {
     var bibleRef = bibleForm.querySelector('input[name="ref"]');

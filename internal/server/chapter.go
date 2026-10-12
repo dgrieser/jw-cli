@@ -34,6 +34,9 @@ type chapterNavView struct {
 
 type chapterLink struct {
 	Label string
+	// Short is the label with the book's abbreviation, for a row too narrow
+	// for its name.
+	Short string
 	Href  string
 }
 
@@ -49,12 +52,31 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 		return nil
 	}
 	nav := &chapterNavView{}
+	abbrs := map[string]map[int]string{}
+	abbr := func(edition string, book int) string {
+		if _, ok := abbrs[edition]; !ok {
+			abbrs[edition] = map[int]string{}
+			if bn, err := s.svc.BibleNav(ctx, lng, edition); err == nil {
+				for _, sec := range bn.Sections {
+					for _, b := range sec.Books {
+						abbrs[edition][b.Number] = b.Abbreviation
+					}
+				}
+			}
+		}
+		return abbrs[edition][book]
+	}
 	link := func(p service.Passage, book, chapter int) chapterLink {
 		name := res.Table.Name(book)
-		return chapterLink{
+		edition := firstNonEmpty(p.Bible, page.Edition)
+		l := chapterLink{
 			Label: fmt.Sprintf("%s %d", name, chapter),
-			Href:  page.chapterHref(firstNonEmpty(p.Bible, page.Edition), name, chapter),
+			Href:  page.chapterHref(edition, name, chapter),
 		}
+		if a := abbr(edition, book); a != "" && a != name {
+			l.Short = fmt.Sprintf("%s %d", a, chapter)
+		}
+		return l
 	}
 	chapters := func(p service.Passage, book int) []int {
 		bn, err := s.svc.BookNav(ctx, lng, firstNonEmpty(p.Bible, page.Edition), book)
