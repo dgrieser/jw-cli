@@ -3200,7 +3200,9 @@
   // time it is opened, and again after a failure
   function loadLazy(d) {
     var url = d.getAttribute("data-lazy");
-    if (!url || d.getAttribute("data-loaded")) return Promise.resolve();
+    if (!url) return Promise.resolve();
+    // loading or loaded already: settles with that
+    if (d.getAttribute("data-loaded")) return d._loading || Promise.resolve();
     d.setAttribute("data-loaded", "1");
     // a section the server folded names what to load without the language
     if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
@@ -3219,7 +3221,7 @@
     if (!list) list = body.appendChild(make("div", "sections"));
     var loader = makeLoader();
     list.appendChild(loader);
-    return streamSections(url, list, loader, null).then(function (res) {
+    d._loading = streamSections(url, list, loader, null).then(function (res) {
       if (res.stopped) {
         // called off before anything came: opened again, it loads again
         if (res.count <= 0) {
@@ -3238,6 +3240,7 @@
       }
       saveState(d);
     });
+    return d._loading;
   }
 
   doc.addEventListener("toggle", function (e) {
@@ -3503,6 +3506,18 @@
         return true;
       case "ref":
         var depth = anchorDepth(owner);
+        // a verse unfolded already has its cross references as a section of
+        // their own: the reference opens in there, loading them all when
+        // they are not yet
+        var marginal = scopeOf(owner);
+        marginal = marginal && marginal.querySelector(':scope > .sections > details.section[data-lazy*="part=marginal"]');
+        if (marginal) {
+          var loadingRefs = loadLazy(marginal);
+          marginal.open = true;
+          inView(marginal);
+          loadingRefs.then(done);
+          return true;
+        }
         if (owner.item && owner.item.params.kind === "verse") {
           // a marginal reference of a verse: the verse's references as they
           // unfold, under their heading, and its other sections as headings

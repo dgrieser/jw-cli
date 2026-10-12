@@ -1930,3 +1930,7 @@ button.hist-rm:hover { border-color: transparent; background: var(--danger-soft)
   font-weight: 500;
 }
 .hist-steps .hist-step.next { flex-direction: row-reverse; }
+
+/* a document's printed pages, folded away above its text */
+details.section.print-edition { margin: 0.25rem 0 1rem; }
+details.section.print-edition .section-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
