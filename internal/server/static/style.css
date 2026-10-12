@@ -375,7 +375,7 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .form select.edition { display: block; width: 100%; min-width: 0; margin-bottom: 0.6rem; text-overflow: ellipsis; }
 .query input { min-width: 0; }
 .query .reset { flex: none; }
-.reset-icon { font-size: 1.1rem; line-height: 1; }
+.reset-icon { display: inline-flex; font-size: 1.1rem; line-height: 1; }
 @media (max-width: 30rem) {
   .reset-label { display: none; }
 }

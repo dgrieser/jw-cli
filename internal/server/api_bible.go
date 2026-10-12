@@ -156,3 +156,30 @@ func (s *Server) apiBibleNav(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// apiBibleVerses says how many verses a chapter has in an edition:
+// GET /api/v1/bible/verses?bible=nwtsty&book=40&chapter=2.
+func (s *Server) apiBibleVerses(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	book, _ := intParam(r, "book", 0)
+	chapter, _ := intParam(r, "chapter", 0)
+	if book < 1 || book > 66 || chapter < 1 {
+		badRequest(w, "parameters %q (1-66) and %q are required", "book", "chapter")
+		return
+	}
+	edition := valueOr(r, "bible", "nwtsty")
+	if !editionSymbol.MatchString(edition) {
+		badRequest(w, "invalid bible edition %q", edition)
+		return
+	}
+	n, err := s.svc.VerseCount(r.Context(), lng, edition, book, chapter)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]int{"book": book, "chapter": chapter, "verses": n})
+}
