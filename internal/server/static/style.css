@@ -657,18 +657,14 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 /* a reading: one verse per row, so each can be unfolded on its own */
 .reading .passage { margin-bottom: 2rem; }
 .reading .passage > h2 { margin-top: 0.5rem; }
-/* a chapter's heading carries a diamond, in line with the verses' ones, that
-   opens what the library has on the chapter */
-.reading .passage > h2.chapter-head { position: relative; padding-right: var(--unfold-room); }
-.reading .passage > h2 > .chapter-study-btn { top: 0; }
-/* what the chapter's diamond brought: sections like a verse's */
-.chapter-study[hidden] { display: none; }
-.chapter-study .section-body h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
-.chapter-study .book-facts { margin-bottom: 0.75rem; }
-.chapter-study .book-outline { max-width: none; }
-.chapter-study .book-outline .bo-item { margin: 0.15rem 0; }
-.chapter-study .gallery-grid { padding: 0; margin: 0 0 0.5rem; }
-.chapter-study .gallery-grid li { margin: 0; }
+/* what a chapter's heading unfolds: its outline, the book's introduction,
+   its media, as sections like a verse's */
+.cs-intro h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
+.cs-intro .book-facts { margin-bottom: 0.75rem; }
+.cs-outline.book-outline { max-width: none; }
+.cs-outline .bo-item { margin: 0.15rem 0; }
+.cs-gallery .gallery-grid { padding: 0; margin: 0 0 0.5rem; }
+.cs-gallery .gallery-grid li { margin: 0; }
 /* on from a reading: all of a chapter shown in part, the chapters around it */
 .whole-chapter { margin: 0 0 0.75rem; }
 .whole-chapter .btn, .chapter-nav .btn { min-height: 2.25rem; padding: 0.3rem 0.9rem; text-decoration: none; }

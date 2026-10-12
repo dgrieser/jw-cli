@@ -1084,73 +1084,6 @@
     T = {};
   }
 
-  // --- what the library has on a chapter, behind the diamond at its heading --
-  //
-  // The headings of the book's outline that cover the chapter, the book's
-  // introduction and the chapter's media, read once when first asked for and
-  // folded away again with the same diamond.
-  (function () {
-    var heads = document.querySelectorAll(".reading .passage[data-book][data-chapter] > h2");
-    if (!heads.length) return;
-    var lang = T.lang || new URLSearchParams(location.search).get("lang") || "";
-    var ICON = '<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" focusable="false">' +
-      '<path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" ' +
-      'd="M4.2 2.5h7.6L15 6.2 8 14 1 6.2zM1 6.2h14M5.9 2.5 5 6.2 8 14l3-7.8-.9-3.7M5 6.2 8 2.5l3 3.7"/></svg>';
-    Array.prototype.forEach.call(heads, function (h) {
-      var passage = h.parentNode;
-      var b = document.createElement("button");
-      b.type = "button";
-      b.className = "unfold-btn chapter-study-btn";
-      b.setAttribute("data-ui", "");
-      b.setAttribute("aria-expanded", "false");
-      b.title = T.chapterStudy || "";
-      b.setAttribute("aria-label", T.chapterStudy || "");
-      b.innerHTML = ICON;
-      h.classList.add("chapter-head");
-      h.appendChild(b);
-      var panel = null;
-      var loading = false;
-      b.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (panel) {
-          panel.hidden = !panel.hidden;
-          b.setAttribute("aria-expanded", String(!panel.hidden));
-          return;
-        }
-        if (loading) return;
-        loading = true;
-        b.setAttribute("aria-busy", "true");
-        var q = new URLSearchParams({
-          bible: passage.getAttribute("data-bible") || "",
-          book: passage.getAttribute("data-book"),
-          chapter: passage.getAttribute("data-chapter")
-        });
-        if (lang) q.set("lang", lang);
-        fetch("/bible/chapter?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
-          return res.text().then(function (t) {
-            if (!res.ok) throw new Error(t.trim() || res.status + " " + res.statusText);
-            return t;
-          });
-        }).then(function (html) {
-          var t = document.createElement("template");
-          t.innerHTML = html.trim();
-          panel = t.content.firstElementChild || document.createElement("div");
-        }, function (err) {
-          panel = document.createElement("p");
-          panel.className = "note";
-          panel.textContent = String(err && err.message || err);
-        }).then(function () {
-          loading = false;
-          b.removeAttribute("aria-busy");
-          panel.setAttribute("data-ui", "");
-          h.insertAdjacentElement("afterend", panel);
-          b.setAttribute("aria-expanded", "true");
-        });
-      });
-    });
-  })();
-
   // fmt fills %d and %s in order, as the catalogs write them
   function fmt(s) {
     var args = Array.prototype.slice.call(arguments, 1);
@@ -2342,13 +2275,22 @@
   var BLOCKS = "p, li, blockquote, figcaption, dd, dt, h1, h2, h3, h4, h5, h6";
 
   if (mode === "verse") {
-    doc.querySelectorAll(".item[data-vid]").forEach(function (el) {
+    // a chapter's heading unfolds what the library has on the chapter — its
+    // outline, the book's introduction, its media — the way a verse unfolds
+    // what it references; the sections go under the heading
+    doc.querySelectorAll(".passage[data-book][data-chapter] > h2, .item[data-vid]").forEach(function (el) {
       var passage = el.closest(".passage");
-      addItem(el, el, {
-        kind: "verse",
-        vid: el.getAttribute("data-vid"),
-        bible: passage ? passage.getAttribute("data-bible") : ""
-      });
+      var bible = passage ? passage.getAttribute("data-bible") : "";
+      if (el.tagName === "H2") {
+        addItem(el, null, {
+          kind: "chapter",
+          book: passage.getAttribute("data-book"),
+          chapter: passage.getAttribute("data-chapter"),
+          bible: bible
+        });
+        return;
+      }
+      addItem(el, el, { kind: "verse", vid: el.getAttribute("data-vid"), bible: bible });
     });
   } else {
     citingBlocks(doc, false);
@@ -2478,6 +2420,12 @@
     if (item.params.kind === "verse") {
       q.set("vid", item.params.vid);
       if (item.params.bible) q.set("bible", item.params.bible);
+    }
+    if (item.params.kind === "chapter") {
+      q.set("book", item.params.book);
+      q.set("chapter", item.params.chapter);
+      if (item.params.bible) q.set("bible", item.params.bible);
+      return "/unfold/chapter?" + unfoldQuery(q, depth, force, spent);
     }
     if (batch) q.set("run", batch.id);
     if (item.params.kind !== "verse") return refsURL(item.params.refs, depth, force, spent, q);
@@ -3653,9 +3601,11 @@
   // address — /meetings is a new week every week — by what they cite
   function signature() {
     var parts = items.map(function (item) {
-      return item.params.kind === "verse"
-        ? item.params.vid + "@" + (item.params.bible || "")
-        : item.params.refs.map(function (r) { return r.path; }).join(",");
+      switch (item.params.kind) {
+        case "verse": return item.params.vid + "@" + (item.params.bible || "");
+        case "chapter": return "ch" + item.params.book + ":" + item.params.chapter + "@" + (item.params.bible || "");
+        default: return item.params.refs.map(function (r) { return r.path; }).join(",");
+      }
     });
     var h = 0;
     var str = parts.join("|");

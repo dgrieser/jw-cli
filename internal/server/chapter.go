@@ -86,15 +86,14 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	return nav
 }
 
-// chapterStudyView is what the library has on one chapter, as the diamond at
-// a chapter's heading opens it: the headings of the book's outline that cover
-// the chapter, the book's introduction — its facts, and the text under its
-// video or what the video says, the video itself a link — and the chapter's
-// part of the book's media gallery. A part the library does not have for the
-// book is left out.
+// chapterStudyView is one part of what the library has on a chapter, as the
+// diamond at a chapter's heading unfolds it, section by section like a
+// verse's: the headings of the book's outline that cover the chapter, the
+// book's introduction — its facts, and the text under its video or what the
+// video says, the video itself a link — or the chapter's part of the book's
+// media gallery. A part the library does not have for the book is left out.
 type chapterStudyView struct {
 	biblePage
-	Chapter int
 
 	OutlineTitle string
 	Outline      []outlineRow
@@ -107,49 +106,62 @@ type chapterStudyView struct {
 
 	GalleryTitle string
 	Gallery      []model.GalleryTile
-
-	// Errors are the parts that could not be read.
-	Errors []string
 }
 
-// Empty says the library has nothing on the chapter.
-func (v chapterStudyView) Empty() bool {
-	return v.Outline == nil && v.Intro == nil && v.Gallery == nil && v.Errors == nil
-}
+// The order the chapter's sections read in, whichever is ready first.
+const (
+	orderOutline = iota + 1
+	orderIntro
+	orderGallery
+)
 
-// uiChapterStudy answers the diamond at a chapter's heading with what the
-// library has on the chapter, as a fragment of the reader:
-// GET /bible/chapter?bible=…&book=…&chapter=….
-func (s *Server) uiChapterStudy(w http.ResponseWriter, r *http.Request) {
+// unfoldChapter streams what the library has on a chapter, the way
+// /unfold/verse streams a verse: GET /unfold/chapter?bible=…&book=…&chapter=….
+func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 	book, _ := intParam(r, "book", 0)
 	chapter, _ := intParam(r, "chapter", 0)
 	if book < 1 || book > 66 || chapter < 1 {
-		http.Error(w, "parameters book (1-66) and chapter are required", http.StatusBadRequest)
+		badRequest(w, "parameters %q (1-66) and %q are required", "book", "chapter")
+		return
+	}
+	edition := valueOr(r, "bible", "nwtsty")
+	if !editionSymbol.MatchString(edition) {
+		badRequest(w, "invalid bible edition %q", edition)
 		return
 	}
 	lng, err := s.language(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		failJSON(w, r, err)
 		return
 	}
+	txt := text(lng)
 	ctx := r.Context()
-	page := biblePage{basePage: s.base(r, "Bible"), Edition: valueOr(r, "bible", "nwtsty")}
-	nav, err := s.svc.BookNav(ctx, lng, page.Edition, book)
+	ev := startStream(w)
+	page := biblePage{basePage: s.base(r, "Bible"), Edition: edition}
+	nav, err := s.svc.BookNav(ctx, lng, edition, book)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadGateway)
+		ev.finish(r, "", 0, err, txt)
 		return
 	}
 	page.BookNav, page.BookName = &nav, s.svc.BookTable(ctx, lng).Name(book)
-	v := chapterStudyView{biblePage: page, Chapter: chapter}
 
 	var mu sync.Mutex
+	var failed []string
 	fail := func(err error) {
 		if errors.Is(err, service.ErrNoBookDoc) {
 			return
 		}
 		mu.Lock()
-		v.Errors = append(v.Errors, err.Error())
+		failed = append(failed, err.Error())
 		mu.Unlock()
+	}
+	send := func(name string, order int, v chapterStudyView) {
+		var buf bytes.Buffer
+		if err := s.templates["bible"].ExecuteTemplate(&buf, name, v); err != nil {
+			fail(err)
+			return
+		}
+		ev.send(streamEvent{Type: "section", HTML: buf.String(), Order: order})
 	}
 	has := func(kinds ...string) bool {
 		for _, l := range nav.Links {
@@ -162,7 +174,7 @@ func (s *Server) uiChapterStudy(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	if has(wol.BookOutline, wol.BookOverview) {
 		wg.Go(func() {
-			o, err := s.svc.BookOutlineDoc(ctx, lng, page.Edition, book)
+			o, err := s.svc.BookOutlineDoc(ctx, lng, edition, book)
 			if err != nil {
 				fail(err)
 				return
@@ -174,47 +186,56 @@ func (s *Server) uiChapterStudy(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if len(items) > 0 {
-				v.OutlineTitle, v.Outline = o.Title, outlineRows(items, false, &page)
+				send("chapteroutline", orderOutline,
+					chapterStudyView{biblePage: page, OutlineTitle: o.Title, Outline: outlineRows(items, false, &page)})
 			}
 		})
 	}
 	if has(wol.BookIntroduction) {
 		wg.Go(func() {
-			intro, err := s.svc.BookIntro(ctx, lng, page.Edition, book)
+			intro, err := s.svc.BookIntro(ctx, lng, edition, book)
 			if err != nil {
 				fail(err)
 				return
 			}
-			v.Intro, v.IntroHref, v.HasVideo = &intro, page.docLink(viewIntro, ""), intro.Video != nil
+			v := chapterStudyView{biblePage: page, Intro: &intro, IntroHref: page.docLink(viewIntro, ""), HasVideo: intro.Video != nil}
 			if intro.NotesHTML != "" {
 				v.Notes = s.sanitized(intro.NotesHTML, s.svc.HTTP.Base.WOL)
 			}
 			v.Paragraphs = subtitles.Paragraphs(intro.Transcript)
+			send("chapterintro", orderIntro, v)
 		})
 	}
 	if has(wol.BookGallery) {
 		wg.Go(func() {
-			g, err := s.svc.BookGallery(ctx, lng, page.Edition, book)
+			g, err := s.svc.BookGallery(ctx, lng, edition, book)
 			if err != nil {
 				fail(err)
 				return
 			}
 			for _, grp := range g.Groups {
 				if headingChapter(grp.Heading) == chapter && len(grp.Items) > 0 {
-					v.GalleryTitle, v.Gallery = g.Title, grp.Items
+					send("chaptergallery", orderGallery, chapterStudyView{biblePage: page, GalleryTitle: g.Title, Gallery: grp.Items})
 				}
 			}
 		})
 	}
 	wg.Wait()
 
-	var buf bytes.Buffer
-	if err := s.templates["bible"].ExecuteTemplate(&buf, "chapterstudy", v); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+	// what could not be read fails the unfold when nothing else came, and is
+	// a note under what did
+	var note string
+	if len(failed) > 0 {
+		ev.mu.Lock()
+		got := ev.sections
+		ev.mu.Unlock()
+		if got == 0 {
+			ev.finish(r, "", 0, errors.New(strings.Join(failed, "; ")), txt)
+			return
+		}
+		note = strings.Join(failed, "; ")
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = buf.WriteTo(w)
+	ev.finish(r, note, 0, nil, txt)
 }
 
 // headingChapter is the chapter a gallery's heading names last: "Matthew 2".
