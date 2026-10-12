@@ -3941,8 +3941,10 @@
           });
           return true;
         }
+        // a link followed brings the verses it cites as text, their sections
+        // loading once opened; held, it unfolds deeper
         var text = (a.textContent || "").replace(/\s+/g, " ").trim();
-        streamOne(refsURL([{ path: target.url.pathname, text: text }], depth), list).then(done);
+        streamOne(refsURL([{ path: target.url.pathname, text: text }], depth, false, 0, new URLSearchParams({ lazy: "1" })), list).then(done);
         return true;
       case "footnote":
         q.set("path", target.url.pathname);

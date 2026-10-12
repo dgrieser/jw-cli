@@ -892,6 +892,9 @@ details.section.fresh { animation: pop 260ms ease-out; }
 .document .gen-field textarea { display: block; width: 100%; min-height: 4.5rem; resize: vertical; }
 .footnote { margin: 0 0 0.6rem; }
 .footnote p { margin: 0; }
+/* a footnote that pointed at a glossary entry: the entry, under its name */
+.footnote .fn-title { margin: 0 0 0.3rem; }
+.footnote .fn-title + * p, .footnote .fn-title ~ p { margin-top: 0; }
 .footnote + .footnote { padding-top: 0.6rem; border-top: 1px solid var(--line); }
 /* a link that opens here rather than leaving the page */
 .document a.b, .document a.fn, .document .item-text a.vl, .document .item-text a.cl { cursor: pointer; }
