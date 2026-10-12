@@ -99,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 	// what the web UI loads once a page is on screen: the expansion of one
 	// verse or of one paragraph, streamed section by section
 	mux.HandleFunc("GET /unfold/verse", s.unfoldVerse)
+	mux.HandleFunc("GET /unfold/chapter", s.unfoldChapter)
 	mux.HandleFunc("GET /unfold/refs", s.unfoldRefs)
 	mux.HandleFunc("GET /unfold/footnote", s.unfoldFootnote)
 	mux.HandleFunc("GET /unfold/translations", s.unfoldTranslations)
@@ -113,7 +114,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /article", s.uiArticle)
 	mux.HandleFunc("GET /open", s.uiOpen)
 	mux.HandleFunc("GET /bible", s.uiBible)
-	mux.HandleFunc("GET /bible/chapter", s.uiChapterStudy)
 	mux.HandleFunc("GET /dailytext", s.uiDailyText)
 	mux.HandleFunc("GET /meetings", s.uiMeetings)
 	mux.HandleFunc("GET /meetings/{part}", s.uiMeetings)

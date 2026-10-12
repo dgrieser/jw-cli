@@ -125,7 +125,6 @@ func (p basePage) UIText() map[string]string {
 		"allBooks":       t.UIAllBooks,
 		"prevBook":       t.UIPrevBook,
 		"nextBook":       t.UINextBook,
-		"chapterStudy":   t.UIChapterStudy,
 		"chapters":       t.UIChapters,
 		"abort":          t.UIAbort,
 		"language":       t.UILanguage,

@@ -636,7 +636,8 @@ links every heading into the reader at its verses; the gallery shows the
 pictures and videos chapter by chapter, each with its caption and description.
 `jw bible intro`, `jw bible outline` and `jw bible gallery` print the same on
 the command line (`-o json` for the data). In the reader, the diamond at a
-chapter's heading opens the same for that chapter: the outline's headings that
+chapter's heading unfolds the same for that chapter, as a verse's diamond unfolds
+what the verse references: the outline's headings that
 cover it, the book's introduction (its video as a link to the introduction's
 page) and the chapter's part of the gallery.
 

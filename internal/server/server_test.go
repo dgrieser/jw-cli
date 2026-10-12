@@ -1252,7 +1252,7 @@ func TestUIBibleChapterNav(t *testing.T) {
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
 	}
-	if resp, _ := get(t, srv, "/bible/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
-		t.Errorf("chapter study without a book: status %d", resp.StatusCode)
+	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
+		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)
 	}
 }
