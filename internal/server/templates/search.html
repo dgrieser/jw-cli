@@ -4,34 +4,35 @@
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   <div class="query">
     <input type="search" name="q" value="{{.Query}}" placeholder="{{.T.UISearchHint}}" aria-label="{{.T.UINavSearch}}" data-autofocus>
+    <button type="button" class="search-opts" hidden aria-haspopup="dialog" title="{{.T.UISearchOptions}}" aria-label="{{.T.UISearchOptions}}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/></svg></button>
     <button type="submit" class="primary">{{.T.UINavSearch}}</button>
   </div>
   <fieldset class="options">
-    <label>{{.T.UIEngine}}
+    <legend>{{.T.UISearchOptions}}</legend>
+    <label class="opt"><span class="name">{{.T.UIEngine}}</span>
       <select name="engine">
         <option value="jworg" {{if eq .Engine "jworg"}}selected{{end}}>jw.org</option>
-        <option value="wol" {{if eq .Engine "wol"}}selected{{end}}>wol</option>
+        <option value="wol" {{if eq .Engine "wol"}}selected{{end}}>{{.T.UISearchWOL}}</option>
       </select>
     </label>
-    <label>{{.T.UIType}}
+    <label class="opt" data-engine="jworg"><span class="name">{{.T.UISearchContent}}<small>{{.T.UISearchJWOrgOnly}}</small></span>
       <select name="type">
-        <option {{if eq .Type "all"}}selected{{end}}>all</option>
-        <option {{if eq .Type "publications"}}selected{{end}}>publications</option>
-        <option {{if eq .Type "videos"}}selected{{end}}>videos</option>
-        <option {{if eq .Type "audio"}}selected{{end}}>audio</option>
-        <option {{if eq .Type "bible"}}selected{{end}}>bible</option>
-        <option {{if eq .Type "indexes"}}selected{{end}}>indexes</option>
+        <option value="all" {{if eq .Type "all"}}selected{{end}}>{{.T.UISearchAll}}</option>
+        <option value="publications" {{if eq .Type "publications"}}selected{{end}}>{{.T.UISearchPubs}}</option>
+        <option value="videos" {{if eq .Type "videos"}}selected{{end}}>{{.T.UISearchVideos}}</option>
+        <option value="audio" {{if eq .Type "audio"}}selected{{end}}>{{.T.UISearchAudio}}</option>
+        <option value="bible" {{if eq .Type "bible"}}selected{{end}}>{{.T.UISearchBible}}</option>
+        <option value="indexes" {{if eq .Type "indexes"}}selected{{end}}>{{.T.UISearchIndexes}}</option>
       </select>
     </label>
-    <label>{{.T.UISort}}
+    <label class="opt"><span class="name">{{.T.UISort}}</span>
       <select name="sort">
-        <option {{if eq .Sort "rel"}}selected{{end}}>rel</option>
-        <option {{if eq .Sort "newest"}}selected{{end}}>newest</option>
-        <option {{if eq .Sort "oldest"}}selected{{end}}>oldest</option>
-        <option {{if eq .Sort "occ"}}selected{{end}}>occ</option>
+        <option value="rel" {{if or (eq .Sort "rel") (eq .Sort "occ")}}selected{{end}}>{{.T.UISortRelevance}}</option>
+        <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>{{.T.UISortNewest}}</option>
+        <option value="oldest" {{if eq .Sort "oldest"}}selected{{end}}>{{.T.UISortOldest}}</option>
       </select>
     </label>
-    <label class="check"><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}> {{.T.UIFullExcerpts}}</label>
+    <label class="opt check" data-engine="wol"><input type="hidden" name="excerpts" value="false"><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}><span class="name">{{.T.UIFullExcerpts}}<small>{{.T.UISearchWOLOnly}}</small></span></label>
   </fieldset>
 </form>
 

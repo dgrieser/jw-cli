@@ -234,6 +234,23 @@ type Messages struct {
 	UIType            string
 	UISort            string
 	UIFullExcerpts    string
+	// UISearch* name the search's options and what each can be set to:
+	// where it searches, which content (jw.org only), the order, and that
+	// excerpts are read in full (the online library only).
+	UISearchOptions   string
+	UISearchContent   string
+	UISearchWOL       string
+	UISearchAll       string
+	UISearchPubs      string
+	UISearchVideos    string
+	UISearchAudio     string
+	UISearchBible     string
+	UISearchIndexes   string
+	UISortRelevance   string
+	UISortNewest      string
+	UISortOldest      string
+	UISearchJWOrgOnly string
+	UISearchWOLOnly   string
 	UIPrevPage        string
 	UINextPage        string
 	UIScriptureRefs   string
@@ -319,7 +336,9 @@ type Messages struct {
 	// UIHistory* are what a section's history says: its list of the pages
 	// opened in it, a step back and forward through them, taking one off and
 	// emptying it.
-	UIHistory       string
+	UIHistory string
+	// UIHistoryShort is UIHistory beside a page's title.
+	UIHistoryShort  string
 	UIHistoryBack   string
 	UIHistoryNext   string
 	UIHistoryRemove string
