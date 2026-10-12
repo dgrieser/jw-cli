@@ -919,8 +919,8 @@
 
   // a song's lines and a transcript's captions carry their time in the
   // recording: the one the player is at is marked, and pressing one plays
-  // from it. The transcript scrolls in its box to keep the caption in view,
-  // unless the reader scrolled it themselves a moment ago.
+  // from it. The transcript reads with the page, so the page is not scrolled
+  // under the reader to follow it.
   (function () {
     var text = document.querySelector(".mediatext");
     var player = document.querySelector(".mediaitem video, .mediaitem audio");
@@ -931,13 +931,6 @@
     if (!timed.length) return;
     text.classList.add("playable");
     text.querySelectorAll(".cue-time").forEach(function (b) { b.hidden = false; });
-    var box = text.querySelector(".transcript");
-    var touched = 0;
-    if (box) {
-      ["wheel", "touchstart", "keydown"].forEach(function (ev) {
-        box.addEventListener(ev, function () { touched = Date.now(); }, { passive: true });
-      });
-    }
     var current = null;
     function mark(t) {
       if (current === t) return;
@@ -949,12 +942,6 @@
       if (!t) return;
       t.el.classList.add("now");
       t.el.setAttribute("aria-current", "true");
-      if (box && box.contains(t.el) && box.clientHeight && Date.now() - touched > 4000) {
-        var top = t.el.offsetTop, bottom = top + t.el.offsetHeight;
-        if (top < box.scrollTop || bottom > box.scrollTop + box.clientHeight) {
-          box.scrollTo({ top: Math.max(0, top - box.clientHeight / 3), behavior: "smooth" });
-        }
-      }
     }
     function sync() {
       var now = player.currentTime;

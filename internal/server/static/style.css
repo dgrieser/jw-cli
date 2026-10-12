@@ -408,8 +408,6 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .book-doc-page { max-width: 60rem; }
 .book-doc-page > h2 { margin-top: 0.25rem; }
 .book-facts { margin-top: 0; }
-/* the introduction's transcript reads with the page, not in a box of its own */
-.book-doc-page .transcript { max-height: none; overflow: visible; padding-right: 0; }
 .book-notes h2 { font-size: 1.15rem; }
 /* an outline page: the headings as links into the reader */
 .book-outline { max-width: var(--measure); }
@@ -1169,11 +1167,8 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 
 .transcript {
   max-width: var(--measure);
-  max-height: min(32rem, 60vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   position: relative;
-  padding: 0.25rem 0.75rem 0.25rem 0;
+  padding: 0.25rem 0;
 }
 .transcript p { margin: 0 0 0.85rem; }
 .cue-time {

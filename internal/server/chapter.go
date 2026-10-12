@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -152,10 +153,8 @@ func (s *Server) uiChapterStudy(w http.ResponseWriter, r *http.Request) {
 	}
 	has := func(kinds ...string) bool {
 		for _, l := range nav.Links {
-			for _, k := range kinds {
-				if l.Kind == k {
-					return true
-				}
+			if slices.Contains(kinds, l.Kind) {
+				return true
 			}
 		}
 		return false
