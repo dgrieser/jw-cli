@@ -389,6 +389,17 @@
       list: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6.5h.01M4 12h.01M4 17.5h.01M8 6.5h12M8 12h12M8 17.5h12"/></svg>'
     };
 
+    // shortTitle is a book's document named without the book, beside the
+    // book's name: "Einführung in Sprüche" is "Einführung" there
+    function shortTitle(title, book) {
+      if (!book || title.length <= book.length || title.slice(-book.length) !== book) return title;
+      var rest = title.slice(0, -book.length).replace(/\s+$/, "");
+      // the little word joining them goes too: in, to, zu, de, …
+      var m = /^(.*\S)\s+\p{Ll}{1,4}$/u.exec(rest);
+      return (m ? m[1] : rest) || title;
+    }
+
+    // docLinks are the book's documents; compact, the strip beside its name
     function docLinks(book, nav, compact) {
       var ul = document.createElement("ul");
       ul.className = compact ? "book-docs compact" : "book-docs";
@@ -406,7 +417,8 @@
         icon.setAttribute("aria-hidden", "true");
         icon.innerHTML = DOC_ICON[l.kind] || DOC_ICON.list;
         var t = document.createElement("span");
-        t.textContent = l.title;
+        t.textContent = compact ? shortTitle(l.title, names[book]) : l.title;
+        if (compact) a.title = l.title;
         a.appendChild(icon);
         a.appendChild(t);
         li.appendChild(a);
@@ -544,8 +556,9 @@
       dialog.setAttribute("aria-label", T.pickBook || "");
       dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>‹</button>' +
         '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>›</button>' +
+        '<div class="bp-row-docs" hidden></div>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
-        '<div class="bp-chapters" role="list"></div><div class="bp-row-docs" hidden></div><div class="bp-books"></div>' +
+        '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>' +
         '<div class="bp-book-view bible-nav chapters-nav" hidden>' +
         '<p class="bible-nav-back"><a href="#" class="bp-back"></a></p><h2></h2>' +
         '<h3 class="bible-nav-heading"></h3><ul class="chapter-grid"></ul><div class="bp-docs"></div></div>';
@@ -1972,8 +1985,9 @@
   // rest: as a reference, where that is how it opens; its page, here or in
   // a new tab; or filed in the section it belongs to, to read there later.
 
-  // the document's part of it: whether a link opens in place, and opening it
-  var LM = { inPlace: function () { return false; } };
+  // the document's part of it: whether a link opens in place, the item it
+  // unfolds — held, how deep — and unfolding that
+  var LM = { inPlace: function () { return false; }, itemOf: function () { return null; } };
 
   var linkMenu = document.createElement("div");
   linkMenu.className = "follow-menu";
@@ -1997,11 +2011,51 @@
     return b;
   }
 
+  // depthRow offers how deep to unfold item, and × to fold it away
+  function depthRow(item) {
+    var row = document.createElement("div");
+    row.className = "follow-depths";
+    row.setAttribute("role", "group");
+    row.setAttribute("aria-label", T.unfoldItem || "Unfold");
+    var pick = function (b, depth) {
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeLinkMenu();
+        held = null;
+        LM.unfold(item, depth);
+      });
+      row.appendChild(b);
+    };
+    for (var d = 1; d <= 3; d++) {
+      var b = document.createElement("button");
+      b.className = "depth";
+      b.textContent = String(d);
+      b.setAttribute("aria-label", fmt(T.depthN, d));
+      b.title = fmt(T.depthN, d);
+      b.setAttribute("aria-pressed", String(item.level === d));
+      pick(b, d);
+    }
+    if (item.exp || item.state === "loading") {
+      var x = document.createElement("button");
+      x.className = "remove";
+      x.textContent = "×";
+      x.setAttribute("aria-label", T.foldAway || "×");
+      x.title = T.foldAway || "×";
+      pick(x, 0);
+    }
+    linkMenu.appendChild(row);
+  }
+
   function openLinkMenu(a) {
     var page = pageOf(a);
     linkMenu.textContent = "";
     linkMenu.link = a;
-    if (LM.inPlace(a)) {
+    var item = LM.itemOf(a);
+    if (item) {
+      depthRow(item);
+    } else if (LM.inPlace(a)) {
       menuItem(T.followHere || "↳", function () {
         held = null;
         a.click();
@@ -2041,7 +2095,7 @@
     if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
     linkMenu.style.left = left + "px";
     linkMenu.style.top = top + "px";
-    linkMenu.firstChild.focus({ preventScroll: true });
+    linkMenu.querySelector("button").focus({ preventScroll: true });
   }
 
   function closeLinkMenu() {
@@ -2227,23 +2281,14 @@
   var items = [];
 
   // addItem makes el unfoldable. A nested item sits inside what another item
-  // brought: it unfolds on its own, and is left out of "unfold all".
+  // brought: it unfolds on its own, and is left out of "unfold all". An item
+  // has no control of its own: its links unfold it — a verse's number, a
+  // chapter's — and, held, offer how deep.
   function addItem(el, host, params, nested) {
     var item = { el: el, host: host, params: params, level: 0, state: "idle", exp: null, ctrl: null };
     el._unfold = item;
     el.classList.add("unfold-item");
     if (nested) el.classList.add("nested");
-    var b = button("unfold-btn", T.unfoldItem || "Unfold");
-    b.innerHTML = ICON + '<span class="lvl" aria-hidden="true"></span>';
-    b.setAttribute("aria-haspopup", "true");
-    b.setAttribute("aria-expanded", "false");
-    b.addEventListener("click", function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      toggleMenu(item);
-    });
-    el.appendChild(b);
-    item.btn = b;
     // what the server already unfolded, on a page asked for without lazy=1
     var exp = existingExpansion(item);
     if (exp) {
@@ -2266,7 +2311,7 @@
 
   function placeExpansion(item, exp) {
     if (item.host === item.el) {
-      item.el.insertBefore(exp, item.btn);
+      item.el.appendChild(exp);
     } else {
       item.el.insertAdjacentElement("afterend", exp);
     }
@@ -2370,6 +2415,7 @@
   // held link offers first
   LM.inPlace = function (a) {
     if (!doc.contains(a) || a.target || a.closest("[data-ui]")) return false;
+    if (numberItem(a)) return true;
     var target = linkTarget(a);
     return !!onThisPage(a) || (!!target && target.kind !== "media");
   };
@@ -2509,7 +2555,6 @@
 
   function setLevel(item, level) {
     item.level = level;
-    item.btn.querySelector(".lvl").textContent = level > 0 ? String(level) : "";
     item.el.setAttribute("data-level", String(level));
   }
 
@@ -2521,8 +2566,6 @@
     // it is there, and a write begun as the page goes is not always kept
     if (state !== "loading") writeState();
     item.el.setAttribute("data-state", state);
-    if (state === "loading") item.btn.setAttribute("aria-busy", "true");
-    else item.btn.removeAttribute("aria-busy");
   }
 
   function removeExpansion(item) {
@@ -2771,10 +2814,10 @@
 
   // unfold loads what one item references, to depth levels, into a fresh
   // expansion under it. opts.force spends an expensive level without asking;
-  // opts.batch is the unfold-all run it is part of.
+  // opts.batch is the unfold-all run it is part of; opts.lazy has a verse's
+  // sections come as headings that load once opened.
   function unfold(item, depth, opts) {
     opts = opts || {};
-    closeMenu();
     if (item.ctrl) item.ctrl.abort();
     var ctrl = window.AbortController ? new AbortController() : null;
     item.ctrl = ctrl;
@@ -2792,6 +2835,7 @@
     setState(item, "loading");
 
     var url = streamURL(item, depth, opts.force, opts.batch);
+    if (opts.lazy && item.params.kind === "verse") url += "&lazy=1";
     return streamSections(url, list, loader, ctrl && ctrl.signal).then(function (res) {
       if (res.aborted || item.ctrl !== ctrl) return;
       item.ctrl = null;
@@ -2867,75 +2911,6 @@
     return Array.prototype.map.call(a, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
   }
 
-  // --- the menu of one item: how deep to unfold it ------------------------
-
-  var menu = make("div", "unfold-menu");
-  menu.setAttribute("role", "group");
-  menu.setAttribute("aria-label", T.unfoldItem || "Unfold");
-  menu.hidden = true;
-  menu.setAttribute("data-ui", "");
-  menu.appendChild(make("span", "label", T.depth || "Depth"));
-  for (var d = 1; d <= MAX_DEPTH; d++) {
-    (function (depth) {
-      var b = button("depth", fmt(T.depthN, depth), String(depth));
-      b.setAttribute("data-depth", String(depth));
-      b.addEventListener("click", function (e) {
-        e.stopPropagation();
-        var item = menu.item;
-        if (!item) return;
-        dequeue(item);
-        unfold(item, depth);
-      });
-      menu.appendChild(b);
-    })(d);
-  }
-  var remove = button("remove", T.foldAway || "×", "×");
-  remove.addEventListener("click", function (e) {
-    e.stopPropagation();
-    var item = menu.item;
-    closeMenu();
-    if (item) {
-      dequeue(item);
-      removeExpansion(item);
-      item.btn.focus();
-    }
-  });
-  menu.appendChild(remove);
-
-  function toggleMenu(item) {
-    if (menu.item === item && !menu.hidden) {
-      closeMenu();
-      return;
-    }
-    closeMenu();
-    menu.item = item;
-    item.el.appendChild(menu);
-    menu.querySelectorAll("button.depth").forEach(function (b) {
-      b.setAttribute("aria-pressed", String(parseInt(b.getAttribute("data-depth"), 10) === item.level));
-    });
-    remove.hidden = !item.exp && item.state !== "loading";
-    menu.hidden = false;
-    item.btn.setAttribute("aria-expanded", "true");
-    var first = menu.querySelector('button.depth[aria-pressed="true"]') || menu.querySelector("button.depth");
-    if (first) first.focus({ preventScroll: true });
-  }
-
-  function closeMenu() {
-    if (menu.item) menu.item.btn.setAttribute("aria-expanded", "false");
-    menu.hidden = true;
-    menu.item = null;
-  }
-
-  document.addEventListener("click", function (e) {
-    if (!menu.hidden && !menu.contains(e.target)) closeMenu();
-  });
-  document.addEventListener("keydown", function (e) {
-    if (e.key !== "Escape" || menu.hidden) return;
-    var item = menu.item;
-    closeMenu();
-    if (item) item.btn.focus();
-  });
-
   // --- unfold all ---------------------------------------------------------
 
   var bar = document.querySelector(".unfold-bar");
@@ -3001,8 +2976,8 @@
     status.querySelector(".meter i").style.width = Math.round(100 * batch.done / Math.max(batch.total, 1)) + "%";
   }
 
-  // the page bar's diamond unfolds everything, the way an item's diamond
-  // unfolds one item: a menu of depths, and × to fold it all away. The level
+  // the page bar's diamond unfolds everything, the way a held link unfolds
+  // its item: a menu of depths, and × to fold it all away. The level
   // links under the heading stay for a browser without a script.
   var allBtn = null;
   var allMenu = null;
@@ -3054,7 +3029,6 @@
         closeAllMenu();
         return;
       }
-      closeMenu();
       closeSettings();
       allMenu.querySelectorAll("button.depth").forEach(function (b) {
         b.setAttribute("aria-pressed", String(parseInt(b.getAttribute("data-depth"), 10) === anchorLevel));
@@ -3142,7 +3116,6 @@
 
   function unfoldAll(level) {
     stopAll();
-    closeMenu();
     markLevel(level);
     rememberLevel();
     if (level === 0) {
@@ -3446,6 +3419,46 @@
     return streamSections(url, list, loader, null);
   }
 
+  // numberItem is the item a number unfolds: a verse's — the chapter's, on a
+  // chapter's first verse — or the one in a chapter's heading
+  function numberItem(a) {
+    if (a.classList.contains("chapter-num")) {
+      var h = a.closest(".passage > h2");
+      return h && h._unfold || null;
+    }
+    if (!a.classList.contains("vl") && !a.classList.contains("cl")) return null;
+    var verse = a.closest(".item[data-vid]");
+    return verse && verse._unfold && a.closest(".item-text") ? verse._unfold : null;
+  }
+
+  // toggleNumber unfolds what a number's item has, its sections as headings
+  // that load once opened, or folds it away again
+  function toggleNumber(item) {
+    dequeue(item);
+    if (item.level > 0 || item.state === "loading") {
+      removeExpansion(item);
+      return;
+    }
+    unfold(item, 1, { lazy: true });
+    if (item.exp && item.exp.isConnected) inView(item.exp);
+  }
+
+  // held, a link offers how deep to unfold the item it is in — what it
+  // unfolds, for a number — instead of opening it as a reference
+  LM.itemOf = function (a) {
+    if (!doc.contains(a)) return null;
+    var num = numberItem(a);
+    if (num) return num;
+    if (!LM.inPlace(a) || onThisPage(a)) return null;
+    var owner = ownerOf(a);
+    return owner && owner.item || null;
+  };
+  LM.unfold = function (item, depth) {
+    dequeue(item);
+    if (depth > 0) unfold(item, depth);
+    else removeExpansion(item);
+  };
+
   function follow(a, target) {
     var owner = ownerOf(a);
     if (!owner) return false;
@@ -3531,6 +3544,12 @@
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest("a[href]") : null;
     if (!a || !doc.contains(a) || a.closest("[data-ui]") || a.target) return;
+    var num = numberItem(a);
+    if (num) {
+      e.preventDefault();
+      toggleNumber(num);
+      return;
+    }
     var here = onThisPage(a);
     if (here) {
       e.preventDefault();

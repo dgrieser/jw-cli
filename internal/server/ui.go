@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -1351,6 +1352,30 @@ func outlineBlock(items []model.OutlineItem) string {
 	return b.String()
 }
 
+// headingHTML is a passage's heading, escaped, its chapter's number a link to
+// the whole chapter — which the page has unfold what the library has on it,
+// the way a verse's number unfolds the verse. Without a chapter, or one the
+// heading does not name, it is the heading alone.
+func headingHTML(heading string, chapter int, href string) string {
+	esc := template.HTMLEscapeString(heading)
+	if chapter <= 0 || href == "" {
+		return esc
+	}
+	for _, m := range headingNumber.FindAllStringSubmatchIndex(esc, -1) {
+		if esc[m[2]:m[3]] != strconv.Itoa(chapter) {
+			continue
+		}
+		return fmt.Sprintf(`%s<a class="chapter-num" href="%s">%s</a>%s`,
+			esc[:m[2]], template.HTMLEscapeString(href), esc[m[2]:m[3]], esc[m[3]:])
+	}
+	return esc
+}
+
+// headingNumber is a number in a heading after the book's name: never the
+// one a book's name starts with ("1. Mose"), always one after a space and
+// before a verse, a range, or the end.
+var headingNumber = regexp.MustCompile(`\s(\d+)(?:[:,\-–\s]|$)`)
+
 // passagesHTML lays a reading out for the page: every passage under its
 // heading, and every verse an item of its own, which is what the page unfolds
 // one at a time. A verse the server already unfolded carries its expansion
@@ -1364,12 +1389,16 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 		if p.Book > 0 && p.Chapter > 0 {
 			fmt.Fprintf(&b, ` data-book="%d" data-chapter="%d"`, p.Book, p.Chapter)
 		}
-		fmt.Fprintf(&b, `><h2>%s</h2>`, template.HTMLEscapeString(p.Heading()))
+		chapterHref := ""
+		if p.Book > 0 && p.Chapter > 0 && res.Table != nil {
+			chapterHref = page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)
+		}
+		fmt.Fprintf(&b, `><h2>%s</h2>`, headingHTML(p.Heading(), p.Chapter, chapterHref))
 		// part of a chapter leads to all of it, above the verses and below
 		whole := ""
-		if !p.Whole && p.Book > 0 && p.Chapter > 0 && res.Table != nil {
+		if !p.Whole && chapterHref != "" {
 			whole = fmt.Sprintf(`<p class="whole-chapter"><a class="btn" href="%s">%s</a></p>`,
-				template.HTMLEscapeString(page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)),
+				template.HTMLEscapeString(chapterHref),
 				template.HTMLEscapeString(page.T.UIWholeChapter))
 		}
 		b.WriteString(whole)
