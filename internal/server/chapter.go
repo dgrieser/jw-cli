@@ -34,6 +34,10 @@ type chapterNavView struct {
 
 type chapterLink struct {
 	Label string
+	// Short is the label with the book's short name ("1. Chr. 28"), which the
+	// page shows instead of Label where Label does not fit on one line; empty
+	// when there is none.
+	Short string
 	Href  string
 }
 
@@ -49,14 +53,31 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 		return nil
 	}
 	nav := &chapterNavView{}
+	// the books' short names, as the library's book grid gives them; best
+	// effort, the full names do without
+	abbr := map[int]string{}
+	if bn, err := s.svc.BibleNav(ctx, lng, page.Edition); err == nil {
+		for _, sec := range bn.Sections {
+			for _, b := range sec.Books {
+				abbr[b.Number] = b.Abbreviation
+			}
+		}
+	}
+	// a label that still does not fit breaks before the chapter only, never
+	// inside the book's name ("1. Chronika")
+	label := func(name string, chapter int) string {
+		return fmt.Sprintf("%s %d", strings.ReplaceAll(name, " ", "\u00a0"), chapter)
+	}
 	link := func(p service.Passage, book, chapter int) chapterLink {
 		name := res.Table.Name(book)
-		return chapterLink{
-			// on a narrow screen the label breaks before the chapter only,
-			// never inside the book's name ("1. Chronika")
-			Label: fmt.Sprintf("%s %d", strings.ReplaceAll(name, " ", "\u00a0"), chapter),
+		l := chapterLink{
+			Label: label(name, chapter),
 			Href:  page.chapterHref(firstNonEmpty(p.Bible, page.Edition), name, chapter),
 		}
+		if a := abbr[book]; a != "" && a != name {
+			l.Short = label(a, chapter)
+		}
+		return l
 	}
 	chapters := func(p service.Passage, book int) []int {
 		bn, err := s.svc.BookNav(ctx, lng, firstNonEmpty(p.Bible, page.Edition), book)
@@ -83,7 +104,7 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	}
 	if !last.Whole {
 		nav.Whole = link(last, last.Book, last.Chapter)
-		nav.Whole.Label = page.T.UIWholeChapter
+		nav.Whole.Label, nav.Whole.Short = page.T.UIWholeChapter, ""
 	}
 	return nav
 }

@@ -915,6 +915,35 @@
     }
   }
 
+  // --- the chapters around a reading: each link on one line ------------------
+  //
+  // A link to the chapter before or after shows the book's full name while it
+  // fits on one line, its short name where it does not, and breaks onto a
+  // second line only when even that does not fit.
+  (function () {
+    var nav = document.querySelector(".chapter-nav");
+    if (!nav) return;
+    function fit() {
+      nav.querySelectorAll(".btn").forEach(function (b) {
+        var full = b.querySelector(".full"), short = b.querySelector(".short");
+        b.classList.add("one-line");
+        if (full) full.hidden = false;
+        if (short) short.hidden = true;
+        if (b.scrollWidth <= b.clientWidth) return;
+        if (full && short) {
+          full.hidden = true;
+          short.hidden = false;
+          if (b.scrollWidth <= b.clientWidth) return;
+        }
+        b.classList.remove("one-line");
+      });
+    }
+    fit();
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(nav);
+    else window.addEventListener("resize", fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  })();
+
   // --- the words of a media item, as it plays --------------------------------
 
   // a song's lines and a transcript's captions carry their time in the

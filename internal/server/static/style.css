@@ -675,6 +675,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .chapter-nav .whole { grid-column: 2; }
 .chapter-nav .next { grid-column: 3; }
 .chapter-nav .btn { min-width: 0; padding-inline: 0.5rem; white-space: normal; text-align: center; line-height: 1.25; }
+.chapter-nav .btn.one-line { white-space: nowrap; }
 .reading .items { display: flex; flex-direction: column; gap: 0.15rem; }
 .reading .item { padding: 0.2rem 0; border-radius: var(--r-small); }
 .reading .item-text { min-width: 0; }

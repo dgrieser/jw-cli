@@ -63,9 +63,9 @@
 </article>
 {{- with .ChapterNav}}
 <nav class="chapter-nav" aria-label="{{$.T.UIChapters}}">
-  {{- if .Prev.Href}}<a class="btn prev" href="{{.Prev.Href}}" rel="prev"><span aria-hidden="true">‹</span> {{.Prev.Label}}</a>{{else}}<span></span>{{end}}
+  {{- if .Prev.Href}}<a class="btn prev" href="{{.Prev.Href}}" rel="prev"><span aria-hidden="true">‹</span> {{template "navlabel" .Prev}}</a>{{else}}<span></span>{{end}}
   {{- if .Whole.Href}}<a class="btn whole" href="{{.Whole.Href}}">{{.Whole.Label}}</a>{{else}}<span></span>{{end}}
-  {{- if .Next.Href}}<a class="btn next" href="{{.Next.Href}}" rel="next">{{.Next.Label}} <span aria-hidden="true">›</span></a>{{else}}<span></span>{{end}}
+  {{- if .Next.Href}}<a class="btn next" href="{{.Next.Href}}" rel="next">{{template "navlabel" .Next}} <span aria-hidden="true">›</span></a>{{else}}<span></span>{{end}}
 </nav>
 {{- end}}
 {{- else if .Doc}}
@@ -234,3 +234,5 @@
     {{- end}}
   </ul>
 </div></details>{{end}}
+
+{{define "navlabel"}}<span class="full">{{.Label}}</span>{{if .Short}}<span class="short" title="{{.Label}}" hidden>{{.Short}}</span>{{end}}{{end}}
