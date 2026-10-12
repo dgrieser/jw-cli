@@ -187,7 +187,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 			if len(items) > 0 {
 				send("chapteroutline", orderOutline,
-					chapterStudyView{biblePage: page, OutlineTitle: o.Title, Outline: outlineRows(items, false, &page)})
+					chapterStudyView{biblePage: page, OutlineTitle: chapterTitle(o.Title, chapter), Outline: outlineRows(items, false, &page)})
 			}
 		})
 	}
@@ -215,7 +215,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, grp := range g.Groups {
 				if headingChapter(grp.Heading) == chapter && len(grp.Items) > 0 {
-					send("chaptergallery", orderGallery, chapterStudyView{biblePage: page, GalleryTitle: g.Title, Gallery: grp.Items})
+					send("chaptergallery", orderGallery, chapterStudyView{biblePage: page, GalleryTitle: chapterTitle(g.Title, chapter), Gallery: grp.Items})
 				}
 			}
 		})
@@ -246,4 +246,15 @@ func headingChapter(h string) int {
 	}
 	n, _ := strconv.Atoi(strings.TrimRight(f[len(f)-1], ".:"))
 	return n
+}
+
+// chapterTitle is the title of a book's outline or gallery as the part of it
+// one chapter shows: "Overview of Matthew" becomes "Overview of Matthew 19".
+// The book's introduction stays the book's.
+func chapterTitle(title string, chapter int) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return title
+	}
+	return fmt.Sprintf("%s %d", title, chapter)
 }
