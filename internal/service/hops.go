@@ -354,6 +354,18 @@ func (s *Service) streamPassageHops(ctx context.Context, lng model.Language, edi
 		}
 	}
 
+	// the pictures and videos only when there are any: never a heading that
+	// opens on nothing
+	if want(PartMedia) && len(study.Media) > 0 {
+		sec := UnfoldSection{Title: html.EscapeString(txt.MediaHeading), Ref: MediaRef, Order: orderMedia}
+		if lazy(PartMedia) {
+			sec.Lazy = hopPartURL(ref, PartMedia, "")
+		} else {
+			sec.Body, sec.Unwrap = mediaBody(study.Media), alone
+		}
+		out.Section(sec)
+	}
+
 	if !alone {
 		// the other bibles of the language and who quotes the passage, both
 		// loaded only once they are opened
@@ -425,6 +437,34 @@ func (s *Service) streamPassageHops(ctx context.Context, lng model.Language, edi
 		}
 	}
 	return joinNotes(notes), spent(), ctx.Err()
+}
+
+// mediaBody is a verse's pictures and videos as tiles: a picture leads to
+// its full size, a video to its player.
+func mediaBody(media []model.MediaAsset) string {
+	var b strings.Builder
+	b.WriteString(`<ul class="gallery-grid verse-media">`)
+	for _, m := range media {
+		href, video := m.URL, false
+		if m.FinderLink != "" {
+			href, video = m.FinderLink, true
+		}
+		thumb := firstNonBlank(m.ThumbnailURL, m.URL)
+		cls := "gallery-tile"
+		if video {
+			cls += " video"
+		}
+		fmt.Fprintf(&b, `<li><a class="%s" href="%s"><span class="poster">`, cls, html.EscapeString(href))
+		if thumb != "" {
+			fmt.Fprintf(&b, `<img src="%s" alt="%s" loading="lazy"/>`, html.EscapeString(thumb), html.EscapeString(m.Alt))
+		}
+		if video {
+			b.WriteString(`<span class="play" aria-hidden="true">▶</span>`)
+		}
+		fmt.Fprintf(&b, `</span><span class="cap">%s</span></a></li>`, html.EscapeString(m.Caption))
+	}
+	b.WriteString(`</ul>`)
+	return b.String()
 }
 
 // unfoldVersesHops is unfoldBibleVerses for an expansion counted in bible

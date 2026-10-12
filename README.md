@@ -668,7 +668,9 @@ page does not move again.
 Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
 opens under the verse's cross references, all of them unfolded at the verse's
 depth, while the verse's other sections — study notes, footnotes, indexes,
-translations, quotations — appear as headings that load once opened.
+translations, quotations — appear as headings that load once opened. A verse the
+study bible shows pictures or videos with has a **Media gallery** among them —
+only such a verse: it is never a heading that opens on nothing.
 
 A section headed by a publication — a passage of the Research Guide or an
 index, a publication quoting a verse — opens and closes on its whole title; the

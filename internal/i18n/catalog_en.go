@@ -84,6 +84,7 @@ var en = Messages{
 	PublicationsIndexHeading: "Publications Index",
 	FootnotesHeading:         "Footnotes",
 	TranslationsHeading:      "Other translations",
+	MediaHeading:             "Media gallery",
 	StudyFailed:              "the study notes on this verse could not be read: %s",
 
 	DailyTextTitle: "Daily text, %s",

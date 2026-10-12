@@ -412,6 +412,7 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 			continue
 		}
 		out.Notes = append(out.Notes, sec.Notes...)
+		out.Media = append(out.Media, sec.Media...)
 		for _, item := range sec.Research {
 			if item.PCPath == "" {
 				// a whole article rather than a passage: nothing to resolve

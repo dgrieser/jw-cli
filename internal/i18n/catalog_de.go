@@ -84,6 +84,7 @@ var de = Messages{
 	PublicationsIndexHeading: "Index der Publikationen",
 	FootnotesHeading:         "Fußnoten",
 	TranslationsHeading:      "Andere Übersetzungen",
+	MediaHeading:             "Mediengalerie",
 	StudyFailed:              "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
 
 	DailyTextTitle: "Tagestext, %s",

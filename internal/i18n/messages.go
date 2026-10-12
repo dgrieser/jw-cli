@@ -166,6 +166,9 @@ type Messages struct {
 	StudyNotesHeading string
 	// FootnotesHeading labels the footnotes of an unfolded verse.
 	FootnotesHeading string
+	// MediaHeading labels the pictures and videos the study bible shows with
+	// a verse.
+	MediaHeading string
 	// TranslationsHeading labels the same verse as the other bibles of the
 	// language render it.
 	TranslationsHeading string

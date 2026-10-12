@@ -53,6 +53,8 @@ type Study struct {
 	// than a passage. There is no citation endpoint behind those, so they are
 	// listed instead of unfolded.
 	Links []model.ResearchItem
+	// Media are the pictures and videos the study pane shows with the verses.
+	Media []model.MediaAsset
 	// Requests is how many requests gathering this cost, reported even
 	// alongside an error, so the budget the user confirmed stays honest.
 	Requests int
