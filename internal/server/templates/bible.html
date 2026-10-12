@@ -202,57 +202,47 @@
 {{end}}
 
 {{define "chapterstudy"}}
-<div class="chapter-study">
+<div class="expansion chapter-study"><div class="sections">
   {{- if .Outline}}
-  <details class="cs-part" open>
-    <summary>{{.OutlineTitle}}</summary>
-    <div class="cs-body book-outline">
-      {{- range .Outline}}
-      <p class="bo-item ol-d{{.Depth}}"><a href="{{.Href}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
-      {{- end}}
-    </div>
-  </details>
+  <details class="section" open><summary>{{.OutlineTitle}}</summary><div class="section-body book-outline">
+    {{- range .Outline}}
+    <p class="bo-item ol-d{{.Depth}}"><a href="{{.Href}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
+    {{- end}}
+  </div></details>
   {{- end}}
   {{- with .Intro}}
-  <details class="cs-part">
-    <summary>{{.Title}}</summary>
-    <div class="cs-body">
-      {{- if $.HasVideo}}<p><a class="btn" href="{{$.IntroHref}}">▶ {{$.T.UIWatchVideo}}</a></p>{{end}}
-      {{- if .Facts}}
-      <dl class="facts book-facts">
-        {{- range .Facts}}
-        <dt>{{.Label}}</dt><dd>{{.Value}}</dd>
-        {{- end}}
-      </dl>
+  <details class="section"><summary>{{.Title}}</summary><div class="section-body">
+    {{- if $.HasVideo}}<p><a class="btn" href="{{$.IntroHref}}">▶ {{$.T.UIWatchVideo}}</a></p>{{end}}
+    {{- if .Facts}}
+    <dl class="facts book-facts">
+      {{- range .Facts}}
+      <dt>{{.Label}}</dt><dd>{{.Value}}</dd>
       {{- end}}
-      {{- if $.Notes}}
-      <div class="book-notes">{{$.Notes}}</div>
-      {{- else if $.Paragraphs}}
-      <h3>{{$.T.UITranscript}}</h3>
-      <div class="cs-transcript">
-        {{- range $.Paragraphs}}
-        <p>{{range $i, $c := .}}{{if $i}} {{end}}{{$c.Text}}{{end}}</p>
-        {{- end}}
-      </div>
-      {{- end}}
-    </div>
-  </details>
+    </dl>
+    {{- end}}
+    {{- if $.Notes}}
+    <div class="book-notes">{{$.Notes}}</div>
+    {{- else if $.Paragraphs}}
+    <h3>{{$.T.UITranscript}}</h3>
+    {{- range $.Paragraphs}}
+    <p>{{range $i, $c := .}}{{if $i}} {{end}}{{$c.Text}}{{end}}</p>
+    {{- end}}
+    {{- end}}
+  </div></details>
   {{- end}}
   {{- if .Gallery}}
-  <details class="cs-part">
-    <summary>{{.GalleryTitle}}</summary>
-    <div class="cs-body">
-      <ul class="gallery-grid">
-        {{- range .Gallery}}
-        <li><a class="gallery-tile{{if .Video}} video{{end}}" href="{{$.GalleryItemLink .URL}}">
-          <span class="poster">{{if .Thumbnail}}<img src="{{.Thumbnail}}" alt="" loading="lazy">{{end}}{{if .Video}}<span class="play" aria-hidden="true">▶</span>{{end}}</span>
-          <span class="cap">{{.Title}}</span>
-        </a></li>
-        {{- end}}
-      </ul>
-    </div>
-  </details>
+  <details class="section"><summary>{{.GalleryTitle}}</summary><div class="section-body">
+    <ul class="gallery-grid">
+      {{- range .Gallery}}
+      <li><a class="gallery-tile{{if .Video}} video{{end}}" href="{{$.GalleryItemLink .URL}}">
+        <span class="poster">{{if .Thumbnail}}<img src="{{.Thumbnail}}" alt="" loading="lazy">{{end}}{{if .Video}}<span class="play" aria-hidden="true">▶</span>{{end}}</span>
+        <span class="cap">{{.Title}}</span>
+      </a></li>
+      {{- end}}
+    </ul>
+  </div></details>
   {{- end}}
+</div>
   {{- range .Errors}}<p class="note">{{.}}</p>{{end}}
   {{- if .Empty}}<p class="note">{{.T.NoResults}}</p>{{end}}
 </div>
