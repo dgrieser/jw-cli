@@ -348,6 +348,8 @@
     var edition = opts.edition || "nwtsty";
     var lang = opts.lang || "";
     var names = opts.names || {};
+    // the books' short names, for a title that would crowd out its row
+    var abbrs = {};
     var dialog = null;
     var row = null;
     var rowDocs = null;
@@ -470,8 +472,8 @@
       row.hidden = false;
       // the book's regular name, with the chapter being read — never the long
       // title the library heads the book with
-      var label = function () {
-        var n = names[book] || "";
+      var label = function (short) {
+        var n = (short && abbrs[book]) || names[book] || "";
         return cur.chapter ? n + " " + cur.chapter : n;
       };
       rowTitle.textContent = label();
@@ -501,11 +503,21 @@
         if (docs) {
           rowDocs.appendChild(docs);
           rowDocs.hidden = false;
+          fitTitle(label);
         }
       }, function (err) {
         row.textContent = String(err && err.message || err);
       });
       grid.scrollTop = 0;
+    }
+
+    // fitTitle names the book short when its documents beside it would not
+    // fit otherwise
+    var fitLabel = null;
+    function fitTitle(label) {
+      fitLabel = label;
+      rowTitle.textContent = label(false);
+      if (rowDocs.scrollWidth > rowDocs.clientWidth + 1) rowTitle.textContent = label(true);
     }
 
     // one book's chapters as the bible page lays them out: the row is gone
@@ -584,6 +596,9 @@
       });
       view.querySelector(".bible-nav-heading").textContent = T.chapters || "";
       dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
+      window.addEventListener("resize", function () {
+        if (dialog.open && !rowDocs.hidden && fitLabel) fitTitle(fitLabel);
+      });
       // a click on the backdrop closes it
       dialog.addEventListener("click", function (e) {
         if (e.target === dialog) dialog.close();
@@ -603,6 +618,7 @@
           ul.className = "book-grid " + (sec.key || "");
           (sec.books || []).forEach(function (b) {
             if (!names[b.number]) names[b.number] = b.name;
+            if (b.abbreviation) abbrs[b.number] = b.abbreviation;
             var li = document.createElement("li");
             li.className = "book " + (b.group || "");
             var a = document.createElement("a");
