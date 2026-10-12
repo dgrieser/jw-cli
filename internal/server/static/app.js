@@ -3298,7 +3298,7 @@
     allMenu.setAttribute("aria-label", T.unfoldAll || "Unfold all");
     allMenu.setAttribute("data-ui", "");
     allMenu.hidden = true;
-    allMenu.appendChild(make("span", "label", T.depth || "Depth"));
+    allMenu.appendChild(make("span", "label", T.depth || "References"));
     for (var ad = 1; ad <= MAX_DEPTH; ad++) {
       (function (depth) {
         var b = button("depth", fmt(T.depthN, depth), String(depth));

@@ -184,7 +184,7 @@ var de = Messages{
 	UIWithoutUnfolding: "Ohne Aufklappen anzeigen",
 	UIUnfoldItem:       "Referenzen aufklappen",
 	UIUnfoldAll:        "Alle aufklappen",
-	UIUnfoldDepth:      "Tiefe",
+	UIUnfoldDepth:      "Verweise",
 	UIUnfoldDepthN:     "%d Ebene(n) tief aufklappen",
 	UIFoldAway:         "Aufgeklapptes entfernen",
 	UIOpenAll:          "Alle öffnen",

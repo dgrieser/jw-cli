@@ -184,7 +184,7 @@ var en = Messages{
 	UIWithoutUnfolding: "Show it without unfolding",
 	UIUnfoldItem:       "Unfold references",
 	UIUnfoldAll:        "Unfold all",
-	UIUnfoldDepth:      "Depth",
+	UIUnfoldDepth:      "References",
 	UIUnfoldDepthN:     "Unfold %d level(s) deep",
 	UIFoldAway:         "Remove what was unfolded",
 	UIOpenAll:          "Open all",
