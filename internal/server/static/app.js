@@ -566,8 +566,14 @@
       dialog = document.createElement("dialog");
       dialog.className = "bible-picker";
       dialog.setAttribute("aria-label", T.pickBook || "");
-      dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>‹</button>' +
-        '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>›</button>' +
+      // drawn, not typed: a chevron glyph sits on the text's baseline, below
+      // the middle of the name beside it
+      var chev = function (d) {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>';
+      };
+      dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>' + chev("M15 5l-7 7 7 7") + '</button>' +
+        '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>' + chev("M9 5l7 7-7 7") + '</button>' +
         '<div class="bp-row-docs" hidden></div>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
         '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>' +
@@ -806,10 +812,10 @@
     });
   })();
 
-  // --- dates: written the way the browser's locale writes them -------------
+  // --- dates: written the way the page's language writes them --------------
   //
-  // A date field shows and takes the date in the browser's own order and
-  // separators, today's date as its placeholder; the calendar button opens
+  // A date field shows and takes the date in the order and separators of the
+  // language the page is read in (12.10.2026 in German), else the browser's, today's date as its placeholder; the calendar button opens
   // the native picker. The native field stays in the form, hidden, and is
   // what is sent, as yyyy-mm-dd.
 
@@ -819,7 +825,7 @@
     var opts = { year: "numeric", month: "2-digit", day: "2-digit" };
     var df;
     try {
-      df = new Intl.DateTimeFormat(navigator.language || undefined, opts);
+      df = new Intl.DateTimeFormat(root.lang || navigator.language || undefined, opts);
     } catch (err) {
       // a tag Intl does not take (en-US@posix): the default locale instead
       df = new Intl.DateTimeFormat(undefined, opts);
@@ -1559,7 +1565,8 @@
     listBtn.setAttribute("aria-haspopup", "true");
     listBtn.setAttribute("aria-expanded", "false");
     listBtn.innerHTML = CLOCK + '<span class="label"></span><span class="count"></span>';
-    listBtn.querySelector(".label").textContent = T.history || "";
+    listBtn.querySelector(".label").textContent = T.historyShort || T.history || "";
+    listBtn.setAttribute("aria-label", T.history || "");
 
     function point(el, entry, label) {
       el.setAttribute("aria-label", label + (entry && entry.title ? ": " + entry.title : ""));
@@ -1674,7 +1681,44 @@
       var a = e.target.closest ? e.target.closest("a[href]") : null;
       if (a) storageSet(HIST_NAV, a.getAttribute("href"), window.sessionStorage);
     });
-    main.insertBefore(bar, main.firstChild);
+    // beside the page's title, at the row's end; the title gives way, cut to
+    // a word's start and a dot ("Zusammenk.") when the row is too narrow
+    var h1 = main.querySelector("h1");
+    if (!h1 || h1.children.length) {
+      main.insertBefore(bar, main.firstChild);
+      return;
+    }
+    var row = document.createElement("div");
+    row.className = "title-row";
+    h1.parentNode.insertBefore(row, h1);
+    row.appendChild(h1);
+    row.appendChild(bar);
+    var full = h1.textContent;
+    h1.title = full;
+    // a cut the way a word is abbreviated: after a consonant that a vowel
+    // follows ("Zusammenk|ünfte"), else after any letter
+    var VOWEL = /[aeiouyäöüàáâèéêìíîòóôùúû]/i;
+    function cutAt(n) {
+      return !VOWEL.test(full.charAt(n - 1)) && VOWEL.test(full.charAt(n)) && /\S/.test(full.charAt(n - 1));
+    }
+    function fitTitle() {
+      h1.textContent = full;
+      if (h1.scrollWidth <= h1.clientWidth + 1) return;
+      var fits = function (n) {
+        h1.textContent = full.slice(0, n).replace(/[\s.,-]+$/, "") + ".";
+        return h1.scrollWidth <= h1.clientWidth + 1;
+      };
+      var n;
+      for (n = full.length - 1; n > 3; n--) {
+        if (cutAt(n) && fits(n)) return;
+      }
+      for (n = full.length - 1; n > 3; n--) {
+        if (fits(n)) return;
+      }
+    }
+    fitTitle();
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
+    window.addEventListener("resize", fitTitle);
   })();
 
   // --- the overall history: every page read, behind the bar's clock ---------
@@ -2194,17 +2238,113 @@
 
   // --- bible navigation ----------------------------------------------------
 
-  // reset starts the bible over: the book grid, and the menu leading back to
-  // it rather than to the reading that was left
-  document.querySelectorAll("a[data-reset]").forEach(function (a) {
-    a.addEventListener("click", function () {
-      try {
-        window.localStorage.removeItem(lastKey(a.getAttribute("data-reset"), pageLang));
-      } catch (err) {
-        // nothing was remembered
+
+  // the chapters before and after a reading and "whole chapter" between
+  // them say it shorter when the row has no room: "whole chapter" first, then
+  // both books by their abbreviation
+  document.querySelectorAll(".chapter-nav").forEach(function (nav) {
+    var wholeLabel = nav.querySelector(".whole-lbl[data-short]");
+    var labels = nav.querySelectorAll(".lbl[data-short]");
+    if (!wholeLabel && !labels.length) return;
+    var all = Array.prototype.slice.call(labels);
+    if (wholeLabel) all.push(wholeLabel);
+    all.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
+    function say(l, short) {
+      l.textContent = l.getAttribute(short ? "data-short" : "data-full");
+    }
+    // each side has half of what "whole chapter" leaves of the row; a
+    // button's width is with its label in full, which it cuts when narrower
+    function cut() {
+      var whole = nav.querySelector(".whole");
+      var gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
+      var room = (nav.clientWidth - (whole ? whole.offsetWidth : 0)) / 2 - gap;
+      return Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
+        var l = b.querySelector(".lbl");
+        return b.offsetWidth + (l ? l.scrollWidth - l.clientWidth : 0) > room;
+      });
+    }
+    function fit() {
+      all.forEach(function (l) { say(l, false); });
+      if (!cut()) return;
+      if (wholeLabel) {
+        say(wholeLabel, true);
+        if (!cut()) return;
       }
-    });
+      labels.forEach(function (l) { say(l, true); });
+    }
+    fit();
+    // the page's own font is narrower than the one it is measured in first
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+    window.addEventListener("load", fit);
+    window.addEventListener("resize", fit);
   });
+
+  // the search's options: behind the button beside the query, in a dialog,
+  // each shown only for the engine it applies to; without a script they
+  // stay under the query
+  (function () {
+    var form = document.querySelector('form[role="search"]');
+    var opts = form && form.querySelector("fieldset.options");
+    var btn = form && form.querySelector("button.search-opts");
+    if (!opts || !btn || !window.HTMLDialogElement) return;
+    var dialog = document.createElement("dialog");
+    dialog.className = "search-dialog";
+    var legend = opts.querySelector("legend");
+    dialog.setAttribute("aria-label", legend ? legend.textContent : "");
+    var head = document.createElement("div");
+    head.className = "sd-head";
+    var title = document.createElement("strong");
+    title.textContent = legend ? legend.textContent : "";
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "sd-close";
+    close.textContent = "×";
+    close.setAttribute("aria-label", "×");
+    head.appendChild(title);
+    head.appendChild(close);
+    var foot = document.createElement("div");
+    foot.className = "sd-foot";
+    var go = document.createElement("button");
+    go.type = "submit";
+    go.className = "primary";
+    go.textContent = form.querySelector('.query button[type="submit"]').textContent;
+    foot.appendChild(go);
+    dialog.appendChild(head);
+    dialog.appendChild(opts);
+    dialog.appendChild(foot);
+    // inside the form, so what it holds is sent with the query
+    form.appendChild(dialog);
+    btn.hidden = false;
+
+    var engine = opts.querySelector('select[name="engine"]');
+    var defaults = {};
+    opts.querySelectorAll("select").forEach(function (s) {
+      var first = s.options[0];
+      defaults[s.name] = first ? first.value : "";
+    });
+    // an option of the other engine is greyed out, and the button marked
+    // when anything is set other than what a search starts with
+    function sync() {
+      opts.querySelectorAll("[data-engine]").forEach(function (l) {
+        var off = engine && l.getAttribute("data-engine") !== engine.value;
+        l.classList.toggle("off", off);
+        l.querySelectorAll("select, input").forEach(function (c) { c.disabled = off; });
+      });
+      var set = Array.prototype.some.call(opts.querySelectorAll("select"), function (s) {
+        return !s.disabled && s.value !== defaults[s.name];
+      });
+      btn.classList.toggle("on", set);
+    }
+    if (engine) engine.addEventListener("change", sync);
+    opts.addEventListener("change", sync);
+    sync();
+
+    btn.addEventListener("click", function () { dialog.showModal(); });
+    close.addEventListener("click", function () { dialog.close(); });
+    dialog.addEventListener("click", function (e) {
+      if (e.target === dialog) dialog.close();
+    });
+  })();
 
   var bibleForm = document.querySelector("form.bible-form");
   if (bibleForm) {
@@ -3201,13 +3341,17 @@
   // open and close all only once there is something to open
   function syncTools() {
     if (!tools) return;
-    tools.hidden = !doc.querySelector("details.section");
+    var none = !doc.querySelector("details.section");
+    tools.hidden = none;
+    openAll.disabled = closeAll.disabled = none;
   }
 
   openAll.addEventListener("click", function () {
+    closeAllMenu();
     doc.querySelectorAll("details.section").forEach(function (d) { d.open = true; });
   });
   closeAll.addEventListener("click", function () {
+    closeAllMenu();
     doc.querySelectorAll("details.section").forEach(function (d) { d.open = false; });
   });
 
@@ -3243,8 +3387,9 @@
   }
 
   // the page bar's diamond unfolds everything, the way a held link unfolds
-  // its item: a menu of depths, and × to fold it all away. The level
-  // links under the heading stay for a browser without a script.
+  // its item: a menu of depths, × to fold it all away, and beside them
+  // opening and closing every section there is. The level links under the
+  // heading stay for a browser without a script.
   var allBtn = null;
   var allMenu = null;
   var pb = document.querySelector(".page-bar .pb");
@@ -3258,7 +3403,7 @@
     allMenu.setAttribute("aria-label", T.unfoldAll || "Unfold all");
     allMenu.setAttribute("data-ui", "");
     allMenu.hidden = true;
-    allMenu.appendChild(make("span", "label", T.unfoldAll || "Unfold all"));
+    allMenu.appendChild(make("span", "label", T.depth || "References"));
     for (var ad = 1; ad <= MAX_DEPTH; ad++) {
       (function (depth) {
         var b = button("depth", fmt(T.depthN, depth), String(depth));
@@ -3279,6 +3424,19 @@
       allBtn.focus();
     });
     allMenu.appendChild(allRemove);
+    // open and close all move here, as glyphs: chevrons apart and together
+    var glyph = function (b, label, d) {
+      b.className = "glyph";
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>';
+      allMenu.appendChild(b);
+    };
+    allMenu.appendChild(make("span", "sep"));
+    glyph(openAll, T.openAll || "Open all", "M7 15l5 5 5-5M7 9l5-5 5 5");
+    glyph(closeAll, T.closeAll || "Close all", "M7 20l5-5 5 5M7 4l5 5 5-5");
+    tools.remove();
     var beside = pb.querySelector(".pb-history") || pb.querySelector(".pb-settings");
     pb.insertBefore(allBtn, beside);
     pb.appendChild(allMenu);

@@ -149,10 +149,13 @@ func boolParam(r *http.Request, name string) bool {
 // boolParamOr is boolParam for a switch that is on unless it is turned off:
 // ?excerpts=0 where the CLI takes --no-excerpts.
 func boolParamOr(r *http.Request, name string, fallback bool) bool {
-	if !r.URL.Query().Has(name) {
+	vs := r.URL.Query()[name]
+	if len(vs) == 0 {
 		return fallback
 	}
-	switch r.FormValue(name) {
+	// the last one counts: a form sends a hidden "false" ahead of its
+	// checkbox, so an unticked box still says so
+	switch vs[len(vs)-1] {
 	case "", "1", "true", "yes":
 		return true
 	}

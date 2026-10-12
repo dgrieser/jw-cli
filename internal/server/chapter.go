@@ -34,6 +34,9 @@ type chapterNavView struct {
 
 type chapterLink struct {
 	Label string
+	// Short is the label with the book's abbreviation, for a row too narrow
+	// for its name.
+	Short string
 	Href  string
 }
 
@@ -49,12 +52,31 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 		return nil
 	}
 	nav := &chapterNavView{}
+	abbrs := map[string]map[int]string{}
+	abbr := func(edition string, book int) string {
+		if _, ok := abbrs[edition]; !ok {
+			abbrs[edition] = map[int]string{}
+			if bn, err := s.svc.BibleNav(ctx, lng, edition); err == nil {
+				for _, sec := range bn.Sections {
+					for _, b := range sec.Books {
+						abbrs[edition][b.Number] = b.Abbreviation
+					}
+				}
+			}
+		}
+		return abbrs[edition][book]
+	}
 	link := func(p service.Passage, book, chapter int) chapterLink {
 		name := res.Table.Name(book)
-		return chapterLink{
+		edition := firstNonEmpty(p.Bible, page.Edition)
+		l := chapterLink{
 			Label: fmt.Sprintf("%s %d", name, chapter),
-			Href:  page.chapterHref(firstNonEmpty(p.Bible, page.Edition), name, chapter),
+			Href:  page.chapterHref(edition, name, chapter),
 		}
+		if a := abbr(edition, book); a != "" && a != name {
+			l.Short = fmt.Sprintf("%s %d", a, chapter)
+		}
+		return l
 	}
 	chapters := func(p service.Passage, book int) []int {
 		bn, err := s.svc.BookNav(ctx, lng, firstNonEmpty(p.Bible, page.Edition), book)
@@ -82,6 +104,7 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	if !last.Whole {
 		nav.Whole = link(last, last.Book, last.Chapter)
 		nav.Whole.Label = page.T.UIWholeChapter
+		nav.Whole.Short = page.T.UIWholeChapterShort
 	}
 	return nav
 }
@@ -187,7 +210,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 			if len(items) > 0 {
 				send("chapteroutline", orderOutline,
-					chapterStudyView{biblePage: page, OutlineTitle: o.Title, Outline: outlineRows(items, false, &page)})
+					chapterStudyView{biblePage: page, OutlineTitle: chapterTitle(o.Title, chapter), Outline: outlineRows(items, false, &page)})
 			}
 		})
 	}
@@ -215,7 +238,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 			for _, grp := range g.Groups {
 				if headingChapter(grp.Heading) == chapter && len(grp.Items) > 0 {
-					send("chaptergallery", orderGallery, chapterStudyView{biblePage: page, GalleryTitle: g.Title, Gallery: grp.Items})
+					send("chaptergallery", orderGallery, chapterStudyView{biblePage: page, GalleryTitle: chapterTitle(g.Title, chapter), Gallery: grp.Items})
 				}
 			}
 		})
@@ -246,4 +269,15 @@ func headingChapter(h string) int {
 	}
 	n, _ := strconv.Atoi(strings.TrimRight(f[len(f)-1], ".:"))
 	return n
+}
+
+// chapterTitle is the title of a book's outline or gallery as the part of it
+// one chapter shows: "Overview of Matthew" becomes "Overview of Matthew 19".
+// The book's introduction stays the book's.
+func chapterTitle(title string, chapter int) string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return title
+	}
+	return fmt.Sprintf("%s %d", title, chapter)
 }

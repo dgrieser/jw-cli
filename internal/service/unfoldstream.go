@@ -67,6 +67,7 @@ const (
 	PartFootnotes = "footnotes"
 	PartIndexes   = "indexes"
 	PartMarginal  = "marginal"
+	PartMedia     = "media"
 )
 
 // PassageParts narrows what StreamPassageUnfold hands out. The zero value is
@@ -87,7 +88,7 @@ type PassageParts struct {
 // IsPart reports whether name is a part a passage can load on its own.
 func IsPart(name string) bool {
 	switch name {
-	case PartNotes, PartFootnotes, PartIndexes, PartMarginal:
+	case PartNotes, PartFootnotes, PartIndexes, PartMarginal, PartMedia:
 		return true
 	}
 	return false
@@ -99,6 +100,7 @@ const (
 	NotesRef        = "notes"
 	FootnotesRef    = "footnotes"
 	MarginalRef     = "marginal"
+	MediaRef        = "media"
 	TranslationsRef = "translations"
 	CitedRef        = "cited"
 )
@@ -114,6 +116,7 @@ const (
 	orderFootnotes    = 15
 	orderIndexes      = 20
 	orderMarginal     = 50
+	orderMedia        = 52
 	orderTranslations = 55
 	orderCited        = 60
 )

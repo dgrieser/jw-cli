@@ -652,7 +652,8 @@ the verse or paragraph references then streams in to that depth, one section
 at a time, with the progress of the slow parts shown in place (nothing is
 added when there is nothing to unfold). The diamond in the bar (or **Unfold
 all 0 1 2 3** above the text, without scripts) does the same for every item
-in turn, with a Stop button. A page never unfolds itself by being visited: only the reader asks
+in turn, with a Stop button; its menu also opens or closes every section on
+the page at once. A page never unfolds itself by being visited: only the reader asks
 for references, and what they brought is kept with the page (see below), not
 in its address. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
@@ -668,7 +669,9 @@ page does not move again.
 Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
 opens under the verse's cross references, all of them unfolded at the verse's
 depth, while the verse's other sections — study notes, footnotes, indexes,
-translations, quotations — appear as headings that load once opened.
+translations, quotations — appear as headings that load once opened. A verse the
+study bible shows pictures or videos with has a **Media gallery** among them —
+only such a verse: it is never a heading that opens on nothing.
 
 A section headed by a publication — a passage of the Research Guide or an
 index, a publication quoting a verse — opens and closes on its whole title; the

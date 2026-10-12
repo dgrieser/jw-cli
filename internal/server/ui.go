@@ -140,6 +140,7 @@ func (p basePage) UIText() map[string]string {
 		"openedIn":       t.UIOpenedIn,
 		"show":           t.UIShow,
 		"history":        t.UIHistory,
+		"historyShort":   t.UIHistoryShort,
 		"historyBack":    t.UIHistoryBack,
 		"historyNext":    t.UIHistoryNext,
 		"historyRemove":  t.UIHistoryRemove,
@@ -303,6 +304,16 @@ func unfoldLevels(r *http.Request, current, def int) []unfoldLevel {
 		out = append(out, unfoldLevel{Level: n, URL: u, Active: n == min(current, maxUnfoldDepth)})
 	}
 	return out
+}
+
+// ownHeading is the heading a page puts above a document: its title, unless
+// the document opens with a title of its own, as a library document does —
+// the week of a meeting part included — which it would only repeat.
+func ownHeading(title string, body template.HTML) string {
+	if strings.Contains(string(body), "<h1") {
+		return ""
+	}
+	return title
 }
 
 // unfoldDocument expands the citations of a document page when a level is
@@ -583,11 +594,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Unfold, page.AutoUnfold = depth, auto
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
-	// a library document opens with its own title; only one without a
-	// heading of its own gets one
-	if !strings.Contains(string(page.Body), "<h1") {
-		page.Heading = art.Title
-	}
+	page.Heading = ownHeading(art.Title, page.Body)
 	page.URL = art.URL
 	page.DocID = art.DocID
 	if page.DocID == 0 {
@@ -717,7 +724,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 	}
 	s.render(w, http.StatusOK, "meetings", documentPage{
 		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")),
-		Heading:      art.Title,
+		Heading:      ownHeading(art.Title, body),
 		URL:          art.URL,
 		Date:         r.FormValue("date"),
 		Part:         part,
@@ -1394,14 +1401,13 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			chapterHref = page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)
 		}
 		fmt.Fprintf(&b, `><h2>%s</h2>`, headingHTML(p.Heading(), p.Chapter, chapterHref))
-		// part of a chapter leads to all of it, above the verses and below
+		// part of a chapter leads to all of it below its verses
 		whole := ""
 		if !p.Whole && chapterHref != "" {
 			whole = fmt.Sprintf(`<p class="whole-chapter"><a class="btn" href="%s">%s</a></p>`,
 				template.HTMLEscapeString(chapterHref),
 				template.HTMLEscapeString(page.T.UIWholeChapter))
 		}
-		b.WriteString(whole)
 		b.WriteString(`<div class="items">`)
 		for _, v := range p.Verses {
 			b.WriteString(outlineBlock(v.Outline))

@@ -1173,9 +1173,6 @@ func TestUIBibleNav(t *testing.T) {
 	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
 		t.Errorf("missing the Matthew tile:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
-		t.Errorf("the start page has no reset:\n%s", body)
-	}
 
 	// a book opens its chapter grid, every chapter a reading
 	resp, body = get(t, srv, "/bible?bible=nwtsty&book=40&lang=en")
@@ -1186,14 +1183,11 @@ func TestUIBibleNav(t *testing.T) {
 		!strings.Contains(body, `href="/bible?bible=nwtsty&amp;ref=Matthew&#43;28&amp;lang=en">28</a>`) {
 		t.Errorf("missing the chapter grid:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
-		t.Errorf("missing the reset:\n%s", body)
-	}
 
-	// a reading shows no grid, and resets back to it
+	// a reading shows no grid; the bar's picker leads to the books
 	_, body = get(t, srv, "/bible?ref=John+3:16&lang=en")
-	if strings.Contains(body, `bible-nav`) || !strings.Contains(body, `data-reset="bible"`) {
-		t.Errorf("a reading with a grid, or without a reset:\n%s", body)
+	if strings.Contains(body, `bible-nav`) || strings.Contains(body, `data-reset`) {
+		t.Errorf("a reading with a grid, or with a reset:\n%s", body)
 	}
 
 	resp, body = get(t, srv, "/api/v1/bible/nav?book=40&lang=en")
@@ -1236,21 +1230,24 @@ func TestUIBibleUnfoldCitedIsLazy(t *testing.T) {
 	}
 }
 
-// A reading leads on: part of a chapter to all of it, above the verses and in
-// the nav below them, which also goes to the chapters around it; the heading
-// says which chapter the diamond opens.
+// A reading leads on: part of a chapter to all of it in the nav below the
+// verses, between the chapters around it; the heading says which chapter its
+// number opens.
 func TestUIBibleChapterNav(t *testing.T) {
 	srv := newTestServer(t, wolMux(t))
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en")
 	if !strings.Contains(body, `data-book="43" data-chapter="3"`) {
 		t.Errorf("the passage does not name its chapter:\n%s", body)
 	}
-	if !strings.Contains(body, `<p class="whole-chapter"><a class="btn" href="/bible?bible=nwtsty&amp;ref=John+3&amp;lang=en">Whole chapter</a>`) {
-		t.Errorf("no whole chapter above the verses:\n%s", body)
+	if strings.Contains(body, `<p class="whole-chapter">`) {
+		t.Errorf("a whole chapter above the verses:\n%s", body)
 	}
-	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en">Whole chapter</a>`) ||
+	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl" data-short="Whole ch.">Whole chapter</span></a>`) ||
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
+	}
+	if !strings.Contains(body, `<span class="lbl">John 2</span>`) {
+		t.Errorf("the chapter nav has no label to shorten:\n%s", body)
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)

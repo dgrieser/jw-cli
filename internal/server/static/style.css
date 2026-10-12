@@ -360,25 +360,47 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .query.large input { padding-inline: 1rem; }
 .query.large button { padding-inline: 1.25rem; }
 
+/* the search's options: a name and its control on each row, the names in
+   one column; under the query without a script, in a dialog with one */
 .options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
-  gap: 0.6rem 1.25rem;
-  margin-top: 0.75rem;
-  color: var(--muted);
-  font-size: 0.9rem;
+  gap: 0.75rem 1rem;
+  max-width: 30rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.95rem;
 }
-.options label { display: inline-flex; align-items: center; gap: 0.5rem; }
-.options select { color: var(--ink); }
+.options legend { display: none; }
+.options .opt { display: contents; }
+.options .opt .name { display: flex; flex-direction: column; color: var(--ink); font-weight: 500; }
+.options .opt small { color: var(--muted); font-size: 0.78rem; font-weight: 400; }
+.options select { width: 100%; color: var(--ink); }
+.options .opt.check { display: flex; grid-column: 1 / -1; align-items: center; gap: 0.6rem; }
+.options .opt.check input[type="checkbox"] { width: 1.15rem; height: 1.15rem; margin: 0; flex: none; }
+.options .opt.off .name, .options .opt.off select { opacity: 0.45; }
+.query .search-opts { flex: none; display: inline-flex; align-items: center; justify-content: center; position: relative; padding: 0 0.7rem; }
+.query .search-opts[hidden] { display: none; }
+.query .search-opts.on { color: var(--accent); border-color: var(--accent); }
+.query .search-opts.on::after { content: ""; position: absolute; top: 0.35rem; right: 0.35rem; width: 0.45rem; height: 0.45rem; border-radius: 999px; background: var(--accent); }
+dialog.search-dialog {
+  width: min(28rem, calc(100vw - 2 * var(--gutter)));
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink);
+}
+dialog.search-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.search-dialog .sd-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 0.75rem 0 1rem; }
+.search-dialog .sd-close { margin-left: auto; min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
+.search-dialog .options { margin: 0; padding: 1rem; max-width: none; }
+.search-dialog .sd-foot { display: flex; justify-content: flex-end; padding: 0 1rem 1rem; }
 /* the edition picker spans the form, above the reference */
 .form select.edition { display: block; width: 100%; min-width: 0; margin-bottom: 0.6rem; text-overflow: ellipsis; }
 .query input { min-width: 0; }
-.query .reset { flex: none; }
-.reset-icon { display: inline-flex; font-size: 1.1rem; line-height: 1; }
-@media (max-width: 30rem) {
-  .reset-label { display: none; }
-}
 
 /* the bible's books and chapters, laid out as the library's own navigation:
    one tile per book, coloured by the kind of book it is */
@@ -668,8 +690,14 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 /* on from a reading: all of a chapter shown in part, the chapters around it */
 .whole-chapter { margin: 0 0 0.75rem; }
 .whole-chapter .btn, .chapter-nav .btn { min-height: 2.25rem; padding: 0.3rem 0.9rem; text-decoration: none; }
-.chapter-nav { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 0.5rem; max-width: var(--measure); margin: -0.5rem 0 1.5rem; }
-.chapter-nav .whole { grid-column: 1 / -1; order: -1; justify-self: start; }
+/* the chapter before, all of this one, and the one after: one row */
+.chapter-nav { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0.5rem; max-width: var(--measure); margin: -0.5rem 0 1.5rem; }
+.chapter-nav .prev { justify-self: start; }
+.chapter-nav .whole { justify-self: center; text-align: center; }
+.chapter-nav .next { justify-self: end; }
+.chapter-nav .btn { max-width: 100%; padding-inline: 0.7rem; white-space: nowrap; }
+/* a name too long even short is cut, never pushed off the screen */
+.chapter-nav .lbl { display: inline-block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .reading .items { display: flex; flex-direction: column; gap: 0.15rem; }
 .reading .item { padding: 0.2rem 0; border-radius: var(--r-small); }
 .reading .item-text { min-width: 0; }
@@ -1016,8 +1044,9 @@ details.section .empty-note { margin: 0.2rem 0; color: var(--muted); font-size: 
 .unfold-tools { display: inline-flex; gap: 0.35rem; margin-left: auto; }
 .unfold-tools[hidden] { display: none; }
 html:not(.js) .unfold-tools { display: none; }
-/* with a script, the page bar's diamond picks the level instead */
-.unfold-bar.has-pb-unfold .tabs.unfold { display: none; }
+/* with a script, the page bar's diamond picks the level, and a page with
+   nothing to unfold has nothing to pick */
+.js .unfold-bar .tabs.unfold { display: none; }
 button.pill {
   min-height: 2.1rem;
   padding: 0 0.85rem;
@@ -1527,6 +1556,11 @@ button.ps-item:hover { background: var(--field); border-color: transparent; }
 @keyframes spin-pulse { 50% { opacity: 0.35; } }
 .pb-unfold-menu { top: calc(100% + 0.2rem); right: 0; }
 .pb-unfold-menu .label { white-space: nowrap; }
+.pb-unfold-menu .sep { align-self: stretch; width: 1px; margin: 0.2rem 0.15rem; background: var(--line-strong); }
+.pb-unfold-menu .glyph { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.pb-unfold-menu .glyph:disabled { opacity: 0.35; }
+/* with the diamond, the bar under the heading shows only a run's progress */
+.unfold-bar.has-pb-unfold:not(.busy) { margin: 0; }
 .pb-btn {
   min-height: 2rem;
   min-width: 1.75rem;
@@ -1590,7 +1624,7 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 .bp-head:has(.bp-row-docs:not([hidden])) .bp-book { flex: none; white-space: nowrap; }
 .bp-close { margin-left: auto; min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
 /* the book before and after the one shown, either side of its name */
-.bp-step { flex: none; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.5rem; font-size: 2rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
+.bp-step { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.3rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
 .bp-step:hover { background: var(--accent-soft); }
 .bp-step[hidden] { display: none; }
 .bp-chapters {
@@ -1794,6 +1828,14 @@ a.img-link > img { display: block; }
   gap: 0.2rem;
   margin: 0.6rem 0 0.5rem;
 }
+/* a page's title, and its history at the row's end */
+.title-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 0.5rem; }
+.title-row > h1 { flex: 1 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; }
+.title-row > .hist { flex: none; margin: 0; }
+.title-row .hist-panel { left: auto; right: 0; }
+.title-row .hist { gap: 0; }
+.title-row .hist-step { width: 1.8rem; }
+.title-row button.hist-list { gap: 0.35rem; padding: 0 0.6rem; }
 .hist-step {
   display: inline-grid;
   place-items: center;
