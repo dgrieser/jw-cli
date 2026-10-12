@@ -768,9 +768,9 @@ kept in this browser. On the bible reader the header names the book, chapter
 and verses in view and opens a book picker: the chapters of the current book in
 one row that scrolls sideways, the book grid under it, and a book picked there
 shows its chapters in that row; the arrows beside the book's name step to the
-book before or after it. Below a reading, links lead to the chapters before
-and after it, and a passage showing part of a chapter leads, above and below
-its verses, to the whole chapter. Typing words instead of a reference into the
+book before or after it. Below a reading, one row of links leads to the
+chapter before it, to the whole chapter when only part of it is shown, and to
+the chapter after it. Typing words instead of a reference into the
 bible's field searches the text of the bible being read and of the other
 bibles its translations section shows, and lists every hit, grouped by bible,
 each passage a link into the reader.

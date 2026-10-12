@@ -1365,14 +1365,14 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			fmt.Fprintf(&b, ` data-book="%d" data-chapter="%d"`, p.Book, p.Chapter)
 		}
 		fmt.Fprintf(&b, `><h2>%s</h2>`, template.HTMLEscapeString(p.Heading()))
-		// part of a chapter leads to all of it, above the verses and below
+		// part of a chapter leads to all of it below the verses; the last
+		// passage's link is in the chapter nav under the reading
 		whole := ""
 		if !p.Whole && p.Book > 0 && p.Chapter > 0 && res.Table != nil {
 			whole = fmt.Sprintf(`<p class="whole-chapter"><a class="btn" href="%s">%s</a></p>`,
 				template.HTMLEscapeString(page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)),
 				template.HTMLEscapeString(page.T.UIWholeChapter))
 		}
-		b.WriteString(whole)
 		b.WriteString(`<div class="items">`)
 		for _, v := range p.Verses {
 			b.WriteString(outlineBlock(v.Outline))

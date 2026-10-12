@@ -1236,17 +1236,19 @@ func TestUIBibleUnfoldCitedIsLazy(t *testing.T) {
 	}
 }
 
-// A reading leads on: part of a chapter to all of it, above the verses and in
-// the nav below them, which also goes to the chapters around it; the heading
-// says which chapter the diamond opens.
+// A reading leads on: part of a chapter to all of it, in the nav below the
+// verses between the chapters around it; the heading says which chapter its
+// diamond unfolds.
 func TestUIBibleChapterNav(t *testing.T) {
 	srv := newTestServer(t, wolMux(t))
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en")
 	if !strings.Contains(body, `data-book="43" data-chapter="3"`) {
 		t.Errorf("the passage does not name its chapter:\n%s", body)
 	}
-	if !strings.Contains(body, `<p class="whole-chapter"><a class="btn" href="/bible?bible=nwtsty&amp;ref=John+3&amp;lang=en">Whole chapter</a>`) {
-		t.Errorf("no whole chapter above the verses:\n%s", body)
+	// a single passage leads to its whole chapter in the nav only, not above
+	// the verses as well
+	if strings.Contains(body, `class="whole-chapter"`) {
+		t.Errorf("whole chapter above the verses:\n%s", body)
 	}
 	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en">Whole chapter</a>`) ||
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {

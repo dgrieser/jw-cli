@@ -52,7 +52,9 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	link := func(p service.Passage, book, chapter int) chapterLink {
 		name := res.Table.Name(book)
 		return chapterLink{
-			Label: fmt.Sprintf("%s %d", name, chapter),
+			// on a narrow screen the label breaks before the chapter only,
+			// never inside the book's name ("1. Chronika")
+			Label: fmt.Sprintf("%s %d", strings.ReplaceAll(name, " ", "\u00a0"), chapter),
 			Href:  page.chapterHref(firstNonEmpty(p.Bible, page.Edition), name, chapter),
 		}
 	}
