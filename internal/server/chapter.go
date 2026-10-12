@@ -104,6 +104,7 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	if !last.Whole {
 		nav.Whole = link(last, last.Book, last.Chapter)
 		nav.Whole.Label = page.T.UIWholeChapter
+		nav.Whole.Short = page.T.UIWholeChapterShort
 	}
 	return nav
 }

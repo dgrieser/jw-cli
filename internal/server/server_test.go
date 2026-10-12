@@ -1242,7 +1242,7 @@ func TestUIBibleChapterNav(t *testing.T) {
 	if strings.Contains(body, `<p class="whole-chapter">`) {
 		t.Errorf("a whole chapter above the verses:\n%s", body)
 	}
-	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en">Whole chapter</a>`) ||
+	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl" data-short="Whole ch.">Whole chapter</span></a>`) ||
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
 	}

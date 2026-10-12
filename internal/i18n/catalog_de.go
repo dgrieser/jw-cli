@@ -222,6 +222,7 @@ var de = Messages{
 	UIPrevBook:             "Vorheriges Buch",
 	UINextBook:             "Nächstes Buch",
 	UIWholeChapter:         "Ganzes Kapitel",
+	UIWholeChapterShort:    "Ganzes Kap.",
 	UIWatchVideo:           "Video ansehen",
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",

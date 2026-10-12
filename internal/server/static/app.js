@@ -2201,24 +2201,38 @@
   // --- bible navigation ----------------------------------------------------
 
 
-  // the chapters before and after a reading name their book short, both of
-  // them, when either name does not fit beside "whole chapter"
+  // the chapters before and after a reading and "whole chapter" between
+  // them say it shorter when the row has no room: "whole chapter" first, then
+  // both books by their abbreviation
   document.querySelectorAll(".chapter-nav").forEach(function (nav) {
+    var wholeLabel = nav.querySelector(".whole-lbl[data-short]");
     var labels = nav.querySelectorAll(".lbl[data-short]");
-    if (!labels.length) return;
-    labels.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
-    // each side has half of what "whole chapter" leaves of the row
-    function fit() {
-      labels.forEach(function (l) { l.textContent = l.getAttribute("data-full"); });
+    if (!wholeLabel && !labels.length) return;
+    var all = Array.prototype.slice.call(labels);
+    if (wholeLabel) all.push(wholeLabel);
+    all.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
+    function say(l, short) {
+      l.textContent = l.getAttribute(short ? "data-short" : "data-full");
+    }
+    // each side has half of what "whole chapter" leaves of the row; a
+    // button's width is with its label in full, which it cuts when narrower
+    function cut() {
       var whole = nav.querySelector(".whole");
       var gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
       var room = (nav.clientWidth - (whole ? whole.offsetWidth : 0)) / 2 - gap;
-      // a button's width with its label in full, which it cuts when narrower
-      var cut = Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
+      return Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
         var l = b.querySelector(".lbl");
         return b.offsetWidth + (l ? l.scrollWidth - l.clientWidth : 0) > room;
       });
-      if (cut) labels.forEach(function (l) { l.textContent = l.getAttribute("data-short"); });
+    }
+    function fit() {
+      all.forEach(function (l) { say(l, false); });
+      if (!cut()) return;
+      if (wholeLabel) {
+        say(wholeLabel, true);
+        if (!cut()) return;
+      }
+      labels.forEach(function (l) { say(l, true); });
     }
     fit();
     // the page's own font is narrower than the one it is measured in first
