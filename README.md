@@ -635,34 +635,36 @@ written, the video's transcript, following along as it plays. The outline
 links every heading into the reader at its verses; the gallery shows the
 pictures and videos chapter by chapter, each with its caption and description.
 `jw bible intro`, `jw bible outline` and `jw bible gallery` print the same on
-the command line (`-o json` for the data). In the reader, the diamond at a
-chapter's heading unfolds the same for that chapter, as a verse's diamond unfolds
+the command line (`-o json` for the data). In the reader, the chapter's number in its
+heading unfolds the same for that chapter, as a verse's number unfolds
 what the verse references: the outline's headings that
 cover it, the book's introduction (its video as a link to the introduction's
 page) and the chapter's part of the gallery.
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
-parts — shows the text first and unfolds afterwards. Every verse of a reading,
-and every paragraph that cites something, gets a small button in the right
-margin: pick a depth (1–3) and what it references streams in right under it,
-one collapsible section at a time, with the progress of the slow parts shown
-in place (nothing is added when there is nothing to unfold). **Unfold all
-0 1 2 3** above the text does the same for every item in turn, with a Stop
-button. A page never unfolds itself by being visited: only the reader asks
+parts — shows the text first and unfolds afterwards. A verse's number (and a
+chapter's, in its heading) unfolds it: what it references streams in right
+under it as collapsible sections, each a heading that loads once opened, and a
+second click folds it away. Holding a link of a verse or of a paragraph that
+cites something offers a depth (1–3) instead, and × to fold it away: everything
+the verse or paragraph references then streams in to that depth, one section
+at a time, with the progress of the slow parts shown in place (nothing is
+added when there is nothing to unfold). The diamond in the bar (or **Unfold
+all 0 1 2 3** above the text, without scripts) does the same for every item
+in turn, with a Stop button. A page never unfolds itself by being visited: only the reader asks
 for references, and what they brought is kept with the page (see below), not
 in its address. Sections start collapsed and sit side by
 side as chips; an opened one takes the whole row, and each reference inside it
 opens on its own. Every paragraph of an unfolded passage that cites something
-has a button of its own, so an expansion can be followed as deep as wanted.
+unfolds on its own, so an expansion can be followed as deep as wanted.
 
 Links open in place instead of leaving the page: a marginal reference (`+`), a
 footnote (`*`), a bible reference or a link to an article — a table-of-contents
 link like "App. C" included — opens its section under the verse or paragraph it
 is in and scrolls to it — or, when it is not there yet, to where it loads,
 loading just that one reference; once loaded it is opened and marked, but the
-page does not move again. A verse number opens the verse in the other bibles
-of the language.
+page does not move again.
 Ctrl/Cmd-click still follows the link itself. A marginal reference of a verse
 opens under the verse's cross references, all of them unfolded at the verse's
 depth, while the verse's other sections — study notes, footnotes, indexes,
@@ -675,8 +677,8 @@ video's ↗ opens its player page). A section showing verses has a ↗ that open
 them in the bible reader in a new tab. Every link to something the site can
 show — a reference, a footnote, a verse number, an article, a search result, a
 publication in the library — can be held (a long press, or a right click) for
-the rest of the choices: open it as a reference where that is how it opens,
-open its page here or in a new tab, or **open it in** the section it belongs to
+the rest of the choices: how deep to unfold the verse or paragraph it is in
+(else open it as a reference, where that is how it opens), open its page here or in a new tab, or **open it in** the section it belongs to
 — the bible, the publications, media — without leaving the page: the section's
 menu entry then leads there, and the section's history lists it.
 

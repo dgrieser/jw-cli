@@ -87,7 +87,7 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 }
 
 // chapterStudyView is one part of what the library has on a chapter, as the
-// diamond at a chapter's heading unfolds it, section by section like a
+// chapter's number in its heading unfolds it, section by section like a
 // verse's: the headings of the book's outline that cover the chapter, the
 // book's introduction — its facts, and the text under its video or what the
 // video says, the video itself a link — or the chapter's part of the book's
