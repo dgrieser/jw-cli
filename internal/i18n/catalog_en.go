@@ -127,7 +127,6 @@ var en = Messages{
 	UILangAll:          "All languages",
 	UILanguageHint:     "JW symbol (E), ISO code (de), or BCP-47 (de-AT)",
 	UIGo:               "Go",
-	UIReset:            "Reset",
 	UIChapters:         "Chapters",
 	UIAllBooks:         "All books",
 	UIShow:             "Show",

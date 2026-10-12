@@ -1173,9 +1173,6 @@ func TestUIBibleNav(t *testing.T) {
 	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
 		t.Errorf("missing the Matthew tile:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
-		t.Errorf("the start page has no reset:\n%s", body)
-	}
 
 	// a book opens its chapter grid, every chapter a reading
 	resp, body = get(t, srv, "/bible?bible=nwtsty&book=40&lang=en")
@@ -1186,14 +1183,11 @@ func TestUIBibleNav(t *testing.T) {
 		!strings.Contains(body, `href="/bible?bible=nwtsty&amp;ref=Matthew&#43;28&amp;lang=en">28</a>`) {
 		t.Errorf("missing the chapter grid:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/bible?lang=en" data-reset="bible"`) {
-		t.Errorf("missing the reset:\n%s", body)
-	}
 
-	// a reading shows no grid, and resets back to it
+	// a reading shows no grid; the bar's picker leads to the books
 	_, body = get(t, srv, "/bible?ref=John+3:16&lang=en")
-	if strings.Contains(body, `bible-nav`) || !strings.Contains(body, `data-reset="bible"`) {
-		t.Errorf("a reading with a grid, or without a reset:\n%s", body)
+	if strings.Contains(body, `bible-nav`) || strings.Contains(body, `data-reset`) {
+		t.Errorf("a reading with a grid, or with a reset:\n%s", body)
 	}
 
 	resp, body = get(t, srv, "/api/v1/bible/nav?book=40&lang=en")

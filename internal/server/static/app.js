@@ -566,8 +566,14 @@
       dialog = document.createElement("dialog");
       dialog.className = "bible-picker";
       dialog.setAttribute("aria-label", T.pickBook || "");
-      dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>‹</button>' +
-        '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>›</button>' +
+      // drawn, not typed: a chevron glyph sits on the text's baseline, below
+      // the middle of the name beside it
+      var chev = function (d) {
+        return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.4" ' +
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + d + '"/></svg>';
+      };
+      dialog.innerHTML = '<div class="bp-head"><button type="button" class="bp-step bp-prev" hidden>' + chev("M15 5l-7 7 7 7") + '</button>' +
+        '<strong class="bp-book"></strong><button type="button" class="bp-step bp-next" hidden>' + chev("M9 5l7 7-7 7") + '</button>' +
         '<div class="bp-row-docs" hidden></div>' +
         '<button type="button" class="bp-close" aria-label="×">×</button></div>' +
         '<div class="bp-chapters" role="list"></div><div class="bp-books"></div>' +
@@ -2194,17 +2200,6 @@
 
   // --- bible navigation ----------------------------------------------------
 
-  // reset starts the bible over: the book grid, and the menu leading back to
-  // it rather than to the reading that was left
-  document.querySelectorAll("a[data-reset]").forEach(function (a) {
-    a.addEventListener("click", function () {
-      try {
-        window.localStorage.removeItem(lastKey(a.getAttribute("data-reset"), pageLang));
-      } catch (err) {
-        // nothing was remembered
-      }
-    });
-  });
 
   var bibleForm = document.querySelector("form.bible-form");
   if (bibleForm) {

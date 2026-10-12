@@ -374,11 +374,6 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 /* the edition picker spans the form, above the reference */
 .form select.edition { display: block; width: 100%; min-width: 0; margin-bottom: 0.6rem; text-overflow: ellipsis; }
 .query input { min-width: 0; }
-.query .reset { flex: none; }
-.reset-icon { display: inline-flex; font-size: 1.1rem; line-height: 1; }
-@media (max-width: 30rem) {
-  .reset-label { display: none; }
-}
 
 /* the bible's books and chapters, laid out as the library's own navigation:
    one tile per book, coloured by the kind of book it is */
@@ -1590,7 +1585,7 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 .bp-head:has(.bp-row-docs:not([hidden])) .bp-book { flex: none; white-space: nowrap; }
 .bp-close { margin-left: auto; min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
 /* the book before and after the one shown, either side of its name */
-.bp-step { flex: none; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.5rem; font-size: 2rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
+.bp-step { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.3rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
 .bp-step:hover { background: var(--accent-soft); }
 .bp-step[hidden] { display: none; }
 .bp-chapters {
