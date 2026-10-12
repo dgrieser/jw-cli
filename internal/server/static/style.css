@@ -686,7 +686,9 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .bible-outline .ol-d1 { padding-left: 1.1em; }
 .bible-outline .ol-d2 { padding-left: 2.2em; }
 .bible-outline .ol-d3 { padding-left: 3.3em; }
-.bible-outline .ol-title { color: var(--ink); font-weight: 600; }
+/* lighter than the verses, so the headings stay out of the reading's way */
+.bible-outline .ol-title { color: color-mix(in srgb, var(--ink) 45%, var(--muted)); font-weight: 600; }
+.bible-outline .ol-ref { opacity: 0.85; }
 .bible-outline .ol-d1 .ol-title, .bible-outline .ol-d2 .ol-title, .bible-outline .ol-d3 .ol-title { font-weight: 500; }
 .bible-outline .ol-ref { font-variant-numeric: tabular-nums; }
 html[data-outlines="off"] .bible-outline { display: none; }
