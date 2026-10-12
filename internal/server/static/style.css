@@ -657,6 +657,29 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 /* a reading: one verse per row, so each can be unfolded on its own */
 .reading .passage { margin-bottom: 2rem; }
 .reading .passage > h2 { margin-top: 0.5rem; }
+/* a chapter's heading carries a diamond, in line with the verses' ones, that
+   opens what the library has on the chapter */
+.reading .passage > h2.chapter-head { position: relative; padding-right: var(--unfold-room); }
+.reading .passage > h2 > .chapter-study-btn { top: 0; }
+.chapter-study { margin: 0 0 1rem; display: grid; gap: 0.5rem; }
+.chapter-study[hidden] { display: none; }
+.cs-part { border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--paper); }
+.cs-part > summary { padding: 0.5rem 0.8rem; cursor: pointer; font-weight: 600; }
+.cs-part > summary:hover { color: var(--accent); }
+.cs-part[open] > summary { border-bottom: 1px solid var(--line); }
+.cs-body { padding: 0.6rem 0.8rem; font-size: 0.95rem; }
+.cs-body > :first-child { margin-top: 0; }
+.cs-body > :last-child { margin-bottom: 0; }
+.cs-body h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
+.cs-transcript p { margin: 0 0 0.7rem; }
+.chapter-study .gallery-grid { padding: 0; margin: 0; }
+.chapter-study .gallery-grid li { margin: 0; }
+.chapter-study .book-outline .bo-item { margin: 0.15rem 0; }
+/* on from a reading: all of a chapter shown in part, the chapters around it */
+.whole-chapter { margin: 0 0 0.75rem; }
+.whole-chapter .btn, .chapter-nav .btn { min-height: 2.25rem; padding: 0.3rem 0.9rem; text-decoration: none; }
+.chapter-nav { display: grid; grid-template-columns: auto auto; justify-content: space-between; gap: 0.5rem; max-width: var(--measure); margin: -0.5rem 0 1.5rem; }
+.chapter-nav .whole { grid-column: 1 / -1; order: -1; justify-self: start; }
 .reading .items { display: flex; flex-direction: column; gap: 0.15rem; }
 .reading .item { padding: 0.2rem 0; border-radius: var(--r-small); }
 .reading .item-text { min-width: 0; }
@@ -1144,11 +1167,8 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 
 .transcript {
   max-width: var(--measure);
-  max-height: min(32rem, 60vh);
-  overflow-y: auto;
-  overscroll-behavior: contain;
   position: relative;
-  padding: 0.25rem 0.75rem 0.25rem 0;
+  padding: 0.25rem 0;
 }
 .transcript p { margin: 0 0 0.85rem; }
 .cue-time {
@@ -1580,8 +1600,12 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
   gap: 0.5rem;
   padding: 0.5rem 0.75rem 0;
 }
-.bp-book { flex: 1; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
-.bp-close { min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
+.bp-book { flex: 0 1 auto; min-width: 0; line-height: 1.3; overflow-wrap: anywhere; }
+.bp-close { margin-left: auto; min-height: 2rem; padding: 0 0.6rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
+/* the book before and after the one shown, either side of its name */
+.bp-step { flex: none; min-height: 2rem; padding: 0 0.55rem; font-size: 1.3rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
+.bp-step:hover { background: var(--accent-soft); }
+.bp-step[hidden] { display: none; }
 .bp-chapters {
   flex: none;
   display: flex;

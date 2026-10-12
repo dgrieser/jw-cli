@@ -40,6 +40,11 @@ type Passage struct {
 	// UnfoldNote says an expansion was cut short, which is about the passage
 	// rather than about one of its verses.
 	UnfoldNote string `json:"unfoldNote,omitempty"`
+	// Book and Chapter are the chapter the passage is part of, and Whole
+	// says it is all of that chapter: what the web reader leads on from.
+	Book    int  `json:"-"`
+	Chapter int  `json:"-"`
+	Whole   bool `json:"-"`
 }
 
 // Heading is the line a passage is printed under: the reference, and with
@@ -125,7 +130,8 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 			// where a reference running past its chapter ends is the edition's
 			// own answer, so it is resolved per edition
 			r := ResolveChapterEnd(ref, verses)
-			p := Passage{Ref: RefString(r, table)}
+			p := Passage{Ref: RefString(r, table), Book: r.Book, Chapter: r.Chapter,
+				Whole: ref.IsWholeChapter() || (ref.VerseStart <= 1 && ref.RunsToChapterEnd())}
 			if req.AllBibles {
 				p.Bible, p.BibleTitle = ed.Symbol, ed.Label()
 			}
