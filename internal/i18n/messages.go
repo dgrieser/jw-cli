@@ -343,7 +343,7 @@ type Messages struct {
 	UIWholeChapter string
 	// UIWholeChapterShort is UIWholeChapter where there is little room.
 	UIWholeChapterShort string
-	UIWatchVideo   string
+	UIWatchVideo        string
 	// UIFont* are the text size controls of every page.
 	UIFontSmaller string
 	UIFontLarger  string
