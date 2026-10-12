@@ -89,12 +89,24 @@ func foldHeadings(n *nethtml.Node) {
 		}
 		n.AppendChild(kids[i])
 	}
-	wrap := element(atom.Div, "sections")
-	n.AppendChild(wrap)
+	var wrap *nethtml.Node
 	for i < len(kids) {
 		heading := kids[i]
 		i++
 		details := element(atom.Details, "section")
+		body := element(atom.Div, "section-body")
+		for ; i < len(kids) && nodeHeading(kids[i]) != level; i++ {
+			body.AppendChild(kids[i])
+		}
+		foldHeadings(body)
+		lazySection(details, body)
+		// a heading with nothing under it — a passage's title, say — stays a
+		// heading: a section of it would open on nothing
+		if attr(details, "data-lazy") == "" && blank(body) {
+			n.AppendChild(heading)
+			wrap = nil
+			continue
+		}
 		summary := element(atom.Summary, "")
 		for c := heading.FirstChild; c != nil; {
 			next := c.NextSibling
@@ -102,16 +114,24 @@ func foldHeadings(n *nethtml.Node) {
 			summary.AppendChild(c)
 			c = next
 		}
-		body := element(atom.Div, "section-body")
-		for ; i < len(kids) && nodeHeading(kids[i]) != level; i++ {
-			body.AppendChild(kids[i])
-		}
-		foldHeadings(body)
-		lazySection(details, body)
 		details.AppendChild(summary)
 		details.AppendChild(body)
+		if wrap == nil {
+			wrap = element(atom.Div, "sections")
+			n.AppendChild(wrap)
+		}
 		wrap.AppendChild(details)
 	}
+}
+
+// blank reports whether n holds nothing but white space.
+func blank(n *nethtml.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == nethtml.ElementNode || (c.Type == nethtml.TextNode && strings.TrimSpace(c.Data) != "") {
+			return false
+		}
+	}
+	return true
 }
 
 // element is a fresh element with a class, or none when class is empty.
