@@ -13,9 +13,6 @@
       {{- range .Facts}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
     </dl>
     {{- end}}
-    {{- if .External}}
-    <p class="links"><a href="{{.External}}" rel="noopener">{{.T.UIOpenOnSite}}</a></p>
-    {{- end}}
   </div>
 </div>
 {{- end}}

@@ -190,6 +190,7 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		page.Publication = true
 		page.Cover = lib.Thumbnail
 		page.External = lib.URL
+		page.SiteURL = lib.URL
 		if lib.Symbol != "" {
 			page.Facts = append(page.Facts, pubFact{txt.UISymbol, lib.Symbol})
 		}

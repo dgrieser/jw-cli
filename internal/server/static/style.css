@@ -1480,10 +1480,17 @@ tbody tr:hover { background: var(--surface); }
 }
 .pb-up {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 2.25rem;
   font-size: 0.9rem;
   text-decoration: none;
   white-space: nowrap;
 }
+.pb-up[hidden] { display: none; }
+/* drawn, as beside the picker's book: a glyph sits low on the baseline */
+.pb-up-chev { flex: none; margin-left: -0.3rem; }
 .pb-title {
   flex: 1 1 auto;
   min-width: 0;
@@ -1533,6 +1540,8 @@ tbody tr:hover { background: var(--surface); }
 .ps-value { flex: none; max-width: 9rem; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-weight: 500; }
 button.ps-item { justify-content: flex-start; width: 100%; padding-right: 0.6rem; border-color: transparent; background: transparent; font-size: inherit; font-weight: 500; }
 button.ps-item:hover { background: var(--field); border-color: transparent; }
+a.ps-item { text-decoration: none; }
+a.ps-item:hover { background: var(--field); color: var(--ink); }
 .ps-font { padding-right: 0.2rem; }
 .ps-steps { flex: none; display: inline-flex; align-items: center; gap: 0.2rem; margin-left: 0.6rem; }
 .ps-steps button { min-width: 2.2rem; min-height: 2.2rem; padding: 0 0.45rem; border-radius: 999px; font-size: 1.15rem; }

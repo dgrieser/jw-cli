@@ -53,6 +53,15 @@ type basePage struct {
 	// picker shows as chosen; LangName names it in the settings.
 	LangSymbol string
 	LangName   string
+	// SiteURL is where the page's document is read on jw.org or
+	// wol.jw.org, which the settings offer to open.
+	SiteURL string
+}
+
+// withSite is b offering to open u on the site it comes from.
+func (b basePage) withSite(u string) basePage {
+	b.SiteURL = u
+	return b
 }
 
 // Version is the build serving the page, for the footer: a release tag or
@@ -596,6 +605,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Title = firstNonEmpty(art.Title, "Article")
 	page.Heading = ownHeading(art.Title, page.Body)
 	page.URL = art.URL
+	page.SiteURL = art.URL
 	page.DocID = art.DocID
 	if page.DocID == 0 {
 		page.DocID = wol.DocIDFromURL(art.URL)
@@ -675,7 +685,7 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, http.StatusOK, "dailytext", documentPage{
-		basePage:     s.base(r, firstNonEmpty(art.Title, "Daily text")),
+		basePage:     s.base(r, firstNonEmpty(art.Title, "Daily text")).withSite(art.URL),
 		Heading:      art.Title,
 		URL:          art.URL,
 		Date:         r.FormValue("date"),
@@ -723,7 +733,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.render(w, http.StatusOK, "meetings", documentPage{
-		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")),
+		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")).withSite(art.URL),
 		Heading:      ownHeading(art.Title, body),
 		URL:          art.URL,
 		Date:         r.FormValue("date"),
