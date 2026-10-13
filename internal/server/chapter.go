@@ -101,7 +101,9 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 			nav.Next = link(last, last.Book+1, 1)
 		}
 	}
-	if !last.Whole {
+	// a reading of several passages is what was asked for: none of them
+	// leads to its whole chapter
+	if !last.Whole && len(res.Passages) == 1 {
 		nav.Whole = link(last, last.Book, last.Chapter)
 		nav.Whole.Label = page.T.UIWholeChapter
 		nav.Whole.Short = page.T.UIWholeChapterShort

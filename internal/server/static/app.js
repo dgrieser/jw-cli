@@ -3457,7 +3457,7 @@
       allMenu.querySelectorAll("button.depth").forEach(function (b) {
         b.setAttribute("aria-pressed", String(parseInt(b.getAttribute("data-depth"), 10) === anchorLevel));
       });
-      allRemove.hidden = anchorLevel === 0 && !batch;
+      allRemove.hidden = anchorLevel === 0 && !batch && !doc.querySelector(".expansion");
       allMenu.hidden = false;
       // under the diamond, its right edge on the diamond's, never past the
       // bar's left edge
@@ -3543,7 +3543,12 @@
     markLevel(level);
     rememberLevel();
     if (level === 0) {
+      // everything loaded into the page goes, whichever way it came — the
+      // copies the browser keeps of what was read stay
       items.forEach(removeExpansion);
+      doc.querySelectorAll(".expansion").forEach(function (exp) { exp.remove(); });
+      syncTools();
+      writeState();
       return;
     }
     // what found nothing has nothing at any level

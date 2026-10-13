@@ -63,6 +63,7 @@
 {{- with .ChapterNav}}
 <nav class="chapter-nav" aria-label="{{$.T.UIChapters}}">
   {{- if .Prev.Href}}<a class="btn prev" href="{{.Prev.Href}}" rel="prev" title="{{.Prev.Label}}"><span aria-hidden="true">‹</span> <span class="lbl"{{with .Prev.Short}} data-short="{{.}}"{{end}}>{{.Prev.Label}}</span></a>{{else}}<span></span>{{end}}
+  {{- if not .Whole.Href}}<span></span>{{end}}
   {{- if .Whole.Href}}<a class="btn whole" href="{{.Whole.Href}}" title="{{.Whole.Label}}"><span class="whole-lbl"{{with .Whole.Short}} data-short="{{.}}"{{end}}>{{.Whole.Label}}</span></a>{{end}}
   {{- if .Next.Href}}<a class="btn next" href="{{.Next.Href}}" rel="next" title="{{.Next.Label}}"><span class="lbl"{{with .Next.Short}} data-short="{{.}}"{{end}}>{{.Next.Label}}</span> <span aria-hidden="true">›</span></a>{{else}}<span></span>{{end}}
 </nav>

@@ -116,7 +116,7 @@ const (
 	orderFootnotes    = 15
 	orderIndexes      = 20
 	orderMarginal     = 50
-	orderMedia        = 52
+	orderMedia        = 12 // right after the notes, which often speak of them
 	orderTranslations = 55
 	orderCited        = 60
 )
