@@ -573,6 +573,10 @@ type articlePage struct {
 	// DocID is the library document shown, zero for a page of jw.org: the
 	// publications quoting what it cites leave it out.
 	DocID int
+	// Crumbs lead up through the publications to the shelf the document is
+	// filed under, as on a page of the publications; for a document filed
+	// nowhere, the publications and the document itself.
+	Crumbs []crumb
 }
 
 func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
@@ -596,7 +600,12 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	var wg sync.WaitGroup
+	if art.ShelfKind != "" {
+		wg.Go(func() { page.Crumbs = s.shelfCrumbs(r.Context(), lng, art, page.basePage) })
+	}
 	page.Body, err = s.unfoldDocument(r, lng, art, depth)
+	wg.Wait()
 	if err != nil {
 		s.failUI(w, r, err)
 		return
@@ -604,6 +613,14 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Unfold, page.AutoUnfold = depth, auto
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
+	if len(page.Crumbs) == 0 && art.Title != "" {
+		// filed nowhere the library says: read among the publications, the
+		// document itself the trail's end
+		page.Crumbs = []crumb{
+			{Label: text(lng).UINavPublications, Href: page.WithLang("/pub")},
+			{Label: art.Title},
+		}
+	}
 	page.Heading = ownHeading(art.Title, page.Body)
 	page.URL = art.URL
 	page.SiteURL = art.URL
@@ -614,6 +631,18 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Refs = art.ScriptureRefs
 	page.Images = art.Images
 	s.render(w, http.StatusOK, "article", page)
+}
+
+// shelfCrumbs is the trail through the publications down to the shelf a
+// document is filed under, the shelf itself last; none when the shelf cannot
+// be read, which leaves the document as it was.
+func (s *Server) shelfCrumbs(ctx context.Context, lng model.Language, art model.Article, page basePage) []crumb {
+	shelf, err := s.svc.Shelf(ctx, lng, art.ShelfKind, art.ShelfPath)
+	if err != nil || shelf.Title == "" {
+		return nil
+	}
+	trail := s.pubCrumbs(ctx, lng, shelf, page)
+	return append(trail, crumb{Label: shelf.Title, Href: pubHref(art.ShelfKind, firstNonEmpty(shelf.Path, art.ShelfPath), page)})
 }
 
 // documentPage renders the daily text and the meeting pages: an article with a

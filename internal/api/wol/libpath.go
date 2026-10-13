@@ -216,6 +216,15 @@ func (c *Client) canonicalLibraryPath(ctx context.Context, cfg, canon Config, lo
 	return out, nil
 }
 
+// CanonicalLibraryPath is the canonical path of a page of cfg's library
+// named by its own path, as CanonicalLibrary takes it.
+func (c *Client) CanonicalLibraryPath(ctx context.Context, cfg, canon Config, local string) (string, error) {
+	if cfg == canon {
+		return strings.Trim(local, "/"), nil
+	}
+	return c.canonicalLibraryPath(ctx, cfg, canon, local)
+}
+
 // ErrNoTranslation: a library page of one language has no counterpart in
 // another.
 var ErrNoTranslation = fmt.Errorf("no counterpart in the other language")

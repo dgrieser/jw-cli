@@ -455,6 +455,11 @@ type Article struct {
 	HTML          string            `json:"html"`
 	Images        []MediaAsset      `json:"images,omitempty"`
 	ScriptureRefs []ScriptureAnchor `json:"scriptureRefs,omitempty"`
+	// ShelfKind and ShelfPath are the page of the library the document is
+	// filed under, as its own page names it ("library",
+	// "alle-publikationen/einsichten/j"); empty for one filed nowhere.
+	ShelfKind string `json:"shelfKind,omitempty"`
+	ShelfPath string `json:"shelfPath,omitempty"`
 }
 
 // Tooltip is the JSON payload of wol's bc/pc citation endpoints.
