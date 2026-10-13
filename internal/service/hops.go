@@ -71,7 +71,8 @@ func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cit
 	secs := []UnfoldSection{
 		{Title: html.EscapeString(txt.StudyNotesHeading), Order: orderNotes, Lazy: hopPartURL(ref, PartNotes, "")},
 	}
-	// the pictures only when there are any, as on the verse's own page
+	// the pictures unless the verse is known to have none: a heading not
+	// known to hold anything goes again once opened and found empty
 	if media {
 		secs = append(secs, UnfoldSection{
 			Title: html.EscapeString(txt.MediaHeading), Ref: MediaRef, Order: orderMedia,
@@ -143,7 +144,7 @@ func hopVerseSections(n unfold.Node, level int, txt *i18n.Messages) []UnfoldSect
 		cited = unfold.Cited{Ref: title, Lazy: citedURL(refs)}
 	}
 	if n.Parts.Lazy {
-		return lazyVerseSections(refs, title, n.HTML, cited, len(n.Media) > 0, txt)
+		return lazyVerseSections(refs, title, n.HTML, cited, len(n.Media) > 0 || !n.MediaKnown, txt)
 	}
 	var secs sectionList
 	secs.add(hopNotesSection(n.Notes, n.StudyErr, n.Parts.NoteRefs, level, txt))

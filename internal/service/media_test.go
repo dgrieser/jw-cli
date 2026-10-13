@@ -52,7 +52,11 @@ func TestHopVerseMedia(t *testing.T) {
 		t.Errorf("no lazy media heading: %+v", sec)
 	}
 	lazy.Media = nil
+	if sec := find(hopVerseSections(lazy, 2, txt)); sec == nil {
+		t.Error("no media heading for a verse whose media is not known yet")
+	}
+	lazy.MediaKnown = true
 	if sec := find(hopVerseSections(lazy, 2, txt)); sec != nil {
-		t.Errorf("a media heading for a verse without media: %+v", sec)
+		t.Errorf("a media heading for a verse known to have none: %+v", sec)
 	}
 }

@@ -135,7 +135,10 @@ type Node struct {
 	// Media are the pictures and videos the study pane shows with a verse:
 	// read with its study material, or — at a verse whose material loads
 	// once opened — when the pane is known without asking (KnownStudier).
-	Media      []model.MediaAsset
+	Media []model.MediaAsset
+	// MediaKnown says Media was read: an empty Media is then a verse
+	// without any, rather than one not asked about.
+	MediaKnown bool
 	Cited      []model.Result
 	CitedTotal int
 	CitedRef   string
@@ -416,7 +419,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 				if err != nil {
 					n.StudyErr = err
 				} else {
-					n.Notes, n.Links, n.Media = s.Notes, s.Links, s.Media
+					n.Notes, n.Links, n.Media, n.MediaKnown = s.Notes, s.Links, s.Media, true
 					research[n.Ref.Path] = s.Research
 				}
 			}
