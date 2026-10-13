@@ -1685,7 +1685,12 @@
     // a word's start and a dot ("Zusammenk.") when the row is too narrow
     var h1 = main.querySelector("h1");
     if (!h1 || h1.children.length) {
-      main.insertBefore(bar, main.firstChild);
+      // a row of its own, at its end — below the breadcrumb, which always
+      // heads the page
+      var crumbs = main.querySelector(":scope > .crumbs");
+      bar.classList.add("alone");
+      if (crumbs) crumbs.insertAdjacentElement("afterend", bar);
+      else main.insertBefore(bar, main.firstChild);
       return;
     }
     var row = document.createElement("div");
