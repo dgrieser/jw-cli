@@ -2108,6 +2108,22 @@
     linkMenu.appendChild(row);
   }
 
+  // siteOf is where a link is read on jw.org or wol.jw.org: the link itself
+  // when it leads there, the document a page of this site reads, else none
+  function siteOf(a) {
+    var u;
+    try {
+      u = new URL(a.getAttribute("href"), location.href);
+    } catch (err) {
+      return "";
+    }
+    if (u.origin !== location.origin) {
+      return /(^|\.)jw\.org$/i.test(u.hostname) ? u.href : "";
+    }
+    var target = u.pathname === "/article" ? u.searchParams.get("target") : "";
+    return target && /^https:\/\/([a-z0-9-]+\.)*jw\.org\//i.test(target) ? target : "";
+  }
+
   function openLinkMenu(a) {
     var page = pageOf(a);
     linkMenu.textContent = "";
@@ -2145,6 +2161,11 @@
       if (page.sec && !samePage(page.href, location.href)) {
         menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
       }
+    }
+    // and where it is read on jw.org or wol.jw.org, in a new tab
+    var site = siteOf(a);
+    if (site) {
+      menuItem(T.openOnSite || "↗", function () { window.open(site, "_blank", "noopener"); });
     }
     if (!linkMenu.firstChild) return;
     linkMenu.hidden = false;

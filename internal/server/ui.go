@@ -144,6 +144,7 @@ func (p basePage) UIText() map[string]string {
 		"follow":         t.UIFollow,
 		"followHere":     t.UIFollowHere,
 		"followTab":      t.UIFollowTab,
+		"openOnSite":     t.UIOpenOnSite,
 		"followPage":     t.UIFollowPage,
 		"followSection":  t.UIFollowSection,
 		"openedIn":       t.UIOpenedIn,
