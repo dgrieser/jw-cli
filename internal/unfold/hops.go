@@ -390,8 +390,13 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 					if err != nil {
 						n.StudyErr = err
 					} else {
-						n.Notes, n.Links = st.Notes, st.Links
+						n.Notes, n.Links, n.Media = st.Notes, st.Links, st.Media
 						research[n.Ref.Path] = st.Research
+					}
+				} else if ks, ok := study.(KnownStudier); ok && study != nil {
+					// what loads once opened: its pictures, if they are known
+					if st, ok := ks.KnownStudy(ctx, n.Title); ok {
+						n.Media = st.Media
 					}
 				}
 			}

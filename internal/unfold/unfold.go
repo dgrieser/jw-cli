@@ -63,6 +63,13 @@ type Study struct {
 // StudyResolver is an optional capability of a Resolver: given the title wol
 // answered a verse citation with, it returns the study material of that verse.
 // A Resolver without it leaves every verse at its bare text.
+// KnownStudier is a StudyResolver that can also say what it already knows
+// of a verse's study pane, without a request: ok is false when it would have
+// to ask.
+type KnownStudier interface {
+	KnownStudy(ctx context.Context, verseTitle string) (s Study, ok bool)
+}
+
 type StudyResolver interface {
 	Study(ctx context.Context, verseTitle string) (Study, error)
 }
@@ -123,8 +130,12 @@ type Node struct {
 	Err error
 	// Notes, Links and Cited are the study material of a verse; StudyErr says
 	// the study pane could not be read, for the same reason Err is kept.
-	Notes      []model.StudyNote
-	Links      []model.ResearchItem
+	Notes []model.StudyNote
+	Links []model.ResearchItem
+	// Media are the pictures and videos the study pane shows with a verse:
+	// read with its study material, or — at a verse whose material loads
+	// once opened — when the pane is known without asking (KnownStudier).
+	Media      []model.MediaAsset
 	Cited      []model.Result
 	CitedTotal int
 	CitedRef   string
@@ -405,7 +416,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 				if err != nil {
 					n.StudyErr = err
 				} else {
-					n.Notes, n.Links = s.Notes, s.Links
+					n.Notes, n.Links, n.Media = s.Notes, s.Links, s.Media
 					research[n.Ref.Path] = s.Research
 				}
 			}

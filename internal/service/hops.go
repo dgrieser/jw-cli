@@ -60,7 +60,7 @@ func hopPartURL(ref bibleref.Ref, part, kind string) string {
 // the ones that turn out to have nothing. title names the verse in the
 // headings that say whose they are; text is the verse itself, which tells
 // whether it has footnotes.
-func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cited, txt *i18n.Messages) []UnfoldSection {
+func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cited, media bool, txt *i18n.Messages) []UnfoldSection {
 	if len(refs) == 0 {
 		return nil
 	}
@@ -70,6 +70,13 @@ func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cit
 	}
 	secs := []UnfoldSection{
 		{Title: html.EscapeString(txt.StudyNotesHeading), Order: orderNotes, Lazy: hopPartURL(ref, PartNotes, "")},
+	}
+	// the pictures only when there are any, as on the verse's own page
+	if media {
+		secs = append(secs, UnfoldSection{
+			Title: html.EscapeString(txt.MediaHeading), Ref: MediaRef, Order: orderMedia,
+			Lazy: hopPartURL(ref, PartMedia, ""),
+		})
 	}
 	if len(footnoteLinks(text)) > 0 {
 		secs = append(secs, UnfoldSection{
@@ -136,10 +143,15 @@ func hopVerseSections(n unfold.Node, level int, txt *i18n.Messages) []UnfoldSect
 		cited = unfold.Cited{Ref: title, Lazy: citedURL(refs)}
 	}
 	if n.Parts.Lazy {
-		return lazyVerseSections(refs, title, n.HTML, cited, txt)
+		return lazyVerseSections(refs, title, n.HTML, cited, len(n.Media) > 0, txt)
 	}
 	var secs sectionList
 	secs.add(hopNotesSection(n.Notes, n.StudyErr, n.Parts.NoteRefs, level, txt))
+	if len(n.Media) > 0 {
+		secs = append(secs, UnfoldSection{
+			Title: html.EscapeString(txt.MediaHeading), Ref: MediaRef, Order: orderMedia, Body: mediaBody(n.Media),
+		})
+	}
 	secs.add(hopFootnotesSection(n.Parts.Footnotes, level, txt))
 	secs = append(secs, indexSections(n.Links, n.Parts.Research, level, txt)...)
 	if len(n.Children) > 0 {
