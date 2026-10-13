@@ -574,8 +574,8 @@ type articlePage struct {
 	// publications quoting what it cites leave it out.
 	DocID int
 	// Crumbs lead up through the publications to the shelf the document is
-	// filed under, as on a page of the publications; none for a document
-	// filed nowhere.
+	// filed under, as on a page of the publications; for a document filed
+	// nowhere, the publications and the document itself.
 	Crumbs []crumb
 }
 
@@ -613,6 +613,14 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	page.Unfold, page.AutoUnfold = depth, auto
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Title = firstNonEmpty(art.Title, "Article")
+	if len(page.Crumbs) == 0 && art.Title != "" {
+		// filed nowhere the library says: read among the publications, the
+		// document itself the trail's end
+		page.Crumbs = []crumb{
+			{Label: text(lng).UINavPublications, Href: page.WithLang("/pub")},
+			{Label: art.Title},
+		}
+	}
 	page.Heading = ownHeading(art.Title, page.Body)
 	page.URL = art.URL
 	page.SiteURL = art.URL
