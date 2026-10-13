@@ -1400,7 +1400,7 @@ var headingNumber = regexp.MustCompile(`\s(\d+)(?:[:,\-–\s]|$)`)
 func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int) template.HTML {
 	wolBase := s.svc.HTTP.Base.WOL
 	var b strings.Builder
-	for i, p := range res.Passages {
+	for _, p := range res.Passages {
 		edition := firstNonEmpty(p.Bible, page.Edition)
 		fmt.Fprintf(&b, `<section class="passage" data-bible="%s"`, template.HTMLEscapeString(edition))
 		if p.Book > 0 && p.Chapter > 0 {
@@ -1411,13 +1411,6 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			chapterHref = page.chapterHref(edition, res.Table.Name(p.Book), p.Chapter)
 		}
 		fmt.Fprintf(&b, `><h2>%s</h2>`, headingHTML(p.Heading(), p.Chapter, chapterHref))
-		// part of a chapter leads to all of it below its verses
-		whole := ""
-		if !p.Whole && chapterHref != "" {
-			whole = fmt.Sprintf(`<p class="whole-chapter"><a class="btn" href="%s">%s</a></p>`,
-				template.HTMLEscapeString(chapterHref),
-				template.HTMLEscapeString(page.T.UIWholeChapter))
-		}
 		b.WriteString(`<div class="items">`)
 		for _, v := range p.Verses {
 			b.WriteString(outlineBlock(v.Outline))
@@ -1435,10 +1428,6 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			b.WriteString(`</div>`)
 		}
 		b.WriteString(`</div>`)
-		// the last one's is in the chapter nav under the reading
-		if i < len(res.Passages)-1 {
-			b.WriteString(whole)
-		}
 		if p.UnfoldNote != "" {
 			fmt.Fprintf(&b, `<p class="note">%s</p>`, template.HTMLEscapeString(p.UnfoldNote))
 		}
