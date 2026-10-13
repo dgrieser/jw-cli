@@ -43,6 +43,9 @@ func (c *Client) documentPage(ctx context.Context, pageURL string) (*goquery.Doc
 	return c.hc.GetHTML(ctx, pageURL)
 }
 
+// selDocLocation is the link to the library page a document is filed under.
+const selDocLocation = "li.documentLocation a[href]"
+
 // contentSelectors are tried in order to find the document body; kept
 // together so live layout drift is cheap to fix.
 var contentSelectors = []string{"#article", "article", ".bodyTxt", "main"}
@@ -76,6 +79,12 @@ func parseDocument(doc *goquery.Document, base string) model.Article {
 	}
 	art.Images = htmlx.Images(content, base)
 	art.ScriptureRefs = htmlx.ScriptureRefs(content, base)
+	// where the library files it: the navigation's entry for the document
+	if a := doc.Find(selDocLocation).First(); a.Length() > 0 {
+		if shelf := cardLink(a.AttrOr("href", ""), base); shelf.Kind == LibraryKind || shelf.Kind == PublicationKind {
+			art.ShelfKind, art.ShelfPath = shelf.Kind, shelf.Path
+		}
+	}
 	return art
 }
 

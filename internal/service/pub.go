@@ -32,6 +32,27 @@ func (s *Service) Library(ctx context.Context, lng model.Language, kind, path st
 	return s.WOL.CanonicalLibrary(ctx, cfg, canon, kind, path)
 }
 
+// Shelf is the library page a document is filed under (model.Article's
+// ShelfKind and ShelfPath), named by its canonical path as Library takes it.
+func (s *Service) Shelf(ctx context.Context, lng model.Language, kind, path string) (wol.LibraryPage, error) {
+	if kind != wol.LibraryKind {
+		return s.Library(ctx, lng, kind, path)
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return wol.LibraryPage{}, err
+	}
+	canon, err := s.WOL.ConfigFor(ctx, LibraryLocale)
+	if err != nil {
+		return wol.LibraryPage{}, err
+	}
+	canonPath, err := s.WOL.CanonicalLibraryPath(ctx, cfg, canon, path)
+	if err != nil {
+		return wol.LibraryPage{}, err
+	}
+	return s.WOL.CanonicalLibrary(ctx, cfg, canon, kind, canonPath)
+}
+
 // LibraryFiles is the downloadable files of the publication a library page
 // shows, in every format the publication media API carries. A page that is no
 // one publication has none.
