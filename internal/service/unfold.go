@@ -199,8 +199,31 @@ func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study
 		out.Notes = append(out.Notes, s.Notes...)
 		out.Research = append(out.Research, s.Research...)
 		out.Links = append(out.Links, s.Links...)
+		out.Media = append(out.Media, s.Media...)
 	}
 	return out, nil
+}
+
+// KnownStudy answers unfold.KnownStudier: a verse's study pane when every
+// chapter it needs was read before, by this expansion or this service.
+func (r *tooltipResolver) KnownStudy(ctx context.Context, title string) (unfold.Study, bool) {
+	if r.table == nil {
+		r.table = r.s.BookTable(ctx, r.lng)
+	}
+	refs, err := bibleref.Parse(title, r.table)
+	if err != nil || len(refs) == 0 {
+		return unfold.Study{}, false
+	}
+	for _, ref := range refs {
+		key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+		_, cached := r.sections[key]
+		_, borrowed := r.docs[key]
+		if _, known := r.chapterMemo(ctx, ref.Book, ref.Chapter); !cached && !borrowed && !known {
+			return unfold.Study{}, false
+		}
+	}
+	s, err := r.Study(ctx, title)
+	return s, err == nil && s.Requests == 0
 }
 
 // Cited answers unfold.CitedResolver: who quotes the verse a citation resolved
