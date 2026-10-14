@@ -89,6 +89,8 @@ var en = Messages{
 	MediaHeading:             "Media gallery",
 	StudyFailed:              "the study notes on this verse could not be read: %s",
 
+	CitedFailed: "the quotations could not be listed: %s",
+
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
 

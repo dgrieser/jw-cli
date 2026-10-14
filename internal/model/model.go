@@ -472,4 +472,21 @@ type Tooltip struct {
 	URL              string `json:"url,omitempty"`
 	ImageURL         string `json:"imageUrl,omitempty"`
 	PublicationTitle string `json:"publicationTitle,omitempty"`
+	// DocID is the document the passage belongs to as the answer's classes
+	// name it — all a footnote, which has no URL, says of where it is from —
+	// and Bible says that document is bible text: a book of a bible.
+	DocID int  `json:"docId,omitempty"`
+	Bible bool `json:"bible,omitempty"`
+	// More are the passages after the first of a citation that names
+	// several: a marginal reference pointing at seven verses is one citation
+	// answered with seven passages. The fields above are the first of them.
+	More []Tooltip `json:"more,omitempty"`
+}
+
+// Items are every passage the citation was answered with, the first one
+// included, each on its own.
+func (t Tooltip) Items() []Tooltip {
+	first := t
+	first.More = nil
+	return append([]Tooltip{first}, t.More...)
 }

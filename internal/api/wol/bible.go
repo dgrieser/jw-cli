@@ -408,17 +408,11 @@ func (c *Client) MarginalReference(ctx context.Context, srcURL string) (string, 
 }
 
 // Tooltip fetches a wol bc/pc citation endpoint as JSON (publication
-// excerpts, verse popups).
+// excerpts, verse popups). Every passage the citation names is kept: the
+// first as the tooltip, the others as its More.
 func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, error) {
 	var resp struct {
-		Items []struct {
-			Title            string `json:"title"`
-			Caption          string `json:"caption"`
-			Content          string `json:"content"`
-			URL              string `json:"url"`
-			ImageURL         string `json:"imageUrl"`
-			PublicationTitle string `json:"publicationTitle"`
-		} `json:"items"`
+		Items []tooltipItem `json:"items"`
 	}
 	// citation paths taken straight out of a document are relative, and carry a
 	// locale segment that has to come off first
@@ -430,17 +424,7 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 	if len(resp.Items) == 0 {
 		return model.Tooltip{}, fmt.Errorf("no citation content at %s", tcURL)
 	}
-	it := resp.Items[0]
-	// asked without a locale, the endpoint answers without one too — in the
-	// passage's own links as much as in its URL
-	return model.Tooltip{
-		Title:            it.Title,
-		Caption:          it.Caption,
-		ContentHTML:      relocalize(it.Content, locale),
-		URL:              absURL(c.hc.Base.WOL, relocalizeURL(it.URL, locale)),
-		ImageURL:         absURL(c.hc.Base.WOL, relocalizeURL(it.ImageURL, locale)),
-		PublicationTitle: it.PublicationTitle,
-	}, nil
+	return c.tooltip(resp.Items, locale), nil
 }
 
 // LocalizedBookNames extracts the localized bible book names from the bible

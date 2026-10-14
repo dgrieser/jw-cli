@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
@@ -54,9 +56,10 @@ type UnfoldSection struct {
 	// Unwrap hands out what the section holds without the section: the body
 	// of a lazy section that already stands on the page with its heading.
 	Unwrap bool
-	// Doc is the document the section's passage was lifted out of, by docid;
-	// zero when it is not known. A page leaves it out of the publications
-	// quoting the verses inside the section.
+	// Doc is the document the section's passage was lifted out of, by docid
+	// — for bible text a citation brought, the document citing it; zero when
+	// it is not known. A page leaves it out of the publications quoting the
+	// verses inside the section.
 	Doc int
 }
 
@@ -198,11 +201,21 @@ func (s *Service) StreamPassageParts(ctx context.Context, lng model.Language, ed
 // self are the documents the page read the passage from — an article citing
 // it, the passage of another article that did: a publication is never listed
 // as quoting a verse in the very document the reader followed it from.
+//
+// A search that fails is the error, worded for the reader in the passage's
+// language: who quotes the passage is not known, which a page must not show
+// as nobody quoting it.
 func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bibleref.Ref, self []int,
 	out UnfoldStream) (int, error) {
 	out.stage(StageCited)
 	r := newTooltipResolver(s, lng, nil).withCited(ctx, true).excluding(self...)
 	c := r.citedFor(ctx, refs, "")
+	if c.Err != nil {
+		if err := ctx.Err(); err != nil {
+			return c.Requests, err
+		}
+		return c.Requests, citedFailure{text: fmt.Sprintf(i18n.TextFor(lng.Locale).CitedFailed, c.Err), err: c.Err}
+	}
 	for i, item := range c.Results {
 		var b strings.Builder
 		writeCitedItems(&b, []model.Result{item}, SectionLevel)
@@ -211,6 +224,15 @@ func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bi
 	}
 	return c.Requests, ctx.Err()
 }
+
+// citedFailure is a citation search that failed, worded for the reader.
+type citedFailure struct {
+	text string
+	err  error
+}
+
+func (e citedFailure) Error() string { return e.text }
+func (e citedFailure) Unwrap() error { return e.err }
 
 // splitHeading takes the heading a writer opened its output with apart from
 // what follows it: the inside of the heading, already HTML, and the rest.
@@ -270,16 +292,28 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 		cfg.Verses = unfold.NewVerses()
 	}
 	depth := max(cfg.Depth, 1)
-	r := hopResolver(s, lng, nil)
+	var plan []unfold.Ref
+	var self []int
+	// the citation of a publication before, which one naming a page alone
+	// continues ("it-2 53, 760")
+	prev := ""
+	for _, c := range refs {
+		if unfold.IsCitation(c.Path) {
+			ref := unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)}
+			if !ref.IsVerse() {
+				ref.Text = unfold.Continue(prev, ref.Text)
+				prev = ref.Text
+			}
+			plan = append(plan, ref)
+			self = append(self, citingDoc(c.Path))
+		}
+	}
+	// the document the block is part of is never listed as quoting what it
+	// cites, whatever the page knows of it
+	r := hopResolver(s, lng, nil, self...)
 	sess := unfold.NewSession(r, unfoldOptions(cfg))
 	sess.Spend(cfg.Spent)
 	spent := func() int { return sess.Requests() - cfg.Spent }
-	var plan []unfold.Ref
-	for _, c := range refs {
-		if unfold.IsCitation(c.Path) {
-			plan = append(plan, unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)})
-		}
-	}
 	if ok, err := sess.Check(1, sess.CostHops(plan, depth)); err != nil || !ok {
 		return "", 0, err
 	}
@@ -298,17 +332,19 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 				tip, err = r.Resolve(ctx, ref.Path)
 				sess.Spend(1)
 			}
-			passages := passageRefs(tip.ContentHTML)
+			// every verse the citation names that is not shown yet
+			left, ok := unshownItems(tip, cfg.Verses)
+			if err == nil && !ok {
+				continue
+			}
+			passages := itemPassageRefs(left)
 			if len(passages) == 0 {
 				// the verses as a chapter read before holds them, which carry
 				// no ids: the ones the citation names
 				passages = verseIDRefs(r.VersesOf(ctx, ref))
 			}
 			if err == nil && len(passages) > 0 {
-				if cfg.Verses.Shown(unfold.VerseIDs(tip.ContentHTML)) {
-					continue
-				}
-				note, err := s.streamCitedPassage(ctx, lng, i, ref, tip, passages, sess, cfg, txt, out)
+				note, err := s.streamCitedPassage(ctx, lng, i, ref, joinItems(left), passages, sess, cfg, txt, out)
 				if err != nil {
 					return joinNotes(notes), spent(), err
 				}
@@ -349,6 +385,7 @@ func (s *Service) streamCitedPassage(ctx context.Context, lng model.Language, i 
 	key := fmt.Sprintf("verse%d", i)
 	out.Section(UnfoldSection{
 		Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(ref.Path), Key: key,
+		Doc: citingDoc(ref.Path),
 	})
 	table := s.BookTable(ctx, lng)
 	var notes []string
@@ -409,6 +446,50 @@ func passageRefs(passage string) []bibleref.Ref {
 	return out
 }
 
+// unshownItems are the passages of a citation of bible text that bring a
+// verse not shown yet, and ok is false when none does. A passage without verse
+// ids — bible text a chapter read before holds — is no repeat of anything.
+func unshownItems(tip model.Tooltip, shown *unfold.Verses) ([]model.Tooltip, bool) {
+	var out []model.Tooltip
+	for _, item := range tip.Items() {
+		if !shown.Shown(unfold.VerseIDs(item.ContentHTML)) {
+			out = append(out, item)
+		}
+	}
+	return out, len(out) > 0
+}
+
+// itemPassageRefs is the bible text of the passages of a citation, passage by
+// passage: two verses of one chapter a marginal reference names apart are two
+// passages, not the stretch between them.
+func itemPassageRefs(items []model.Tooltip) []bibleref.Ref {
+	var out []bibleref.Ref
+	for _, item := range items {
+		out = append(out, passageRefs(item.ContentHTML)...)
+	}
+	return out
+}
+
+// joinItems is the passages of a citation as one: their texts one after the
+// other, titled with all their titles.
+func joinItems(items []model.Tooltip) model.Tooltip {
+	if len(items) == 0 {
+		return model.Tooltip{}
+	}
+	out := items[0]
+	if len(items) == 1 {
+		return out
+	}
+	titles := make([]string, len(items))
+	var text strings.Builder
+	for i, item := range items {
+		titles[i] = strings.TrimRight(item.Title, ",;. ")
+		text.WriteString(item.ContentHTML)
+	}
+	out.Title, out.ContentHTML, out.More = strings.Join(titles, "; "), text.String(), nil
+	return out
+}
+
 // verseIDRefs is passageRefs for verse ids (book*1e6 + chapter*1e3 + verse).
 func verseIDRefs(ids []int) []bibleref.Ref {
 	var out []bibleref.Ref
@@ -435,15 +516,106 @@ func joinNotes(notes []string) string { return strings.Join(notes, " ") }
 
 // CitationPage is where a citation of the library leads when it is read on a
 // page of its own: the bible text it quotes, or else the document it was
-// taken from (docURL, without the anchor naming the passage).
+// taken from (docURL, without the anchor naming the passage). A footnote leads
+// to the document it belongs to: for one of the bible, the verse carrying its
+// marker, or the book's first chapter when that cannot be told. A link
+// written without a locale, as wol's own endpoints are, is read in the
+// locale of lng: wol answers it with links without one too, which lead
+// nowhere.
 func (s *Service) CitationPage(ctx context.Context, lng model.Language, path string) (refs []bibleref.Ref, docURL string, err error) {
+	path = s.withLocale(ctx, lng, path)
 	tip, err := newTooltipResolver(s, lng, nil).Resolve(ctx, path)
 	if err != nil {
 		return nil, "", err
 	}
-	if refs = passageRefs(tip.ContentHTML); len(refs) > 0 {
+	if refs = itemPassageRefs(tip.Items()); len(refs) > 0 {
 		return refs, "", nil
+	}
+	if IsFootnote(path) && tip.URL == "" {
+		return s.footnotePage(ctx, path, tip)
 	}
 	docURL, _, _ = strings.Cut(tip.URL, "#")
 	return nil, docURL, nil
+}
+
+// withLocale is a link of the library with a locale: its own, or the one the
+// library of lng is read in when it has none ("/wol/pc/r10/lp-x/...").
+func (s *Service) withLocale(ctx context.Context, lng model.Language, path string) string {
+	if !strings.HasPrefix(path, "/wol/") {
+		return path
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil || cfg.Locale == "" {
+		return path
+	}
+	return "/" + cfg.Locale + path
+}
+
+// footnoteLink matches the link of a footnote marker,
+// "/de/wol/fn/r10/lp-x/1001070147/8": the locale and the library the document
+// it belongs to is read in.
+var footnoteLink = regexp.MustCompile(`^/([\w-]+)/wol/fn/([^/]+)/([^/]+)/\d+/`)
+
+// footnotePage is where a footnote leads, as CitationPage says: its answer
+// names the document by id alone, which is read in the locale and library
+// the marker's link names.
+func (s *Service) footnotePage(ctx context.Context, path string, tip model.Tooltip) ([]bibleref.Ref, string, error) {
+	m := footnoteLink.FindStringSubmatch(RefPath(path))
+	if m == nil || tip.DocID == 0 {
+		return nil, "", nil
+	}
+	docURL := fmt.Sprintf("%s/%s/wol/d/%s/%s/%d", s.HTTP.Base.WOL, m[1], m[2], m[3], tip.DocID)
+	if !tip.Bible {
+		return nil, docURL, nil
+	}
+	// a book of the bible is one document; the verse is the one whose text
+	// carries the marker, and it is read in the bible rather than as an
+	// article
+	art, err := s.WOL.DocumentByURL(ctx, docURL)
+	if err != nil {
+		return nil, "", err
+	}
+	if ref, ok := footnoteVerse(art.HTML, path); ok {
+		return []bibleref.Ref{ref}, "", nil
+	}
+	return nil, docURL, nil
+}
+
+// footnoteVerse is the verse of a bible document carrying the marker of the
+// footnote at path, or, when no verse carries it, the first chapter of the
+// document; ok is false for a document that is no bible text at all.
+func footnoteVerse(document, path string) (bibleref.Ref, bool) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(document))
+	if err != nil {
+		return bibleref.Ref{}, false
+	}
+	marker := RefPath(path)
+	marker = marker[strings.Index(marker, footnotePath):]
+	var at *goquery.Selection
+	doc.Find(`a[href*="` + footnotePath + `"]`).EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		if strings.HasSuffix(RefPath(a.AttrOr("href", "")), marker) {
+			at = a
+		}
+		return at == nil
+	})
+	if at != nil {
+		if m := verseSpan.FindStringSubmatch(at.Closest("span.v").AttrOr("id", "")); m != nil {
+			return spanRef(m), true
+		}
+	}
+	// the marker is not where the document has it: the book, at its start
+	if m := verseSpan.FindStringSubmatch(doc.Find("span.v[id]").First().AttrOr("id", "")); m != nil {
+		ref := spanRef(m)
+		ref.VerseStart, ref.VerseEnd = 0, 0
+		return ref, true
+	}
+	return bibleref.Ref{}, false
+}
+
+// spanRef is the verse a verseSpan match names.
+func spanRef(m []string) bibleref.Ref {
+	book, _ := strconv.Atoi(m[1])
+	chapter, _ := strconv.Atoi(m[2])
+	verse, _ := strconv.Atoi(m[3])
+	return bibleref.Ref{Book: book, Chapter: chapter, VerseStart: verse, VerseEnd: verse}
 }

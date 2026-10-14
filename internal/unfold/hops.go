@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 // An expansion counted in bible references (Options.Hops) reads a verse the way
@@ -204,23 +206,45 @@ func (s *Session) shownAlready(n *Node) bool {
 // other one lists. What it cost is spent like everything else.
 func (s *Session) Show(ctx context.Context, refs []Ref) error {
 	s.run++
+	var nodes []*Node
 	for _, ref := range refs {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		if s.seen[ref.Path] {
 			continue
 		}
 		s.seen[ref.Path] = true
-		tip, err := s.r.Resolve(ctx, ref.Path)
-		s.Spend(1)
+		nodes = append(nodes, &Node{Ref: ref})
+	}
+	// read as a level is, several at a time, and weighed in order once back
+	tips := make(map[*Node]model.Tooltip, len(nodes))
+	var mu sync.Mutex
+	p := &pass{s: s, quiet: true}
+	spent, _, err := p.each(ctx, nodes, func(n *Node) int {
+		tip, err := s.r.Resolve(ctx, n.Ref.Path)
 		if err != nil {
+			n.Err = err
+			return 1
+		}
+		mu.Lock()
+		tips[n] = tip
+		mu.Unlock()
+		return 1
+	})
+	s.Spend(spent)
+	if err != nil {
+		return err
+	}
+	for _, ref := range nodes {
+		if ref.Err != nil {
 			continue
 		}
-		n := Node{Ref: ref, Title: tip.Title, HTML: tip.ContentHTML, URL: tip.URL}
-		if text := plainText(&n); text != "" {
-			doc := document(&n)
-			s.shown[doc] = append(s.shown[doc], passage{path: ref.Path, text: text, rank: ref.Rank, run: s.run})
+		// every passage the citation names says what it says
+		for i, item := range tips[ref].Items() {
+			path := ItemPath(ref.Ref.Path, i+1)
+			n := Node{Ref: ref.Ref, Title: item.Title, HTML: item.ContentHTML, URL: item.URL}
+			if text := plainText(&n); text != "" {
+				doc := document(&n)
+				s.shown[doc] = append(s.shown[doc], passage{path: path, text: text, rank: ref.Ref.Rank, run: s.run})
+			}
 		}
 	}
 	return nil
@@ -289,7 +313,7 @@ func notesHTML(n *Node) string {
 
 // runHops is Run for an expansion counted in bible references.
 func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err error) {
-	r, o := s.r, s.o
+	r := s.r
 	res = Grouped{Nodes: make([][]Node, len(groups))}
 	s.run++
 	defer func() {
@@ -323,7 +347,8 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		for _, n := range nodes {
 			if known != nil {
 				if tip, ok := known.Known(ctx, n.Ref); ok {
-					n.Title, n.HTML, n.URL, n.ready = tip.Title, tip.ContentHTML, tip.URL, true
+					n.resolved(tip)
+					n.ready = true
 					continue
 				}
 			}
@@ -331,17 +356,18 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		}
 		return unknown
 	}
-	resolve := func(n *Node) {
+	// resolve reads what is not at hand, and returns what that cost
+	resolve := func(n *Node) int {
 		if n.ready {
-			return
+			return 0
 		}
 		tip, err := r.Resolve(ctx, n.Ref.Path)
-		res.Requests++
 		if err != nil {
 			n.Err = err
-			return
+			return 1
 		}
-		n.Title, n.HTML, n.URL = tip.Title, tip.ContentHTML, tip.URL
+		n.resolved(tip)
+		return 1
 	}
 	for level := 1; ; level++ {
 		frontier := nodesIn(tiers)
@@ -370,39 +396,61 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		if ok, err := ask(level, s.hopCost(frontier)-(len(frontier)-unknown), len(frontier)); err != nil || !ok {
 			return res, err
 		}
-		research := map[string][]Ref{}
-		for i, n := range frontier {
-			if err := ctx.Err(); err != nil {
-				res.Pending += len(frontier) - i
+		research := &refsByPath{}
+		// what a verse brings beside its text: where who quotes it loads
+		// from, and with references left its study material
+		verse := func(n *Node) int {
+			if n.Err != nil || !n.Ref.IsVerse() {
+				return 0
+			}
+			requests := 0
+			n.Parts = &Parts{Lazy: n.Hops <= 0}
+			if cited != nil {
+				c := cited.Cited(ctx, n.Title)
+				requests += c.Requests
+				n.setCited(c)
+			}
+			if n.Hops > 0 && study != nil {
+				st, err := study.Study(ctx, n.Title)
+				requests += st.Requests
+				if err != nil {
+					n.StudyErr = err
+				} else {
+					n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
+					research.set(n.Ref.Path, st.Research)
+				}
+			} else if ks, ok := study.(KnownStudier); ok && study != nil {
+				// what loads once opened: its pictures, if they are known
+				if st, ok := ks.KnownStudy(ctx, n.Title); ok {
+					n.Media, n.MediaKnown = st.Media, true
+				}
+			}
+			return requests
+		}
+		lv := s.pass(level)
+		spent, left, err := lv.each(ctx, frontier, func(n *Node) int { return resolve(n) + verse(n) })
+		res.Requests += spent
+		if err != nil {
+			res.Pending += left
+			return res, err
+		}
+		// a citation answered with several passages is a reference for each:
+		// a verse among them shown already is left out before its material is
+		// read, and what the others bring is asked about before it is spent
+		shownBefore := func(n *Node) bool { return !n.Ref.IsVerse() || !s.o.Verses.Shown(VerseIDs(n.HTML)) }
+		if items := s.splitItems(tiers, shownBefore); len(items) > 0 {
+			if cost := s.hopCost(items) - len(items); cost > 0 {
+				if ok, err := ask(level, cost, len(items)); err != nil || !ok {
+					return res, err
+				}
+			}
+			spent, left, err := lv.each(ctx, items, verse)
+			res.Requests += spent
+			if err != nil {
+				res.Pending += left
 				return res, err
 			}
-			resolve(n)
-			if n.Err == nil && n.Ref.IsVerse() {
-				n.Parts = &Parts{Lazy: n.Hops <= 0}
-				if cited != nil {
-					c := cited.Cited(ctx, n.Title)
-					res.Requests += c.Requests
-					n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy = c.Results, c.Total, c.Ref, c.Lazy
-				}
-				if n.Hops > 0 && study != nil {
-					st, err := study.Study(ctx, n.Title)
-					res.Requests += st.Requests
-					if err != nil {
-						n.StudyErr = err
-					} else {
-						n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
-						research[n.Ref.Path] = st.Research
-					}
-				} else if ks, ok := study.(KnownStudier); ok && study != nil {
-					// what loads once opened: its pictures, if they are known
-					if st, ok := ks.KnownStudy(ctx, n.Title); ok {
-						n.Media, n.MediaKnown = st.Media, true
-					}
-				}
-			}
-			if o.Progress != nil {
-				o.Progress(level, i+1, len(frontier))
-			}
+			frontier = nodesIn(tiers)
 		}
 		// a verse shown already is not shown again; a passage saying what
 		// another one says, as at any level
@@ -436,7 +484,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 			if n.Parts == nil || n.Parts.Lazy {
 				continue
 			}
-			n.Parts.Research = s.planHops(research[n.Ref.Path], n.Hops)
+			n.Parts.Research = s.planHops(research.get(n.Ref.Path), n.Hops)
 			for _, p := range footnotePaths(n.HTML) {
 				if s.seen[p] {
 					continue
@@ -455,12 +503,12 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 				return res, err
 			}
 		}
-		for _, n := range append(nodesIn(footnotes), nodesIn(indexes)...) {
-			if err := ctx.Err(); err != nil {
-				return res, err
-			}
-			resolve(n)
+		spent, _, err = lv.each(ctx, append(nodesIn(footnotes), nodesIn(indexes)...), resolve)
+		res.Requests += spent
+		if err != nil {
+			return res, err
 		}
+		s.splitItems(append(footnotes, indexes...), nil)
 		// the two indexes of a verse regularly point at one passage
 		if dropped := duplicates(nodesIn(indexes), s.shown, s.run, level); len(dropped) > 0 {
 			for _, list := range indexes {

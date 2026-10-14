@@ -151,17 +151,14 @@ func DocIDFromURL(u string) int { return docIDFromURL(u) }
 
 var docIDPattern = regexp.MustCompile(`(?:/d/[^/]+/[^/]+/|docid=)(\d+)`)
 
+// docIDFromURL reads the id of a document link (/{loc}/wol/d/r1/lp-e/1102025912)
+// or a finder link (?docid=), and nothing else: the numbers ending a daily text
+// (/wol/dt/r1/lp-e/2026/1/1) or a week of meetings are a date, and those of a
+// citation (/wol/pc/r1/lp-e/1102026209/13/0) name the document citing it.
 func docIDFromURL(u string) int {
 	if m := docIDPattern.FindStringSubmatch(u); m != nil {
 		id, _ := strconv.Atoi(m[1])
 		return id
-	}
-	// /{loc}/wol/d/r1/lp-e/1102025912 -> last path segment
-	parts := strings.Split(strings.TrimRight(u, "/"), "/")
-	if len(parts) > 0 {
-		if id, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
-			return id
-		}
 	}
 	return 0
 }

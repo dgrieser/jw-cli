@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
@@ -74,10 +75,15 @@ type UnfoldConfig struct {
 const studyEdition = "nwtsty"
 
 // tooltipResolver adapts the wol client to unfold.Resolver, and reads the study
-// pane of every verse an expansion touches.
+// pane of every verse an expansion touches. It is safe for concurrent use, as
+// an expansion resolving several references at once needs
+// (unfold.Options.Workers): what it keeps is behind mu, and a chapter is read
+// by one of the verses asking for it while the others wait for it.
 type tooltipResolver struct {
-	s     *Service
-	lng   model.Language
+	s   *Service
+	lng model.Language
+	mu  sync.Mutex
+	// table is the language's book table, read once it is first needed
 	table *bibleref.Table
 	// cited turns the citation search on; cats is the publication filter it
 	// runs with, resolved once for the language.
@@ -98,6 +104,8 @@ type tooltipResolver struct {
 	// docs are chapter pages the caller already holds, borrowed rather than
 	// fetched again. Same key as sections.
 	docs map[string]*wol.ChapterDoc
+	// reading holds a lock per chapter being read, same key as sections
+	reading map[string]*sync.Mutex
 	// self are the documents the expansion is read from, by docid: a
 	// publication quoting a verse is never the document that cited the verse
 	// in the first place.
@@ -125,7 +133,27 @@ func (r *tooltipResolver) isSelf(item model.Result) bool {
 }
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
-	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
+	return &tooltipResolver{
+		s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs,
+		reading: map[string]*sync.Mutex{},
+	}
+}
+
+// bookTable is the language's book table, read when it is first needed.
+func (r *tooltipResolver) bookTable(ctx context.Context) *bibleref.Table {
+	r.mu.Lock()
+	table := r.table
+	r.mu.Unlock()
+	if table != nil {
+		return table
+	}
+	table = r.s.BookTable(ctx, r.lng)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.table == nil {
+		r.table = table
+	}
+	return r.table
 }
 
 // withCited turns the citation search on for this run, with the filter
@@ -152,7 +180,18 @@ func (r *tooltipResolver) withCited(ctx context.Context, on bool) *tooltipResolv
 }
 
 func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
-	if tip, ok := r.tips[path]; ok {
+	// one of several passages a citation names is asked for as the citation
+	if base, item := unfold.SplitItemPath(path); base != path {
+		tip, err := r.Resolve(ctx, base)
+		if err != nil {
+			return tip, err
+		}
+		if items := tip.Items(); item <= len(items) {
+			return items[item-1], nil
+		}
+		return model.Tooltip{}, fmt.Errorf("no passage %d at %s", item, base)
+	}
+	if tip, ok := r.kept(path); ok {
 		return tip, nil
 	}
 	r.s.mem.init()
@@ -164,17 +203,37 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 	if err != nil {
 		return tip, err
 	}
-	if strings.TrimSpace(tip.ContentHTML) == "" && tip.URL != "" {
-		// wol names some passages — a box of a book, a sidebar — without
-		// their text; the document it links to has them. Best effort: the
-		// title and the link are still worth showing without it
-		if passage, err := r.s.WOL.Passage(ctx, tip.URL); err == nil {
-			tip.ContentHTML = passage
-		}
+	var complete bool
+	tip.ContentHTML, complete = r.passageOf(ctx, tip)
+	for i := range tip.More {
+		var ok bool
+		tip.More[i].ContentHTML, ok = r.passageOf(ctx, tip.More[i])
+		complete = complete && ok
+	}
+	if !complete {
+		// a passage that could not be read is a gap of this moment, not what
+		// the citation says: neither this run nor the next one takes it as
+		// the answer, so the next asking reads it again
+		return tip, nil
 	}
 	r.keep(path, tip)
 	r.s.mem.rememberTip(r.lng, path, tip)
 	return tip, nil
+}
+
+// passageOf is the text of one passage a citation was answered with. wol names
+// some passages — a box of a book, a sidebar — without their text; the
+// document it links to has them. Best effort: the title and the link are still
+// worth showing without it, and ok says whether the document could be read.
+func (r *tooltipResolver) passageOf(ctx context.Context, tip model.Tooltip) (string, bool) {
+	if strings.TrimSpace(tip.ContentHTML) != "" || tip.URL == "" {
+		return tip.ContentHTML, true
+	}
+	passage, err := r.s.WOL.Passage(ctx, tip.URL)
+	if err != nil {
+		return tip.ContentHTML, false
+	}
+	return passage, true
 }
 
 // Study reads the study pane of the verse wol titled a citation with. wol titles
@@ -182,10 +241,7 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 // locates the chapter page the pane lives on; a title that is not a reference
 // belongs to something other than a verse and has no pane to look for.
 func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study, error) {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil {
 		return unfold.Study{}, nil
 	}
@@ -207,17 +263,16 @@ func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study
 // KnownStudy answers unfold.KnownStudier: a verse's study pane when every
 // chapter it needs was read before, by this expansion or this service.
 func (r *tooltipResolver) KnownStudy(ctx context.Context, title string) (unfold.Study, bool) {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil || len(refs) == 0 {
 		return unfold.Study{}, false
 	}
 	for _, ref := range refs {
 		key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+		r.mu.Lock()
 		_, cached := r.sections[key]
 		_, borrowed := r.docs[key]
+		r.mu.Unlock()
 		if _, known := r.chapterMemo(ctx, ref.Book, ref.Chapter); !cached && !borrowed && !known {
 			return unfold.Study{}, false
 		}
@@ -231,42 +286,49 @@ func (r *tooltipResolver) KnownStudy(ctx context.Context, title string) (unfold.
 // "Jeremia 33:1-5" is one question, not five — and wol's own title for it is
 // the compact way the language spells it, which is what heads the answer.
 func (r *tooltipResolver) Cited(ctx context.Context, title string) unfold.Cited {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil {
 		return unfold.Cited{}
 	}
 	return r.citedFor(ctx, refs, strings.TrimRight(title, ",;. "))
 }
 
-// addCited lists the publications quoting refs and drops the ones the verse's
-// research guide already points at. Best effort: a search that fails leaves the
-// study material it was meant to complement standing.
 // citedFor lists the publications quoting refs and drops the ones the indexes
 // of the same verses already point at. label is how the reference is spelled
-// over the answer; empty spells it out of the references themselves. Best
-// effort: a search that fails comes back empty, having cost what it cost.
+// over the answer; empty spells it out of the references themselves. A search
+// that fails comes back with its error and no results, having cost what it
+// cost: the verse is worth reading without them, and whoever prints it says
+// they are missing rather than that nobody quotes it.
 func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, label string) unfold.Cited {
 	if !r.cited || len(refs) == 0 {
 		return unfold.Cited{}
 	}
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
+	table := r.bookTable(ctx)
+	spell := func() string {
+		spelled := make([]string, len(refs))
+		for i, ref := range refs {
+			spelled[i] = RefString(ref, table)
+		}
+		return strings.Join(spelled, "; ")
 	}
 	if r.lazyCited {
 		if label == "" {
-			spelled := make([]string, len(refs))
-			for i, ref := range refs {
-				spelled[i] = RefString(ref, r.table)
-			}
-			label = strings.Join(spelled, "; ")
+			label = spell()
 		}
 		return unfold.Cited{Ref: label, Lazy: citedURL(refs, r.self...)}
 	}
-	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
-	if err != nil || query == "" {
+	// failed, the lookup still cost the page it asked for
+	failed := func(err error) unfold.Cited {
+		if label == "" {
+			label = spell()
+		}
+		return unfold.Cited{Ref: label, Err: err, Requests: 1}
+	}
+	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, table)
+	if err != nil {
+		return failed(err)
+	}
+	if query == "" {
 		return unfold.Cited{}
 	}
 	if label == "" {
@@ -278,7 +340,7 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	}
 	found, err := r.s.CitedListing(ctx, r.lng, &p, nil)
 	if err != nil {
-		return unfold.Cited{}
+		return failed(err)
 	}
 	out := unfold.Cited{Total: found.Total, Ref: label, Requests: citedRequests(len(found.Items))}
 	// the indexes of these very verses, read back out of the chapter pages
@@ -358,14 +420,34 @@ func (r *tooltipResolver) namedByResearch(ctx context.Context, st *unfold.Study)
 		add(item.ArticleURL, item.Source)
 		add("", item.Title)
 	}
-	for _, ref := range st.Research {
-		tip, err := r.Resolve(ctx, ref.Path)
+	// read several at a time, as an expansion reads them, and named in the
+	// order the index lists them
+	tips := make([]model.Tooltip, len(st.Research))
+	failed := make([]bool, len(st.Research))
+	var (
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, unfoldWorkers)
+	)
+	for i, ref := range st.Research {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			tip, err := r.Resolve(ctx, ref.Path)
+			tips[i], failed[i] = tip, err != nil
+		}()
+	}
+	wg.Wait()
+	for i, ref := range st.Research {
 		requests++
-		if err != nil {
+		if failed[i] {
 			add("", ref.Text)
 			continue
 		}
-		add(tip.URL, ref.Text)
+		for _, item := range tips[i].Items() {
+			add(item.URL, ref.Text)
+		}
 	}
 	return names, requests
 }
@@ -400,27 +482,10 @@ func normalizeCitation(line string) string {
 
 // studyOf collects the study material of every verse ref covers.
 func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold.Study, error) {
-	key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
-	sections, ok := r.sections[key]
-	var out unfold.Study
-	if !ok {
-		// read before, by this service: nothing to ask
-		cm, known := r.chapterMemo(ctx, ref.Book, ref.Chapter)
-		if !known {
-			doc, borrowed := r.docs[key]
-			if !borrowed {
-				var err error
-				doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
-				out.Requests++
-				if err != nil {
-					return out, err
-				}
-			}
-			cm = newChapterMemo(doc)
-			r.s.mem.chapters.put(chapterKey(r.lng, studyEdition, ref.Book, ref.Chapter), cm)
-		}
-		sections = cm.sections
-		r.sections[key] = sections
+	sections, requests, err := r.chapterSections(ctx, ref)
+	out := unfold.Study{Requests: requests}
+	if err != nil {
+		return out, err
 	}
 	from, to := ref.VerseStart, ref.VerseEnd
 	switch {
@@ -440,7 +505,7 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		}
 		out.Notes = append(out.Notes, sec.Notes...)
 		out.Media = append(out.Media, sec.Media...)
-		for _, item := range sec.Research {
+		for _, item := range researchItems(sec.Research) {
 			if item.PCPath == "" {
 				// a whole article rather than a passage: nothing to resolve
 				out.Links = append(out.Links, item)
@@ -453,6 +518,67 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		}
 	}
 	return out, nil
+}
+
+// chapterSections is the study pane of the chapter ref is in, and what reading
+// it cost. Verses of one chapter asked about at once wait for the one reading
+// it rather than reading it again, so the chapter costs one request however
+// the verses arrive.
+func (r *tooltipResolver) chapterSections(ctx context.Context, ref bibleref.Ref) (map[int]model.StudySection, int, error) {
+	key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+	r.mu.Lock()
+	reading, ok := r.reading[key]
+	if !ok {
+		reading = &sync.Mutex{}
+		r.reading[key] = reading
+	}
+	r.mu.Unlock()
+	reading.Lock()
+	defer reading.Unlock()
+	r.mu.Lock()
+	sections, ok := r.sections[key]
+	doc, borrowed := r.docs[key]
+	r.mu.Unlock()
+	if ok {
+		return sections, 0, nil
+	}
+	requests := 0
+	// read before, by this service: nothing to ask
+	cm, known := r.chapterMemo(ctx, ref.Book, ref.Chapter)
+	if !known {
+		if !borrowed {
+			var err error
+			doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
+			requests++
+			if err != nil {
+				return nil, requests, err
+			}
+		}
+		cm = newChapterMemo(doc)
+		r.s.mem.chapters.put(chapterKey(r.lng, studyEdition, ref.Book, ref.Chapter), cm)
+	}
+	r.mu.Lock()
+	r.sections[key] = cm.sections
+	r.mu.Unlock()
+	return cm.sections, requests, nil
+}
+
+// researchItems are the entries of a verse's indexes, each citing what it
+// points at in full. An index writes "it-2 53, 760, 1000" as an entry per
+// page, and every entry after the first names a page alone, which says
+// nothing on its own: it continues the entry before it in the same index.
+func researchItems(items []model.ResearchItem) []model.ResearchItem {
+	out := make([]model.ResearchItem, len(items))
+	prev := ""
+	for i, item := range items {
+		if i > 0 && items[i-1].Source != item.Source {
+			prev = ""
+		}
+		item.Title = unfold.Continue(prev, item.Title)
+		prev = item.Title
+		out[i] = item
+	}
+	return out
 }
 
 // researchLabel is how a research-guide passage is cited. The entry's own line
@@ -531,14 +657,39 @@ func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art mod
 	if cfg.Hops {
 		// a verse the document cites is the verse unfolded; a passage of
 		// another publication brings the verses it cites, one further down
-		r := hopResolver(s, lng, nil, art.DocID, wol.DocIDFromURL(art.URL))
+		r := hopResolver(s, lng, nil, articleDocs(art)...)
 		return unfoldInlineHops(ctx, r, art.HTML, cfg, cfg.Depth, false, txt)
 	}
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited).excluding(art.DocID, wol.DocIDFromURL(art.URL))
+	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited).excluding(articleDocs(art)...)
 	return unfoldInline(ctx, r, art.HTML, cfg, txt)
+}
+
+// articleDocs are the documents an article is, which are never listed as
+// quoting a verse it cites: its own id, the one its link names, and the ones
+// its citations are written in — which is all a page assembled from documents
+// (a daily text) says about them.
+func articleDocs(art model.Article) []int {
+	ids := []int{art.DocID, wol.DocIDFromURL(art.URL)}
+	for _, ref := range unfold.Refs(art.HTML) {
+		ids = append(ids, citingDoc(ref.Path))
+	}
+	return ids
+}
+
+// citingDocPath matches a citation link, which wol writes as the document
+// holding it and the place in it: "/de/wol/bc/r10/lp-x/1102026200/3/0".
+var citingDocPath = regexp.MustCompile(`/(?:bc|pc|fn)/[^/]+/[^/]+/(\d+)/`)
+
+// citingDoc is the document a citation is written in, zero for anything else.
+func citingDoc(path string) int {
+	if m := citingDocPath.FindStringSubmatch(path); m != nil {
+		id, _ := strconv.Atoi(m[1])
+		return id
+	}
+	return 0
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
@@ -603,20 +754,31 @@ func citingBlocks(doc *goquery.Document) []citingBlock {
 	seen := map[string]bool{}
 	// nothing seen yet: the document's own title is the heading above it
 	heading := documentUnfoldLevel - 1
+	// the citation of a publication before, which one naming a page alone
+	// continues ("it-2 53, 760")
+	prev := ""
 	doc.Find("body *").Each(func(_ int, s *goquery.Selection) {
 		name := goquery.NodeName(s)
 		if level, ok := headingLevel(name); ok {
 			heading = level
 		}
 		href, _ := s.Attr("href")
-		if name != "a" || !unfold.IsCitation(href) || seen[href] {
+		if name != "a" || !unfold.IsCitation(href) {
+			return
+		}
+		text := collapseSpace(s.Text())
+		if !(unfold.Ref{Path: href}).IsVerse() {
+			text = unfold.Continue(prev, text)
+			prev = text
+		}
+		if seen[href] {
 			return
 		}
 		seen[href] = true
 		block, isBlock := blockOf(s)
 		chapter, verse := verseAt(s)
 		cite := citation{
-			ref:     unfold.Ref{Text: collapseSpace(s.Text()), Path: href},
+			ref:     unfold.Ref{Text: text, Path: href},
 			chapter: chapter,
 			verse:   verse,
 		}
@@ -935,12 +1097,19 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 		Progress:  cfg.Progress,
 		Hops:      cfg.Hops,
 		Verses:    cfg.Verses,
+		Workers:   unfoldWorkers,
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
 	}
 	return o
 }
+
+// unfoldWorkers is how many citations an expansion resolves at once. Each is a
+// round trip of a second or more to wol, and the index of a verse lists
+// hundreds of them; the per-host limiter in internal/httpx caps the real rate,
+// as it does for the excerpts of a listing.
+const unfoldWorkers = excerptWorkers
 
 // citedCostEstimate is what one verse's citation lookup is priced at before it
 // runs: two pages of results and a document read for each of them. How many
@@ -1045,6 +1214,11 @@ const refSeparator = " → "
 // text, so both are named — the passage the marker sits in and the one it points
 // at: "Querverweis Apostelgeschichte 24:15 → Jesaja 26:19". At the top level
 // there is no enclosing passage to name, and the label carries the target alone.
+//
+// A citation naming no more than verses or a page is the end of the one before
+// it ("4. Mo. 14:1-10, 20-38", "it-2 53, 760"), which says nothing on its own:
+// a verse is named by its own title, and a page that no citation before it
+// spells out (unfold.Continue) by the publication it is a page of.
 func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
@@ -1060,11 +1234,24 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 		}
 		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source)
 	}
+	if n.Ref.IsVerse() && n.Title != "" && (n.Item > 0 || !hasLetter(ref)) {
+		// one of several verses the citation names, which names them all, or
+		// a citation naming verses alone ("20-38", continuing "4. Mo. 14:1-10"):
+		// the verse's own title says which they are
+		return strings.TrimRight(n.Title, ",;. ")
+	}
+	if !n.Ref.IsVerse() && !hasLetter(ref) && n.Publication != "" {
+		// a page alone, with no citation before it to say of what
+		ref = n.Publication + ", " + ref
+	}
 	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
 		return ref
 	}
 	return ref + refSeparator + n.Title
 }
+
+// hasLetter reports whether s names anything in words rather than numbers.
+func hasLetter(s string) bool { return strings.IndexFunc(s, unicode.IsLetter) >= 0 }
 
 // nodeTitle is the heading of an expanded reference as HTML: a passage of a
 // publication links to the document it was taken from, which a page offers
@@ -1246,7 +1433,8 @@ func splitRootRefs(nodes []unfold.Node, roots []unfold.Ref) (research, marginal 
 		paths[ref.Path] = true
 	}
 	for _, n := range nodes {
-		if paths[n.Ref.Path] {
+		// every passage of a citation goes where the citation does
+		if paths[unfold.CitationPath(n.Ref.Path)] {
 			research = append(research, n)
 			continue
 		}
@@ -1361,9 +1549,12 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 	if len(blocks) == 0 {
 		return content, children
 	}
-	at := map[string]int{}
+	// the children of each citation: every passage it was answered with goes
+	// where the citation stands
+	at := map[string][]int{}
 	for i, c := range children {
-		at[c.Ref.Path] = i
+		path := unfold.CitationPath(c.Ref.Path)
+		at[path] = append(at[path], i)
 	}
 	placed := map[string]bool{}
 	for _, block := range blocks {
@@ -1374,7 +1565,7 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 		}
 		var sub strings.Builder
 		for _, cite := range block.refs {
-			i, ok := at[cite.ref.Path]
+			list, ok := at[cite.ref.Path]
 			if !ok || placed[cite.ref.Path] {
 				// cited here but expanded elsewhere: at another block of this
 				// passage, or not at all because the depth ran out
@@ -1383,8 +1574,10 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 			placed[cite.ref.Path] = true
 			// one at a time: each names the verse it was found in, which is
 			// what a marginal reference has instead of a citation text
-			writeUnfoldNodes(&sub, []unfold.Node{children[i]}, level,
-				verseSource(source, cite.chapter, cite.verse), txt)
+			for _, i := range list {
+				writeUnfoldNodes(&sub, []unfold.Node{children[i]}, level,
+					verseSource(source, cite.chapter, cite.verse), txt)
+			}
 		}
 		if sub.Len() == 0 {
 			continue
@@ -1404,7 +1597,7 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 	out = collapseRules(out)
 	var rest []unfold.Node
 	for _, c := range children {
-		if !placed[c.Ref.Path] {
+		if !placed[unfold.CitationPath(c.Ref.Path)] {
 			rest = append(rest, c)
 		}
 	}

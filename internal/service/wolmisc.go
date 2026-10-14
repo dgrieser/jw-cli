@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -15,7 +18,35 @@ func (s *Service) DailyText(ctx context.Context, lng model.Language, date time.T
 	if err != nil {
 		return model.Article{}, err
 	}
-	return s.WOL.DailyText(ctx, cfg, date)
+	art, err := s.WOL.DailyText(ctx, cfg, date)
+	if err == nil && art.DocID == 0 {
+		// the page is no document of its own: the text is a day of the
+		// month's issue of the year's book, which the element holding it
+		// names — and which is never listed as quoting the verses it cites
+		art.DocID = heldDocID(art.HTML)
+	}
+	return art, err
+}
+
+// heldDocID is the document the outermost element of a fragment marked with
+// one says it holds; zero when none does. A link card names the document it
+// leads to the same way, so links are not asked.
+func heldDocID(fragment string) int {
+	if !strings.Contains(fragment, "docId-") {
+		return 0
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return 0
+	}
+	id := 0
+	doc.Find(`body [class*="docId-"]`).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		if goquery.NodeName(s) != "a" {
+			id = wol.DocIDOfClasses(s.AttrOr("class", ""))
+		}
+		return id == 0
+	})
+	return id
 }
 
 // Meetings fetches the overview of the week's meeting material.

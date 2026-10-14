@@ -447,14 +447,19 @@ order, and leaves out whatever the verse does not have:
 3. **The marginal references**, under one heading naming the verse they belong
    to, each headed by the reference it points at and the verse it came from —
    which is what tells them from the references of a reference one level
-   deeper. What belongs to one of them is nested under it.
+   deeper. What belongs to one of them is nested under it. A `+` naming
+   several verses brings every one of them, each a reference of its own with
+   its own material one level deeper; so does a citation of a publication
+   that names several passages.
 4. **Quotations of …** — every publication a citation search finds quoting the
    verse, each with the passage it quotes it in, and every video quoting it,
    with the passage of its transcript: `jw bible cited` for that verse, printed
    where the verse stands. The heading names the reference it
    answers for. A quotation is where an expansion ends: what it cites is never
    unfolded in turn, and the document being unfolded is never listed as
-   quoting a verse it cites itself.
+   quoting a verse it cites itself. When the search fails — wol answers 503
+   now and then — the heading stays and says the quotations could not be
+   listed, so an outage never reads as nobody quoting the verse.
 
 Each unfolded reference is a verse in its own right, so at `--unfold 2` it
 brings its own notes, indexes and margin in turn, one level deeper. The
@@ -520,8 +525,12 @@ Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 
 The count is an upper bound: verses of one chapter share its page, and a verse's
 citation lookup is priced at two full pages of results before anyone knows how
-many there are. Documents are cached, so a second run of the same
-material spends almost nothing.
+many there are. How many verses a `+` names is only known once it is read, so
+the material of the verses past its first is asked about on its own, before it
+is spent. Documents are cached, so a second run of the same
+material spends almost nothing. The references of a level are read eight at a
+time, since wol takes a second or more per answer; what comes out, what is
+counted and the order it comes in are the same as one at a time.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
 since a script has nobody to ask. Declining stops there and the output says how

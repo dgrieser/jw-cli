@@ -39,11 +39,20 @@ var wordRun = regexp.MustCompile(`\p{L}{3,}`)
 // about it, and only the heading is worth dropping. A result left with nothing
 // to say drops out of the listing.
 //
+// unread says, by position, which results' documents could not be read. Those
+// are kept as they are: without the passage there is nothing to judge, and
+// judging the teaser instead would make a listing depend on whether wol
+// answered this time.
+//
 // Only citation listings are filtered. A plain search is asked for matches and
 // should report the matches it found.
-func keepTelling(items []model.Result) []model.Result {
+func keepTelling(items []model.Result, unread []bool) []model.Result {
 	out := items[:0]
-	for _, item := range items {
+	for i, item := range items {
+		if i < len(unread) && unread[i] {
+			out = append(out, item)
+			continue
+		}
 		if item.Excerpt != "" {
 			item.Excerpt = tellingBlocks(item.Excerpt)
 		}
