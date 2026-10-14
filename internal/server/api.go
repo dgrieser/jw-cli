@@ -381,12 +381,18 @@ func (s *Server) apiMediaText(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	text, err := s.svc.MediaText(r.Context(), lng.Symbol, item)
+	words, err := s.svc.MediaText(r.Context(), lng.Symbol, item)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, text)
+	// an item without words has no text to answer with, as jw media text
+	// says
+	if words.Empty() {
+		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf(text(lng).NoMediaText, item.LANK))
+		return
+	}
+	writeJSON(w, http.StatusOK, words)
 }
 
 // pubResponse is /api/v1/pub: the publication's names plus its files as
