@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"strconv"
 	"strings"
@@ -195,9 +196,11 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 		return model.PubMedia{}, fmt.Errorf("%w: %s", ErrNotFound, describe(q))
 	}
 
+	// the names are written as HTML would have them, entities and all:
+	// "(2013&nbsp;Revision)"
 	pm := model.PubMedia{
-		PubName:       resp.PubName,
-		ParentPubName: resp.ParentPubName,
+		PubName:       html.UnescapeString(resp.PubName),
+		ParentPubName: html.UnescapeString(resp.ParentPubName),
 		Pub:           resp.Pub,
 		Issue:         resp.Issue.String(),
 		Files:         map[string]map[string][]model.PubFile{},
@@ -208,7 +211,7 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 	}
 	pm.BookNum, _ = atoiNum(resp.BookNum)
 	for sym, l := range resp.Languages {
-		pm.Languages[sym] = model.Language{Symbol: sym, Name: l.Name, Locale: l.Locale}
+		pm.Languages[sym] = model.Language{Symbol: sym, Name: html.UnescapeString(l.Name), Locale: l.Locale}
 	}
 	for sym, byFormat := range resp.Files {
 		pm.Files[sym] = map[string][]model.PubFile{}
@@ -216,7 +219,7 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 			out := make([]model.PubFile, 0, len(files))
 			for _, f := range files {
 				pf := model.PubFile{
-					Title:    f.Title,
+					Title:    html.UnescapeString(f.Title),
 					URL:      f.File.URL,
 					Checksum: f.File.Checksum,
 					Label:    f.Label,
