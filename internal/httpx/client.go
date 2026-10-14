@@ -52,8 +52,10 @@ type Client struct {
 	// restart — until it changed upstream. Nil keeps nothing.
 	responses *Cache
 	flight    singleflight.Group
-	// failed notes bodies upstream could not be asked about lately
+	// failed notes bodies upstream could not be asked about lately, down the
+	// hosts that failed lately; see outage.go
 	failed sync.Map
+	down   downHosts
 	// stashed holds changed bodies a memo's revalidation read, for the
 	// rebuild that follows
 	stashMu sync.Mutex
@@ -149,16 +151,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // Get issues a GET and returns the response if the status is 2xx.
 // The caller must close the body.
 func (c *Client) Get(ctx context.Context, rawURL string, hdr http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, vs := range hdr {
-		for _, v := range vs {
-			req.Header.Add(k, v)
-		}
-	}
-	resp, err := c.Do(req)
+	resp, err := c.send(ctx, http.MethodGet, rawURL, hdr)
 	if err != nil {
 		return nil, err
 	}

@@ -22,7 +22,9 @@ import (
 //
 // When a rebuild fails for any reason but the content being gone (HTTP 404 or
 // 410), the last value is returned instead: a page that cannot be read now is
-// better shown as it was than not at all.
+// better shown as it was than not at all, and is not rebuilt again for a
+// while. A page said to be gone is asked for once more past the CDN before
+// the last value is given up.
 //
 // Every caller gets a copy of its own: values travel as JSON, as they are kept.
 func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.Context) (T, error)) (T, error) {
@@ -35,6 +37,9 @@ func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.C
 	flightKey, anew := key, refreshFirst(ctx, "memo "+key)
 	if anew {
 		flightKey += "\x00refresh"
+	}
+	if hasKept(ctx) {
+		flightKey += "\x00kept"
 	}
 	ch := c.memoFlight.DoChan(flightKey, func() (any, error) {
 		// shared by every caller waiting on key, so not cut short by the first
@@ -73,10 +78,17 @@ type memoResult struct {
 
 func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(context.Context) (any, error)) (memoResult, error) {
 	old, have := c.loadMemo(key)
-	if have && !anew && c.memoCurrent(ctx, old) {
+	// a rebuild that failed lately would most likely fail again, after
+	// waiting on the same unanswering server
+	if have && !anew && (time.Now().Unix() < old.Retry || c.memoCurrent(ctx, old)) {
 		return memoResult{old.Value, old.Deps}, nil
 	}
-	tctx, t := withTracker(ctx)
+	bctx := ctx
+	if have && !anew {
+		// the last value stands in for what upstream cannot answer now
+		bctx = withKept(ctx)
+	}
+	tctx, t := withTracker(bctx)
 	v, err := build(tctx)
 	if err != nil {
 		if IsGone(err) {
@@ -84,6 +96,10 @@ func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(cont
 			return memoResult{}, err
 		}
 		if have {
+			// and is not tried again for a while, by this process or the
+			// next
+			old.Retry = time.Now().Add(backOffFor).Unix()
+			c.saveMemo(key, old)
 			return memoResult{old.Value, old.Deps}, nil
 		}
 		return memoResult{}, err
@@ -125,7 +141,7 @@ func (c *Cache) memoCurrent(ctx context.Context, m memoRecord) bool {
 		}
 		got := e.Hash
 		if !e.fresh(c.fresh) && cl != nil {
-			if got, ok = cl.revalidate(ctx, id, e); !ok {
+			if got, ok = cl.revalidate(ctx, id, e, want); !ok {
 				return false
 			}
 		}
@@ -173,6 +189,22 @@ func (t *tracker) snapshot() map[string]string {
 		return nil
 	}
 	return maps.Clone(t.deps)
+}
+
+// keptKey marks the context of a request that something kept can stand in
+// for: a body being revalidated, or a memo being rebuilt that has a value
+// from before. Waiting on upstream is weighed against using that at once (see
+// outage.go), and what upstream says against losing it: a body said to be
+// gone is asked for once more past the CDN before it is believed.
+type keptKey struct{}
+
+func withKept(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keptKey{}, true)
+}
+
+func hasKept(ctx context.Context) bool {
+	kept, _ := ctx.Value(keptKey{}).(bool)
+	return kept
 }
 
 // record notes a body as a source of the memo being built under ctx, if any.

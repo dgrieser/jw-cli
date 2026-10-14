@@ -2,12 +2,15 @@ package httpx
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -80,13 +83,24 @@ type upstream struct {
 	lastMod string
 	length  bool // send a Content-Length on HEAD
 	status  int  // when set, every request answers with it
-	heads   atomic.Int32
-	gets    atomic.Int32
+	// when set, the next HEADs answer with it, or every one with headsLeft 0
+	headStatus int
+	headsLeft  int
+	heads      atomic.Int32
+	gets       atomic.Int32
 }
 
 func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	u.mu.Lock()
 	body, status := u.body, u.status
+	if r.Method == http.MethodHead && u.headStatus != 0 {
+		status = u.headStatus
+		if u.headsLeft > 0 {
+			if u.headsLeft--; u.headsLeft == 0 {
+				u.headStatus = 0
+			}
+		}
+	}
 	if u.etag {
 		w.Header().Set("ETag", fmt.Sprintf(`W/"%x"`, bodyHash([]byte(body))))
 	}
@@ -189,13 +203,55 @@ func TestRevalidation(t *testing.T) {
 		c := staleClient(t)
 		text(c, srv.URL)
 		u.counts()
+		// a length that stayed is no proof: a GET decides, and the HEAD,
+		// which never could, is not sent again
 		text(c, srv.URL)
-		if h, g := u.counts(); h != 1 || g != 0 {
-			t.Errorf("same length: %d HEAD, %d GET; want 1, 0", h, g)
+		if h, g := u.counts(); h != 1 || g != 1 {
+			t.Errorf("same length: %d HEAD, %d GET; want 1, 1", h, g)
+		}
+		u.set(func(u *upstream) { u.body = "two" })
+		if got := text(c, srv.URL); got != "two" {
+			t.Errorf("a change of the same length: body %q, want the new one", got)
+		}
+		if h, g := u.counts(); h != 0 || g != 1 {
+			t.Errorf("after: %d HEAD, %d GET; want 0, 1", h, g)
 		}
 		u.set(func(u *upstream) { u.body = "three" })
 		if got := text(c, srv.URL); got != "three" {
 			t.Errorf("body %q, want the new one", got)
+		}
+	})
+
+	t.Run("a HEAD refused once is asked again next time", func(t *testing.T) {
+		u := &upstream{body: "one", etag: true, headStatus: http.StatusForbidden, headsLeft: 1}
+		srv := httptest.NewServer(u)
+		defer srv.Close()
+		c := staleClient(t)
+		text(c, srv.URL)
+		u.counts()
+		if got := text(c, srv.URL); got != "one" {
+			t.Errorf("body %q", got)
+		}
+		if h, g := u.counts(); h != 1 || g != 1 {
+			t.Errorf("refused HEAD: %d HEAD, %d GET; want 1, 1", h, g)
+		}
+		text(c, srv.URL)
+		if h, g := u.counts(); h != 1 || g != 0 {
+			t.Errorf("then: %d HEAD, %d GET; want 1, 0", h, g)
+		}
+	})
+
+	t.Run("a HEAD the server does not answer is not sent again", func(t *testing.T) {
+		u := &upstream{body: "one", etag: true, headStatus: http.StatusMethodNotAllowed}
+		srv := httptest.NewServer(u)
+		defer srv.Close()
+		c := staleClient(t)
+		text(c, srv.URL)
+		text(c, srv.URL)
+		u.counts()
+		text(c, srv.URL)
+		if h, g := u.counts(); h != 0 || g != 1 {
+			t.Errorf("%d HEAD, %d GET; want 0, 1", h, g)
 		}
 	})
 
@@ -322,14 +378,14 @@ func TestMemoFollowsItsSources(t *testing.T) {
 
 	// a failing rebuild keeps the last value
 	u.set(func(u *upstream) { u.body = "three"; u.status = http.StatusInternalServerError })
-	c.failed.Range(func(k, _ any) bool { c.failed.Delete(k); return true })
+	pastBackOff(c)
 	if got := get(); got != "derived two" {
 		t.Errorf("upstream down: %q, want the last value", got)
 	}
 
 	// a memo of memos depends on what they depend on
 	u.set(func(u *upstream) { u.status = 0 })
-	c.failed.Range(func(k, _ any) bool { c.failed.Delete(k); return true })
+	pastBackOff(c)
 	outer, err := Memo(ctx, cache, "outer", func(ctx context.Context) (string, error) {
 		return "outer " + getIn(ctx), nil
 	})
@@ -339,6 +395,138 @@ func TestMemoFollowsItsSources(t *testing.T) {
 	m, _ := cache.loadMemo("outer")
 	if len(m.Deps) != 1 {
 		t.Errorf("outer memo deps = %v, want the page", m.Deps)
+	}
+}
+
+// A memo whose source on disk has moved on, while upstream still serves the
+// body the memo was built from, has that body kept again: otherwise nothing
+// reads it, and every use asks upstream for it anew.
+func TestMemoKeepsTheBodyItWasBuiltFrom(t *testing.T) {
+	ctx := context.Background()
+	u := &upstream{body: "one", etag: true}
+	srv := httptest.NewServer(u)
+	defer srv.Close()
+	cache := Open(t.TempDir(), CacheOptions{Fresh: -1})
+	c := New(WithResponseCache(cache))
+	builds := 0
+	get := func() string {
+		t.Helper()
+		v, err := Memo(ctx, cache, "k", func(ctx context.Context) (string, error) {
+			builds++
+			return c.GetText(ctx, srv.URL, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	get()
+	// another body was kept since — read on its own, say, from a server
+	// that answered differently for a while
+	id := entryID(c.responseKey(srv.URL, http.Header{}))
+	cache.saveEntry(id, entry{URL: srv.URL, ETag: `W/"other"`}, []byte("two"))
+	u.counts()
+	if got := get(); got != "one" || builds != 1 {
+		t.Fatalf("%q after %d builds, want the memo as it was", got, builds)
+	}
+	if _, body, _ := cache.loadEntry(id, false); string(body) != "one" {
+		t.Errorf("kept body %q, want the one upstream serves", body)
+	}
+	// and the next command asks with a HEAD alone
+	c = New(WithResponseCache(cache))
+	u.counts()
+	get()
+	if h, g := u.counts(); h != 1 || g != 0 {
+		t.Errorf("then: %d HEAD, %d GET; want 1, 0", h, g)
+	}
+}
+
+// The hash a body is told apart by leaves out the nonce every render of a wol
+// page carries, and nothing else.
+func TestBodyHashIgnoresNonces(t *testing.T) {
+	page := func(nonce, text string) []byte {
+		return fmt.Appendf(nil, "<script nonce=\"%s\">x()</script>\n<style nonce=\"%s\" id=\"s\"></style><p>%s</p>", nonce, nonce, text)
+	}
+	if bodyHash(page("5b1c0a", "one")) != bodyHash(page("9f00ee", "one")) {
+		t.Error("two renders of one page hash apart")
+	}
+	if bodyHash(page("5b1c0a", "one")) == bodyHash(page("5b1c0a", "two")) {
+		t.Error("a changed page hashes the same")
+	}
+	// a body without a nonce hashes as it did before, so what is kept
+	// stays current
+	plain := []byte(`{"n": 1, "text": "nonce=\"x\" or anonce="y"}`)
+	sum := sha256.Sum256(plain)
+	if bodyHash(plain) != hex.EncodeToString(sum[:16]) {
+		t.Error("a body without a nonce attribute hashes differently")
+	}
+}
+
+// wolPage renders a page as wol.jw.org does: a nonce of its own in every
+// response, and a weak ETag that differs between renders and between HEAD and
+// GET.
+type wolPage struct {
+	mu          sync.Mutex
+	text        string
+	renders     int
+	heads, gets atomic.Int32
+}
+
+func (p *wolPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	p.renders++
+	n, text := p.renders, p.text
+	p.mu.Unlock()
+	w.Header().Set("ETag", fmt.Sprintf(`W/"%s-%d"`, r.Method, n))
+	if r.Method == http.MethodHead {
+		p.heads.Add(1)
+		return
+	}
+	p.gets.Add(1)
+	fmt.Fprintf(w, "<html><script nonce=\"%08x\">init()</script><body>%s</body></html>", n*7919, text)
+}
+
+// A page whose every render differs in its nonce alone is no change: it is
+// confirmed, not kept anew, and nothing built from it is rebuilt.
+func TestRevalidationIgnoresNonces(t *testing.T) {
+	ctx := context.Background()
+	page := &wolPage{text: "one"}
+	srv := httptest.NewServer(page)
+	defer srv.Close()
+	cache := Open(t.TempDir(), CacheOptions{Fresh: -1})
+	c := New(WithResponseCache(cache))
+	builds := 0
+	get := func() string {
+		t.Helper()
+		v, err := Memo(ctx, cache, "k", func(ctx context.Context) (string, error) {
+			builds++
+			return c.GetText(ctx, srv.URL, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	first := get()
+	id := entryID(c.responseKey(srv.URL, http.Header{}))
+	kept, _, _ := cache.loadEntry(id, true)
+	for range 3 {
+		if got := get(); got != first {
+			t.Fatalf("body %q, want the kept %q", got, first)
+		}
+	}
+	if builds != 1 {
+		t.Errorf("%d builds, want 1: a new nonce rebuilt the memo", builds)
+	}
+	if e, _, _ := cache.loadEntry(id, true); e.Hash != kept.Hash {
+		t.Errorf("hash moved from %s to %s", kept.Hash, e.Hash)
+	}
+	// a real change is still one
+	page.mu.Lock()
+	page.text = "two"
+	page.mu.Unlock()
+	if got := get(); !strings.Contains(got, "two") || builds != 2 {
+		t.Errorf("changed page: %q after %d builds", got, builds)
 	}
 }
 
@@ -378,6 +566,92 @@ func TestEvictionKeepsTheRecentlyUsed(t *testing.T) {
 	}
 	if _, _, ok := cache.loadEntry(entryID("0"), true); ok {
 		t.Errorf("the least recently used entry survived")
+	}
+}
+
+// diskSize is what the cache's entries and memos take on disk.
+func diskSize(t *testing.T, dir string) int64 {
+	t.Helper()
+	var total int64
+	for _, sub := range []string{responseDir, memoDir} {
+		entries, _ := os.ReadDir(filepath.Join(dir, sub))
+		for _, e := range entries {
+			if info, err := e.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+	}
+	return total
+}
+
+// Many short commands in a row keep the cache within its limit: each goes
+// by what the ones before it wrote, not only by what the last sweep found.
+func TestCacheLimitHoldsAcrossCommands(t *testing.T) {
+	dir := t.TempDir()
+	const limit = 8 << 10
+	body := make([]byte, 1<<10)
+	for cmd := range 7 {
+		cache := Open(dir, CacheOptions{MaxBytes: limit})
+		for i := range 3 {
+			cache.saveEntry(entryID(fmt.Sprint(cmd, i)), entry{URL: "u"}, body)
+		}
+		cache.Close()
+	}
+	if got := diskSize(t, dir); got > limit {
+		t.Errorf("%d bytes on disk after seven commands, over the %d limit", got, limit)
+	}
+	// and the marker does not lose sight of what is there (it may count a
+	// file a sweep saw being written twice, which only sweeps sooner)
+	size, _, ok := OpenCacheAt(dir).readMarker()
+	if got := diskSize(t, dir); !ok || size < got {
+		t.Errorf("marker says %d (%v), %d on disk", size, ok, got)
+	}
+}
+
+// A sweep counts what was written while it ran, though its walk did not.
+func TestSweepCountsWhatWasWrittenMeanwhile(t *testing.T) {
+	dir := t.TempDir()
+	cache := Open(dir, CacheOptions{})
+	cache.saveEntry(entryID("before"), entry{URL: "u"}, make([]byte, 1000))
+	// a sweep under way: the entry written now is newer than its start
+	cache.mu.Lock()
+	cache.sweeping = true
+	cache.written, cache.unrecorded = 0, 0
+	cache.mu.Unlock()
+	id := entryID("during")
+	cache.saveEntry(id, entry{URL: "u"}, make([]byte, 3000))
+	later := time.Now().Add(time.Hour)
+	_ = os.Chtimes(cache.entryPath(id), later, later)
+	cache.sweeps.Add(1)
+	cache.sweep()
+	size, _, ok := cache.readMarker()
+	if got := diskSize(t, dir); !ok || size != got {
+		t.Errorf("marker says %d (%v), %d on disk", size, ok, got)
+	}
+}
+
+// A cache whose marker an older version wrote — a bare size, dated by the
+// file — is measured anew rather than believed.
+func TestOldSweepMarkerIsMeasuredAnew(t *testing.T) {
+	dir := t.TempDir()
+	const limit = 8 << 10
+	cache := Open(dir, CacheOptions{MaxBytes: 1 << 30})
+	for i := range 20 {
+		cache.saveEntry(entryID(strconv.Itoa(i)), entry{URL: "u"}, make([]byte, 1<<10))
+	}
+	cache.Close()
+	_ = os.WriteFile(filepath.Join(dir, sweepMarker), []byte("0"), 0o644)
+	cache = Open(dir, CacheOptions{MaxBytes: limit})
+	if _, _, ok := cache.loadEntry(entryID("0"), true); !ok {
+		t.Fatal("an entry of the older cache was not read")
+	}
+	cache.saveEntry(entryID("new"), entry{URL: "u"}, []byte("x"))
+	cache.Close()
+	if got := diskSize(t, dir); got > limit {
+		t.Errorf("%d bytes on disk, over the %d limit", got, limit)
+	}
+	if _, _, ok := cache.readMarker(); !ok {
+		t.Error("the marker was not written anew")
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 )
@@ -39,6 +38,11 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 	flightKey, lookup := id, c.lookup
 	if refreshFirst(ctx, "GET "+id) {
 		flightKey, lookup = id+"\x00refresh", c.lookupAnew
+	}
+	// nor does a read something kept stands in for, which weighs upstream's
+	// answers differently
+	if hasKept(ctx) {
+		flightKey += "\x00kept"
 	}
 	ch := c.flight.DoChan(flightKey, func() (any, error) {
 		return lookup(context.WithoutCancel(ctx), id, rawURL, hdr)
@@ -81,7 +85,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		c.responses.saveEntry(id, e, body)
 	}
 	// a body of an older edition than the newest seen is asked for again
-	if ok && c.behind(e) && !c.backingOff(id) {
+	if ok && c.behind(e) && !c.backingOff(id, e) && !c.hostDown(hostOf(rawURL)) {
 		return c.renew(ctx, id, rawURL, hdr, e, body)
 	}
 	if ok && e.fresh(c.responses.fresh) {
@@ -92,6 +96,9 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		return c.refresh(ctx, id, e, body)
 	}
 	body, resp, err := c.download(ctx, rawURL, hdr)
+	if IsGone(err) && hasKept(ctx) {
+		body, resp, err = c.confirmGone(ctx, rawURL, hdr, err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +113,11 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Header) (*fetched, error) {
 	// past the CDN too, which keeps what it got for hours
 	body, resp, err := c.downloadPast(ctx, rawURL, hdr, 0)
+	if IsGone(err) {
+		if _, _, ok := c.responses.loadEntry(id, true); ok || hasKept(ctx) {
+			body, resp, err = c.confirmGone(ctx, rawURL, hdr, err)
+		}
+	}
 	if err == nil {
 		body, resp = c.latest(ctx, rawURL, hdr, body, resp)
 	}
@@ -145,45 +157,54 @@ func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
 
 // refresh revalidates a stale body: a HEAD request first, whose validators
 // usually settle it, and a GET only when they say the body changed or cannot
-// tell. A body upstream cannot be asked about right now is used as it is.
+// tell. A body upstream cannot be asked about right now is used as it is, as
+// is one whose host failed lately.
 func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (*fetched, error) {
 	stale := &fetched{body: body, id: id, e: e}
-	if c.backingOff(id) {
+	if c.backingOff(id, e) || c.hostDown(hostOf(e.URL)) {
 		c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 		return stale, nil
 	}
+	// the kept body stands in for whatever upstream cannot answer now
+	ctx = withKept(ctx)
 	hdr := e.header()
 	var head *http.Response
 	noHead := e.NoHead
 	if !noHead {
 		var herr error
 		head, herr = c.Head(ctx, e.URL, hdr)
-		if herr != nil || unavailable(head.StatusCode) {
-			c.backOff(id)
+		switch {
+		case herr == nil && headUnsupported(head.StatusCode):
+			// a HEAD the server does not answer says nothing; if the GET
+			// below succeeds, it never will
+			head, noHead = nil, true
+		case herr != nil || unavailable(head.StatusCode):
+			c.backOff(id, e, body)
 			c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 			return stale, nil
-		}
-		if head.StatusCode/100 == 2 {
+		case head.StatusCode/100 == 2:
 			if compare(e, head) == unchanged {
 				e.setValidators(head, true)
 				return c.confirm(id, e, body), nil
 			}
-			// a page rendered for every request says nothing a HEAD could
-			// compare, and never will
+			// a page rendered for every request, or an API that sends only
+			// a length, says nothing a HEAD could settle, and never will
 			noHead = undecidable(head)
-		} else {
-			// a HEAD the server does not answer says nothing; if the GET
-			// below succeeds, it never will
-			head, noHead = nil, true
+		default:
+			// refused this once — the CDN answers a 403 now and then —
+			// which says nothing about the next HEAD: the GET decides
+			head = nil
 		}
 	}
 	nbody, resp, err := c.download(ctx, e.URL, hdr)
-	if err != nil {
-		if IsGone(err) {
+	if IsGone(err) {
+		if nbody, resp, err = c.confirmGone(ctx, e.URL, hdr, err); IsGone(err) {
 			c.responses.removeEntry(id)
 			return nil, err
 		}
-		c.backOff(id)
+	}
+	if err != nil {
+		c.backOff(id, e, body)
 		c.verbose("GET %s (cached, upstream unavailable: %v)", e.URL, err)
 		return stale, nil
 	}
@@ -192,7 +213,13 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 	if head != nil {
 		ne.setValidators(head, true)
 	}
-	if bodyHash(nbody) == e.Hash {
+	// the bodies themselves decide, not the validators: wol.jw.org gives
+	// every render a new weak ETag, and its HEAD and GET answers come from
+	// different objects in the CDN, so a page that did not change often looks
+	// as if it had. The kept body is hashed anew rather than taken by the
+	// hash it was kept with, which an older version made without leaving the
+	// nonces out.
+	if bodyHash(nbody) == bodyHash(body) {
 		return c.confirm(id, ne, body), nil
 	}
 	// a server not up to date answers with an older edition: past the CDN
@@ -213,16 +240,19 @@ func (c *Client) confirm(id string, e entry, body []byte) *fetched {
 	if !e.EdSeen {
 		c.stamp(&e, body)
 	}
-	e.Checked = time.Now().Unix()
+	e.Checked, e.Retry = time.Now().Unix(), 0
 	c.responses.saveEntry(id, e, body)
 	e.Size, e.Hash = int64(len(body)), bodyHash(body)
 	return &fetched{body: body, id: id, e: e}
 }
 
-// revalidate brings a stale body up to date for a memo and returns the hash it
-// has now. A changed body is not kept yet — its decoding caller decides
-// that — but held for the rebuild about to read it.
-func (c *Client) revalidate(ctx context.Context, id string, e entry) (string, bool) {
+// revalidate brings a stale body up to date for a memo built from the body
+// hashed want, and returns the hash it has now. A changed body is not kept
+// yet — its decoding caller decides that — but held for the rebuild about to
+// read it. A body that is the very one the memo was built from has been
+// decoded already, and is kept at once: nothing would read it otherwise, and
+// every later use would ask upstream again.
+func (c *Client) revalidate(ctx context.Context, id string, e entry, want string) (string, bool) {
 	v, err, _ := c.flight.Do(id, func() (any, error) {
 		return c.lookup(ctx, id, e.URL, e.header())
 	})
@@ -231,7 +261,11 @@ func (c *Client) revalidate(ctx context.Context, id string, e entry) (string, bo
 	}
 	f := v.(*fetched)
 	if f.pending {
-		c.stash(f)
+		if f.e.Hash == want {
+			f.once.Do(func() { c.responses.saveEntry(f.id, f.e, f.body) })
+		} else {
+			c.stash(f)
+		}
 	}
 	return f.e.Hash, true
 }
@@ -276,9 +310,18 @@ func (c *Client) unstash(id string) *fetched {
 // rather than one per read.
 const backOffFor = 10 * time.Minute
 
-func (c *Client) backOff(id string) { c.failed.Store(id, time.Now()) }
+// backOff notes that upstream could not be asked about the body e kept under
+// id, in the entry as well, so the next command uses it at once too.
+func (c *Client) backOff(id string, e entry, body []byte) {
+	c.failed.Store(id, time.Now())
+	e.Retry = time.Now().Add(backOffFor).Unix()
+	c.responses.saveEntry(id, e, body)
+}
 
-func (c *Client) backingOff(id string) bool {
+func (c *Client) backingOff(id string, e entry) bool {
+	if e.Retry > time.Now().Unix() {
+		return true
+	}
 	v, ok := c.failed.Load(id)
 	if !ok {
 		return false
@@ -290,21 +333,28 @@ func (c *Client) backingOff(id string) bool {
 	return true
 }
 
+// unavailable reports whether a status says the server cannot answer now,
+// rather than anything about what was asked.
 func unavailable(status int) bool {
-	return status >= 500 || status == http.StatusTooManyRequests
+	return status >= 500 && status != http.StatusNotImplemented || status == http.StatusTooManyRequests
+}
+
+// headUnsupported reports whether a status to a HEAD says the server does not
+// answer HEAD requests at all: the CDN's mediator API answers one with 404,
+// and the GET with the body.
+func headUnsupported(status int) bool {
+	switch status {
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
+		return true
+	}
+	return false
 }
 
 // Head issues a HEAD request, following redirects, and returns the response
-// whatever its status.
+// whatever its status. A HEAD has no body to wait for: a server that does
+// not answer one within answerWait is not waited on longer.
 func (c *Client) Head(ctx context.Context, rawURL string, hdr http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, vs := range hdr {
-		req.Header[k] = slices.Clone(vs)
-	}
-	resp, err := c.Do(req)
+	resp, err := c.send(ctx, http.MethodHead, rawURL, hdr)
 	if err != nil {
 		return nil, err
 	}
@@ -339,7 +389,9 @@ const (
 // an ETag per page (and a Last-Modified that is the same for the whole site),
 // the CDN's APIs only a length, www.jw.org a Last-Modified that is when its
 // edge last fetched the page. Validators are compared strongest first; when
-// none of them settles it the answer is unknown, and a GET decides.
+// none of them settles it the answer is unknown, and a GET decides. A length
+// can tell a change but never its absence: a checksum or a date changes in
+// place.
 func compare(e entry, head *http.Response) verdict {
 	etag, lm := head.Header.Get("ETag"), head.Header.Get("Last-Modified")
 	// a length of the identity encoding is comparable to the body kept
@@ -355,19 +407,15 @@ func compare(e entry, head *http.Response) verdict {
 		return changed
 	case lm != "" && lm == e.LastMod:
 		return unchanged
-	case sized && etag == "" && lm == "":
-		return unchanged
 	}
 	return unknown
 }
 
-// undecidable reports whether a HEAD response carries nothing to compare: no
-// ETag, no length, and a Last-Modified that is just the time of the request.
+// undecidable reports whether a HEAD response carries nothing that could ever
+// tell an unchanged body: no ETag, and a Last-Modified, if any, that is just
+// the time of the request. A length alone does not count.
 func undecidable(head *http.Response) bool {
-	if head.Header.Get("ETag") != "" || (head.ContentLength >= 0 && head.Header.Get("Content-Encoding") == "") {
-		return false
-	}
-	return !meaningfulLastMod(head)
+	return head.Header.Get("ETag") == "" && !meaningfulLastMod(head)
 }
 
 // meaningfulLastMod reports whether a Last-Modified names when the content
