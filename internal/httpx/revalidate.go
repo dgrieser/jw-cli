@@ -158,23 +158,27 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 	if !noHead {
 		var herr error
 		head, herr = c.Head(ctx, e.URL, hdr)
-		if herr != nil || unavailable(head.StatusCode) {
+		switch {
+		case herr == nil && headUnsupported(head.StatusCode):
+			// a HEAD the server does not answer says nothing; if the GET
+			// below succeeds, it never will
+			head, noHead = nil, true
+		case herr != nil || unavailable(head.StatusCode):
 			c.backOff(id)
 			c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 			return stale, nil
-		}
-		if head.StatusCode/100 == 2 {
+		case head.StatusCode/100 == 2:
 			if compare(e, head) == unchanged {
 				e.setValidators(head, true)
 				return c.confirm(id, e, body), nil
 			}
-			// a page rendered for every request says nothing a HEAD could
-			// compare, and never will
+			// a page rendered for every request, or an API that sends only
+			// a length, says nothing a HEAD could settle, and never will
 			noHead = undecidable(head)
-		} else {
-			// a HEAD the server does not answer says nothing; if the GET
-			// below succeeds, it never will
-			head, noHead = nil, true
+		default:
+			// refused this once — the CDN answers a 403 now and then —
+			// which says nothing about the next HEAD: the GET decides
+			head = nil
 		}
 	}
 	nbody, resp, err := c.download(ctx, e.URL, hdr)
@@ -296,8 +300,21 @@ func (c *Client) backingOff(id string) bool {
 	return true
 }
 
+// unavailable reports whether a status says the server cannot answer now,
+// rather than anything about what was asked.
 func unavailable(status int) bool {
-	return status >= 500 || status == http.StatusTooManyRequests
+	return status >= 500 && status != http.StatusNotImplemented || status == http.StatusTooManyRequests
+}
+
+// headUnsupported reports whether a status to a HEAD says the server does not
+// answer HEAD requests at all: the CDN's mediator API answers one with 404,
+// and the GET with the body.
+func headUnsupported(status int) bool {
+	switch status {
+	case http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
+		return true
+	}
+	return false
 }
 
 // Head issues a HEAD request, following redirects, and returns the response
@@ -345,7 +362,9 @@ const (
 // an ETag per page (and a Last-Modified that is the same for the whole site),
 // the CDN's APIs only a length, www.jw.org a Last-Modified that is when its
 // edge last fetched the page. Validators are compared strongest first; when
-// none of them settles it the answer is unknown, and a GET decides.
+// none of them settles it the answer is unknown, and a GET decides. A length
+// can tell a change but never its absence: a checksum or a date changes in
+// place.
 func compare(e entry, head *http.Response) verdict {
 	etag, lm := head.Header.Get("ETag"), head.Header.Get("Last-Modified")
 	// a length of the identity encoding is comparable to the body kept
@@ -361,19 +380,15 @@ func compare(e entry, head *http.Response) verdict {
 		return changed
 	case lm != "" && lm == e.LastMod:
 		return unchanged
-	case sized && etag == "" && lm == "":
-		return unchanged
 	}
 	return unknown
 }
 
-// undecidable reports whether a HEAD response carries nothing to compare: no
-// ETag, no length, and a Last-Modified that is just the time of the request.
+// undecidable reports whether a HEAD response carries nothing that could ever
+// tell an unchanged body: no ETag, and a Last-Modified, if any, that is just
+// the time of the request. A length alone does not count.
 func undecidable(head *http.Response) bool {
-	if head.Header.Get("ETag") != "" || (head.ContentLength >= 0 && head.Header.Get("Content-Encoding") == "") {
-		return false
-	}
-	return !meaningfulLastMod(head)
+	return head.Header.Get("ETag") == "" && !meaningfulLastMod(head)
 }
 
 // meaningfulLastMod reports whether a Last-Modified names when the content

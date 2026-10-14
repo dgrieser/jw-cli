@@ -83,13 +83,24 @@ type upstream struct {
 	lastMod string
 	length  bool // send a Content-Length on HEAD
 	status  int  // when set, every request answers with it
-	heads   atomic.Int32
-	gets    atomic.Int32
+	// when set, the next HEADs answer with it, or every one with headsLeft 0
+	headStatus int
+	headsLeft  int
+	heads      atomic.Int32
+	gets       atomic.Int32
 }
 
 func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	u.mu.Lock()
 	body, status := u.body, u.status
+	if r.Method == http.MethodHead && u.headStatus != 0 {
+		status = u.headStatus
+		if u.headsLeft > 0 {
+			if u.headsLeft--; u.headsLeft == 0 {
+				u.headStatus = 0
+			}
+		}
+	}
 	if u.etag {
 		w.Header().Set("ETag", fmt.Sprintf(`W/"%x"`, bodyHash([]byte(body))))
 	}
@@ -192,13 +203,55 @@ func TestRevalidation(t *testing.T) {
 		c := staleClient(t)
 		text(c, srv.URL)
 		u.counts()
+		// a length that stayed is no proof: a GET decides, and the HEAD,
+		// which never could, is not sent again
 		text(c, srv.URL)
-		if h, g := u.counts(); h != 1 || g != 0 {
-			t.Errorf("same length: %d HEAD, %d GET; want 1, 0", h, g)
+		if h, g := u.counts(); h != 1 || g != 1 {
+			t.Errorf("same length: %d HEAD, %d GET; want 1, 1", h, g)
+		}
+		u.set(func(u *upstream) { u.body = "two" })
+		if got := text(c, srv.URL); got != "two" {
+			t.Errorf("a change of the same length: body %q, want the new one", got)
+		}
+		if h, g := u.counts(); h != 0 || g != 1 {
+			t.Errorf("after: %d HEAD, %d GET; want 0, 1", h, g)
 		}
 		u.set(func(u *upstream) { u.body = "three" })
 		if got := text(c, srv.URL); got != "three" {
 			t.Errorf("body %q, want the new one", got)
+		}
+	})
+
+	t.Run("a HEAD refused once is asked again next time", func(t *testing.T) {
+		u := &upstream{body: "one", etag: true, headStatus: http.StatusForbidden, headsLeft: 1}
+		srv := httptest.NewServer(u)
+		defer srv.Close()
+		c := staleClient(t)
+		text(c, srv.URL)
+		u.counts()
+		if got := text(c, srv.URL); got != "one" {
+			t.Errorf("body %q", got)
+		}
+		if h, g := u.counts(); h != 1 || g != 1 {
+			t.Errorf("refused HEAD: %d HEAD, %d GET; want 1, 1", h, g)
+		}
+		text(c, srv.URL)
+		if h, g := u.counts(); h != 1 || g != 0 {
+			t.Errorf("then: %d HEAD, %d GET; want 1, 0", h, g)
+		}
+	})
+
+	t.Run("a HEAD the server does not answer is not sent again", func(t *testing.T) {
+		u := &upstream{body: "one", etag: true, headStatus: http.StatusMethodNotAllowed}
+		srv := httptest.NewServer(u)
+		defer srv.Close()
+		c := staleClient(t)
+		text(c, srv.URL)
+		text(c, srv.URL)
+		u.counts()
+		text(c, srv.URL)
+		if h, g := u.counts(); h != 0 || g != 1 {
+			t.Errorf("%d HEAD, %d GET; want 0, 1", h, g)
 		}
 	})
 
