@@ -980,7 +980,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 	for _, sub := range cat.Subcategories {
 		// beside a category's own list — the songs of an album, and the
 		// category of their versions with audio descriptions — a subcategory
-		// is a link after it
+		// is a link in it
 		if len(sub.Media) == 0 || len(cat.Media) > 0 {
 			subs = append(subs, sub)
 			continue
@@ -993,10 +993,9 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 			Rows:    [][]resultView{s.resultViews(service.MediaToResults(media), page.Lang)},
 		})
 	}
+	// the subcategories lead, then the category's own media, as jw media
+	// browse lists them
 	items := append(service.CategoriesToResults(subs), service.MediaToResults(cat.Media)...)
-	if len(cat.Media) > 0 {
-		items = append(service.MediaToResults(cat.Media), service.CategoriesToResults(subs)...)
-	}
 	page.Items = s.resultViews(items, page.Lang)
 	s.render(w, http.StatusOK, "media_category", page)
 }
