@@ -106,17 +106,44 @@ func TestReadUnfoldKeepsEveryVerseOfAMarginalReference(t *testing.T) {
 // every verse the reference names is a section of its own.
 func TestStreamMarginalKeepsEveryVerse(t *testing.T) {
 	s := unfoldUpstream(t, nil)
-	var titles []string
+	var titles, refs []string
 	_, _, err := s.StreamPassageParts(context.Background(), english, "nwtsty",
 		bibleref.Ref{Book: 43, Chapter: 3, VerseStart: 16, VerseEnd: 16}, PassageParts{Only: PartMarginal},
 		UnfoldConfig{Depth: 1}, i18n.EN.Text(), UnfoldStream{Section: func(sec UnfoldSection) {
 			titles = append(titles, sec.Title)
+			refs = append(refs, sec.Ref)
 		}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := strings.Join(titles, "|"), strings.Join(marginalTargets, "|"); got != want {
 		t.Errorf("sections = %s, want %s", got, want)
+	}
+	// each under a key of its own, the first the citation's: a page shows a
+	// section once by its key, and finds the one a link opens by its path
+	seen := map[string]bool{}
+	for _, ref := range refs {
+		if seen[ref] {
+			t.Errorf("two sections under %s: %q", ref, refs)
+		}
+		seen[ref] = true
+	}
+	if len(refs) == 0 || refs[0] != RefPath(marginalPath) {
+		t.Errorf("refs = %q, want the citation's path first", refs)
+	}
+}
+
+// A section's key is a link's path, and the path of a citation's later
+// passage keeps the mark naming which it is.
+func TestRefPathKeepsTheItem(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://wol.jw.org/de/wol/bc/r10/lp-x/1001070147/96":        "/de/wol/bc/r10/lp-x/1001070147/96",
+		"https://wol.jw.org/de/wol/bc/r10/lp-x/1001070147/96#item-3": "/de/wol/bc/r10/lp-x/1001070147/96#item-3",
+		"/en/wol/d/r1/lp-e/1102025912#h=4":                           "/en/wol/d/r1/lp-e/1102025912",
+	} {
+		if got := RefPath(in); got != want {
+			t.Errorf("RefPath(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

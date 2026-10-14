@@ -49,8 +49,14 @@ func footnoteLinks(fragment string) []string {
 
 // RefPath is the path a link names, without scheme, host, query or fragment:
 // the key a page finds the section of a reference by, the same whether the
-// link was absolutized for the page or is still relative as wol wrote it.
+// link was absolutized for the page or is still relative as wol wrote it. The
+// passages after the first of a citation answered with several keep the mark
+// naming which they are (unfold.ItemPath): each is a section of its own, and
+// a page shows a section once by its key.
 func RefPath(href string) string {
+	if base, item := unfold.SplitItemPath(href); item > 1 {
+		return unfold.ItemPath(RefPath(base), item)
+	}
 	u, err := url.Parse(strings.TrimSpace(href))
 	if err != nil {
 		return href
