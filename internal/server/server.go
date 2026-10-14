@@ -121,7 +121,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /unfold/article", s.unfoldArticle)
 
 	// web UI
-	mux.Handle("GET /static/", http.FileServerFS(staticFS))
+	mux.Handle("GET /static/", staticFiles())
 	mux.HandleFunc("GET /sw.js", s.serviceWorker)
 	mux.HandleFunc("GET /{$}", s.uiIndex)
 	mux.HandleFunc("GET /search", s.uiSearch)
@@ -138,7 +138,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
-	return s.logged(s.auth.RequireAuth(s.remembersLanguage(refreshes(s.limitsAPI(mux)))))
+	return s.logged(s.auth.RequireAuth(s.remembersLanguage(private(refreshes(s.limitsAPI(mux))))))
+}
+
+// private marks what a page or the API answers as the reader's own: it
+// follows the language cookie (and, behind a login, the login), so no cache
+// between the server and the browser may hand it to anybody else, and the
+// browser's own cache keeps it apart per cookie. The page's files and the
+// service worker say for themselves how they are kept, and a handler that
+// keeps nothing (a stream, a refresh) says so over this.
+//
+// Vary: Cookie leaves the page cache of the service worker (static/sw.js)
+// as it was: it keeps and looks up its pages by a URL of its own, which
+// never carries a cookie.
+func private(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/static/") && r.URL.Path != "/sw.js" {
+			w.Header().Set("Cache-Control", "private")
+			w.Header().Add("Vary", "Cookie")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // apiTimeout bounds one request to the JSON API. It is generous: an
