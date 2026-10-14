@@ -7,17 +7,21 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	xhtml "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // sanitize normalizes a site HTML fragment before conversion:
-//   - drops script/style/noscript and hidden UI chrome
+//   - drops script/style/noscript and hidden UI chrome: the image viewer's
+//     lightbox and the page's form controls (pageChrome), and HTML comments
+//   - writes an ordered list whose items carry their own number as plain
+//     blocks, so the number is printed once
 //   - materializes responsive images (span.jsRespImg data attributes) into
 //     plain <img> tags with the largest available source
 //   - prefers data-img-size-* attributes on <img> tags
 //   - flattens wol's multi-line publication link cards into one line each
 //   - drops soft hyphens, which only a browser knows how to hide
-//   - absolutizes href/src attributes against o.BaseURL, or strips link targets
-//     and image sources entirely under o.NoURLs
+//   - absolutizes href/src attributes against o.BaseURL, or strips link targets,
+//     image sources and every other attribute holding a URL under o.NoURLs
 func sanitize(fragment string, o Options) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
 	if err != nil {
@@ -48,8 +52,11 @@ func sanitize(fragment string, o Options) (string, error) {
 	})
 
 	body.Find("script, style, noscript").Remove()
+	body.Find(pageChrome).Remove()
 	flattenLinkCards(body)
+	unlistSelfNumbered(body)
 	for _, n := range body.Nodes {
+		dropComments(n)
 		stripSoftHyphens(n)
 	}
 
@@ -66,6 +73,9 @@ func sanitize(fragment string, o Options) (string, error) {
 	if o.NoURLs {
 		// nothing left to absolutize once the targets are gone
 		stripURLs(body)
+		for _, n := range body.Nodes {
+			stripURLAttrs(n)
+		}
 	} else if o.BaseURL != "" {
 		if base, err := url.Parse(o.BaseURL); err == nil {
 			absolutize(body, "a", "href", base)
@@ -79,6 +89,14 @@ func sanitize(fragment string, o Options) (string, error) {
 	}
 	return strings.TrimSpace(html), nil
 }
+
+// pageChrome is what a document page carries inside its article that is no
+// reading matter: the lightbox wol builds its image viewer from (PhotoSwipe's
+// .pswp, two dozen elements with its buttons), and the page's form controls —
+// some twenty-five hidden fields its scripts read their settings from, among
+// them the pub-media endpoint and the share link, which no rendering wants and
+// --no-urls must not leak. A study article's answer fields (textarea) stay.
+const pageChrome = ".pswp, input, button"
 
 // cardDecoration is the parts of a wol link card that carry no text: the
 // publication cover thumbnail, the section icon and the chevron. They have no
@@ -111,6 +129,43 @@ func flattenLinkCards(body *goquery.Selection) {
 		}
 		card.SetHtml(html.EscapeString(strings.Join(lines, cardSeparator)))
 	})
+}
+
+// selOwnNumber is the number an item of a list carries in its text: wol's
+// study questions are an <ol> whose every item opens with "<span
+// class="txtSrcBullet"><strong>1.</strong></span>".
+const selOwnNumber = ".txtSrcBullet"
+
+// unlistSelfNumbered writes an ordered list whose every item carries its own
+// number as plain blocks. Kept a list, each item would be numbered twice —
+// "1. **1.** Why can we say ..." — and the number the source prints is the one
+// to keep: it need not start at one, nor be a digit.
+func unlistSelfNumbered(body *goquery.Selection) {
+	body.Find("ol").Each(func(_ int, ol *goquery.Selection) {
+		items := ol.ChildrenFiltered("li")
+		if items.Length() == 0 || items.FilterFunction(func(_ int, li *goquery.Selection) bool {
+			return li.Find(selOwnNumber).Length() == 0
+		}).Length() > 0 {
+			return
+		}
+		for _, n := range append(ol.Nodes, items.Nodes...) {
+			n.Data, n.DataAtom = "div", atom.Div
+		}
+	})
+}
+
+// dropComments removes the HTML comments, which no format prints on purpose:
+// a jw.org article ends in "<!--THE END-->", which markdown kept as it is.
+func dropComments(n *xhtml.Node) {
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		if c.Type == xhtml.CommentNode {
+			n.RemoveChild(c)
+		} else {
+			dropComments(c)
+		}
+		c = next
+	}
 }
 
 // softHyphen is U+00AD, a conditional hyphen: it marks where a word may be
@@ -155,6 +210,32 @@ func stripURLs(body *goquery.Selection) {
 		}
 		s.ReplaceWithHtml(inner)
 	})
+}
+
+// stripURLAttrs drops whatever attribute still holds a URL once the links and
+// images are gone — a lazy-loaded source in a data attribute, say — so the
+// HTML output under --no-urls names no address at all.
+func stripURLAttrs(n *xhtml.Node) {
+	if n.Type == xhtml.ElementNode {
+		kept := n.Attr[:0]
+		for _, a := range n.Attr {
+			if !looksLikeURL(a.Val) {
+				kept = append(kept, a)
+			}
+		}
+		n.Attr = kept
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		stripURLAttrs(c)
+	}
+}
+
+// looksLikeURL reports whether an attribute value is an address: absolute,
+// protocol-relative, or a site path.
+func looksLikeURL(v string) bool {
+	v = strings.TrimSpace(v)
+	return strings.Contains(v, "://") || strings.HasPrefix(v, "/") ||
+		strings.HasPrefix(v, "mailto:")
 }
 
 // imagePlaceholder is how an image is spelled where its source cannot be shown:

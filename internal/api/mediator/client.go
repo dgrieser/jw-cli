@@ -6,11 +6,15 @@ package mediator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
@@ -33,19 +37,30 @@ type wireLanguage struct {
 	IsSignLanguage bool   `json:"isSignLanguage"`
 }
 
-// Languages lists all languages with web content.
+// Languages lists every language there is content in: the full list (1099
+// languages), not the 312 that have a website of their own on jw.org — the
+// library and the media are in many more, Assamese, Kachin and Acholi among
+// them. Should the mediator stop answering the full list, the web list still
+// serves the common languages.
 func (c *Client) Languages(ctx context.Context) ([]model.Language, error) {
 	var resp struct {
 		Languages []wireLanguage `json:"languages"`
 	}
-	if err := c.hc.GetJSON(ctx, c.base()+"/languages/E/web", nil, &resp); err != nil {
+	err := c.hc.GetJSON(ctx, c.base()+"/languages/E/all", nil, &resp)
+	var se *httpx.StatusError
+	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
+		err = c.hc.GetJSON(ctx, c.base()+"/languages/E/web", nil, &resp)
+	}
+	if err != nil {
 		return nil, err
 	}
 	langs := make([]model.Language, 0, len(resp.Languages))
 	for _, l := range resp.Languages {
 		langs = append(langs, model.Language{
-			Symbol:         l.Code,
-			Locale:         l.Locale,
+			Symbol: l.Code,
+			// the mediator spells a region or script with an underscore
+			// ("pt_pt", "cmn_hant"), the sites and BCP 47 with a hyphen
+			Locale:         strings.ReplaceAll(l.Locale, "_", "-"),
 			Name:           l.Name,
 			Vernacular:     l.Vernacular,
 			Script:         l.Script,
@@ -225,7 +240,7 @@ func (c *Client) Category(ctx context.Context, lang, key string, limit, offset i
 		cat.Total = resp.Pagination.TotalCount
 	}
 	if cat.Key == "" {
-		return cat, fmt.Errorf("category %q not found", key)
+		return cat, notFound(fmt.Sprintf("category %q not found", key))
 	}
 	return cat, nil
 }
@@ -241,7 +256,7 @@ func (c *Client) CategoryInfo(ctx context.Context, lang, key string) (model.Cate
 		return model.Category{}, err
 	}
 	if resp.Category.Key == "" {
-		return model.Category{}, fmt.Errorf("category %q not found", key)
+		return model.Category{}, notFound(fmt.Sprintf("category %q not found", key))
 	}
 	cat := resp.Category.toModel()
 	cat.Subcategories, cat.Media = nil, nil
@@ -258,7 +273,16 @@ func (c *Client) MediaItem(ctx context.Context, lang, lank string) (model.MediaI
 		return model.MediaItem{}, err
 	}
 	if len(resp.Media) == 0 {
-		return model.MediaItem{}, fmt.Errorf("media item %q not found in language %s", lank, lang)
+		return model.MediaItem{}, notFound(fmt.Sprintf("media item %q not found in language %s", lank, lang))
 	}
 	return resp.Media[0].toModel(), nil
 }
+
+// notFound is a media item or category the mediator does not have. To
+// errors.Is it is pubmedia.ErrNotFound, the sentinel for what the sites do not
+// have — which the server answers with 404 rather than taking the request for
+// a bad one — without that sentinel's words in the message.
+type notFound string
+
+func (e notFound) Error() string { return string(e) }
+func (e notFound) Unwrap() error { return pubmedia.ErrNotFound }

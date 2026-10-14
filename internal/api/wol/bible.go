@@ -2,13 +2,16 @@ package wol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -55,6 +58,7 @@ type ChapterDoc struct {
 
 const (
 	selVerse            = "span.v"                     // verse text segments, id=v{b}-{c}-{v}-{seg}
+	selVerseBlock       = "p, div, li, blockquote, td" // the paragraph or line a segment is laid out in
 	selStudySection     = "#studyDiscover div.section" // per-verse study material, data-key={b}-{c}-{v}
 	selStudyNote        = ".studyNoteGroup li.item p"  // one study note paragraph
 	selMarginalItem     = ".group.marginal li.item"    // one cross-reference group
@@ -74,11 +78,21 @@ const (
 	selCardDetail = ".cardTitleDetail"             // the year beside the title
 )
 
+// The classes of a line of poetry: wol sets each line of a psalm or a proverb
+// in a paragraph of its own, the line a verse begins on classed "sl" and every
+// line after it "sz". Prose is set in paragraphs of several verses each.
+var poetryLineClasses = []string{"sl", "sz"}
+
 // The two indexes a research entry can be listed under, as wol classes them.
 const (
 	classResearchGuide    = "ref-rsg"
 	classPublicationIndex = "ref-dx"
 )
+
+// ErrNoVerses is a chapter page without a verse on it: a chapter the edition
+// does not have, served as an empty page rather than refused (or a page whose
+// layout changed).
+var ErrNoVerses = errors.New("no verses on the chapter page")
 
 // Chapter fetches one bible chapter page (with the study pane inlined).
 func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, chapter int) (*ChapterDoc, error) {
@@ -92,7 +106,7 @@ func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, 
 	}
 	cd := &ChapterDoc{doc: doc, base: c.hc.Base.WOL, Book: book, Chapter: chapter, URL: u}
 	if cd.doc.Find(selVerse).Length() == 0 {
-		return nil, fmt.Errorf("no verses found at %s (chapter missing in %s, or page layout changed)", u, edition)
+		return nil, fmt.Errorf("%w at %s (chapter missing in %s, or page layout changed)", ErrNoVerses, u, edition)
 	}
 	return cd, nil
 }
@@ -119,23 +133,18 @@ func (c *Client) VerseCount(ctx context.Context, cfg Config, edition string, boo
 // LastVerse is the highest verse number of the chapter on its page.
 func (d *ChapterDoc) LastVerse() int {
 	last := 0
-	d.doc.Find(selVerse).Each(func(_ int, s *goquery.Selection) {
-		m := verseID.FindStringSubmatch(s.AttrOr("id", ""))
-		if m == nil {
-			return
-		}
-		book, _ := strconv.Atoi(m[1])
-		ch, _ := strconv.Atoi(m[2])
-		v, _ := strconv.Atoi(m[3])
-		if book == d.Book && ch == d.Chapter {
-			last = max(last, v)
-		}
-	})
+	d.eachPart(func(v int, _ *goquery.Selection) { last = max(last, v) })
 	return last
 }
 
+// lineBreak is what parts of one verse that wol sets in separate paragraphs
+// are joined with: a line of poetry stays a line of its own in every format.
+const lineBreak = "<br/>"
+
 // Verses returns verses from..to (inclusive); 0,0 means the whole chapter.
-// Multi-segment verses are concatenated.
+// The segments of a verse are concatenated, and segments set in different
+// paragraphs — the lines of a verse of poetry — are joined with a line break,
+// so the lines are not run together.
 func (d *ChapterDoc) Verses(from, to int) ([]model.Verse, error) {
 	if from == 0 {
 		from, to = 1, 999
@@ -143,34 +152,36 @@ func (d *ChapterDoc) Verses(from, to int) ([]model.Verse, error) {
 	if to == 0 {
 		to = from
 	}
+	type verseText struct {
+		b     strings.Builder
+		block *html.Node // the paragraph the last segment was in
+	}
 	order := []int{}
-	byVerse := map[int]*strings.Builder{}
-	d.doc.Find(selVerse).Each(func(_ int, s *goquery.Selection) {
-		id, ok := s.Attr("id")
-		if !ok {
+	byVerse := map[int]*verseText{}
+	d.eachPart(func(v int, s *goquery.Selection) {
+		if v < from || v > to {
 			return
 		}
-		m := verseID.FindStringSubmatch(id)
-		if m == nil {
-			return
-		}
-		book, _ := strconv.Atoi(m[1])
-		ch, _ := strconv.Atoi(m[2])
-		v, _ := strconv.Atoi(m[3])
-		if book != d.Book || ch != d.Chapter || v < from || v > to {
-			return
-		}
-		html, err := s.Html()
+		fragment, err := s.Html()
 		if err != nil {
 			return
 		}
-		b, seen := byVerse[v]
+		block := verseBlockOf(s)
+		t, seen := byVerse[v]
 		if !seen {
-			b = &strings.Builder{}
-			byVerse[v] = b
+			t = &verseText{}
+			byVerse[v] = t
 			order = append(order, v)
+		} else if block != t.block {
+			t.b.WriteString(lineBreak)
 		}
-		b.WriteString(html)
+		if block != t.block {
+			// a line of poetry is indented with a no-break space ahead of its
+			// verse number, which only a page set line by line has use for
+			fragment = strings.TrimLeftFunc(fragment, unicode.IsSpace)
+		}
+		t.block = block
+		t.b.WriteString(fragment)
 	})
 	if len(order) == 0 {
 		return nil, fmt.Errorf("verses %d-%d not found in chapter %d", from, to, d.Chapter)
@@ -179,10 +190,79 @@ func (d *ChapterDoc) Verses(from, to int) ([]model.Verse, error) {
 	for _, v := range order {
 		verses = append(verses, model.Verse{
 			ID:   d.Book*1_000_000 + d.Chapter*1_000 + v,
-			HTML: byVerse[v].String(),
+			HTML: byVerse[v].b.String(),
 		})
 	}
 	return verses, nil
+}
+
+// StartsLine reports whether a verse begins a line of its own when the verses
+// of a passage are printed one after the other: a verse of poetry opens a new
+// line, and so does the prose that follows poetry. A verse of prose that
+// follows prose runs on in its paragraph, as the page prints it.
+func (d *ChapterDoc) StartsLine(verse int) bool {
+	var prev *html.Node // the paragraph the segment before the verse is in
+	starts := false
+	d.eachPartUntil(func(v int, s *goquery.Selection) bool {
+		block := verseBlockOf(s)
+		if v != verse {
+			prev = block
+			return true
+		}
+		// a verse that shares its paragraph with the one before it continues
+		// that paragraph, whatever kind of paragraph it is
+		starts = block != nil && block != prev && (isPoetryLine(block) || isPoetryLine(prev))
+		return false
+	})
+	return starts
+}
+
+// eachPart calls fn with every verse segment of the chapter, in page order.
+func (d *ChapterDoc) eachPart(fn func(verse int, s *goquery.Selection)) {
+	d.eachPartUntil(func(v int, s *goquery.Selection) bool {
+		fn(v, s)
+		return true
+	})
+}
+
+// eachPartUntil is eachPart that stops once fn returns false.
+func (d *ChapterDoc) eachPartUntil(fn func(verse int, s *goquery.Selection) bool) {
+	d.doc.Find(selVerse).EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		m := verseID.FindStringSubmatch(s.AttrOr("id", ""))
+		if m == nil {
+			return true
+		}
+		book, _ := strconv.Atoi(m[1])
+		ch, _ := strconv.Atoi(m[2])
+		v, _ := strconv.Atoi(m[3])
+		if book != d.Book || ch != d.Chapter {
+			return true
+		}
+		return fn(v, s)
+	})
+}
+
+// verseBlockOf is the paragraph a verse segment is set in, nil when it is in none.
+func verseBlockOf(s *goquery.Selection) *html.Node {
+	if b := s.Closest(selVerseBlock); b.Length() > 0 {
+		return b.Get(0)
+	}
+	return nil
+}
+
+// isPoetryLine reports whether a paragraph is one line of poetry.
+func isPoetryLine(n *html.Node) bool {
+	if n == nil {
+		return false
+	}
+	for _, a := range n.Attr {
+		if a.Key == "class" {
+			return slices.ContainsFunc(strings.Fields(a.Val), func(c string) bool {
+				return slices.Contains(poetryLineClasses, c)
+			})
+		}
+	}
+	return false
 }
 
 // StudySection extracts everything the study pane attaches to one verse.

@@ -197,13 +197,23 @@ func parseOne(s string, t *Table) ([]Ref, error) {
 		return nil, err
 	}
 	rest = strings.TrimSpace(rest)
+	single := singleChapter(book)
+	if single && (rest == "" || rest == "1") {
+		// a book of one chapter is all of it, "Jude" or "Jude 1"
+		return []Ref{{Book: book, Chapter: 1}}, nil
+	}
 	if rest == "" {
 		return nil, fmt.Errorf("missing chapter in %q (whole-book references are not supported)", s)
 	}
 	var refs []Ref
 	// the chapter a bare number belongs to: none until a span names verses, so
-	// "Pr 8-9, 11" is chapters and "Pr 8:8, 9" is verses of chapter 8
+	// "Pr 8-9, 11" is chapters and "Pr 8:8, 9" is verses of chapter 8. A book
+	// of one chapter is cited by its verses alone — "Jude 3", "Phm 10-12" —
+	// so there a bare number is a verse from the start.
 	chapter := 0
+	if single {
+		chapter = 1
+	}
 	for span := range strings.SplitSeq(rest, ",") {
 		span = strings.TrimSpace(span)
 		if span == "" {
@@ -336,8 +346,9 @@ func splitBook(s string, t *Table) (int, string, error) {
 	if len(fields) == 0 {
 		return 0, "", fmt.Errorf("empty reference")
 	}
-	// try the longest book-name prefix first: "song of solomon 2:1"
-	for i := len(fields) - 1; i >= 1; i-- {
+	// try the longest book-name prefix first: "song of solomon 2:1", and the
+	// whole input, which names a book without a chapter: "Jude"
+	for i := len(fields); i >= 1; i-- {
 		name := strings.Join(fields[:i], " ")
 		if book, ok := t.Lookup(name); ok {
 			return book, strings.Join(fields[i:], " "), nil

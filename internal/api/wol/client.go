@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 )
@@ -47,8 +48,12 @@ func cfgPatternFor(locale string) *regexp.Regexp {
 // so even a locale-anchored body match can pick up a foreign pair.
 // Kept for the freshness window, then asked again; while wol cannot be
 // reached, the pair last seen is used.
+//
+// A locale the library has no edition in is redirected to the English home
+// page, which must not pass for it: that is ErrNoLibrary, and not English
+// content under the language's name.
 func (c *Client) ConfigFor(ctx context.Context, locale string) (Config, error) {
-	return httpx.Memo(ctx, c.cache, "wolcfg3-"+locale, func(ctx context.Context) (Config, error) {
+	return httpx.Memo(ctx, c.cache, "wolcfg4-"+locale, func(ctx context.Context) (Config, error) {
 		return c.configFor(ctx, locale)
 	})
 }
@@ -59,7 +64,7 @@ func (c *Client) configFor(ctx context.Context, locale string) (Config, error) {
 	// the redirect is all that is needed, and a HEAD follows it as well
 	if resp, err := c.hc.Head(ctx, home, nil); err == nil && resp.StatusCode/100 == 2 {
 		if m := cfgPathPattern.FindStringSubmatch(finalPath(resp)); m != nil {
-			return Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}, nil
+			return landed(locale, Config{Locale: m[1], Rsconf: m[2], Lp: m[3]})
 		}
 	}
 	resp, err := c.hc.Get(ctx, home, nil)
@@ -69,7 +74,7 @@ func (c *Client) configFor(ctx context.Context, locale string) (Config, error) {
 	defer resp.Body.Close()
 
 	if m := cfgPathPattern.FindStringSubmatch(finalPath(resp)); m != nil {
-		return Config{Locale: m[1], Rsconf: m[2], Lp: m[3]}, nil
+		return landed(locale, Config{Locale: m[1], Rsconf: m[2], Lp: m[3]})
 	}
 	// no redirect (or an unexpected target): fall back to a body scan
 	body, err := io.ReadAll(resp.Body)
@@ -81,6 +86,35 @@ func (c *Client) configFor(ctx context.Context, locale string) (Config, error) {
 		return Config{}, fmt.Errorf("could not find wol library config for %q on %s (page layout changed?)", locale, home)
 	}
 	cfg = Config{Locale: locale, Rsconf: string(m[1]), Lp: string(m[2])}
+	return cfg, nil
+}
+
+// ErrNoLibrary is a language the library has no edition in: one there is
+// media in, say, but no publications on wol.jw.org. To errors.Is it is
+// ErrNoTranslation too — the library has no counterpart in that language.
+var ErrNoLibrary = fmt.Errorf("%w: no library in that language", ErrNoTranslation)
+
+// noLibrary is ErrNoLibrary for one locale, worded for the reader.
+type noLibrary string
+
+func (e noLibrary) Error() string {
+	return fmt.Sprintf("the Watchtower Online Library has no edition in %q", string(e))
+}
+func (e noLibrary) Unwrap() error { return ErrNoLibrary }
+
+// landed checks the library a locale was sent to is in that language. wol
+// sends a locale it has no library for to the English one (Bena, "bez", to
+// /en); a regional variant goes to its language ("es-es" to /es, "en-ng" to
+// /en) and is that language, as is a locale spelled in another case ("pt-pt"
+// to /pt-PT).
+func landed(asked string, cfg Config) (Config, error) {
+	base := func(locale string) string {
+		b, _, _ := strings.Cut(strings.ToLower(locale), "-")
+		return b
+	}
+	if base(cfg.Locale) != base(asked) {
+		return Config{}, noLibrary(asked)
+	}
 	return cfg, nil
 }
 

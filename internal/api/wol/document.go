@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 
 	"github.com/dgrieser/jw-cli/internal/htmlx"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -64,18 +65,19 @@ func parseDocument(doc *goquery.Document, base string) model.Article {
 		return art
 	}
 
-	title := doc.Find("h1").First()
-	art.Title = cleanSpace(title.Text())
-	if art.Title == "" {
-		art.Title = cleanSpace(doc.Find("title").Text())
-	}
+	art.Title = documentTitle(doc, content)
 
-	// drop non-content chrome inside the article container
+	// drop non-content chrome inside the article container: navigation, and
+	// what the page's scripts work with — the image viewer's lightbox, the
+	// hidden fields they read their settings from, comments
 	pruned := content.Clone()
-	pruned.Find("#regionMain nav, .resultsNavigationSelected, #docSubMedia, .groupTOC, #contentColumnControl, " + todayChrome).Remove()
-	html, err := goquery.OuterHtml(pruned)
-	if err == nil {
-		art.HTML = html
+	pruned.Find("#regionMain nav, .resultsNavigationSelected, #docSubMedia, .groupTOC, #contentColumnControl, " +
+		todayChrome + ", " + scriptChrome).Remove()
+	for _, n := range pruned.Nodes {
+		dropComments(n)
+	}
+	if out, err := goquery.OuterHtml(pruned); err == nil {
+		art.HTML = out
 	}
 	art.Images = htmlx.Images(content, base)
 	art.ScriptureRefs = htmlx.ScriptureRefs(content, base)
@@ -86,6 +88,60 @@ func parseDocument(doc *goquery.Document, base string) model.Article {
 		}
 	}
 	return art
+}
+
+// scriptChrome is what a document page carries for its scripts inside the
+// article: the lightbox wol builds its image viewer from, and the form
+// controls holding the page's settings (the share link, the pub-media
+// endpoint) and the viewer's buttons. A study article's answer fields
+// (textarea) belong to the document and stay.
+const scriptChrome = ".pswp, input, button"
+
+// dropComments removes the HTML comments under n.
+func dropComments(n *html.Node) {
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		if c.Type == html.CommentNode {
+			n.RemoveChild(c)
+		} else {
+			dropComments(c)
+		}
+		c = next
+	}
+}
+
+// selSiteName is the library's name in the banner of every page, in the page's
+// language: what its <title> ends in.
+const selSiteName = ".titleBig"
+
+// documentTitle is the document's own heading, or failing one — the meetings
+// page has none, nor have some search hits — the page's <title> without the
+// library's name the site appends to it in every language ("He Fought Loyally
+// for His God — Watchtower ONLINE LIBRARY", "Johannes 3 — Wachtturm
+// ONLINE-BIBLIOTHEK"). A page titled with that name alone has no title of its
+// own and gets none.
+func documentTitle(doc *goquery.Document, content *goquery.Selection) string {
+	for _, h := range []*goquery.Selection{content.Find("h1").First(), doc.Find("h1").First()} {
+		if t := cleanSpace(h.Text()); t != "" {
+			return t
+		}
+	}
+	return stripSiteName(cleanSpace(doc.Find("title").Text()), cleanSpace(doc.Find(selSiteName).First().Text()))
+}
+
+// stripSiteName takes the library's name off a page title. Without the banner
+// to say what the name is, it is what follows the last dash.
+func stripSiteName(title, site string) string {
+	if site != "" {
+		if t, ok := strings.CutSuffix(title, site); ok {
+			return strings.TrimRight(t, " —–-|")
+		}
+		return title
+	}
+	if i := strings.LastIndex(title, " — "); i >= 0 {
+		return strings.TrimSpace(title[:i])
+	}
+	return title
 }
 
 // DocIDFromURL is the document id a wol link points at, or zero when it points

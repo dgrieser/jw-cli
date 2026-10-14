@@ -256,6 +256,7 @@ jw bible read "mt 24:3-14" -o text           # abbreviations, ranges
 jw bible read "Pr 8:8, 9"                    # single verses
 jw bible read "Pr 8-9"                       # whole chapters
 jw bible read "Pr 8:30-9:6"                  # across a chapter boundary
+jw bible read "Jude 3-5"                     # one-chapter books: verses alone; "Jude" is all of it
 jw bible read "Joh 3:16; Ro 5:8"             # multiple references
 jw bible read "Psalm 83" --bible nwt         # other editions: nwt, Rbi8, int, ...
 jw bible read "Joh 3:16" --bible-all         # every edition of the language, compared
@@ -305,7 +306,9 @@ with every image:
 A study-bible verse picture keeps its explanation and its credit on the gallery
 page its thumbnail links to, so `jw bible media` reads that page as well
 (cached) and lists the full-size rendition instead of the
-thumbnail. Failing to reach it costs the extra words, not the entry.
+thumbnail. Failing to reach it costs the extra words, not the entry. A verse's
+clip is listed as the video it plays a stretch of: its poster is the picture,
+the video is what `--download` and `jw download` save.
 
 The metadata is printed with `--no-urls` too: the flag hides where a picture is,
 not what it shows. `-o json` carries it as the `image` object of a result and on

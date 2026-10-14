@@ -1,0 +1,67 @@
+{
+  "pubName": "New World Translation of the Holy Scriptures (2013&nbsp;Revision)",
+  "parentPubName": "New World Translation of the Holy Scriptures (2013&nbsp;Revision)",
+  "booknum": null,
+  "pub": "nwt",
+  "issue": "",
+  "formattedDate": "",
+  "fileformat": [
+    "PDF"
+  ],
+  "track": null,
+  "specialty": "",
+  "pubImage": {
+    "url": "",
+    "modifiedDatetime": "",
+    "checksum": null
+  },
+  "languages": {
+    "E": {
+      "name": "English",
+      "direction": "ltr",
+      "locale": "en",
+      "script": "ROMAN"
+    }
+  },
+  "files": {
+    "E": {
+      "PDF": [
+        {
+          "title": "New World Translation of the Holy Scriptures (2013&nbsp;Revision)",
+          "file": {
+            "url": "https://cfp2.jw-cdn.org/a/d48df68/4/o/nwt_E.pdf",
+            "stream": "https://jw.org",
+            "modifiedDatetime": "2026-05-01 15:05:36",
+            "checksum": "b19f062dd49a4ff129f3bff637b639e5"
+          },
+          "filesize": 49436637,
+          "trackImage": {
+            "url": "",
+            "modifiedDatetime": "",
+            "checksum": null
+          },
+          "markers": null,
+          "label": "0p",
+          "track": 0,
+          "hasTrack": false,
+          "pub": "nwt",
+          "docid": 0,
+          "booknum": 0,
+          "mimetype": "application/pdf",
+          "edition": "",
+          "editionDescr": "Regular",
+          "format": "",
+          "formatDescr": "Regular",
+          "specialty": "",
+          "specialtyDescr": "",
+          "subtitled": false,
+          "frameWidth": 0,
+          "frameHeight": 0,
+          "frameRate": 0,
+          "duration": 0,
+          "bitRate": 0
+        }
+      ]
+    }
+  }
+}
