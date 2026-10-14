@@ -209,6 +209,35 @@ func TestEditionsProbeOtherLibraries(t *testing.T) {
 	}
 }
 
+// How far a library was looked into outlives the client: the next command
+// does not look into it again before the day is out, neither on new pages
+// nor on the pages kept.
+func TestEditionsProbesOutliveTheClient(t *testing.T) {
+	ctx := context.Background()
+	c, site, srv := editionClient(t)
+	get := func(c *Client, path string) {
+		t.Helper()
+		if _, err := c.GetText(ctx, srv.URL+path, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	site.serve("/en", 2027)
+	get(c, "/en?lib=en")
+	for i := range probePages {
+		path := fmt.Sprintf("/fr%d", i)
+		site.serve(path, 2026)
+		get(c, path+"?lib=fr")
+	}
+	busts := site.busts
+	next := New(WithResponseCache(Open(c.responses.Dir(), CacheOptions{})), WithEditions(fakeEditions{}))
+	site.serve("/fr9", 2026)
+	get(next, "/fr9?lib=fr")
+	get(next, "/fr0?lib=fr")
+	if site.busts != busts {
+		t.Errorf("the next command looked into it again: %d busts after %d", site.busts, busts)
+	}
+}
+
 // A page a lagging server says is gone is asked for once more past the CDN
 // before what is kept of it — the body, a memo built from it — is given up.
 func TestGoneIsConfirmedPastTheCDN(t *testing.T) {

@@ -51,6 +51,17 @@ type probe struct {
 	pages int
 }
 
+// probesKey is where how far each scope was looked into is kept: every
+// command is a process of its own, and would otherwise look into a library
+// that lags behind another on every run, not on a few pages a day.
+const probesKey = "probes1"
+
+// probeRecord is a probe as it is kept.
+type probeRecord struct {
+	Since int64 `json:"s"` // unix seconds
+	Pages int   `json:"p"`
+}
+
 // editionsKey is where the newest edition of each scope is kept, so a restart
 // does not take an old edition for the newest.
 const editionsKey = "editions1"
@@ -98,6 +109,19 @@ func (c *Client) loadEditions() {
 			c.newest.n = map[string]int{}
 		}
 	}
+	c.newest.probed = c.keptProbes()
+}
+
+// keptProbes reads how far each scope was looked into, as kept.
+func (c *Client) keptProbes() map[string]probe {
+	out := map[string]probe{}
+	var kept map[string]probeRecord
+	if c.responses != nil && c.responses.Get(probesKey, &kept) {
+		for scope, r := range kept {
+			out[scope] = probe{since: time.Unix(r.Since, 0), pages: r.Pages}
+		}
+	}
+	return out
 }
 
 // newestAny is the newest edition seen of any scope.
@@ -131,19 +155,34 @@ func (c *Client) suspect(scope string, n int) bool {
 	return false
 }
 
-// probed notes that scope was looked into for a newer edition.
+// probed notes that scope was looked into for a newer edition, and keeps it.
 func (c *Client) probed(scope string) {
 	c.newest.mu.Lock()
 	defer c.newest.mu.Unlock()
-	if c.newest.probed == nil {
-		c.newest.probed = map[string]probe{}
+	c.loadEditions()
+	// what another command looked into meanwhile counts as well
+	for s, k := range c.keptProbes() {
+		if p := c.newest.probed[s]; k.since.After(p.since) || k.since.Equal(p.since) && k.pages > p.pages {
+			c.newest.probed[s] = k
+		}
 	}
 	p := c.newest.probed[scope]
 	if time.Since(p.since) > probeEvery {
-		p = probe{since: time.Now()}
+		// to the second, as it is kept
+		p = probe{since: time.Unix(time.Now().Unix(), 0)}
 	}
 	p.pages++
 	c.newest.probed[scope] = p
+	if c.responses == nil {
+		return
+	}
+	kept := map[string]probeRecord{}
+	for s, p := range c.newest.probed {
+		if time.Since(p.since) <= probeEvery {
+			kept[s] = probeRecord{Since: p.since.Unix(), Pages: p.pages}
+		}
+	}
+	c.responses.Put(probesKey, kept)
 }
 
 // stamp notes in e which edition body is from.
