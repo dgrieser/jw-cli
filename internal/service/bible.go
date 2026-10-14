@@ -1,13 +1,18 @@
 package service
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	htmlpkg "html"
+	"net/http"
 	"strings"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -88,6 +93,9 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 	if err != nil {
 		return ReadResult{}, err
 	}
+	if err := bibleref.Validate(refs, table); err != nil {
+		return ReadResult{}, err
+	}
 	editions, err := s.ReadEditions(ctx, lng, req.Edition, req.AllBibles)
 	if err != nil {
 		return ReadResult{}, err
@@ -114,7 +122,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				doc, err = s.Chapter(ctx, lng, ed.Symbol, ref)
 				if err != nil {
 					if !req.AllBibles {
-						return ReadResult{}, err
+						return ReadResult{}, s.chapterError(ctx, lng, ed.Symbol, ref, table, err)
 					}
 					// a translation of part of the Bible only, or one that
 					// numbers its chapters differently
@@ -126,16 +134,17 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 			verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 			if err != nil {
 				if !req.AllBibles {
-					return ReadResult{}, fmt.Errorf("%s: %w", RefString(ref, table), err)
+					return ReadResult{}, verseError(ref, ed.Symbol, doc, table)
 				}
 				skipped = append(skipped, ed.Symbol)
 				continue
 			}
 			// where a reference running past its chapter ends is the edition's
-			// own answer, so it is resolved per edition
+			// own answer, so it is resolved per edition, and the passage is
+			// headed with the verses it shows
 			r := ResolveChapterEnd(ref, verses)
 			p := Passage{Ref: RefString(r, table), Book: r.Book, Chapter: r.Chapter,
-				Whole: ref.IsWholeChapter() || (ref.VerseStart <= 1 && ref.RunsToChapterEnd())}
+				Whole: ref.IsWholeChapter() || (ref.VerseStart <= 1 && ref.VerseEnd >= doc.LastVerse())}
 			if req.AllBibles {
 				p.Bible, p.BibleTitle = ed.Symbol, ed.Label()
 			}
@@ -335,15 +344,73 @@ func RefString(r bibleref.Ref, t *bibleref.Table) string {
 	}
 }
 
-// ResolveChapterEnd names the last verse of a reference that was written as
-// running past its chapter — "Pr 8:5-9:10" takes chapter 8 to its end — now that
-// the chapter has been read and where it ends is known.
+// ResolveChapterEnd names the last verse of a reference that runs past the end
+// of its chapter — "Pr 8:5-9:10" takes chapter 8 to its end, and "Joh 3:16-99"
+// ends where John 3 does, with verse 36 — now that the chapter has been read
+// and its verses are known. verses are the ones read for the reference.
 func ResolveChapterEnd(ref bibleref.Ref, verses []model.Verse) bibleref.Ref {
-	if !ref.RunsToChapterEnd() || len(verses) == 0 {
+	if ref.IsWholeChapter() || len(verses) == 0 {
 		return ref
 	}
-	ref.VerseEnd = verses[len(verses)-1].ID % 1000
+	if last := verses[len(verses)-1].ID % 1000; ref.VerseEnd > last {
+		ref.VerseEnd = last
+	}
 	return ref
+}
+
+// notThere is an error about something the library does not have, worded for
+// the reader. It is pubmedia.ErrNotFound to whoever classifies it — the server
+// answers it with 404 — without that sentinel's own words in the message.
+type notThere string
+
+func (e notThere) Error() string { return string(e) }
+func (e notThere) Unwrap() error { return pubmedia.ErrNotFound }
+
+// chapterError words why a chapter could not be read in an edition. wol refuses
+// a chapter it cannot serve with a bare 400 (or serves a page without verses),
+// whether the edition is none the language has or the edition does not cover
+// that part of the Bible — the Kingdom Interlinear has the Greek Scriptures
+// only — so the language's bible list tells the two apart. A chapter no book
+// has never gets here (bibleref.Validate), and any other failure is passed on
+// as it is.
+func (s *Service) chapterError(ctx context.Context, lng model.Language, edition string, ref bibleref.Ref,
+	t *bibleref.Table, err error) error {
+	var se *httpx.StatusError
+	refused := errors.As(err, &se) && (se.StatusCode == http.StatusBadRequest || se.StatusCode == http.StatusNotFound)
+	if !refused && !errors.Is(err, wol.ErrNoVerses) {
+		return err
+	}
+	cfg, cerr := s.WOLConfig(ctx, lng)
+	if cerr != nil {
+		return err
+	}
+	editions, berr := s.WOL.Bibles(ctx, cfg)
+	if berr != nil {
+		return err
+	}
+	symbols := make([]string, 0, len(editions))
+	for _, e := range editions {
+		if e.Symbol == edition {
+			chapter := RefString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter}, t)
+			return notThere(fmt.Sprintf("%s is not in %s", chapter, e.Label()))
+		}
+		symbols = append(symbols, e.Symbol)
+	}
+	return fmt.Errorf("unknown bible edition %q: the bibles in %s are %s",
+		edition, cmp.Or(lng.Name, lng.Symbol), strings.Join(symbols, ", "))
+}
+
+// verseError words a reference to verses its chapter does not have once the
+// chapter has been read: "Joh 3:99" asks past the end of John 3, which is a
+// mistake of the reference, while a verse inside the chapter that the edition
+// leaves out — the NWT has no Matthew 17:21 — is not there to be read.
+func verseError(ref bibleref.Ref, edition string, doc *wol.ChapterDoc, t *bibleref.Table) error {
+	last := doc.LastVerse()
+	if last > 0 && ref.VerseStart > last {
+		chapter := RefString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter}, t)
+		return fmt.Errorf("there is no %s: %s has %d verses", RefString(ref, t), chapter, last)
+	}
+	return notThere(fmt.Sprintf("%s is not in %s", RefString(ref, t), cmp.Or(edition, studyEdition)))
 }
 
 // ForEachStudySection iterates the study sections of every verse in the parsed
@@ -355,6 +422,9 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 	if err != nil {
 		return err
 	}
+	if err := bibleref.Validate(refs, table); err != nil {
+		return err
+	}
 	chapters := map[string]*wol.ChapterDoc{}
 	for _, ref := range refs {
 		key := fmt.Sprintf("%d-%d", ref.Book, ref.Chapter)
@@ -362,7 +432,7 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 		if !ok {
 			doc, err = s.Chapter(ctx, lng, studyEdition, ref)
 			if err != nil {
-				return err
+				return s.chapterError(ctx, lng, studyEdition, ref, table, err)
 			}
 			chapters[key] = doc
 		}
@@ -371,7 +441,7 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 		texts := map[int]model.Verse{}
 		verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 		if err != nil {
-			return fmt.Errorf("%s: %w", RefString(ref, table), err)
+			return verseError(ref, studyEdition, doc, table)
 		}
 		ref = ResolveChapterEnd(ref, verses)
 		from, to := ref.VerseStart, ref.VerseEnd
@@ -572,11 +642,10 @@ func (s *Service) BibleNav(ctx context.Context, lng model.Language, edition stri
 	return s.WOL.BibleNav(ctx, cfg, edition)
 }
 
-// BookNav is the chapter grid of one book in an edition.
 // VerseCount is how many verses a chapter has in an edition: the number of
 // its last verse.
 func (s *Service) VerseCount(ctx context.Context, lng model.Language, edition string, book, chapter int) (int, error) {
-	if book < 1 || book > 66 || chapter < 1 {
+	if book < 1 || book > 66 || chapter < 1 || chapter > bibleref.Chapters(book) {
 		return 0, fmt.Errorf("invalid chapter %d:%d", book, chapter)
 	}
 	cfg, err := s.WOLConfig(ctx, lng)
@@ -586,6 +655,7 @@ func (s *Service) VerseCount(ctx context.Context, lng model.Language, edition st
 	return s.WOL.VerseCount(ctx, cfg, edition, book, chapter)
 }
 
+// BookNav is the chapter grid of one book in an edition.
 func (s *Service) BookNav(ctx context.Context, lng model.Language, edition string, book int) (wol.BookNav, error) {
 	if book < 1 || book > 66 {
 		return wol.BookNav{}, fmt.Errorf("invalid book %d (want 1-66)", book)

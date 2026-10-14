@@ -2,6 +2,7 @@ package wol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -88,6 +89,11 @@ const (
 	classPublicationIndex = "ref-dx"
 )
 
+// ErrNoVerses is a chapter page without a verse on it: a chapter the edition
+// does not have, served as an empty page rather than refused (or a page whose
+// layout changed).
+var ErrNoVerses = errors.New("no verses on the chapter page")
+
 // Chapter fetches one bible chapter page (with the study pane inlined).
 func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, chapter int) (*ChapterDoc, error) {
 	if edition == "" {
@@ -100,7 +106,7 @@ func (c *Client) Chapter(ctx context.Context, cfg Config, edition string, book, 
 	}
 	cd := &ChapterDoc{doc: doc, base: c.hc.Base.WOL, Book: book, Chapter: chapter, URL: u}
 	if cd.doc.Find(selVerse).Length() == 0 {
-		return nil, fmt.Errorf("no verses found at %s (chapter missing in %s, or page layout changed)", u, edition)
+		return nil, fmt.Errorf("%w at %s (chapter missing in %s, or page layout changed)", ErrNoVerses, u, edition)
 	}
 	return cd, nil
 }

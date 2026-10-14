@@ -1,5 +1,7 @@
 package bibleref
 
+import "fmt"
+
 // chapterCounts is how many chapters each book has (index = book number), as
 // the library numbers them: Joel has three, Malachi four. The canon is closed,
 // so the table never moves; the verses of a chapter are another matter, they
@@ -27,3 +29,23 @@ func Chapters(book int) int {
 // singleChapter reports whether a book has one chapter only — Obadiah,
 // Philemon, 2 and 3 John, Jude — and so is cited by its verses alone.
 func singleChapter(book int) bool { return Chapters(book) == 1 }
+
+// Validate checks that every reference names a chapter its book has: "Joh 22"
+// reads as well as "Joh 21", but John ends with chapter 21. The error names the
+// book the way t does.
+func Validate(refs []Ref, t *Table) error {
+	for _, r := range refs {
+		n := Chapters(r.Book)
+		switch {
+		case n == 0:
+			return fmt.Errorf("there is no bible book %d (want 1-66)", r.Book)
+		case r.Chapter <= n:
+			continue
+		case n == 1:
+			return fmt.Errorf("there is no %s %d: %s has only one chapter", t.Name(r.Book), r.Chapter, t.Name(r.Book))
+		default:
+			return fmt.Errorf("there is no %s %d: %s has %d chapters", t.Name(r.Book), r.Chapter, t.Name(r.Book), n)
+		}
+	}
+	return nil
+}

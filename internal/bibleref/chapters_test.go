@@ -68,3 +68,33 @@ func TestParseSingleChapterBooks(t *testing.T) {
 		t.Errorf("Parse(John): want a missing chapter, got %v", err)
 	}
 }
+
+// What parses is not always there: Validate names the chapter a book does not
+// have, in the table's own words.
+func TestValidate(t *testing.T) {
+	tbl := English()
+	for in, want := range map[string]string{
+		"Joh 22":       "there is no John 22: John has 21 chapters",
+		"Joh 21:25":    "",
+		"Ps 150":       "",
+		"Ps 151:1":     "there is no Psalms 151: Psalms has 150 chapters",
+		"Jude 2:1":     "there is no Jude 2: Jude has only one chapter",
+		"Jude 25":      "",
+		"Mal 4:6":      "",
+		"Joe 4:1":      "there is no Joel 4: Joel has 3 chapters",
+		"Ge 50; Ex 41": "there is no Exodus 41: Exodus has 40 chapters",
+	} {
+		refs, err := Parse(in, tbl)
+		if err != nil {
+			t.Errorf("Parse(%q): %v", in, err)
+			continue
+		}
+		err = Validate(refs, tbl)
+		switch {
+		case want == "" && err != nil:
+			t.Errorf("Validate(%q): %v", in, err)
+		case want != "" && (err == nil || err.Error() != want):
+			t.Errorf("Validate(%q) = %v, want %q", in, err, want)
+		}
+	}
+}
