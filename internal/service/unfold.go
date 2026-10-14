@@ -152,6 +152,17 @@ func (r *tooltipResolver) withCited(ctx context.Context, on bool) *tooltipResolv
 }
 
 func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Tooltip, error) {
+	// one of several passages a citation names is asked for as the citation
+	if base, item := unfold.SplitItemPath(path); base != path {
+		tip, err := r.Resolve(ctx, base)
+		if err != nil {
+			return tip, err
+		}
+		if items := tip.Items(); item <= len(items) {
+			return items[item-1], nil
+		}
+		return model.Tooltip{}, fmt.Errorf("no passage %d at %s", item, base)
+	}
 	if tip, ok := r.tips[path]; ok {
 		return tip, nil
 	}
@@ -164,17 +175,27 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 	if err != nil {
 		return tip, err
 	}
-	if strings.TrimSpace(tip.ContentHTML) == "" && tip.URL != "" {
-		// wol names some passages — a box of a book, a sidebar — without
-		// their text; the document it links to has them. Best effort: the
-		// title and the link are still worth showing without it
-		if passage, err := r.s.WOL.Passage(ctx, tip.URL); err == nil {
-			tip.ContentHTML = passage
-		}
+	tip.ContentHTML = r.passageOf(ctx, tip)
+	for i := range tip.More {
+		tip.More[i].ContentHTML = r.passageOf(ctx, tip.More[i])
 	}
 	r.keep(path, tip)
 	r.s.mem.rememberTip(r.lng, path, tip)
 	return tip, nil
+}
+
+// passageOf is the text of one passage a citation was answered with. wol names
+// some passages — a box of a book, a sidebar — without their text; the
+// document it links to has them. Best effort: the title and the link are still
+// worth showing without it.
+func (r *tooltipResolver) passageOf(ctx context.Context, tip model.Tooltip) string {
+	if strings.TrimSpace(tip.ContentHTML) != "" || tip.URL == "" {
+		return tip.ContentHTML
+	}
+	if passage, err := r.s.WOL.Passage(ctx, tip.URL); err == nil {
+		return passage
+	}
+	return tip.ContentHTML
 }
 
 // Study reads the study pane of the verse wol titled a citation with. wol titles
@@ -365,7 +386,9 @@ func (r *tooltipResolver) namedByResearch(ctx context.Context, st *unfold.Study)
 			add("", ref.Text)
 			continue
 		}
-		add(tip.URL, ref.Text)
+		for _, item := range tip.Items() {
+			add(item.URL, ref.Text)
+		}
 	}
 	return names, requests
 }
@@ -1060,6 +1083,11 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 		}
 		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source)
 	}
+	if n.Ref.IsVerse() && n.Item > 0 && n.Title != "" {
+		// one of several verses the citation names: the citation names them
+		// all, the verse's own title only itself
+		return strings.TrimRight(n.Title, ",;. ")
+	}
 	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
 		return ref
 	}
@@ -1246,7 +1274,8 @@ func splitRootRefs(nodes []unfold.Node, roots []unfold.Ref) (research, marginal 
 		paths[ref.Path] = true
 	}
 	for _, n := range nodes {
-		if paths[n.Ref.Path] {
+		// every passage of a citation goes where the citation does
+		if paths[unfold.CitationPath(n.Ref.Path)] {
 			research = append(research, n)
 			continue
 		}
@@ -1361,9 +1390,12 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 	if len(blocks) == 0 {
 		return content, children
 	}
-	at := map[string]int{}
+	// the children of each citation: every passage it was answered with goes
+	// where the citation stands
+	at := map[string][]int{}
 	for i, c := range children {
-		at[c.Ref.Path] = i
+		path := unfold.CitationPath(c.Ref.Path)
+		at[path] = append(at[path], i)
 	}
 	placed := map[string]bool{}
 	for _, block := range blocks {
@@ -1374,7 +1406,7 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 		}
 		var sub strings.Builder
 		for _, cite := range block.refs {
-			i, ok := at[cite.ref.Path]
+			list, ok := at[cite.ref.Path]
 			if !ok || placed[cite.ref.Path] {
 				// cited here but expanded elsewhere: at another block of this
 				// passage, or not at all because the depth ran out
@@ -1383,8 +1415,10 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 			placed[cite.ref.Path] = true
 			// one at a time: each names the verse it was found in, which is
 			// what a marginal reference has instead of a citation text
-			writeUnfoldNodes(&sub, []unfold.Node{children[i]}, level,
-				verseSource(source, cite.chapter, cite.verse), txt)
+			for _, i := range list {
+				writeUnfoldNodes(&sub, []unfold.Node{children[i]}, level,
+					verseSource(source, cite.chapter, cite.verse), txt)
+			}
 		}
 		if sub.Len() == 0 {
 			continue
@@ -1404,7 +1438,7 @@ func inlineChildren(content string, children []unfold.Node, level int, source st
 	out = collapseRules(out)
 	var rest []unfold.Node
 	for _, c := range children {
-		if !placed[c.Ref.Path] {
+		if !placed[unfold.CitationPath(c.Ref.Path)] {
 			rest = append(rest, c)
 		}
 	}

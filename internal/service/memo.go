@@ -87,13 +87,15 @@ func versesKey(lng model.Language, ids []int) string {
 }
 
 // rememberTip keeps what a citation answered, under its link and, for bible
-// text, under the verses it holds.
+// text, every passage of it under the verses that passage holds.
 func (m *memo) rememberTip(lng model.Language, path string, tip model.Tooltip) {
 	m.init()
 	m.tips.put(tipKey(lng, path), tip)
 	if unfold.IsCitation(path) && (unfold.Ref{Path: path}).IsVerse() {
-		if ids := unfold.VerseIDs(tip.ContentHTML); len(ids) > 0 {
-			m.verses.put(versesKey(lng, ids), tip)
+		for _, item := range tip.Items() {
+			if ids := unfold.VerseIDs(item.ContentHTML); len(ids) > 0 {
+				m.verses.put(versesKey(lng, ids), item)
+			}
 		}
 	}
 }

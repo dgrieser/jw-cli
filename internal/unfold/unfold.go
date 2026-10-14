@@ -154,8 +154,16 @@ type Node struct {
 	// references, which are Children; nil for a passage, and for any node of
 	// an expansion counted in levels.
 	Parts *Parts
+	// Item numbers the passages of a citation wol answered with several — a
+	// marginal reference pointing at seven verses — from one; zero for a
+	// citation answered with one. Each passage is a node of its own, the
+	// first under the citation's path, the others under ItemPath.
+	Item int
 	// ready says the content was at hand without asking (KnownResolver).
 	ready bool
+	// more are the passages after the first of the citation, until they are
+	// nodes of their own (splitItems).
+	more []model.Tooltip
 }
 
 // Parts is the material of a verse in an expansion counted in bible references
@@ -381,56 +389,86 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		res.Nodes[i] = plan(append(Refs(g.Fragment), g.RootRefs...), seen)
 		tiers = append(tiers, &res.Nodes[i])
 	}
+	// ask is what Confirm is asked before cost is spent on the level; what is
+	// pending when the answer is no is everything that cost was for
+	ask := func(level, cost, pending int) (bool, error) {
+		if o.Confirm == nil {
+			return true, nil
+		}
+		ok, err := s.Check(level, cost)
+		if err == nil && !ok {
+			res.Pending += pending
+			res.Stopped = true
+		}
+		return ok, err
+	}
 	for level := 1; ; level++ {
 		frontier := nodesIn(tiers)
 		if len(frontier) == 0 {
 			break
 		}
-		if o.Confirm != nil {
-			ok, err := s.Check(level, requestCost(frontier, study != nil, o.citedCostAt(level, cited != nil)))
-			if err != nil {
-				return res, err
-			}
-			if !ok {
-				res.Pending += len(frontier)
-				res.Stopped = true
-				return res, nil
-			}
+		citedCost := o.citedCostAt(level, cited != nil)
+		if ok, err := ask(level, requestCost(frontier, study != nil, citedCost), len(frontier)); err != nil || !ok {
+			return res, err
 		}
 		// the research-guide passages each verse turned out to have, kept aside
 		// so they join the citations found in its text. Keyed by path rather
 		// than by node: dropping a duplicate moves the nodes of a tier around.
 		research := map[string][]Ref{}
-		for i, n := range frontier {
-			if err := ctx.Err(); err != nil {
-				res.Pending += len(frontier) - i
-				return res, err
+		// what a verse brings beside its text: its study material, and who
+		// quotes it
+		verse := func(n *Node) int {
+			if n.Err != nil || !n.Ref.IsVerse() {
+				return 0
 			}
-			tip, err := r.Resolve(ctx, n.Ref.Path)
-			res.Requests++
-			if err != nil {
-				n.Err = err
-			} else {
-				n.Title, n.HTML, n.URL = tip.Title, tip.ContentHTML, tip.URL
-			}
-			if study != nil && n.Err == nil && n.Ref.IsVerse() {
-				s, err := study.Study(ctx, n.Title)
-				res.Requests += s.Requests
+			requests := 0
+			if study != nil {
+				st, err := study.Study(ctx, n.Title)
+				requests += st.Requests
 				if err != nil {
 					n.StudyErr = err
 				} else {
-					n.Notes, n.Links, n.Media, n.MediaKnown = s.Notes, s.Links, s.Media, true
-					research[n.Ref.Path] = s.Research
+					n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
+					research[n.Ref.Path] = st.Research
 				}
 			}
-			if cited != nil && level <= o.CitedDepth && n.Err == nil && n.Ref.IsVerse() {
+			if cited != nil && level <= o.CitedDepth {
 				c := cited.Cited(ctx, n.Title)
-				res.Requests += c.Requests
-				n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy = c.Results, c.Total, c.Ref, c.Lazy
+				requests += c.Requests
+				n.setCited(c)
 			}
-			if o.Progress != nil {
-				o.Progress(level, i+1, len(frontier))
+			return requests
+		}
+		p := s.pass(level)
+		spent, left, err := p.each(ctx, frontier, func(n *Node) int {
+			tip, err := r.Resolve(ctx, n.Ref.Path)
+			if err != nil {
+				n.Err = err
+			} else {
+				n.resolved(tip)
 			}
+			return 1 + verse(n)
+		})
+		res.Requests += spent
+		if err != nil {
+			res.Pending += left
+			return res, err
+		}
+		// a citation answered with several passages is a reference for each,
+		// which brings what a verse brings like any other; their text is in
+		// hand already, the rest is asked about before it is spent
+		if items := s.splitItems(tiers, nil); len(items) > 0 {
+			cost := requestCost(items, study != nil, citedCost) - len(items)
+			if ok, err := ask(level, cost, len(items)); err != nil || !ok {
+				return res, err
+			}
+			spent, left, err := p.each(ctx, items, verse)
+			res.Requests += spent
+			if err != nil {
+				res.Pending += left
+				return res, err
+			}
+			frontier = nodesIn(tiers)
 		}
 		if dropped := duplicates(frontier, shown, s.run, level); len(dropped) > 0 {
 			for _, tier := range tiers {

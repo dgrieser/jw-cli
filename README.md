@@ -425,7 +425,10 @@ order, and leaves out whatever the verse does not have:
 3. **The marginal references**, under one heading naming the verse they belong
    to, each headed by the reference it points at and the verse it came from —
    which is what tells them from the references of a reference one level
-   deeper. What belongs to one of them is nested under it.
+   deeper. What belongs to one of them is nested under it. A `+` naming
+   several verses brings every one of them, each a reference of its own with
+   its own material one level deeper; so does a citation of a publication
+   that names several passages.
 4. **Quotations of …** — every publication a citation search finds quoting the
    verse, each with the passage it quotes it in, and every video quoting it,
    with the passage of its transcript: `jw bible cited` for that verse, printed

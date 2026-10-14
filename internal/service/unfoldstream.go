@@ -298,17 +298,19 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 				tip, err = r.Resolve(ctx, ref.Path)
 				sess.Spend(1)
 			}
-			passages := passageRefs(tip.ContentHTML)
+			// every verse the citation names that is not shown yet
+			left, ok := unshownItems(tip, cfg.Verses)
+			if err == nil && !ok {
+				continue
+			}
+			passages := itemPassageRefs(left)
 			if len(passages) == 0 {
 				// the verses as a chapter read before holds them, which carry
 				// no ids: the ones the citation names
 				passages = verseIDRefs(r.VersesOf(ctx, ref))
 			}
 			if err == nil && len(passages) > 0 {
-				if cfg.Verses.Shown(unfold.VerseIDs(tip.ContentHTML)) {
-					continue
-				}
-				note, err := s.streamCitedPassage(ctx, lng, i, ref, tip, passages, sess, cfg, txt, out)
+				note, err := s.streamCitedPassage(ctx, lng, i, ref, joinItems(left), passages, sess, cfg, txt, out)
 				if err != nil {
 					return joinNotes(notes), spent(), err
 				}
@@ -409,6 +411,50 @@ func passageRefs(passage string) []bibleref.Ref {
 	return out
 }
 
+// unshownItems are the passages of a citation of bible text that bring a
+// verse not shown yet, and ok is false when none does. A passage without verse
+// ids — bible text a chapter read before holds — is no repeat of anything.
+func unshownItems(tip model.Tooltip, shown *unfold.Verses) ([]model.Tooltip, bool) {
+	var out []model.Tooltip
+	for _, item := range tip.Items() {
+		if !shown.Shown(unfold.VerseIDs(item.ContentHTML)) {
+			out = append(out, item)
+		}
+	}
+	return out, len(out) > 0
+}
+
+// itemPassageRefs is the bible text of the passages of a citation, passage by
+// passage: two verses of one chapter a marginal reference names apart are two
+// passages, not the stretch between them.
+func itemPassageRefs(items []model.Tooltip) []bibleref.Ref {
+	var out []bibleref.Ref
+	for _, item := range items {
+		out = append(out, passageRefs(item.ContentHTML)...)
+	}
+	return out
+}
+
+// joinItems is the passages of a citation as one: their texts one after the
+// other, titled with all their titles.
+func joinItems(items []model.Tooltip) model.Tooltip {
+	if len(items) == 0 {
+		return model.Tooltip{}
+	}
+	out := items[0]
+	if len(items) == 1 {
+		return out
+	}
+	titles := make([]string, len(items))
+	var text strings.Builder
+	for i, item := range items {
+		titles[i] = strings.TrimRight(item.Title, ",;. ")
+		text.WriteString(item.ContentHTML)
+	}
+	out.Title, out.ContentHTML, out.More = strings.Join(titles, "; "), text.String(), nil
+	return out
+}
+
 // verseIDRefs is passageRefs for verse ids (book*1e6 + chapter*1e3 + verse).
 func verseIDRefs(ids []int) []bibleref.Ref {
 	var out []bibleref.Ref
@@ -441,7 +487,7 @@ func (s *Service) CitationPage(ctx context.Context, lng model.Language, path str
 	if err != nil {
 		return nil, "", err
 	}
-	if refs = passageRefs(tip.ContentHTML); len(refs) > 0 {
+	if refs = itemPassageRefs(tip.Items()); len(refs) > 0 {
 		return refs, "", nil
 	}
 	docURL, _, _ = strings.Cut(tip.URL, "#")
