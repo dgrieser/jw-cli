@@ -232,6 +232,8 @@ var en = Messages{
 	UICatsHint:    "codes such as w, g, bk, it, bi, dx",
 	UIPageSize:    "Results per page",
 
+	UIAllTranslations: "All translations",
+
 	UILazyFallback: "Show on a page of its own",
 
 	UIAbort:                "Abort",

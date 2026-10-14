@@ -19,9 +19,13 @@ import (
 	"github.com/dgrieser/jw-cli/internal/subtitles"
 )
 
-// chapterHref reads one whole chapter, named the way a typed reference names it.
+// chapterHref reads one whole chapter, named the way a typed reference names
+// it — in every bible of the language when the page reads them all.
 func (p biblePage) chapterHref(edition, bookName string, chapter int) string {
 	q := url.Values{"bible": {edition}, "ref": {fmt.Sprintf("%s %d", bookName, chapter)}}
+	if p.AllBibles {
+		q.Set("all", "1")
+	}
 	return p.WithLang("/bible?" + q.Encode())
 }
 

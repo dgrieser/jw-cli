@@ -1084,7 +1084,9 @@ type biblePage struct {
 	basePage
 	Ref     string
 	Edition string
-	Unfold  int
+	// AllBibles reads the passage in every bible of the language (?all=1).
+	AllBibles bool
+	Unfold    int
 	// AutoUnfold is the level the browser unfolds the reading to once it is
 	// shown, zero for none.
 	AutoUnfold int
@@ -1276,9 +1278,10 @@ func vidRef(vid int, to string) (bibleref.Ref, bool) {
 // brings, so the reader is the only view; the JSON API keeps the others.
 func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page := biblePage{
-		basePage: s.base(r, "Bible"),
-		Ref:      strings.TrimSpace(r.FormValue("ref")),
-		Edition:  valueOr(r, "bible", "nwtsty"),
+		basePage:  s.base(r, "Bible"),
+		Ref:       strings.TrimSpace(r.FormValue("ref")),
+		Edition:   valueOr(r, "bible", "nwtsty"),
+		AllBibles: boolParam(r, "all"),
 	}
 	page.Editions = s.editionOptions(r, page.Edition)
 	// a chapter picked from the header's book picker reads like one typed
@@ -1321,7 +1324,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Unfold, page.AutoUnfold = depth, auto
 	res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
-		Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
+		Refs: page.Ref, Edition: page.Edition, AllBibles: page.AllBibles,
 		Unfold: unfoldConfig(depth, forceParam(r)),
 	}, text(lng))
 	if err != nil {

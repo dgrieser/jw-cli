@@ -349,6 +349,8 @@ type Messages struct {
 	UICatsHint    string
 	// UIPageSize sets how many results a page of the jw.org search shows.
 	UIPageSize string
+	// UIAllTranslations reads a passage in every bible of the language.
+	UIAllTranslations string
 
 	// UILazyFallback leads a page read without scripts from a section that
 	// loads once opened to a page showing what it would load.
