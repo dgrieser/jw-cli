@@ -329,6 +329,25 @@ type Messages struct {
 	UIErrUnreachable string
 	UIErrTimeout     string
 
+	// UICited* are the page listing who quotes a verse (jw bible cited): its
+	// heading, the hint in its field, and the switch for the videos quoting
+	// the verse.
+	UICitedTitle  string
+	UICitedHint   string
+	UICitedVideos string
+	// UIScope* choose what the words looked for in the Online Library are
+	// found together in: a paragraph or a sentence.
+	UIScope    string
+	UIScopePar string
+	UIScopeSen string
+	// UICats* choose the publications a search of the Online Library covers:
+	// every one, bibles and indexes included, only some, or all but some;
+	// UICatsHint names the codes the last two take.
+	UICatsAll     string
+	UICatsInclude string
+	UICatsExclude string
+	UICatsHint    string
+
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string

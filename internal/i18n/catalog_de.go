@@ -220,6 +220,17 @@ var de = Messages{
 	UIErrUnreachable: "jw.org war nicht erreichbar. Bitte später erneut versuchen.",
 	UIErrTimeout:     "jw.org hat zu lange nicht geantwortet. Bitte später erneut versuchen.",
 
+	UICitedTitle:  "Zitate",
+	UICitedHint:   "Jer 31:15 — der Vers, dessen Zitate aufgelistet werden",
+	UICitedVideos: "Videos, die ihn zitieren",
+	UIScope:       "Wörter zusammen in",
+	UIScopePar:    "einem Absatz",
+	UIScopeSen:    "einem Satz",
+	UICatsAll:     "Alle Publikationen, auch Bibeln und Indizes",
+	UICatsInclude: "Nur diese Publikationen",
+	UICatsExclude: "Alle Publikationen außer",
+	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
+
 	UIAbort:                "Abbrechen",
 	UIAborted:              "Abgebrochen.",
 	UIFollow:               "Öffnen",

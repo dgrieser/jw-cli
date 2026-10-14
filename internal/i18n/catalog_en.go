@@ -220,6 +220,17 @@ var en = Messages{
 	UIErrUnreachable: "jw.org could not be reached. Please try again later.",
 	UIErrTimeout:     "jw.org took too long to answer. Please try again later.",
 
+	UICitedTitle:  "Quotations",
+	UICitedHint:   "Jer 31:15 — the verse whose quotations are listed",
+	UICitedVideos: "Videos quoting it",
+	UIScope:       "Words together in",
+	UIScopePar:    "a paragraph",
+	UIScopeSen:    "a sentence",
+	UICatsAll:     "Every publication, bibles and indexes included",
+	UICatsInclude: "Only these publications",
+	UICatsExclude: "All publications except",
+	UICatsHint:    "codes such as w, g, bk, it, bi, dx",
+
 	UIAbort:                "Abort",
 	UIAborted:              "Aborted.",
 	UIFollow:               "Open",

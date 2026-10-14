@@ -63,6 +63,7 @@ type htmlTemplate = template.Template
 var uiPages = []string{
 	"index", "search", "article", "bible", "dailytext", "meetings",
 	"media", "media_category", "media_item", "pub", "error", "confirm",
+	"cited",
 }
 
 // parseTemplates builds one template set per page at startup, so a parse error

@@ -94,6 +94,10 @@ func (p basePage) Active(path string) string {
 	if path == "/pub" && p.Path == "/article" {
 		return "active"
 	}
+	// and who quotes a verse is part of the bible's study
+	if path == "/bible" && p.Path == "/cited" {
+		return "active"
+	}
 	return ""
 }
 
