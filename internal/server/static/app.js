@@ -3966,10 +3966,16 @@
   }
 
   // blockExpansion is the expansion of a block that is no item, which links
-  // followed from it brought: after it, or inside a list item — past those
-  // of the verses in it
+  // followed from it brought: after it, or inside a list item — but never
+  // that of an item inside the list item, a paragraph of it, say
   function blockExpansion(b) {
-    return b.tagName === "LI" ? expansionIn(b, "") : expansionAfter(b, "");
+    if (b.tagName !== "LI") return expansionAfter(b, "");
+    var kids = b.querySelectorAll(":scope > .expansion:not([data-vid])");
+    for (var i = 0; i < kids.length; i++) {
+      var prev = kids[i].previousElementSibling;
+      if (!(prev && prev._unfold && prev._unfold.exp === kids[i])) return kids[i];
+    }
+    return null;
   }
 
   // listOf is the list an owner's sections go into, made when there is none
