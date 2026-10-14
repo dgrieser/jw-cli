@@ -384,7 +384,7 @@ type resultView struct {
 	Snippet  template.HTML
 	Excerpt  template.HTML
 	Href     string // internal page, when the row has one
-	External string // the row's own link on jw.org / wol.jw.org
+	External string // the row's own link on jw.org / wol.jw.org, which its menu offers
 	FileURL  string
 	ImageURL string
 	Duration string
@@ -961,10 +961,9 @@ type mediaItemPage struct {
 	Stream *model.MediaFile
 	// Text is what the item says in words — a song's lyrics, the document a
 	// recording reads, the transcript of its subtitles — and Paragraphs the
-	// transcript as running text. JWLink is the item's page on jw.org.
+	// transcript as running text.
 	Text       *model.MediaText
 	Paragraphs [][]model.Cue
-	JWLink     string
 	// HasResolution says a rendition has a picture size to show.
 	HasResolution bool
 }
@@ -993,10 +992,9 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := mediaItemPage{
-		basePage: s.base(r, item.Title),
+		basePage: s.base(r, item.Title).withSite(service.VideoLink(item.LANK, lng.Symbol)),
 		Item:     item,
 		Image:    service.BestImage(item.Images),
-		JWLink:   service.VideoLink(item.LANK, lng.Symbol),
 	}
 	var primary *model.CategoryRef
 	if item.PrimaryCategory != "" {
@@ -1093,7 +1091,7 @@ type bibleHitView struct {
 	Href     string
 	Refs     []bibleHitRef
 	Snippet  template.HTML
-	External string
+	External string // the hit on wol.jw.org, which its menu offers
 }
 
 // bibleHitRef is one passage of a hit, as a link into the reader.

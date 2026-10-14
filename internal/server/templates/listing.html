@@ -11,7 +11,7 @@
         {{- if not (or $media (eq .Kind "category"))}}
         <span class="kind">{{.Kind}}</span>
         {{- end}}
-        {{if .Href}}<a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
+        {{if .Href}}<a class="title" href="{{.Href}}"{{with .External}} data-site="{{.}}"{{end}}>{{or .Title $.T.UIUntitled}}</a>{{else}}<span class="title">{{or .Title $.T.UIUntitled}}</span>{{end}}
         {{- if $media}} <span class="kind after">{{.Kind}}</span>{{end}}
         {{- if .Context}} <span class="context">{{.Context}}</span>{{end}}
         {{- if .Duration}} <span class="meta">{{.Duration}}</span>{{end}}
@@ -25,11 +25,8 @@
       {{- range .Meta}}
       <p class="imagemeta">{{.}}</p>
       {{- end}}
-      {{- if or .External .FileURL}}
-      <p class="links">
-        {{- if .External}}<a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a>{{end}}
-        {{- if .FileURL}} <a href="{{.FileURL}}" rel="noopener">{{$.T.UIDownload}}</a>{{end}}
-      </p>
+      {{- if .FileURL}}
+      <p class="links"><a href="{{.FileURL}}" rel="noopener">{{$.T.UIDownload}}</a></p>
       {{- end}}
     </div>
   </li>

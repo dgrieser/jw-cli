@@ -2113,9 +2113,13 @@
     linkMenu.appendChild(row);
   }
 
-  // siteOf is where a link is read on jw.org or wol.jw.org: the link itself
-  // when it leads there, the document a page of this site reads, else none
+  // siteOf is where a link is read on jw.org or wol.jw.org: what the link
+  // names as its own (a listing row, data-site), the link itself when it
+  // leads there, the document a page of this site reads, else none
   function siteOf(a) {
+    var JW = /^https:\/\/([a-z0-9-]+\.)*jw\.org\//i;
+    var own = a.getAttribute("data-site");
+    if (own && JW.test(own)) return own;
     var u;
     try {
       u = new URL(a.getAttribute("href"), location.href);
@@ -2126,7 +2130,7 @@
       return /(^|\.)jw\.org$/i.test(u.hostname) ? u.href : "";
     }
     var target = u.pathname === "/article" ? u.searchParams.get("target") : "";
-    return target && /^https:\/\/([a-z0-9-]+\.)*jw\.org\//i.test(target) ? target : "";
+    return target && JW.test(target) ? target : "";
   }
 
   function openLinkMenu(a) {

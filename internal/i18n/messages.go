@@ -396,12 +396,11 @@ type Messages struct {
 	// UIPublication, UIResolution and UIPrintedEdition label what the page
 	// knows of a media item: the publication it belongs to, the picture size
 	// of a rendition, the printed page of a song. UIBurnedIn marks a rendition
-	// with its subtitles in the picture; UIOnJWOrg links the item's own page.
+	// with its subtitles in the picture.
 	UIPublication    string
 	UIResolution     string
 	UIPrintedEdition string
 	UIBurnedIn       string
-	UIOnJWOrg        string
 }
 
 // Date renders t as a full date in the language's own word order.

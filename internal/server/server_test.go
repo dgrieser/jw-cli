@@ -421,11 +421,15 @@ func TestUIMediaItemText(t *testing.T) {
 		`<p class="line" data-start="16.016" data-end="24.016">Jehovah our God, exalted in might,</p>`,
 		`<p class="line">Creator of life.</p>`,
 		`<dt>Publication</dt><dd>Sing Out Joyfully—Vocals</dd>`,
-		`/finder?docid=1102016801&amp;wtlocale=E" target="_blank" rel="noopener">Open on site</a>`,
+		// the item's own page is opened from the settings, not the page
+		`class="ps-row ps-item ps-site" href="https://www.jw.org/finder?lank=pub-sjjc_1_AUDIO&amp;wtlocale=E"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("song page lacks %s: %.4000s", want, body)
 		}
+	}
+	if strings.Count(body, "jw.org/finder?") != 1 {
+		t.Errorf("song page links jw.org outside the settings: %.4000s", body)
 	}
 
 	_, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
@@ -434,11 +438,14 @@ func TestUIMediaItemText(t *testing.T) {
 		`data-start="1" data-end="2"><button type="button" class="cue-time" title="Play from here" aria-label="Play from here 0:01" hidden>0:01</button> Hello world.</span>`,
 		`<span class="cue" data-start="4" data-end="5"><button`,
 		`<td class="hint">1280 × 720 · 29.97 fps</td>`,
-		`href="https://www.jw.org/finder?lank=pub-abc_1_VIDEO&amp;wtlocale=E"`,
+		`class="ps-row ps-item ps-site" href="https://www.jw.org/finder?lank=pub-abc_1_VIDEO&amp;wtlocale=E"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("video page lacks %s: %.5000s", want, body)
 		}
+	}
+	if strings.Contains(body, "mediaactions") {
+		t.Error("video page still links jw.org outside the settings")
 	}
 	if strings.Contains(body, "<h2>Lyrics</h2>") {
 		t.Error("a video without a document has no lyrics")
@@ -587,6 +594,11 @@ func TestUISearch(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in:\n%s", want, body)
 		}
+	}
+	// a row's own page on jw.org is offered by its menu, not linked
+	if !strings.Contains(body, `data-site="https://www.jw.org/finder?lank=pub-xyz_1_VIDEO"`) ||
+		strings.Contains(body, `href="https://www.jw.org/finder?lank=pub-xyz_1_VIDEO"`) {
+		t.Errorf("the row links jw.org instead of naming it for its menu:\n%s", body)
 	}
 	// the empty form renders without hitting upstream
 	resp, _ = get(t, srv, "/search")

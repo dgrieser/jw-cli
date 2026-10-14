@@ -260,5 +260,4 @@ var de = Messages{
 	UIResolution:           "Auflösung",
 	UIPrintedEdition:       "Druckausgabe",
 	UIBurnedIn:             "Untertitel im Bild",
-	UIOnJWOrg:              "Auf jw.org",
 }

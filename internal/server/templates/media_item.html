@@ -34,9 +34,6 @@
   {{- if .Item.AvailableLanguages}}<dt>{{.T.UINavLanguages}}</dt><dd>{{len .Item.AvailableLanguages}}</dd>{{end}}
   {{- with .Text}}{{with .Document}}{{if .PubName}}<dt>{{$.T.UIPublication}}</dt><dd>{{.PubName}}</dd>{{end}}{{end}}{{end}}
 </dl>
-{{- if .JWLink}}
-<p class="mediaactions"><a class="btn small" href="{{.JWLink}}" target="_blank" rel="noopener">{{.T.UIOnJWOrg}}</a></p>
-{{- end}}
 </div>
 </div>
 
@@ -62,11 +59,12 @@
   {{- end}}
   {{- if .Closing}}<p class="lyr-closing">{{.Closing}}</p>{{end}}
 </div>
+{{- if or .PrintedEdition .Downloads}}
 <p class="lyr-links">
   {{- if .PrintedEdition}}<a class="btn small" href="{{.PrintedEdition}}" target="_blank" rel="noopener">{{$.T.UIPrintedEdition}}</a> {{end}}
   {{- range .Downloads}}<a class="btn small" href="{{.URL}}" rel="noopener">{{.Label}}</a> {{end}}
-  <a class="btn small" href="{{.URL}}" target="_blank" rel="noopener">{{$.T.UIOpenOnSite}}</a>
 </p>
+{{- end}}
 {{- end}}
 {{- if .Transcript}}
 {{- if .Document}}

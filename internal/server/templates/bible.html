@@ -40,12 +40,11 @@
   {{- range .Hits}}
   <li>
     <div class="body">
-      <p class="row"><a class="title" href="{{.Href}}">{{or .Title $.T.UIUntitled}}</a>
+      <p class="row"><a class="title" href="{{.Href}}"{{with .External}} data-site="{{.}}"{{end}}>{{or .Title $.T.UIUntitled}}</a>
       {{- range .Refs}} <a class="context" href="{{.Href}}">{{.Label}}</a>{{end}}</p>
       {{- if .Snippet}}
       <blockquote class="snippet">{{.Snippet}}</blockquote>
       {{- end}}
-      {{- if .External}}<p class="links"><a href="{{.External}}" rel="noopener">{{$.T.UIOpenOnSite}}</a></p>{{end}}
     </div>
   </li>
   {{- end}}

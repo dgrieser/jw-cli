@@ -1325,10 +1325,6 @@ func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string,
 		content, rest = inlineChildren(demoteHeadings(n.HTML, level), rest,
 			level+1, unfoldSource(n, label), txt)
 		b.WriteString(content)
-	case n.URL != "":
-		// resolved, but to nothing that could be shown: the passage is still
-		// there to be read where it was taken from
-		fmt.Fprintf(b, `<p><a href="%s">%s</a></p>`, html.EscapeString(n.URL), html.EscapeString(txt.UIOpenOnSite))
 	}
 	writeStudy(b, n, level+1, txt)
 	writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)

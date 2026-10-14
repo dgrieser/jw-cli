@@ -525,8 +525,8 @@ song's lyrics, the document a recording reads, or the transcript of a video's
 subtitles (behind a fold when lyrics are shown too). The line being sung or
 said is highlighted as the item plays, and pressing a line or a caption's time
 plays from there. The page also names the recording's publication, links the
-item's page on jw.org, the printed edition and the lead sheet, and lists each
-rendition's picture size and frame rate.
+printed edition and the lead sheet, and lists each rendition's picture size and
+frame rate; the item's page on jw.org is opened from the settings.
 
 The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
 it is about to listen on a non-loopback address without authentication.
@@ -684,6 +684,9 @@ the rest of the choices: how deep to unfold the verse or paragraph it is in
 (else open it as a reference, where that is how it opens), open its page here or in a new tab, or **open it in** the section it belongs to
 — the bible, the publications, media — without leaving the page: the section's
 menu entry then leads there, and the section's history lists it.
+Where a link is read on jw.org or wol.jw.org is offered there too, as **open on
+the website**, and the page's own document is opened on the website from the
+settings in the bar; no page links out to the sites otherwise.
 
 Every page is kept as it was left. What was unfolded, what was open and how far
 down the page was scrolled are kept in the browser (IndexedDB) and put back on

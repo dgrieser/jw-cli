@@ -260,5 +260,4 @@ var en = Messages{
 	UIResolution:           "Resolution",
 	UIPrintedEdition:       "Printed edition",
 	UIBurnedIn:             "subtitles in the picture",
-	UIOnJWOrg:              "On jw.org",
 }

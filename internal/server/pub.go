@@ -31,7 +31,6 @@ type pubPage struct {
 	Publication bool
 	Cover       string
 	Facts       []pubFact
-	External    string
 	Files       []pubFormat
 	// Categories and Shelves make the start page: the categories to browse,
 	// then a row of the latest covers of each.
@@ -189,7 +188,6 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	if lib.Symbol != "" || kind == wol.PublicationKind {
 		page.Publication = true
 		page.Cover = lib.Thumbnail
-		page.External = lib.URL
 		page.SiteURL = lib.URL
 		if lib.Symbol != "" {
 			page.Facts = append(page.Facts, pubFact{txt.UISymbol, lib.Symbol})
