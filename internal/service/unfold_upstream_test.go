@@ -12,12 +12,8 @@ import (
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
-	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/unfold"
 )
-
-// english is the language the recorded fixtures are in.
-var english = model.Language{Symbol: "E", Locale: "en"}
 
 // marginalPath is the "+" after "only-begotten Son" in John 3:16, which wol
 // answers with seven verses (testdata/citation_multi.json).
