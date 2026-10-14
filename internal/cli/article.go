@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 
@@ -180,11 +181,16 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 	if len(art.ScriptureRefs) == 0 {
 		return a.Write(fmt.Sprintf(a.Text().NoBibleRefs, art.Title))
 	}
+	esc := html.EscapeString
 	var b strings.Builder
-	fmt.Fprintf(&b, a.Text().BibleRefsIn+"\n\n", art.Title)
+	b.WriteString("<p>" + esc(fmt.Sprintf(a.Text().BibleRefsIn, art.Title)) + "</p><ul>")
 	for _, r := range art.ScriptureRefs {
-		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, linkTarget(a, r.BCPath)))
+		ref := esc(strings.TrimSpace(r.Text))
+		if r.BCPath != "" {
+			ref = `<a href="` + esc(r.BCPath) + `">` + ref + "</a>"
+		}
+		b.WriteString("<li>" + ref + "</li>")
 	}
-	b.WriteString("\n" + a.Text().ReadOneHint + "\n")
-	return a.WriteMarkdown(b.String())
+	b.WriteString("</ul><p>" + inlineHTML(a.Text().ReadOneHint) + "</p>")
+	return writeComposed(a, format, b.String())
 }

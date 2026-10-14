@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	htmlpkg "html"
 	"net/url"
 	"strings"
 
@@ -249,7 +250,7 @@ func writeMediaInfo(a *app.App, item model.MediaItem) error {
 	if format == render.JSON {
 		return a.WriteJSON(item)
 	}
-	return a.WriteMarkdown(mediaInfoText(item, a.Text(), a.Flags.NoURLs))
+	return writeComposed(a, format, mediaInfoHTML(item, a.Text(), a.Flags.NoURLs, format))
 }
 
 // mediaFileRows are a media item's renditions as listing rows. Each carries
@@ -270,59 +271,73 @@ func mediaFileRows(item model.MediaItem) []model.Result {
 	return rows
 }
 
-func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {
+// mediaInfoHTML lays a media item's details out as a document for the
+// selected format: its metadata, then its files, numbered as the listing
+// writeMediaInfo saves numbers them.
+func mediaInfoHTML(m model.MediaItem, txt *i18n.Messages, noURLs bool, format render.Format) string {
+	esc := htmlpkg.EscapeString
 	var b strings.Builder
-	fmt.Fprintf(&b, "# %s\n\n", m.Title)
+	b.WriteString("<h1>" + esc(m.Title) + "</h1>")
 	if m.Description != "" {
-		fmt.Fprintf(&b, "%s\n\n", m.Description)
+		b.WriteString("<p>" + esc(m.Description) + "</p>")
 	}
+	var facts []string
+	add := func(label, value string) {
+		if value != "" {
+			facts = append(facts, esc(label)+": "+value)
+		}
+	}
+	// the LANK is what jw media info and jw download take: a code span keeps
+	// its underscores as they are in the markdown
 	if m.LANK != "" {
-		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelLANK, m.LANK)
+		add(txt.LabelLANK, "<code>"+esc(m.LANK)+"</code>")
 	}
-	fmt.Fprintf(&b, "- %s: %s\n", txt.LabelType, m.Type)
-	if m.DurationFormatted != "" {
-		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelDuration, m.DurationFormatted)
-	}
-	if m.FirstPublished != "" {
-		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelPublished, m.FirstPublished)
-	}
-	if m.PrimaryCategory != "" {
-		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelCategory, m.PrimaryCategory)
-	}
+	add(txt.LabelType, esc(m.Type))
+	add(txt.LabelDuration, esc(m.DurationFormatted))
+	add(txt.LabelPublished, esc(m.FirstPublished))
+	add(txt.LabelCategory, esc(m.PrimaryCategory))
 	if n := len(m.AvailableLanguages); n > 0 {
 		sample := m.AvailableLanguages
 		more := ""
 		if n > 12 {
 			sample, more = sample[:12], ", ..."
 		}
-		fmt.Fprintf(&b, "- "+txt.LabelLanguages+"\n", n, strings.Join(sample, ", ")+more)
+		facts = append(facts, esc(fmt.Sprintf(txt.LabelLanguages, n, strings.Join(sample, ", ")+more)))
 	}
+	b.WriteString("<ul><li>" + strings.Join(facts, "</li><li>") + "</li></ul>")
 	if len(m.Files) > 0 {
-		// an ordered list: the numbers are the indexes `jw download <n>` takes
-		fmt.Fprintf(&b, "\n## %s\n\n", txt.FilesHeading)
+		b.WriteString("<h2>" + esc(txt.FilesHeading) + "</h2>")
+		// numbered: the numbers are the indexes `jw download <n>` takes. Plain
+		// text writes any list with dashes, so there each file is a paragraph
+		// with its number spelled out.
+		var files []string
 		for i, f := range m.Files {
-			label := f.Label
-			if label == "" {
-				label = f.MimeType
-			}
-			fmt.Fprintf(&b, "%d. **%s** (%s)", i+1, label, humanSize(f.Filesize))
+			line := "<strong>" + esc(cmp.Or(f.Label, f.MimeType)) + "</strong> (" + esc(humanSize(f.Filesize)) + ")"
 			if f.SubtitlesURL != "" {
-				b.WriteString(" — " + txt.Subtitles)
+				line += " — " + esc(txt.Subtitles)
 			}
-			b.WriteString("\n")
 			if !noURLs {
-				fmt.Fprintf(&b, "   <%s>\n", f.URL)
+				line += `<br><a href="` + esc(f.URL) + `">` + esc(f.URL) + "</a>"
 			}
+			if format == render.Text {
+				line = fmt.Sprintf("<p>%d. %s</p>", i+1, line)
+			}
+			files = append(files, line)
+		}
+		if format == render.Text {
+			b.WriteString(strings.Join(files, ""))
+		} else {
+			b.WriteString("<ol><li>" + strings.Join(files, "</li><li>") + "</li></ol>")
 		}
 		if m.LANK != "" {
-			fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
+			b.WriteString("<p>" + inlineHTML(fmt.Sprintf(txt.DownloadHint, m.LANK)) + "</p>")
 		} else {
-			b.WriteString("\n" + txt.DownloadHintFiles + "\n")
+			b.WriteString("<p>" + inlineHTML(txt.DownloadHintFiles) + "</p>")
 		}
 	}
 	// jw media text looks an item up by its LANK; a gallery video has none
 	if m.LANK != "" {
-		fmt.Fprintf(&b, "\n"+txt.MediaTextHint+"\n", m.LANK)
+		b.WriteString("<p>" + inlineHTML(fmt.Sprintf(txt.MediaTextHint, m.LANK)) + "</p>")
 	}
 	return b.String()
 }
@@ -375,7 +390,7 @@ Examples:
 			if text.Empty() {
 				return fmt.Errorf(a.Text().NoMediaText, item.LANK)
 			}
-			return a.WriteMarkdown(mediaTextMarkdown(item, text, a.Text(), transcript, timestamps, a.Flags.NoURLs))
+			return writeComposed(a, format, mediaTextHTML(item, text, a.Text(), transcript, timestamps, a.Flags.NoURLs))
 		},
 	}
 	fl := cmd.Flags()
@@ -384,99 +399,97 @@ Examples:
 	return cmd
 }
 
-// mediaTextMarkdown writes the words of item: the document it sings or reads,
-// stanza by stanza, and the transcript of its subtitles, paragraph by
-// paragraph.
-func mediaTextMarkdown(item model.MediaItem, text model.MediaText, txt *i18n.Messages, transcript, timestamps, noURLs bool) string {
+// mediaTextHTML lays out the words of item as a document for the selected
+// format: the document it sings or reads, stanza by stanza, and the
+// transcript of its subtitles, paragraph by paragraph.
+func mediaTextHTML(item model.MediaItem, text model.MediaText, txt *i18n.Messages, transcript, timestamps, noURLs bool) string {
+	esc := htmlpkg.EscapeString
+	clock := func(sec float64) string { return "<code>" + subtitles.Clock(sec) + "</code> " }
+	link := func(label, url string) string {
+		return esc(label) + `: <a href="` + esc(url) + `">` + esc(url) + "</a>"
+	}
 	var b strings.Builder
 	if d := text.Document; d != nil {
-		title := d.Title
-		if title == "" {
-			title = item.Title
-		}
-		fmt.Fprintf(&b, "# %s\n\n", title)
+		b.WriteString("<h1>" + esc(cmp.Or(d.Title, item.Title)) + "</h1>")
 		if d.Context != "" {
-			fmt.Fprintf(&b, "*%s*\n\n", d.Context)
+			b.WriteString("<p><em>" + esc(d.Context) + "</em></p>")
 		}
 		if d.Theme != "" {
-			fmt.Fprintf(&b, "%s\n\n", d.Theme)
+			b.WriteString("<p>" + esc(d.Theme) + "</p>")
 		}
 		for _, blk := range d.Blocks {
 			var lines []string
 			for _, l := range blk.Lines {
-				line := l.Text
+				line := esc(l.Text)
 				if timestamps && d.Synced && l.End > 0 {
-					line = "`" + subtitles.Clock(l.Start) + "` " + line
+					line = clock(l.Start) + line
 				}
 				lines = append(lines, line)
 			}
 			switch blk.Kind {
 			case model.BlockHeading:
-				fmt.Fprintf(&b, "## %s\n\n", strings.Join(lines, " "))
+				b.WriteString("<h2>" + strings.Join(lines, " ") + "</h2>")
 			case model.BlockChorus:
 				if blk.Label != "" {
-					lines = append([]string{"**" + blk.Label + "**"}, lines...)
+					lines = append([]string{"<strong>" + esc(blk.Label) + "</strong>"}, lines...)
 				}
-				fmt.Fprintf(&b, "> %s\n\n", strings.Join(lines, "  \n> "))
+				b.WriteString("<blockquote><p>" + strings.Join(lines, "<br>") + "</p></blockquote>")
 			default:
-				if len(lines) > 0 && !timestamps {
-					lines[0] = escapeListMarker(lines[0])
+				if blk.Label != "" && len(lines) > 0 {
+					lines[0] = "<strong>" + esc(blk.Label) + "</strong> " + lines[0]
 				}
-				if blk.Label != "" {
-					lines[0] = "**" + blk.Label + "** " + lines[0]
-				}
-				fmt.Fprintf(&b, "%s\n\n", strings.Join(lines, "  \n"))
+				b.WriteString("<p>" + strings.Join(lines, "<br>") + "</p>")
 			}
 		}
 		if d.Closing != "" {
-			fmt.Fprintf(&b, "%s\n\n", d.Closing)
+			b.WriteString("<p>" + esc(d.Closing) + "</p>")
 		}
 		var facts []string
 		if d.PubName != "" {
-			facts = append(facts, fmt.Sprintf("- %s: %s", txt.LabelPublication, d.PubName))
+			facts = append(facts, esc(txt.LabelPublication)+": "+esc(d.PubName))
 		}
 		if !noURLs {
-			facts = append(facts, fmt.Sprintf("- %s: <%s>", txt.LabelSource, d.URL))
+			facts = append(facts, link(txt.LabelSource, d.URL))
 			if d.PrintedEdition != "" {
-				facts = append(facts, fmt.Sprintf("- %s: <%s>", txt.PrintedEdition, d.PrintedEdition))
+				facts = append(facts, link(txt.PrintedEdition, d.PrintedEdition))
 			}
 			for _, l := range d.Downloads {
-				facts = append(facts, fmt.Sprintf("- %s: <%s>", l.Label, l.URL))
+				facts = append(facts, link(l.Label, l.URL))
 			}
 		}
 		if len(facts) > 0 {
-			b.WriteString(strings.Join(facts, "\n") + "\n\n")
+			b.WriteString("<ul><li>" + strings.Join(facts, "</li><li>") + "</li></ul>")
 		}
 	}
 	if len(text.Transcript) > 0 && (text.Document == nil || transcript) {
 		if text.Document == nil {
-			fmt.Fprintf(&b, "# %s\n\n", item.Title)
+			b.WriteString("<h1>" + esc(item.Title) + "</h1>")
 		}
 		heading := txt.TranscriptHeading
 		if text.AITranscript {
 			heading = txt.TranscriptAIHeading
 		}
-		fmt.Fprintf(&b, "## %s\n\n", heading)
+		b.WriteString("<h2>" + esc(heading) + "</h2>")
+		// a paragraph of captions runs on as prose; with their times, each
+		// caption stands on a line of its own behind its time
 		for _, para := range subtitles.Paragraphs(text.Transcript) {
 			var parts []string
 			for _, c := range para {
 				if timestamps {
-					parts = append(parts, "`"+subtitles.Clock(c.Start)+"` "+c.Text)
+					parts = append(parts, clock(c.Start)+esc(c.Text))
 				} else {
-					parts = append(parts, c.Text)
+					parts = append(parts, esc(c.Text))
 				}
 			}
 			sep := " "
 			if timestamps {
-				sep = "  \n"
-			} else {
-				parts[0] = escapeListMarker(parts[0])
+				sep = "<br>"
 			}
-			fmt.Fprintf(&b, "%s\n\n", strings.Join(parts, sep))
+			b.WriteString("<p>" + strings.Join(parts, sep) + "</p>")
 		}
 		if !noURLs && text.SubtitlesURL != "" {
-			fmt.Fprintf(&b, "- %s: <%s>\n", txt.LabelSource, text.SubtitlesURL)
+			b.WriteString("<ul><li>" + link(txt.LabelSource, text.SubtitlesURL) + "</li></ul>")
 		}
 	}
-	return strings.TrimRight(b.String(), "\n") + "\n"
+	return b.String()
 }

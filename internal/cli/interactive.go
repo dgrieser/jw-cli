@@ -25,7 +25,11 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 				if err != nil {
 					return tui.Content{}, err
 				}
-				return tui.Content{Text: mediaInfoText(mi, a.Text(), a.Flags.NoURLs)}, nil
+				md, err := renderComposed(a, render.Markdown, mediaInfoHTML(mi, a.Text(), a.Flags.NoURLs, render.Markdown))
+				if err != nil {
+					return tui.Content{}, err
+				}
+				return tui.Content{Text: md, Markdown: true}, nil
 			}
 			switch item.Kind {
 			case "file", "image":

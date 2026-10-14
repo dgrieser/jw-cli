@@ -315,6 +315,18 @@ func TestBibleXrefs(t *testing.T) {
 	}
 }
 
+// The unresolved references are a list in the format asked for, not markdown
+// dashes in the middle of HTML.
+func TestBibleXrefsHTML(t *testing.T) {
+	out, err := runCmd(t, bibleMux(t), "bible", "xrefs", "-l", "en", "-o", "html", "John 3:16")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "<ul><li>Ge 22:2, 16; Joh 1:14") || strings.Contains(out, "- Ge 22:2") {
+		t.Fatalf("xrefs -o html:\n%s", out)
+	}
+}
+
 func TestBibleXrefsResolve(t *testing.T) {
 	out, err := runCmd(t, bibleMux(t), "bible", "xrefs", "-l", "en", "-r", "John 3:16")
 	if err != nil {

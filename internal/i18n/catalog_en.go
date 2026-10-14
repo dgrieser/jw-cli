@@ -24,7 +24,7 @@ var en = Messages{
 
 	BibleRefsIn:  "Bible references in %q:",
 	NoBibleRefs:  "No bible references found in %q.",
-	ReadOneHint:  `Read one with: jw bible read "<reference>"`,
+	ReadOneHint:  "Read one with: `jw bible read \"<reference>\"`",
 	NoStudyNotes: "No study notes found (study notes are available in the study edition, nwtsty).",
 	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",

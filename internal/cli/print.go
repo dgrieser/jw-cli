@@ -2,6 +2,8 @@ package cli
 
 import (
 	"fmt"
+	"html"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -38,6 +40,68 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 		b.WriteString(a.Text().NoResults + "\n")
 	}
 	return a.Write(b.String())
+}
+
+// writeComposed prints a document the CLI puts together itself — a media
+// item's details, a recording's words, the references of an article — in the
+// selected output format, through the renderer every document from the sites
+// goes through: markdown (styled on a terminal), raw markdown, HTML or plain
+// text. JSON is the caller's to handle.
+func writeComposed(a *app.App, format render.Format, fragment string) error {
+	body, err := renderComposed(a, format, fragment)
+	if err != nil {
+		return err
+	}
+	return a.WriteMarkdown(body)
+}
+
+// renderComposed is writeComposed's rendering, for a caller that shows the
+// result elsewhere (the interactive browser's detail pane).
+func renderComposed(a *app.App, format render.Format, fragment string) (string, error) {
+	body, err := render.Render(fragment, format, a.RenderOptions(a.HTTP().Base.WOL))
+	if err != nil {
+		return "", err
+	}
+	if format.IsMarkdown() {
+		body = autolinks(body)
+	}
+	return strings.TrimRight(body, "\n") + "\n", nil
+}
+
+// mdSelfLink matches a markdown link and its target.
+var mdSelfLink = regexp.MustCompile(`\[([^\]\n]+)\]\((https?://[^)\s]+)\)`)
+
+// autolinks writes a link whose text is its own URL — a file or a page spelled
+// out — as an autolink, <url>. The converter writes it [url](url), with the
+// URL's underscores escaped in the text, and a reader copying the URL from
+// -o raw would carry the backslashes along.
+func autolinks(md string) string {
+	return mdSelfLink.ReplaceAllStringFunc(md, func(m string) string {
+		sub := mdSelfLink.FindStringSubmatch(m)
+		if strings.ReplaceAll(sub[1], `\`, "") != sub[2] {
+			return m
+		}
+		return "<" + sub[2] + ">"
+	})
+}
+
+// inlineHTML escapes catalog text for a composed document, turning its `code
+// spans` — the commands a hint quotes — into <code> elements. A backtick
+// left unclosed stays as it is.
+func inlineHTML(s string) string {
+	parts := strings.Split(s, "`")
+	var b strings.Builder
+	for i, p := range parts {
+		switch {
+		case i%2 == 0:
+			b.WriteString(html.EscapeString(p))
+		case i < len(parts)-1:
+			b.WriteString("<code>" + html.EscapeString(p) + "</code>")
+		default:
+			b.WriteString("`" + html.EscapeString(p))
+		}
+	}
+	return b.String()
 }
 
 // listIndent aligns a wrapped continuation line under a result's text.

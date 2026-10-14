@@ -48,6 +48,25 @@ func TestArticleRefs(t *testing.T) {
 	}
 }
 
+// The list of references follows -o like the document it is taken from.
+func TestArticleRefsFormats(t *testing.T) {
+	out, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--refs", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<ul><li><a href="http`) || !strings.Contains(out, ">Num. 14:24</a></li></ul>") ||
+		strings.Contains(out, "- [") {
+		t.Errorf("-o html:\n%s", out)
+	}
+	out, err = runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--refs", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "- Num. 14:24\n") || strings.Contains(out, "](") || strings.Contains(out, "`") {
+		t.Errorf("-o text:\n%s", out)
+	}
+}
+
 func TestArticleImagesListing(t *testing.T) {
 	out, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--images")
 	if err != nil {

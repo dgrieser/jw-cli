@@ -192,6 +192,46 @@ func TestMediaInfo(t *testing.T) {
 	}
 }
 
+// A media item's details follow -o like any document: HTML is HTML, text is
+// text with the files' numbers — what jw download takes — spelled out, and
+// neither carries markdown. jw show on a video prints the same.
+func TestMediaInfoFormats(t *testing.T) {
+	out, err := runCmd(t, mediaMux(t), "media", "info", "pub-abc_1_VIDEO", "-l", "en", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<h1>A New Video</h1>", "<ol><li><strong>240p</strong>", "<code>jw download &lt;n&gt;</code>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-o html: missing %q in\n%s", want, out)
+		}
+	}
+
+	out, err = runCmd(t, mediaMux(t), "media", "info", "pub-abc_1_VIDEO", "-l", "en", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"A New Video\n", "- LANK: pub-abc_1_VIDEO", "1. 240p (5 B)", "2. 720p (5 B)", "jw download <n>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-o text: missing %q in\n%s", want, out)
+		}
+	}
+	for _, md := range []string{"# ", "**", "`"} {
+		if strings.Contains(out, md) {
+			t.Errorf("-o text carries markdown %q:\n%s", md, out)
+		}
+	}
+
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runCmdWithCache(t, mux, cacheDir, "show", "1", "-l", "en", "-o", "html")
+	if err != nil || !strings.Contains(out, "<h1>A New Video</h1>") || strings.Contains(out, "**") {
+		t.Errorf("show -o html: %v\n%s", err, out)
+	}
+}
+
 // textMux adds a song and a subtitled video: the song's lyrics come from its
 // page, timed by the recording; the video's words from its subtitles.
 func textMux(t *testing.T) *http.ServeMux {
@@ -250,6 +290,23 @@ func TestMediaText(t *testing.T) {
 	}
 	if strings.Contains(out, "Transcript") || strings.Contains(out, "`0:11`") || strings.Contains(out, "http") {
 		t.Errorf("unexpected output:\n%s", out)
+	}
+
+	// -o text and -o html carry no markdown: the times and the stanza numbers
+	// are plain in the one and marked up in the other
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--timestamps", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "1. 0:11 Jehovah our God,\nCreator of life.") || strings.ContainsAny(out, "`*") {
+		t.Errorf("-o text:\n%s", out)
+	}
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--timestamps", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "<p><strong>1.</strong> <code>0:11</code> Jehovah our God,<br/>Creator of life.</p>") {
+		t.Errorf("-o html:\n%s", out)
 	}
 
 	// a video with nothing but subtitles is its transcript
