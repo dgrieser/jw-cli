@@ -198,6 +198,9 @@ type entry struct {
 	Size    int64             `json:"s"`
 	Hash    string            `json:"x"`
 	Checked int64             `json:"c"` // unix seconds the body was last known current
+	// Retry is when upstream may be asked about the body again, in unix
+	// seconds, after it could not be lately (see backOff)
+	Retry int64 `json:"r,omitempty"`
 	// NoHead is set for a URL whose server answers HEAD with an error but GET
 	// with the body (the CDN's mediator API): a HEAD would be wasted on it
 	NoHead bool `json:"n,omitempty"`
@@ -332,6 +335,9 @@ type memoRecord struct {
 	Deps  map[string]string `json:"deps,omitempty"`
 	At    int64             `json:"at"`
 	Value json.RawMessage   `json:"v"`
+	// Retry is when a rebuild that failed may be tried again, in unix
+	// seconds; until then the value stands as it is
+	Retry int64 `json:"r,omitempty"`
 }
 
 func (c *Cache) memoPath(key string) string {

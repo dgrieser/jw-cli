@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"slices"
 	"sync"
 	"time"
 )
@@ -86,7 +85,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		c.responses.saveEntry(id, e, body)
 	}
 	// a body of an older edition than the newest seen is asked for again
-	if ok && c.behind(e) && !c.backingOff(id) {
+	if ok && c.behind(e) && !c.backingOff(id, e) && !c.hostDown(hostOf(rawURL)) {
 		return c.renew(ctx, id, rawURL, hdr, e, body)
 	}
 	if ok && e.fresh(c.responses.fresh) {
@@ -158,13 +157,16 @@ func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
 
 // refresh revalidates a stale body: a HEAD request first, whose validators
 // usually settle it, and a GET only when they say the body changed or cannot
-// tell. A body upstream cannot be asked about right now is used as it is.
+// tell. A body upstream cannot be asked about right now is used as it is, as
+// is one whose host failed lately.
 func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (*fetched, error) {
 	stale := &fetched{body: body, id: id, e: e}
-	if c.backingOff(id) {
+	if c.backingOff(id, e) || c.hostDown(hostOf(e.URL)) {
 		c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 		return stale, nil
 	}
+	// the kept body stands in for whatever upstream cannot answer now
+	ctx = withKept(ctx)
 	hdr := e.header()
 	var head *http.Response
 	noHead := e.NoHead
@@ -177,7 +179,7 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 			// below succeeds, it never will
 			head, noHead = nil, true
 		case herr != nil || unavailable(head.StatusCode):
-			c.backOff(id)
+			c.backOff(id, e, body)
 			c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 			return stale, nil
 		case head.StatusCode/100 == 2:
@@ -202,7 +204,7 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 		}
 	}
 	if err != nil {
-		c.backOff(id)
+		c.backOff(id, e, body)
 		c.verbose("GET %s (cached, upstream unavailable: %v)", e.URL, err)
 		return stale, nil
 	}
@@ -238,7 +240,7 @@ func (c *Client) confirm(id string, e entry, body []byte) *fetched {
 	if !e.EdSeen {
 		c.stamp(&e, body)
 	}
-	e.Checked = time.Now().Unix()
+	e.Checked, e.Retry = time.Now().Unix(), 0
 	c.responses.saveEntry(id, e, body)
 	e.Size, e.Hash = int64(len(body)), bodyHash(body)
 	return &fetched{body: body, id: id, e: e}
@@ -308,9 +310,18 @@ func (c *Client) unstash(id string) *fetched {
 // rather than one per read.
 const backOffFor = 10 * time.Minute
 
-func (c *Client) backOff(id string) { c.failed.Store(id, time.Now()) }
+// backOff notes that upstream could not be asked about the body e kept under
+// id, in the entry as well, so the next command uses it at once too.
+func (c *Client) backOff(id string, e entry, body []byte) {
+	c.failed.Store(id, time.Now())
+	e.Retry = time.Now().Add(backOffFor).Unix()
+	c.responses.saveEntry(id, e, body)
+}
 
-func (c *Client) backingOff(id string) bool {
+func (c *Client) backingOff(id string, e entry) bool {
+	if e.Retry > time.Now().Unix() {
+		return true
+	}
 	v, ok := c.failed.Load(id)
 	if !ok {
 		return false
@@ -340,16 +351,10 @@ func headUnsupported(status int) bool {
 }
 
 // Head issues a HEAD request, following redirects, and returns the response
-// whatever its status.
+// whatever its status. A HEAD has no body to wait for: a server that does
+// not answer one within answerWait is not waited on longer.
 func (c *Client) Head(ctx context.Context, rawURL string, hdr http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, vs := range hdr {
-		req.Header[k] = slices.Clone(vs)
-	}
-	resp, err := c.Do(req)
+	resp, err := c.send(ctx, http.MethodHead, rawURL, hdr)
 	if err != nil {
 		return nil, err
 	}

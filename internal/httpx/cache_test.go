@@ -378,14 +378,14 @@ func TestMemoFollowsItsSources(t *testing.T) {
 
 	// a failing rebuild keeps the last value
 	u.set(func(u *upstream) { u.body = "three"; u.status = http.StatusInternalServerError })
-	c.failed.Range(func(k, _ any) bool { c.failed.Delete(k); return true })
+	pastBackOff(c)
 	if got := get(); got != "derived two" {
 		t.Errorf("upstream down: %q, want the last value", got)
 	}
 
 	// a memo of memos depends on what they depend on
 	u.set(func(u *upstream) { u.status = 0 })
-	c.failed.Range(func(k, _ any) bool { c.failed.Delete(k); return true })
+	pastBackOff(c)
 	outer, err := Memo(ctx, cache, "outer", func(ctx context.Context) (string, error) {
 		return "outer " + getIn(ctx), nil
 	})

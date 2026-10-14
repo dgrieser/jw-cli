@@ -253,6 +253,8 @@ func (c *Client) latest(ctx context.Context, rawURL string, hdr http.Header, bod
 // newest seen. A newer one replaces it; failing that, the kept body is used
 // and not asked about again for a while.
 func (c *Client) renew(ctx context.Context, id, rawURL string, hdr http.Header, e entry, body []byte) (*fetched, error) {
+	// the kept body stands in for whatever upstream cannot answer now
+	ctx = withKept(ctx)
 	nbody, resp, err := c.downloadPast(ctx, rawURL, hdr, 0)
 	if err == nil {
 		nbody, resp = c.latest(ctx, rawURL, hdr, nbody, resp)
@@ -264,7 +266,7 @@ func (c *Client) renew(ctx context.Context, id, rawURL string, hdr http.Header, 
 			return c.pendingBody(id, ne, nbody), nil
 		}
 	}
-	c.backOff(id)
+	c.backOff(id, e, body)
 	return &fetched{body: body, id: id, e: e}, nil
 }
 

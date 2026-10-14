@@ -22,8 +22,9 @@ import (
 //
 // When a rebuild fails for any reason but the content being gone (HTTP 404 or
 // 410), the last value is returned instead: a page that cannot be read now is
-// better shown as it was than not at all. A page said to be gone is asked
-// for once more past the CDN before the last value is given up.
+// better shown as it was than not at all, and is not rebuilt again for a
+// while. A page said to be gone is asked for once more past the CDN before
+// the last value is given up.
 //
 // Every caller gets a copy of its own: values travel as JSON, as they are kept.
 func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.Context) (T, error)) (T, error) {
@@ -77,7 +78,9 @@ type memoResult struct {
 
 func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(context.Context) (any, error)) (memoResult, error) {
 	old, have := c.loadMemo(key)
-	if have && !anew && c.memoCurrent(ctx, old) {
+	// a rebuild that failed lately would most likely fail again, after
+	// waiting on the same unanswering server
+	if have && !anew && (time.Now().Unix() < old.Retry || c.memoCurrent(ctx, old)) {
 		return memoResult{old.Value, old.Deps}, nil
 	}
 	bctx := ctx
@@ -93,6 +96,10 @@ func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(cont
 			return memoResult{}, err
 		}
 		if have {
+			// and is not tried again for a while, by this process or the
+			// next
+			old.Retry = time.Now().Add(backOffFor).Unix()
+			c.saveMemo(key, old)
 			return memoResult{old.Value, old.Deps}, nil
 		}
 		return memoResult{}, err
@@ -186,8 +193,9 @@ func (t *tracker) snapshot() map[string]string {
 
 // keptKey marks the context of a request that something kept can stand in
 // for: a body being revalidated, or a memo being rebuilt that has a value
-// from before. What upstream says is weighed against losing that: a body said
-// to be gone is asked for once more past the CDN before it is believed.
+// from before. Waiting on upstream is weighed against using that at once (see
+// outage.go), and what upstream says against losing it: a body said to be
+// gone is asked for once more past the CDN before it is believed.
 type keptKey struct{}
 
 func withKept(ctx context.Context) context.Context {
