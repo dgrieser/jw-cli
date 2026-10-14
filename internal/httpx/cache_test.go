@@ -2,12 +2,15 @@ package httpx
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -339,6 +342,95 @@ func TestMemoFollowsItsSources(t *testing.T) {
 	m, _ := cache.loadMemo("outer")
 	if len(m.Deps) != 1 {
 		t.Errorf("outer memo deps = %v, want the page", m.Deps)
+	}
+}
+
+// The hash a body is told apart by leaves out the nonce every render of a wol
+// page carries, and nothing else.
+func TestBodyHashIgnoresNonces(t *testing.T) {
+	page := func(nonce, text string) []byte {
+		return fmt.Appendf(nil, "<script nonce=\"%s\">x()</script>\n<style nonce=\"%s\" id=\"s\"></style><p>%s</p>", nonce, nonce, text)
+	}
+	if bodyHash(page("5b1c0a", "one")) != bodyHash(page("9f00ee", "one")) {
+		t.Error("two renders of one page hash apart")
+	}
+	if bodyHash(page("5b1c0a", "one")) == bodyHash(page("5b1c0a", "two")) {
+		t.Error("a changed page hashes the same")
+	}
+	// a body without a nonce hashes as it did before, so what is kept
+	// stays current
+	plain := []byte(`{"n": 1, "text": "nonce=\"x\" or anonce="y"}`)
+	sum := sha256.Sum256(plain)
+	if bodyHash(plain) != hex.EncodeToString(sum[:16]) {
+		t.Error("a body without a nonce attribute hashes differently")
+	}
+}
+
+// wolPage renders a page as wol.jw.org does: a nonce of its own in every
+// response, and a weak ETag that differs between renders and between HEAD and
+// GET.
+type wolPage struct {
+	mu          sync.Mutex
+	text        string
+	renders     int
+	heads, gets atomic.Int32
+}
+
+func (p *wolPage) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	p.mu.Lock()
+	p.renders++
+	n, text := p.renders, p.text
+	p.mu.Unlock()
+	w.Header().Set("ETag", fmt.Sprintf(`W/"%s-%d"`, r.Method, n))
+	if r.Method == http.MethodHead {
+		p.heads.Add(1)
+		return
+	}
+	p.gets.Add(1)
+	fmt.Fprintf(w, "<html><script nonce=\"%08x\">init()</script><body>%s</body></html>", n*7919, text)
+}
+
+// A page whose every render differs in its nonce alone is no change: it is
+// confirmed, not kept anew, and nothing built from it is rebuilt.
+func TestRevalidationIgnoresNonces(t *testing.T) {
+	ctx := context.Background()
+	page := &wolPage{text: "one"}
+	srv := httptest.NewServer(page)
+	defer srv.Close()
+	cache := Open(t.TempDir(), CacheOptions{Fresh: -1})
+	c := New(WithResponseCache(cache))
+	builds := 0
+	get := func() string {
+		t.Helper()
+		v, err := Memo(ctx, cache, "k", func(ctx context.Context) (string, error) {
+			builds++
+			return c.GetText(ctx, srv.URL, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	first := get()
+	id := entryID(c.responseKey(srv.URL, http.Header{}))
+	kept, _, _ := cache.loadEntry(id, true)
+	for range 3 {
+		if got := get(); got != first {
+			t.Fatalf("body %q, want the kept %q", got, first)
+		}
+	}
+	if builds != 1 {
+		t.Errorf("%d builds, want 1: a new nonce rebuilt the memo", builds)
+	}
+	if e, _, _ := cache.loadEntry(id, true); e.Hash != kept.Hash {
+		t.Errorf("hash moved from %s to %s", kept.Hash, e.Hash)
+	}
+	// a real change is still one
+	page.mu.Lock()
+	page.text = "two"
+	page.mu.Unlock()
+	if got := get(); !strings.Contains(got, "two") || builds != 2 {
+		t.Errorf("changed page: %q after %d builds", got, builds)
 	}
 }
 

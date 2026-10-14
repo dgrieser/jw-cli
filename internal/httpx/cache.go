@@ -220,10 +220,46 @@ func (c *Cache) entryPath(id string) string {
 	return filepath.Join(c.dir, responseDir, id)
 }
 
+// nonceAttr opens the one part of a page that every render fills anew:
+// wol.jw.org gives each response a CSP nonce of its own, on its script and
+// style tags, so two renders of an unchanged page differ in it and in nothing
+// else.
+var nonceAttr = []byte(`nonce="`)
+
+// maxNonce bounds what is taken for a nonce's value, so a stray quote cannot
+// leave a stretch of real content out of the hash.
+const maxNonce = 128
+
+// bodyHash identifies a body by what it says: the values of nonce attributes
+// are left out, or a page rendered again would count as changed — and every
+// result derived from it would be rebuilt — however little it moved. A body
+// without one hashes as it always did.
 func bodyHash(b []byte) string {
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:16])
+	h := sha256.New()
+	for off := 0; ; {
+		i := bytes.Index(b[off:], nonceAttr)
+		if i < 0 {
+			break
+		}
+		start := off + i
+		end := start + len(nonceAttr)
+		off = end
+		// an attribute, not the word in a text
+		if start == 0 || !isSpace(b[start-1]) {
+			continue
+		}
+		j := bytes.IndexByte(b[end:], '"')
+		if j < 0 || j > maxNonce {
+			continue
+		}
+		h.Write(b[:end])
+		b, off = b[end+j:], 0
+	}
+	h.Write(b)
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }
+
+func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
 
 func (e *entry) fresh(window time.Duration) bool {
 	return time.Since(time.Unix(e.Checked, 0)) < window

@@ -192,7 +192,13 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 	if head != nil {
 		ne.setValidators(head, true)
 	}
-	if bodyHash(nbody) == e.Hash {
+	// the bodies themselves decide, not the validators: wol.jw.org gives
+	// every render a new weak ETag, and its HEAD and GET answers come from
+	// different objects in the CDN, so a page that did not change often looks
+	// as if it had. The kept body is hashed anew rather than taken by the
+	// hash it was kept with, which an older version made without leaving the
+	// nonces out.
+	if bodyHash(nbody) == bodyHash(body) {
 		return c.confirm(id, ne, body), nil
 	}
 	// a server not up to date answers with an older edition: past the CDN
