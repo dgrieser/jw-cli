@@ -396,6 +396,11 @@ func TestAPIBibleRead(t *testing.T) {
 	if !strings.Contains(out.Body, "John 3:16") {
 		t.Errorf("rendered body: %q", out.Body)
 	}
+	// every bible is not the one named, as the CLI says
+	resp, body = get(t, srv, "/api/v1/bible/read?ref=John+3:16&lang=en&bible=nwt&all=1")
+	if resp.StatusCode != 400 || !strings.Contains(body, "bible and all cannot be combined") {
+		t.Errorf("bible with all: status %d body %s", resp.StatusCode, body)
+	}
 }
 
 func TestAPIBibleBooks(t *testing.T) {

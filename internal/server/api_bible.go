@@ -45,6 +45,12 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%s", err)
 		return
 	}
+	// every bible is not the one named, as on the command line; the reader's
+	// form sends its edition along with all=1, but that is the page's affair
+	if boolParam(r, "all") && r.FormValue("bible") != "" {
+		badRequest(w, "%s", errExclusive("bible", "all"))
+		return
+	}
 	lng, err := s.language(r)
 	if err != nil {
 		failJSON(w, r, err)
