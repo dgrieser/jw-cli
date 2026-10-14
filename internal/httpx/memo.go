@@ -125,7 +125,7 @@ func (c *Cache) memoCurrent(ctx context.Context, m memoRecord) bool {
 		}
 		got := e.Hash
 		if !e.fresh(c.fresh) && cl != nil {
-			if got, ok = cl.revalidate(ctx, id, e); !ok {
+			if got, ok = cl.revalidate(ctx, id, e, want); !ok {
 				return false
 			}
 		}

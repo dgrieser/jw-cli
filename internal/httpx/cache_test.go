@@ -398,6 +398,49 @@ func TestMemoFollowsItsSources(t *testing.T) {
 	}
 }
 
+// A memo whose source on disk has moved on, while upstream still serves the
+// body the memo was built from, has that body kept again: otherwise nothing
+// reads it, and every use asks upstream for it anew.
+func TestMemoKeepsTheBodyItWasBuiltFrom(t *testing.T) {
+	ctx := context.Background()
+	u := &upstream{body: "one", etag: true}
+	srv := httptest.NewServer(u)
+	defer srv.Close()
+	cache := Open(t.TempDir(), CacheOptions{Fresh: -1})
+	c := New(WithResponseCache(cache))
+	builds := 0
+	get := func() string {
+		t.Helper()
+		v, err := Memo(ctx, cache, "k", func(ctx context.Context) (string, error) {
+			builds++
+			return c.GetText(ctx, srv.URL, nil)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	get()
+	// another body was kept since — read on its own, say, from a server
+	// that answered differently for a while
+	id := entryID(c.responseKey(srv.URL, http.Header{}))
+	cache.saveEntry(id, entry{URL: srv.URL, ETag: `W/"other"`}, []byte("two"))
+	u.counts()
+	if got := get(); got != "one" || builds != 1 {
+		t.Fatalf("%q after %d builds, want the memo as it was", got, builds)
+	}
+	if _, body, _ := cache.loadEntry(id, false); string(body) != "one" {
+		t.Errorf("kept body %q, want the one upstream serves", body)
+	}
+	// and the next command asks with a HEAD alone
+	c = New(WithResponseCache(cache))
+	u.counts()
+	get()
+	if h, g := u.counts(); h != 1 || g != 0 {
+		t.Errorf("then: %d HEAD, %d GET; want 1, 0", h, g)
+	}
+}
+
 // The hash a body is told apart by leaves out the nonce every render of a wol
 // page carries, and nothing else.
 func TestBodyHashIgnoresNonces(t *testing.T) {

@@ -229,10 +229,13 @@ func (c *Client) confirm(id string, e entry, body []byte) *fetched {
 	return &fetched{body: body, id: id, e: e}
 }
 
-// revalidate brings a stale body up to date for a memo and returns the hash it
-// has now. A changed body is not kept yet — its decoding caller decides
-// that — but held for the rebuild about to read it.
-func (c *Client) revalidate(ctx context.Context, id string, e entry) (string, bool) {
+// revalidate brings a stale body up to date for a memo built from the body
+// hashed want, and returns the hash it has now. A changed body is not kept
+// yet — its decoding caller decides that — but held for the rebuild about to
+// read it. A body that is the very one the memo was built from has been
+// decoded already, and is kept at once: nothing would read it otherwise, and
+// every later use would ask upstream again.
+func (c *Client) revalidate(ctx context.Context, id string, e entry, want string) (string, bool) {
 	v, err, _ := c.flight.Do(id, func() (any, error) {
 		return c.lookup(ctx, id, e.URL, e.header())
 	})
@@ -241,7 +244,11 @@ func (c *Client) revalidate(ctx context.Context, id string, e entry) (string, bo
 	}
 	f := v.(*fetched)
 	if f.pending {
-		c.stash(f)
+		if f.e.Hash == want {
+			f.once.Do(func() { c.responses.saveEntry(f.id, f.e, f.body) })
+		} else {
+			c.stash(f)
+		}
 	}
 	return f.e.Hash, true
 }
