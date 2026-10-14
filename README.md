@@ -591,17 +591,28 @@ holds the on-disk cache; mount a volume to keep it across restarts.
 What jw.org and wol.jw.org answer is kept on disk (in the user cache
 directory, `/data` in the image) with no expiry, and reused — by the next
 command, and by `jw serve` across restarts. For 24 hours an answer is used as
-is; after that, a `HEAD` request asks upstream whether it changed (by ETag,
-length or Last-Modified, whichever the site sends). If not, it is good for
-another 24 hours; if so, only that page is read again, and only the results
-derived from it (a parsed book grid, a library listing) are rebuilt. When
-upstream cannot be reached, what is kept is used. `--cache-ttl 1h` changes the
-window, `--cache-ttl 0` checks on every use.
+is; after that, a `HEAD` request asks upstream whether it changed (by ETag or
+Last-Modified, whichever the site sends). Where that cannot tell — a length
+alone, or a new ETag for every render — a `GET` does, by comparing the page
+itself, leaving out the nonce wol.jw.org puts into every render. If it did not
+change, it is good for another 24 hours; if it did, only that page is read
+again, and only the results derived from it (a parsed book grid, a library
+listing) are rebuilt. A page one server says is gone is asked for once more
+past the CDN before what is kept of it is dropped, as some of wol's servers
+lack what was published lately. When upstream cannot be reached, what is kept
+is used: a server is given 10 seconds to start answering, and once one did
+not, or said it is unavailable, what is kept of its pages is used for 10
+minutes without asking it — by the next command too. A read with nothing kept
+to fall back on asks twice more, after 1 and 3 seconds, when the server says
+it is busy (429, 502, 503, 504). `--cache-ttl 1h` changes the window,
+`--cache-ttl 0` checks on every use.
 
 The cache is bounded at 4 GB by default; past that, what was used least
 recently is dropped. `--cache-max 500MB` or `JW_CACHE_MAX=2GB` changes the
-bound, `0` turns the cache off. Downloads and signed-in search requests are
-never kept.
+bound, `0` turns the cache off. Commands run one after another keep to it
+together: each adds what it wrote to the cache's `.swept` marker for the next
+one to go by, and the cache is measured anew at least once an hour. Downloads
+and signed-in search requests are never kept.
 
 `--lang` sets the default content language; every page and endpoint takes a
 `?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
@@ -936,13 +947,19 @@ wol.jw.org requests at 50 a second (`requestsPerSecond` in
 user cache directory (`~/.cache/jw` on Linux, `http/`) with their validators,
 and revalidated by `HEAD` once older than the freshness window
 (`internal/httpx/revalidate.go`); a server that cannot answer a `HEAD` usefully
-— the CDN's mediator API answers it with 404, jw.org renders some pages per
-request — is remembered and asked with a `GET` instead, and an equal body is
-still no change. Results derived from bodies (language list, localized bible
-book names, book grids, library pages) are memos (`memo/`, `httpx.Memo`) that
-record the bodies they were built from and are rebuilt only when one of those
-changed. Concurrent reads of one page share one request, and the least recently
-used entries are evicted beyond `--cache-max`.
+— the CDN's mediator API answers it with 404, its other APIs with a length
+alone, jw.org renders some pages per request — is remembered and asked with a
+`GET` instead, and an equal body (its nonce attributes left out) is still no
+change. Results derived from bodies (language list, localized bible book names,
+book grids, library pages) are memos (`memo/`, `httpx.Memo`) that record the
+bodies they were built from and are rebuilt only when one of those changed.
+Requests that a kept body or memo can stand in for give the server 10 seconds
+to answer and are not retried; a host that fails one is backed off for 10
+minutes, and the back-off is kept in the cache along with that of each body and
+each failed rebuild (`internal/httpx/outage.go`). Other `GET` and `HEAD`
+requests are retried twice when upstream is busy. Concurrent reads of one page
+share one request, and the least recently used entries are evicted beyond
+`--cache-max`.
 
 ## Live smoke-test checklist
 
