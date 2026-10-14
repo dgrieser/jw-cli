@@ -56,6 +56,9 @@ type Client struct {
 	// hosts that failed lately; see outage.go
 	failed sync.Map
 	down   downHosts
+	// retryDelays, when set, replace the pauses before a busy upstream is
+	// asked again (see outage.go)
+	retryDelays []time.Duration
 	// stashed holds changed bodies a memo's revalidation read, for the
 	// rebuild that follows
 	stashMu sync.Mutex
@@ -73,6 +76,13 @@ func WithBaseURLs(b BaseURLs) Option { return func(c *Client) { c.Base = b } }
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.hc = h } }
 
 func WithUserAgent(ua string) Option { return func(c *Client) { c.UserAgent = ua } }
+
+// WithRetryDelays sets the pauses before a busy upstream (429, 502, 503, 504)
+// is asked again, one per retry; none asks only once. For tests, which need
+// not wait the real pauses out.
+func WithRetryDelays(d ...time.Duration) Option {
+	return func(c *Client) { c.retryDelays = append([]time.Duration{}, d...) }
+}
 
 func WithVerbose(f func(format string, args ...any)) Option {
 	return func(c *Client) { c.verbose = f }

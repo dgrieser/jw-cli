@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -48,7 +49,9 @@ func bibleUpstream(t *testing.T) *Service {
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: srv.URL, JWOrg: srv.URL, WOL: srv.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: srv.URL, JWOrg: srv.URL, WOL: srv.URL}),
+		// a busy upstream is asked again at once: the pauses are the client's business
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	return New(hc, httpx.OpenCacheAt(t.TempDir()))
 }
 

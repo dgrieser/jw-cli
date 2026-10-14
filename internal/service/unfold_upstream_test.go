@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -61,7 +62,9 @@ func unfoldUpstream(t *testing.T, handle func(mux *http.ServeMux)) *Service {
 		mux.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: srv.URL, JWOrg: srv.URL, WOL: srv.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: srv.URL, JWOrg: srv.URL, WOL: srv.URL}),
+		// a busy upstream is asked again at once: the pauses are the client's business
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	return New(hc, httpx.OpenCacheAt(t.TempDir()))
 }
 

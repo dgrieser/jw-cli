@@ -69,7 +69,7 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		}
 		// busy, or behind a failing gateway: asked again in a moment,
 		// unless something kept can stand in for the answer right away
-		wait, again := retryWait(resp, try)
+		wait, again := retryWait(resp, try, c.retryDelays)
 		if kept || !again {
 			c.hostFailed(host)
 			return resp, nil
@@ -88,17 +88,21 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 }
 
 // retryWait is how long to wait before asking again after resp, the answer
-// to the try-th attempt, and whether to ask again at all.
-func retryWait(resp *http.Response, try int) (time.Duration, bool) {
+// to the try-th attempt, and whether to ask again at all. delays, when set,
+// stand in for retryDelays.
+func retryWait(resp *http.Response, try int, delays []time.Duration) (time.Duration, bool) {
+	if delays == nil {
+		delays = retryDelays
+	}
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
 	default:
 		return 0, false
 	}
-	if try >= len(retryDelays) {
+	if try >= len(delays) {
 		return 0, false
 	}
-	wait := retryDelays[try]
+	wait := delays[try]
 	if ra := strings.TrimSpace(resp.Header.Get("Retry-After")); ra != "" {
 		if secs, err := strconv.Atoi(ra); err == nil {
 			wait = time.Duration(max(secs, 0)) * time.Second
