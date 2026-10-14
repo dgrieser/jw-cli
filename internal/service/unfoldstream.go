@@ -54,9 +54,10 @@ type UnfoldSection struct {
 	// Unwrap hands out what the section holds without the section: the body
 	// of a lazy section that already stands on the page with its heading.
 	Unwrap bool
-	// Doc is the document the section's passage was lifted out of, by docid;
-	// zero when it is not known. A page leaves it out of the publications
-	// quoting the verses inside the section.
+	// Doc is the document the section's passage was lifted out of, by docid
+	// — for bible text a citation brought, the document citing it; zero when
+	// it is not known. A page leaves it out of the publications quoting the
+	// verses inside the section.
 	Doc int
 }
 
@@ -270,16 +271,20 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 		cfg.Verses = unfold.NewVerses()
 	}
 	depth := max(cfg.Depth, 1)
-	r := hopResolver(s, lng, nil)
-	sess := unfold.NewSession(r, unfoldOptions(cfg))
-	sess.Spend(cfg.Spent)
-	spent := func() int { return sess.Requests() - cfg.Spent }
 	var plan []unfold.Ref
+	var self []int
 	for _, c := range refs {
 		if unfold.IsCitation(c.Path) {
 			plan = append(plan, unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)})
+			self = append(self, citingDoc(c.Path))
 		}
 	}
+	// the document the block is part of is never listed as quoting what it
+	// cites, whatever the page knows of it
+	r := hopResolver(s, lng, nil, self...)
+	sess := unfold.NewSession(r, unfoldOptions(cfg))
+	sess.Spend(cfg.Spent)
+	spent := func() int { return sess.Requests() - cfg.Spent }
 	if ok, err := sess.Check(1, sess.CostHops(plan, depth)); err != nil || !ok {
 		return "", 0, err
 	}
@@ -351,6 +356,7 @@ func (s *Service) streamCitedPassage(ctx context.Context, lng model.Language, i 
 	key := fmt.Sprintf("verse%d", i)
 	out.Section(UnfoldSection{
 		Title: html.EscapeString(label), Body: b.String(), Order: i, Ref: RefPath(ref.Path), Key: key,
+		Doc: citingDoc(ref.Path),
 	})
 	table := s.BookTable(ctx, lng)
 	var notes []string

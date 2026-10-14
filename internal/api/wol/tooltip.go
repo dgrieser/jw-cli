@@ -1,6 +1,26 @@
 package wol
 
-import "github.com/dgrieser/jw-cli/internal/model"
+import (
+	"regexp"
+	"strconv"
+
+	"github.com/dgrieser/jw-cli/internal/model"
+)
+
+// docIDClass is the class wol marks an element holding a document with:
+// "todayItem today html5 pub-es docId-1102026200 pub-es26 …".
+var docIDClass = regexp.MustCompile(`(?:^|\s)docId-(\d+)(?:\s|$)`)
+
+// DocIDOfClasses is the document an element's classes say it holds, zero when
+// they name none. It is what names a document that has no link of its own: a
+// daily text on its page, a footnote's answer.
+func DocIDOfClasses(classes string) int {
+	if m := docIDClass.FindStringSubmatch(classes); m != nil {
+		id, _ := strconv.Atoi(m[1])
+		return id
+	}
+	return 0
+}
 
 // tooltipItem is one passage of a citation endpoint's answer. A citation can
 // name several — a marginal reference points at every verse it lists, each an

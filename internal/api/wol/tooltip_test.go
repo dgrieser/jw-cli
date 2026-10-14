@@ -41,3 +41,37 @@ func TestTooltipKeepsEveryItem(t *testing.T) {
 		t.Error("an item on its own carries no further items")
 	}
 }
+
+// Only a link to a document names one: the numbers ending a daily text or a
+// week of meetings are a date, and a citation names the document citing it.
+func TestDocIDFromURL(t *testing.T) {
+	for u, want := range map[string]int{
+		"https://wol.jw.org/de/wol/d/r10/lp-x/1102025912":          1102025912,
+		"/en/wol/d/r1/lp-e/1102026200?#h=2:0-5:0":                  1102026200,
+		"/de/wol/d/r10/lp-x/202026249?q=Jer&p=par":                 202026249,
+		"https://www.jw.org/finder?wtlocale=E&docid=1102014204":    1102014204,
+		"https://wol.jw.org/en/wol/dt/r1/lp-e/2026/1/1":            0,
+		"https://wol.jw.org/en/wol/meetings/r1/lp-e/2026/3":        0,
+		"/en/wol/pc/r1/lp-e/1102026209/13/0":                       0,
+		"/de/wol/fn/r10/lp-x/1001070147/8":                         0,
+		"https://www.jw.org/en/library/magazines/watchtower-2024/": 0,
+	} {
+		if got := DocIDFromURL(u); got != want {
+			t.Errorf("DocIDFromURL(%q) = %d, want %d", u, got, want)
+		}
+	}
+}
+
+func TestDocIDOfClasses(t *testing.T) {
+	for classes, want := range map[string]int{
+		"todayItem today html5 pub-es docId-1102026200 pub-es26 pub-es": 1102026200,
+		"document html5 pub- docId-1001070147 pub-nwtsty bible":         1001070147,
+		"docId-7":                        7,
+		"bibleCitation html5 pub-nwtsty": 0,
+		"xdocId-5 docId-x":               0,
+	} {
+		if got := DocIDOfClasses(classes); got != want {
+			t.Errorf("DocIDOfClasses(%q) = %d, want %d", classes, got, want)
+		}
+	}
+}

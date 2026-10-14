@@ -627,14 +627,39 @@ func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art mod
 	if cfg.Hops {
 		// a verse the document cites is the verse unfolded; a passage of
 		// another publication brings the verses it cites, one further down
-		r := hopResolver(s, lng, nil, art.DocID, wol.DocIDFromURL(art.URL))
+		r := hopResolver(s, lng, nil, articleDocs(art)...)
 		return unfoldInlineHops(ctx, r, art.HTML, cfg, cfg.Depth, false, txt)
 	}
 	// the references the document writes are worth the traffic; the ones
 	// reached through them multiply it
 	cfg.CitedDepth = 1
-	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited).excluding(art.DocID, wol.DocIDFromURL(art.URL))
+	r := newTooltipResolver(s, lng, nil).withCited(ctx, cfg.Cited).excluding(articleDocs(art)...)
 	return unfoldInline(ctx, r, art.HTML, cfg, txt)
+}
+
+// articleDocs are the documents an article is, which are never listed as
+// quoting a verse it cites: its own id, the one its link names, and the ones
+// its citations are written in — which is all a page assembled from documents
+// (a daily text) says about them.
+func articleDocs(art model.Article) []int {
+	ids := []int{art.DocID, wol.DocIDFromURL(art.URL)}
+	for _, ref := range unfold.Refs(art.HTML) {
+		ids = append(ids, citingDoc(ref.Path))
+	}
+	return ids
+}
+
+// citingDocPath matches a citation link, which wol writes as the document
+// holding it and the place in it: "/de/wol/bc/r10/lp-x/1102026200/3/0".
+var citingDocPath = regexp.MustCompile(`/(?:bc|pc|fn)/[^/]+/[^/]+/(\d+)/`)
+
+// citingDoc is the document a citation is written in, zero for anything else.
+func citingDoc(path string) int {
+	if m := citingDocPath.FindStringSubmatch(path); m != nil {
+		id, _ := strconv.Atoi(m[1])
+		return id
+	}
+	return 0
 }
 
 // blockTags are the elements an expansion is inlined under: the smallest piece of
