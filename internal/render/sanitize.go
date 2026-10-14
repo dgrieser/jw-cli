@@ -10,14 +10,15 @@ import (
 )
 
 // sanitize normalizes a site HTML fragment before conversion:
-//   - drops script/style/noscript and hidden UI chrome
+//   - drops script/style/noscript and hidden UI chrome: the image viewer's
+//     lightbox and the page's form controls (pageChrome)
 //   - materializes responsive images (span.jsRespImg data attributes) into
 //     plain <img> tags with the largest available source
 //   - prefers data-img-size-* attributes on <img> tags
 //   - flattens wol's multi-line publication link cards into one line each
 //   - drops soft hyphens, which only a browser knows how to hide
-//   - absolutizes href/src attributes against o.BaseURL, or strips link targets
-//     and image sources entirely under o.NoURLs
+//   - absolutizes href/src attributes against o.BaseURL, or strips link targets,
+//     image sources and every other attribute holding a URL under o.NoURLs
 func sanitize(fragment string, o Options) (string, error) {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
 	if err != nil {
@@ -48,6 +49,7 @@ func sanitize(fragment string, o Options) (string, error) {
 	})
 
 	body.Find("script, style, noscript").Remove()
+	body.Find(pageChrome).Remove()
 	flattenLinkCards(body)
 	for _, n := range body.Nodes {
 		stripSoftHyphens(n)
@@ -66,6 +68,9 @@ func sanitize(fragment string, o Options) (string, error) {
 	if o.NoURLs {
 		// nothing left to absolutize once the targets are gone
 		stripURLs(body)
+		for _, n := range body.Nodes {
+			stripURLAttrs(n)
+		}
 	} else if o.BaseURL != "" {
 		if base, err := url.Parse(o.BaseURL); err == nil {
 			absolutize(body, "a", "href", base)
@@ -79,6 +84,14 @@ func sanitize(fragment string, o Options) (string, error) {
 	}
 	return strings.TrimSpace(html), nil
 }
+
+// pageChrome is what a document page carries inside its article that is no
+// reading matter: the lightbox wol builds its image viewer from (PhotoSwipe's
+// .pswp, two dozen elements with its buttons), and the page's form controls —
+// some twenty-five hidden fields its scripts read their settings from, among
+// them the pub-media endpoint and the share link, which no rendering wants and
+// --no-urls must not leak. A study article's answer fields (textarea) stay.
+const pageChrome = ".pswp, input, button"
 
 // cardDecoration is the parts of a wol link card that carry no text: the
 // publication cover thumbnail, the section icon and the chevron. They have no
@@ -155,6 +168,32 @@ func stripURLs(body *goquery.Selection) {
 		}
 		s.ReplaceWithHtml(inner)
 	})
+}
+
+// stripURLAttrs drops whatever attribute still holds a URL once the links and
+// images are gone — a lazy-loaded source in a data attribute, say — so the
+// HTML output under --no-urls names no address at all.
+func stripURLAttrs(n *xhtml.Node) {
+	if n.Type == xhtml.ElementNode {
+		kept := n.Attr[:0]
+		for _, a := range n.Attr {
+			if !looksLikeURL(a.Val) {
+				kept = append(kept, a)
+			}
+		}
+		n.Attr = kept
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		stripURLAttrs(c)
+	}
+}
+
+// looksLikeURL reports whether an attribute value is an address: absolute,
+// protocol-relative, or a site path.
+func looksLikeURL(v string) bool {
+	v = strings.TrimSpace(v)
+	return strings.Contains(v, "://") || strings.HasPrefix(v, "/") ||
+		strings.HasPrefix(v, "mailto:")
 }
 
 // imagePlaceholder is how an image is spelled where its source cannot be shown:
