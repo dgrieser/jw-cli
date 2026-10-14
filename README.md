@@ -166,6 +166,14 @@ jw search -e wol '(Mt 24:14)' --exclude bi,dx # without bibles and indexes
 jw search -i bible study                      # interactive TUI
 ```
 
+`-n` is the jw.org page size, 1 to 36: jw.org answers a larger one with
+HTTP 400, so it is refused up front. wol serves pages of 40 and takes no page
+size, so `-n` does not apply to `-e wol`; page with `-p`. An all-types search
+(`-t all`, the default) comes back grouped by type on its first page, which
+jw.org sizes itself — the header then names the page only — and its later
+pages are flat and start over from the first results; the interactive browser
+lists a result once, on the page it first came on.
+
 The wol engine covers every publication category by default. Which categories a
 search covers is controlled by three mutually exclusive flags, also available on
 `jw bible cited`:

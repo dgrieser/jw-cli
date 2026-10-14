@@ -133,6 +133,8 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 
 // searchFetcher pages through search results for either engine.
 func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p service.SearchParams) tui.Fetcher {
+	// the page each result was first listed on, across the session
+	listed := map[string]int{}
 	return func(page int) (results.ResultSet, string, error) {
 		rs, header, err := runSearch(ctx, a, lng, &p, page)
 		if err != nil {
@@ -141,9 +143,30 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p servic
 		if len(rs.Items) == 0 && page > 1 {
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreResults)
 		}
+		rs.Items = dropRepeats(rs.Items, page, listed)
 		_ = results.Save(a.Cache().Dir(), &rs)
 		return rs, header, nil
 	}
+}
+
+// dropRepeats leaves out the results an earlier page already listed. jw.org
+// serves the first page of an all-types search grouped by type, sized by
+// itself, and the following pages flat from the start of the results — so its
+// second page repeats rows of the first. A result keeps its place on the page
+// it first came on, so paging back shows that page whole again.
+func dropRepeats(items []model.Result, page int, listed map[string]int) []model.Result {
+	kept := items[:0:0]
+	for _, r := range items {
+		key := firstNonEmpty(r.LANK, r.JWLink, r.WOLLink)
+		if first, ok := listed[key]; key != "" && ok && first < page {
+			continue
+		}
+		if _, ok := listed[key]; key != "" && !ok {
+			listed[key] = page
+		}
+		kept = append(kept, r)
+	}
+	return kept
 }
 
 // runSearch executes one page of a search on the chosen engine and heads the
@@ -159,7 +182,12 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, p *service.S
 		header = a.Text().WolResults(out.Total, out.Query, out.Page)
 	default:
 		header = a.Text().Results(out.Total, out.Query)
-		if out.Total > p.Limit {
+		switch {
+		case len(out.Items) > p.Limit:
+			// a grouped first page: jw.org sized it itself, whatever the
+			// limit, so the page is all there is to say
+			header += fmt.Sprintf(a.Text().PageSuffixShort, out.Page)
+		case out.Total > p.Limit:
 			header += fmt.Sprintf(a.Text().PageSuffix, out.Page, p.Limit)
 		}
 	}
