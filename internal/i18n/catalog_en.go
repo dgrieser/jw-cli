@@ -230,6 +230,7 @@ var en = Messages{
 	UICatsInclude: "Only these publications",
 	UICatsExclude: "All publications except",
 	UICatsHint:    "codes such as w, g, bk, it, bi, dx",
+	UIPageSize:    "Results per page",
 
 	UILazyFallback: "Show on a page of its own",
 

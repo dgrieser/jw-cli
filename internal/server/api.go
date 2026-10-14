@@ -17,6 +17,9 @@ import (
 // size at all; its pages are as long as the site makes them.
 const maxSearchLimit = 36
 
+// defaultSearchLimit is the page size without ?limit=, as jw search's.
+const defaultSearchLimit = 10
+
 func (s *Server) apiLanguages(w http.ResponseWriter, r *http.Request) {
 	langs, err := s.svc.Languages(r.Context())
 	if err != nil {
@@ -56,7 +59,7 @@ func (s *Server) searchParams(r *http.Request, lng model.Language) (*service.Sea
 	if q == "" {
 		return nil, 0, errMissing("q")
 	}
-	limit, err := intParam(r, "limit", 10)
+	limit, err := intParam(r, "limit", defaultSearchLimit)
 	if err != nil {
 		return nil, 0, err
 	}

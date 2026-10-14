@@ -230,6 +230,7 @@ var de = Messages{
 	UICatsInclude: "Nur diese Publikationen",
 	UICatsExclude: "Alle Publikationen außer",
 	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
+	UIPageSize:    "Ergebnisse pro Seite",
 
 	UILazyFallback: "Auf einer eigenen Seite anzeigen",
 

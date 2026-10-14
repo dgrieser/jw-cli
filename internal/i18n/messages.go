@@ -347,6 +347,8 @@ type Messages struct {
 	UICatsInclude string
 	UICatsExclude string
 	UICatsHint    string
+	// UIPageSize sets how many results a page of the jw.org search shows.
+	UIPageSize string
 
 	// UILazyFallback leads a page read without scripts from a section that
 	// loads once opened to a page showing what it would load.

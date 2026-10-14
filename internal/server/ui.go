@@ -502,6 +502,14 @@ type searchPage struct {
 	Sort     string
 	Scope    string
 	Excerpts bool
+	// AllCats, Include and Exclude are the publications a search of the
+	// Online Library covers (?all, ?include=, ?exclude=); Limit is the page
+	// size of the jw.org search, MaxLimit the most it answers.
+	AllCats  bool
+	Include  string
+	Exclude  string
+	Limit    int
+	MaxLimit int
 	Page     int
 	Header   string
 	Items    []resultView
@@ -510,6 +518,9 @@ type searchPage struct {
 }
 
 func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
+	// a form sends its blank fields, which ask for nothing
+	dropBlank(r, "include", "exclude", "limit")
+	limit, _ := intParam(r, "limit", defaultSearchLimit)
 	page := searchPage{
 		basePage: s.base(r, "Search"),
 		Query:    strings.TrimSpace(r.FormValue("q")),
@@ -518,6 +529,11 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		Sort:     valueOr(r, "sort", "rel"),
 		Scope:    valueOr(r, "scope", "par"),
 		Excerpts: boolParamOr(r, "excerpts", true),
+		AllCats:  boolParam(r, "all"),
+		Include:  r.FormValue("include"),
+		Exclude:  r.FormValue("exclude"),
+		Limit:    max(1, min(limit, maxSearchLimit)),
+		MaxLimit: maxSearchLimit,
 	}
 	if page.Query == "" {
 		s.render(w, http.StatusOK, "search", page)
@@ -545,6 +561,16 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		page.Header = txt.WolResults(out.Total, out.Query, out.Page)
 	} else {
 		page.Header = txt.Results(out.Total, out.Query)
+		// which page of how many, as jw search says it — but only what is
+		// true: the first page of everything comes grouped by kind, longer
+		// than the page size asked for
+		switch {
+		case out.Total <= p.Limit:
+		case len(out.Items) > p.Limit:
+			page.Header += fmt.Sprintf(txt.PageSuffixShort, out.Page)
+		default:
+			page.Header += fmt.Sprintf(txt.PageSuffix, out.Page, p.Limit)
+		}
 	}
 	page.Items = s.resultViews(out.Items, page.Lang)
 	if pageNum > 1 {
