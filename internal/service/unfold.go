@@ -175,9 +175,18 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 	if err != nil {
 		return tip, err
 	}
-	tip.ContentHTML = r.passageOf(ctx, tip)
+	var complete bool
+	tip.ContentHTML, complete = r.passageOf(ctx, tip)
 	for i := range tip.More {
-		tip.More[i].ContentHTML = r.passageOf(ctx, tip.More[i])
+		var ok bool
+		tip.More[i].ContentHTML, ok = r.passageOf(ctx, tip.More[i])
+		complete = complete && ok
+	}
+	if !complete {
+		// a passage that could not be read is a gap of this moment, not what
+		// the citation says: neither this run nor the next one takes it as
+		// the answer, so the next asking reads it again
+		return tip, nil
 	}
 	r.keep(path, tip)
 	r.s.mem.rememberTip(r.lng, path, tip)
@@ -187,15 +196,16 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 // passageOf is the text of one passage a citation was answered with. wol names
 // some passages — a box of a book, a sidebar — without their text; the
 // document it links to has them. Best effort: the title and the link are still
-// worth showing without it.
-func (r *tooltipResolver) passageOf(ctx context.Context, tip model.Tooltip) string {
+// worth showing without it, and ok says whether the document could be read.
+func (r *tooltipResolver) passageOf(ctx context.Context, tip model.Tooltip) (string, bool) {
 	if strings.TrimSpace(tip.ContentHTML) != "" || tip.URL == "" {
-		return tip.ContentHTML
+		return tip.ContentHTML, true
 	}
-	if passage, err := r.s.WOL.Passage(ctx, tip.URL); err == nil {
-		return passage
+	passage, err := r.s.WOL.Passage(ctx, tip.URL)
+	if err != nil {
+		return tip.ContentHTML, false
 	}
-	return tip.ContentHTML
+	return passage, true
 }
 
 // Study reads the study pane of the verse wol titled a citation with. wol titles

@@ -155,3 +155,37 @@ func TestInlineChildrenPlacesEveryPassage(t *testing.T) {
 		}
 	}
 }
+
+// A passage wol names without its text is read from its document; when that
+// read fails, the gap is not kept as what the citation says: the next
+// expansion reads it again.
+func TestResolveDoesNotRememberAFailedPassage(t *testing.T) {
+	fail := true
+	s := unfoldUpstream(t, func(mux *http.ServeMux) {
+		mux.HandleFunc("/wol/pc/r1/lp-e/2024360/3/0", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"items":[{"title":"A box","content":"","url":"/wol/d/r1/lp-e/1102014000#h=2:0-2:0"}]}`))
+		})
+		mux.HandleFunc("/en/wol/d/r1/lp-e/1102014000", func(w http.ResponseWriter, r *http.Request) {
+			if fail {
+				http.Error(w, "busy", http.StatusServiceUnavailable)
+				return
+			}
+			w.Write([]byte(`<article id="article"><p data-pid="2">What the box says.</p></article>`))
+		})
+	})
+	resolve := func() string {
+		tip, err := newTooltipResolver(s, english, nil).Resolve(context.Background(), "/en/wol/pc/r1/lp-e/2024360/3/0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tip.ContentHTML
+	}
+	if got := resolve(); got != "" {
+		t.Fatalf("a passage that could not be read: %q", got)
+	}
+	fail = false
+	if got := resolve(); !strings.Contains(got, "What the box says.") {
+		t.Errorf("the passage was not read again: %q", got)
+	}
+}
