@@ -56,15 +56,8 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 			if err != nil {
 				return tui.Content{}, err
 			}
-			switch {
-			case art.Title == "":
-			case format.IsMarkdown():
-				body = "# " + art.Title + "\n\n" + body
-			default:
-				body = art.Title + "\n\n" + body
-			}
 			// -o raw asks for the markdown verbatim, in the pane too
-			return tui.Content{Text: body, Markdown: format == render.Markdown}, nil
+			return tui.Content{Text: headedBody(art, format, body), Markdown: format == render.Markdown}, nil
 		},
 		Download: func(item model.Result) (string, error) {
 			return tuiDownload(ctx, a, item)
