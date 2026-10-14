@@ -225,3 +225,166 @@ func TestRefusedUpstreamUsesWhatIsKept(t *testing.T) {
 		t.Errorf("took %s", took)
 	}
 }
+
+// quickRetries has busy servers asked again at once.
+func quickRetries(t *testing.T, delays ...time.Duration) {
+	old := retryDelays
+	retryDelays = []time.Duration{time.Millisecond, 2 * time.Millisecond}
+	if delays != nil {
+		retryDelays = delays
+	}
+	t.Cleanup(func() { retryDelays = old })
+}
+
+// busySite answers its next busy requests with status, then the page.
+type busySite struct {
+	mu         sync.Mutex
+	busy       int
+	status     int
+	retryAfter string
+	heads      atomic.Int32
+	gets       atomic.Int32
+}
+
+func (s *busySite) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodHead {
+		s.heads.Add(1)
+	} else {
+		s.gets.Add(1)
+	}
+	s.mu.Lock()
+	busy, status, retryAfter := s.busy > 0, s.status, s.retryAfter
+	if busy {
+		s.busy--
+	}
+	s.mu.Unlock()
+	if busy {
+		if retryAfter != "" {
+			w.Header().Set("Retry-After", retryAfter)
+		}
+		w.WriteHeader(status)
+		return
+	}
+	w.Header().Set("ETag", `W/"page"`)
+	if r.Method == http.MethodGet {
+		_, _ = io.WriteString(w, "page")
+	}
+}
+
+func (s *busySite) set(busy, status int, retryAfter string) {
+	s.mu.Lock()
+	s.busy, s.status, s.retryAfter = busy, status, retryAfter
+	s.mu.Unlock()
+	s.heads.Store(0)
+	s.gets.Store(0)
+}
+
+// A server that says it is busy, or that its gateway failed, is asked again
+// a couple of times before a read with nothing kept gives up.
+func TestBusyUpstreamIsAskedAgain(t *testing.T) {
+	quickRetries(t)
+	ctx := context.Background()
+	site := &busySite{}
+	srv := httptest.NewServer(site)
+	defer srv.Close()
+
+	for _, status := range []int{http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout, http.StatusTooManyRequests} {
+		site.set(2, status, "")
+		c := New(WithResponseCache(Open(t.TempDir(), CacheOptions{})))
+		if got, err := c.GetText(ctx, srv.URL, nil); err != nil || got != "page" {
+			t.Fatalf("after two %d: %q, %v", status, got, err)
+		}
+		if n := site.gets.Load(); n != 3 {
+			t.Errorf("after two %d: %d requests, want 3", status, n)
+		}
+	}
+
+	// three times is all
+	site.set(3, http.StatusServiceUnavailable, "")
+	c := New()
+	if _, err := c.GetText(ctx, srv.URL, nil); err == nil {
+		t.Error("a server busy three times answered")
+	}
+	if n := site.gets.Load(); n != 3 {
+		t.Errorf("%d requests, want 3", n)
+	}
+	// a 500 is about what was asked: not asked again
+	site.set(1, http.StatusInternalServerError, "")
+	if _, err := c.GetText(ctx, srv.URL, nil); err == nil || site.gets.Load() != 1 {
+		t.Errorf("500: %v after %d requests, want an error after 1", err, site.gets.Load())
+	}
+	// a server asking for a long pause is not waited on
+	site.set(1, http.StatusServiceUnavailable, "120")
+	start := time.Now()
+	if _, err := c.GetText(ctx, srv.URL, nil); err == nil || site.gets.Load() != 1 || time.Since(start) > time.Second {
+		t.Errorf("Retry-After 120: %v after %d requests", err, site.gets.Load())
+	}
+	// a short one is
+	site.set(1, http.StatusServiceUnavailable, "0")
+	if _, err := c.GetText(ctx, srv.URL, nil); err != nil || site.gets.Load() != 2 {
+		t.Errorf("Retry-After 0: %v after %d requests", err, site.gets.Load())
+	}
+}
+
+// Reads of a page that share one request share its retries too.
+func TestBusyUpstreamSharedReads(t *testing.T) {
+	quickRetries(t, 50*time.Millisecond, time.Millisecond)
+	site := &busySite{}
+	site.set(1, http.StatusServiceUnavailable, "")
+	srv := httptest.NewServer(site)
+	defer srv.Close()
+	c := New(WithResponseCache(Open(t.TempDir(), CacheOptions{})))
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			<-release
+			if s, err := c.GetText(context.Background(), srv.URL, nil); err != nil || s != "page" {
+				t.Errorf("GetText: %q %v", s, err)
+			}
+		})
+	}
+	close(release)
+	wg.Wait()
+	if n := site.gets.Load(); n != 2 {
+		t.Errorf("%d requests, want 2", n)
+	}
+}
+
+// A revalidation is not held up by retries: the kept body answers at once,
+// and the host is left alone for a while.
+func TestBusyUpstreamDuringRevalidation(t *testing.T) {
+	quickRetries(t, time.Hour)
+	ctx := context.Background()
+	site := &busySite{}
+	srv := httptest.NewServer(site)
+	defer srv.Close()
+	c := staleClient(t)
+	if _, err := c.GetText(ctx, srv.URL, nil); err != nil {
+		t.Fatal(err)
+	}
+	site.set(5, http.StatusServiceUnavailable, "")
+	for range 3 {
+		if got, err := c.GetText(ctx, srv.URL, nil); err != nil || got != "page" {
+			t.Fatalf("%q, %v", got, err)
+		}
+	}
+	if h, g := site.heads.Load(), site.gets.Load(); h != 1 || g != 0 {
+		t.Errorf("%d HEAD, %d GET; want the one HEAD", h, g)
+	}
+}
+
+// A caller that gives up during the pause is let go at once.
+func TestBusyUpstreamCancelled(t *testing.T) {
+	quickRetries(t, time.Hour)
+	site := &busySite{}
+	site.set(5, http.StatusServiceUnavailable, "")
+	srv := httptest.NewServer(site)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	if _, err := New().Get(ctx, srv.URL, nil); err == nil || time.Since(start) > time.Second {
+		t.Errorf("%v after %s", err, time.Since(start))
+	}
+}

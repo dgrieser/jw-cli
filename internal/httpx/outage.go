@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -18,7 +20,8 @@ import (
 // (see withKept) gives the server answerWait to start answering, and a host
 // that failed one is not asked again for such requests for backOffFor — by
 // this process or the next, as the cache keeps which hosts failed. A read
-// with nothing to fall back on is not held back by any of this.
+// with nothing to fall back on is not held back by any of this, and is asked
+// again a few times when the server says it is busy.
 
 // answerWait is how long a server is given to start answering a HEAD, or a
 // request something kept can stand in for.
@@ -31,7 +34,18 @@ var errNoAnswer = errors.New("no answer in time")
 // host is backed off.
 var errHostDown = errors.New("failed lately, not asked again yet")
 
-// send issues a GET or HEAD of rawURL with hdr and notes how the host did.
+// retryDelays are the pauses before asking again a server that answered it
+// is busy or that its gateway failed (429, 502, 503, 504): one such answer
+// is often all there is, and would otherwise end a read that has nothing
+// kept to fall back on. A variable so tests need not wait them out.
+var retryDelays = []time.Duration{time.Second, 3 * time.Second}
+
+// maxRetryAfter is the longest Retry-After waited out; a server that asks
+// for more is not asked again within the read.
+const maxRetryAfter = 5 * time.Second
+
+// send issues a GET or HEAD of rawURL with hdr — both ask without changing
+// anything, so asking again is safe — and notes how the host did.
 func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
 	host := hostOf(rawURL)
 	kept := hasKept(ctx)
@@ -39,22 +53,63 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		c.verbose("%s %s (not asked: upstream unavailable)", method, rawURL)
 		return nil, fmt.Errorf("%s %s: %s %w", method, rawURL, host, errHostDown)
 	}
-	resp, err := c.attempt(ctx, method, rawURL, hdr, kept || method == http.MethodHead)
-	switch {
-	case err != nil:
-		// a caller that gave up says nothing about the host
-		if ctx.Err() == nil {
-			c.hostFailed(host)
+	for try := 0; ; try++ {
+		resp, err := c.attempt(ctx, method, rawURL, hdr, kept || method == http.MethodHead)
+		switch {
+		case err != nil:
+			// a caller that gave up says nothing about the host
+			if ctx.Err() == nil {
+				c.hostFailed(host)
+			}
+			return nil, err
+		case !unavailable(resp.StatusCode) || resp.StatusCode == http.StatusInternalServerError:
+			// a 500 is more often about what was asked than about the host
+			c.hostAnswered(host)
+			return resp, nil
 		}
-		return nil, err
-	case unavailable(resp.StatusCode) && resp.StatusCode != http.StatusInternalServerError:
-		// busy or behind a failing gateway; a 500 is more often about what
-		// was asked than about the host
-		c.hostFailed(host)
-	default:
-		c.hostAnswered(host)
+		// busy, or behind a failing gateway: asked again in a moment,
+		// unless something kept can stand in for the answer right away
+		wait, again := retryWait(resp, try)
+		if kept || !again {
+			c.hostFailed(host)
+			return resp, nil
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+		resp.Body.Close()
+		c.verbose("%s %s (HTTP %d, asking again in %s)", method, rawURL, resp.StatusCode, wait)
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil, ctx.Err()
+		case <-t.C:
+		}
 	}
-	return resp, nil
+}
+
+// retryWait is how long to wait before asking again after resp, the answer
+// to the try-th attempt, and whether to ask again at all.
+func retryWait(resp *http.Response, try int) (time.Duration, bool) {
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+	default:
+		return 0, false
+	}
+	if try >= len(retryDelays) {
+		return 0, false
+	}
+	wait := retryDelays[try]
+	if ra := strings.TrimSpace(resp.Header.Get("Retry-After")); ra != "" {
+		if secs, err := strconv.Atoi(ra); err == nil {
+			wait = time.Duration(max(secs, 0)) * time.Second
+		} else if at, err := http.ParseTime(ra); err == nil {
+			wait = max(time.Until(at), 0)
+		}
+		if wait > maxRetryAfter {
+			return 0, false
+		}
+	}
+	return wait, true
 }
 
 // attempt sends one request. With brief, the server has answerWait to start
