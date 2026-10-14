@@ -223,6 +223,11 @@ keeps the search's passage.
 `--no-videos` leaves the videos out altogether, and so does `--include`, which
 names the publications to cover.
 
+A listing says what it could not include: a video search that failed, and the
+results whose documents could not be read this time — those keep wol's teaser
+and are left unjudged — are noted under it (`notes` in `-o json`), so a listing
+missing something never reads as complete.
+
 For the wol engine both commands then read each result's document and print the
 passage the hit sits in — the paragraph, list item or table, whole — instead of
 wol's teaser, which is cut mid-sentence. That is one request per result, run
@@ -266,7 +271,8 @@ jw bible read "Ge 1" --no-outlines           # without the book outline's headin
 jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text, each headed
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
-jw bible research John 3:16 -x               # research guide + excerpts
+jw bible media John 3:16 --download -q 240p  # a clip saves its whole video: in this quality
+jw bible research John 3:16 -x               # research guide + excerpts (a failed one says why)
 jw bible intro Genesis                       # facts, noteworthy facts or transcript, video
 jw bible intro Mt --download -q 480p         # the introduction's video
 jw bible outline Genesis                     # outline of contents (overview for Mt-Acts)
@@ -739,13 +745,16 @@ publication in the library — can be held (a long press, or a right click) for
 the rest of the choices: how deep to unfold the verse or paragraph it is in
 (else open it as a reference, where that is how it opens), open its page here or in a new tab, or **open it in** the section it belongs to
 — the bible, the publications, media — without leaving the page: the section's
-menu entry then leads there, and the section's history lists it.
+menu entry then leads there, and the section's history lists it. A verse's
+number inside something unfolded unfolds that verse in place, as the reader's
+own verse numbers do, and holding it offers the same choices.
 Where a link is read on jw.org or wol.jw.org is offered there too, as **open on
 the website**, and the page's own document is opened on the website from the
 settings in the bar; no page links out to the sites otherwise.
 
-Every page is kept as it was left. What was unfolded, what was open and how far
-down the page was scrolled are kept in the browser (IndexedDB) and put back on
+Every page is kept as it was left, for the language it was read in. What was
+unfolded, what was open and how far down the page was scrolled are kept in the
+browser (IndexedDB) and put back on
 return without asking the server again — an item that found nothing, or
 failed, stays that way until it is asked for again — and the menu leads back to
 the last page of each section: the bible, the meetings, media, publications
@@ -779,7 +788,8 @@ footnotes, the passages its Research Guide and Publications Index point at,
 and its marginal references — and every bible verse any of them cites, as a
 verse at depth N−1. A verse at depth 0 is its text, with all of its sections as
 headings that load once opened; one that turns out to have nothing says so
-for a moment ("Nothing here") and then fades away. Other translations and quotations load once opened at every
+for a moment ("Nothing here") and then fades away; one that could not be
+loaded says why and offers to try again. Other translations and quotations load once opened at every
 depth. A passage of another publication is no step of its own: it brings the
 verses it cites one reference further down than the verse or document citing
 it, and nothing else it cites is followed. Depth 1 on a verse:
@@ -827,7 +837,8 @@ jw.org address it was read from.
 
 Every page keeps a header in view: the page's title, a link up to the page
 above it (the last breadcrumb, the section's start, or the page a document was
-opened from), and buttons for a smaller, the default or a larger text size —
+opened from — a reading leads up to its book's chapters, a book to all books,
+a search to the search page), and buttons for a smaller, the default or a larger text size —
 kept in this browser. On the bible reader the header names the book, chapter
 and verses in view and opens a book picker: the chapters of the current book in
 one row that scrolls sideways, the book grid under it, and a book picked there
