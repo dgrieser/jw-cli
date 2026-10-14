@@ -39,6 +39,14 @@ func writeListing(a *app.App, rs results.ResultSet, header string) error {
 	if len(rs.Items) == 0 {
 		b.WriteString(a.Text().NoResults + "\n")
 	}
+	// what could not be listed closes the listing, set off from the rows the
+	// way an unfolded document marks a citation it could not unfold
+	if len(rs.Notes) > 0 {
+		b.WriteString("\n")
+		for _, note := range rs.Notes {
+			fmt.Fprintf(&b, "%s\n", style.wrapUnder(style.text.Italic(note), ""))
+		}
+	}
 	return a.Write(b.String())
 }
 

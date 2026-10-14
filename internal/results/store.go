@@ -27,6 +27,10 @@ type ResultSet struct {
 	Total     int            `json:"total,omitempty"`
 	Timestamp time.Time      `json:"timestamp"`
 	Items     []model.Result `json:"items"`
+
+	// Notes say what the listing could not include — a lookup that failed —
+	// so a partial answer says it is partial. Already in the user's language.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // Save numbers and stamps the result set, then writes it into dir (the app
