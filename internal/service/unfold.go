@@ -654,6 +654,7 @@ const (
 // and styling — as the article itself.
 func (s *Service) UnfoldArticle(ctx context.Context, lng model.Language, art model.Article,
 	cfg UnfoldConfig, txt *i18n.Messages) (string, error) {
+	art = s.citable(ctx, lng, art)
 	if cfg.Hops {
 		// a verse the document cites is the verse unfolded; a passage of
 		// another publication brings the verses it cites, one further down

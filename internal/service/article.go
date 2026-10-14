@@ -3,10 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/unfold"
 )
 
 // Article resolves a docid or URL to a parsed article.
@@ -25,6 +27,38 @@ func (s *Service) Article(ctx context.Context, lng model.Language, target string
 		return s.WOL.DocumentByURL(ctx, target)
 	}
 	return s.JWOrg.ArticleByURL(ctx, target)
+}
+
+// citable is the document an expansion of art reads its citations in. wol
+// writes a verse a document cites as a citation link (/wol/bc/), which the
+// expansion follows; jw.org writes the same verse as a link into its study
+// bible (a.jsBibleLink), which is no citation. A jw.org article the library
+// also carries — the same document, by the same id — is unfolded from the
+// library's copy; one it does not carry is left as it is, with nothing to
+// unfold.
+func (s *Service) citable(ctx context.Context, lng model.Language, art model.Article) model.Article {
+	if art.DocID == 0 || !onJWOrg(art.URL) || len(unfold.Refs(art.HTML)) > 0 {
+		return art
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return art
+	}
+	lib, err := s.WOL.Document(ctx, cfg, art.DocID)
+	if err != nil || len(unfold.Refs(lib.HTML)) == 0 {
+		return art
+	}
+	return lib
+}
+
+// onJWOrg reports whether a link leads to www.jw.org rather than the library.
+func onJWOrg(link string) bool {
+	u, err := url.Parse(link)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "jw.org" || strings.HasSuffix(host, ".jw.org") && host != "wol.jw.org"
 }
 
 // ImagesToResults turns an article's illustrations into listing rows.

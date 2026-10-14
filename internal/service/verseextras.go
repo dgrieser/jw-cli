@@ -317,6 +317,9 @@ func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target
 		body = passage
 	}
 	if cfg.Depth > 0 {
+		if lib := s.citable(ctx, lng, art); lib.URL != art.URL {
+			art, body = lib, lib.HTML
+		}
 		// the document is what cites: the verses it quotes, one reference
 		// further down than the link it was reached through
 		cfg.Hops = true
