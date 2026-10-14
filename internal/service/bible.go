@@ -384,6 +384,8 @@ func (s *Service) chapterError(ctx context.Context, lng model.Language, edition 
 	if cerr != nil {
 		return err
 	}
+	// the edition that was read, should the study edition have been stood in for
+	edition = s.readableEdition(ctx, cfg, edition)
 	language := cmp.Or(lng.Name, lng.Symbol)
 	editions, berr := s.WOL.Bibles(ctx, cfg)
 	if refused(berr) {

@@ -42,6 +42,19 @@ func bibleUpstream(t *testing.T) *Service {
 	})
 	mux.HandleFunc("/kac/wol/h/r539/lp-ah", func(w http.ResponseWriter, r *http.Request) {})
 	mux.HandleFunc("/en/wol/bibles/r1/lp-e", file("testdata/bibles_en.html"))
+	// Assamese has the plain New World Translation, not its study edition
+	mux.HandleFunc("/as", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/as/wol/h/r97/lp-as", http.StatusFound)
+	})
+	mux.HandleFunc("/as/wol/h/r97/lp-as", func(w http.ResponseWriter, r *http.Request) {})
+	mux.HandleFunc("/as/wol/bibles/r97/lp-as", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><article id="article" class="article bibleList"><ul class="directory">` +
+			`<li class="row resultAlternatePubTitle"><a href="/as/wol/binav/r97/lp-as/nwt" class="cardContainer lnk">` +
+			`<div class="cardThumbnail"><span class="cardThumbnailImage thumbnail publication pub-nwt" data-pub-symbol="nwt"></span></div>` +
+			`<div class="cardTitleBlock"><div class="cardLine1">New World Translation</div></div>` +
+			`<div class="cardTitleDetail">2013</div></a></li></ul></article></body></html>`))
+	})
+	mux.HandleFunc("/as/wol/b/r97/lp-as/nwt/43/3", file("testdata/chapter_john3.html"))
 	mux.HandleFunc("/en/wol/b/r1/lp-e/nwtsty/43/3", file("testdata/chapter_john3.html"))
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-gnj_3_VIDEO", file("testdata/media_gnj3.json"))
 	mux.HandleFunc("/en/wol/b/", func(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +162,27 @@ func TestReadPassagesNoBible(t *testing.T) {
 	_, err := s.ReadPassages(context.Background(), kachin,
 		ReadRequest{Refs: "Joh 3:16", Edition: "nwtsty", NoOutlines: true}, i18n.TextFor("en"))
 	if err == nil || err.Error() != "the library has no bible in Kachin" || !errors.Is(err, pubmedia.ErrNotFound) {
+		t.Errorf("got %v", err)
+	}
+}
+
+// The study edition every reading defaults to is in a few dozen languages
+// only; in one that has the plain New World Translation, that is read.
+func TestReadPassagesPlainEditionStandsIn(t *testing.T) {
+	s := bibleUpstream(t)
+	assamese := model.Language{Symbol: "AS", Locale: "as", Name: "Assamese"}
+	res, err := s.ReadPassages(context.Background(), assamese,
+		ReadRequest{Refs: "Joh 3:16", Edition: "nwtsty", NoOutlines: true}, i18n.TextFor("en"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Passages) != 1 || len(res.Passages[0].Verses) != 1 {
+		t.Fatalf("passages = %+v", res.Passages)
+	}
+	// an edition asked for by name is read as asked
+	_, err = s.ReadPassages(context.Background(), assamese,
+		ReadRequest{Refs: "Joh 3:16", Edition: "int", NoOutlines: true}, i18n.TextFor("en"))
+	if err == nil || !strings.Contains(err.Error(), `there is no bible edition "int" in Assamese`) {
 		t.Errorf("got %v", err)
 	}
 }
