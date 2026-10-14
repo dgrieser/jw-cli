@@ -569,6 +569,92 @@ func TestEvictionKeepsTheRecentlyUsed(t *testing.T) {
 	}
 }
 
+// diskSize is what the cache's entries and memos take on disk.
+func diskSize(t *testing.T, dir string) int64 {
+	t.Helper()
+	var total int64
+	for _, sub := range []string{responseDir, memoDir} {
+		entries, _ := os.ReadDir(filepath.Join(dir, sub))
+		for _, e := range entries {
+			if info, err := e.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+	}
+	return total
+}
+
+// Many short commands in a row keep the cache within its limit: each goes
+// by what the ones before it wrote, not only by what the last sweep found.
+func TestCacheLimitHoldsAcrossCommands(t *testing.T) {
+	dir := t.TempDir()
+	const limit = 8 << 10
+	body := make([]byte, 1<<10)
+	for cmd := range 7 {
+		cache := Open(dir, CacheOptions{MaxBytes: limit})
+		for i := range 3 {
+			cache.saveEntry(entryID(fmt.Sprint(cmd, i)), entry{URL: "u"}, body)
+		}
+		cache.Close()
+	}
+	if got := diskSize(t, dir); got > limit {
+		t.Errorf("%d bytes on disk after seven commands, over the %d limit", got, limit)
+	}
+	// and the marker does not lose sight of what is there (it may count a
+	// file a sweep saw being written twice, which only sweeps sooner)
+	size, _, ok := OpenCacheAt(dir).readMarker()
+	if got := diskSize(t, dir); !ok || size < got {
+		t.Errorf("marker says %d (%v), %d on disk", size, ok, got)
+	}
+}
+
+// A sweep counts what was written while it ran, though its walk did not.
+func TestSweepCountsWhatWasWrittenMeanwhile(t *testing.T) {
+	dir := t.TempDir()
+	cache := Open(dir, CacheOptions{})
+	cache.saveEntry(entryID("before"), entry{URL: "u"}, make([]byte, 1000))
+	// a sweep under way: the entry written now is newer than its start
+	cache.mu.Lock()
+	cache.sweeping = true
+	cache.written, cache.unrecorded = 0, 0
+	cache.mu.Unlock()
+	id := entryID("during")
+	cache.saveEntry(id, entry{URL: "u"}, make([]byte, 3000))
+	later := time.Now().Add(time.Hour)
+	_ = os.Chtimes(cache.entryPath(id), later, later)
+	cache.sweeps.Add(1)
+	cache.sweep()
+	size, _, ok := cache.readMarker()
+	if got := diskSize(t, dir); !ok || size != got {
+		t.Errorf("marker says %d (%v), %d on disk", size, ok, got)
+	}
+}
+
+// A cache whose marker an older version wrote — a bare size, dated by the
+// file — is measured anew rather than believed.
+func TestOldSweepMarkerIsMeasuredAnew(t *testing.T) {
+	dir := t.TempDir()
+	const limit = 8 << 10
+	cache := Open(dir, CacheOptions{MaxBytes: 1 << 30})
+	for i := range 20 {
+		cache.saveEntry(entryID(strconv.Itoa(i)), entry{URL: "u"}, make([]byte, 1<<10))
+	}
+	cache.Close()
+	_ = os.WriteFile(filepath.Join(dir, sweepMarker), []byte("0"), 0o644)
+	cache = Open(dir, CacheOptions{MaxBytes: limit})
+	if _, _, ok := cache.loadEntry(entryID("0"), true); !ok {
+		t.Fatal("an entry of the older cache was not read")
+	}
+	cache.saveEntry(entryID("new"), entry{URL: "u"}, []byte("x"))
+	cache.Close()
+	if got := diskSize(t, dir); got > limit {
+		t.Errorf("%d bytes on disk, over the %d limit", got, limit)
+	}
+	if _, _, ok := cache.readMarker(); !ok {
+		t.Error("the marker was not written anew")
+	}
+}
+
 func TestOldLayoutIsDropped(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(dir, responseDir), 0o755)
