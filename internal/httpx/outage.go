@@ -58,7 +58,7 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		switch {
 		case err != nil:
 			// a caller that gave up says nothing about the host
-			if ctx.Err() == nil {
+			if ctx.Err() == nil && host != "" {
 				c.hostFailed(host)
 			}
 			return nil, err
@@ -233,6 +233,12 @@ func (c *Client) markHost(host string, until int64) {
 		return
 	}
 	m := c.keptHosts()
+	now := time.Now().Unix()
+	for h, u := range c.down.until {
+		if u > now && u > m[h] {
+			m[h] = u
+		}
+	}
 	if until == 0 {
 		delete(m, host)
 	} else {

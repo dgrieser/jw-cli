@@ -203,6 +203,28 @@ func TestFailedRebuildWaits(t *testing.T) {
 	}
 }
 
+// Hosts are backed off one by one, with a cache or without, and an answer
+// lifts the back-off of its host alone.
+func TestHostsBackOffOneByOne(t *testing.T) {
+	for _, c := range []*Client{New(), staleClient(t)} {
+		c.hostFailed("a")
+		c.hostFailed("b")
+		if !c.hostDown("a") || !c.hostDown("b") {
+			t.Fatalf("a %v, b %v; want both down", c.hostDown("a"), c.hostDown("b"))
+		}
+		c.hostAnswered("a")
+		if c.hostDown("a") || !c.hostDown("b") {
+			t.Errorf("a %v, b %v; want b alone down", c.hostDown("a"), c.hostDown("b"))
+		}
+		if c.responses != nil {
+			next := New(WithResponseCache(c.responses))
+			if next.hostDown("a") || !next.hostDown("b") {
+				t.Errorf("next process: a %v, b %v; want b alone down", next.hostDown("a"), next.hostDown("b"))
+			}
+		}
+	}
+}
+
 // A refused connection is answered at once from what is kept, as before.
 func TestRefusedUpstreamUsesWhatIsKept(t *testing.T) {
 	shortWait(t)
