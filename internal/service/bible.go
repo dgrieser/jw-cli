@@ -7,6 +7,7 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
@@ -577,11 +578,21 @@ func (s *Service) Research(ctx context.Context, lng model.Language, input string
 
 // BibleMedia lists images and clips attached to the verses of the references.
 // With meta, what the study pane leaves out is read from each item's gallery
-// page (best effort); a download-bound listing skips that.
+// page (best effort); a download-bound listing skips that, and fails where a
+// clip's file cannot be found, since the file is what it is for.
 func (s *Service) BibleMedia(ctx context.Context, lng model.Language, input string, meta bool) ([]model.Result, error) {
 	var items []model.Result
+	var clipErr error
 	err := s.ForEachStudySection(ctx, lng, input, func(ref string, _ model.Verse, sec model.StudySection) {
 		for _, m := range sec.Media {
+			if lank := clipLANK(m.FinderLink); lank != "" {
+				r, err := s.clipResult(ctx, lng, lank, m, ref)
+				if err != nil && clipErr == nil {
+					clipErr = err
+				}
+				items = append(items, r)
+				continue
+			}
 			if meta {
 				m = s.WithGalleryMeta(ctx, m)
 			}
@@ -590,7 +601,50 @@ func (s *Service) BibleMedia(ctx context.Context, lng model.Language, input stri
 			items = append(items, r)
 		}
 	})
+	if err == nil && !meta {
+		err = clipErr
+	}
 	return items, err
+}
+
+// clipLANK is the video a study pane's media entry plays a stretch of, from
+// its jw.org link ("finder?lank=pub-gnj_3_VIDEO&ts=00:05:02.26-00:07:52.31"),
+// or empty for a picture.
+func clipLANK(finderLink string) string {
+	u, err := url.Parse(finderLink)
+	if err != nil {
+		return ""
+	}
+	lank := u.Query().Get("lank")
+	if !strings.HasSuffix(strings.ToUpper(lank), "_VIDEO") {
+		return ""
+	}
+	return lank
+}
+
+// clipResult lists a verse's clip as the video it is: the study pane shows a
+// poster for it, which stays its picture, and links the stretch of the video
+// the clip is to jw.org, which stays its link. The file is the video's — no
+// rendition holds the stretch alone — so downloading the row saves the video
+// rather than the poster. Without the mediator's word on the video the row
+// still names it by its LANK, which is all jw download needs.
+func (s *Service) clipResult(ctx context.Context, lng model.Language, lank string, m model.MediaAsset,
+	ref string) (model.Result, error) {
+	r := model.Result{
+		Kind: "video", Title: cmp.Or(m.Caption, m.Alt, lank), Context: ref,
+		LANK: lank, ImageURL: m.URL, JWLink: m.FinderLink,
+	}
+	item, err := s.Mediator.MediaItem(ctx, lng.Symbol, lank)
+	if err != nil {
+		return r, err
+	}
+	f, err := PickBest(item)
+	if err != nil {
+		return r, err
+	}
+	r.FileURL, r.Checksum, r.Filesize = f.URL, f.Checksum, f.Filesize
+	r.Duration = item.DurationFormatted
+	return r, nil
 }
 
 // WithGalleryMeta fills in what the study pane leaves out. A verse's picture is

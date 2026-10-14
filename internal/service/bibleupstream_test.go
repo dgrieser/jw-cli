@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
@@ -41,6 +42,7 @@ func bibleUpstream(t *testing.T) *Service {
 	mux.HandleFunc("/kac/wol/h/r539/lp-ah", func(w http.ResponseWriter, r *http.Request) {})
 	mux.HandleFunc("/en/wol/bibles/r1/lp-e", file("testdata/bibles_en.html"))
 	mux.HandleFunc("/en/wol/b/r1/lp-e/nwtsty/43/3", file("testdata/chapter_john3.html"))
+	mux.HandleFunc("/apis/mediator/v1/media-items/E/pub-gnj_3_VIDEO", file("testdata/media_gnj3.json"))
 	mux.HandleFunc("/en/wol/b/", func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "", http.StatusBadRequest)
 	})
@@ -103,6 +105,36 @@ func TestReadPassagesClampsRangeEnd(t *testing.T) {
 		if len(res.Passages) != 1 || res.Passages[0].Ref != "John 3:16-17" || len(res.Passages[0].Verses) != 2 {
 			t.Errorf("%s: got %+v", ref, res.Passages)
 		}
+	}
+}
+
+// A verse's clip is listed as the video it plays a stretch of, with the
+// video's file to download; its poster stays its picture. A picture beside it
+// stays a picture.
+func TestBibleMediaClip(t *testing.T) {
+	s := bibleUpstream(t)
+	items, err := s.BibleMedia(context.Background(), english, "Joh 3:16-17", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2: %+v", len(items), items)
+	}
+	clip := items[0]
+	if clip.Kind != "video" || clip.LANK != "pub-gnj_3_VIDEO" {
+		t.Errorf("clip = %+v, want the video pub-gnj_3_VIDEO", clip)
+	}
+	if clip.FileURL != "https://cfp2.jw-cdn.org/a/b15676d/2/o/gnj_E_03_r1080P.mp4" || clip.Checksum == "" || clip.Filesize == 0 {
+		t.Errorf("clip file = %q (%s, %d), want the video's best rendition", clip.FileURL, clip.Checksum, clip.Filesize)
+	}
+	if !strings.HasSuffix(clip.ImageURL, "/en/wol/d/r1/lp-e/1200280003/thumbnail") {
+		t.Errorf("clip picture = %q, want the poster", clip.ImageURL)
+	}
+	if !strings.Contains(clip.JWLink, "ts=00:05:02.26-00:07:52.31") || clip.Title == "" {
+		t.Errorf("clip = %+v, want its stretch linked and its caption", clip)
+	}
+	if pic := items[1]; pic.Kind != "image" || !strings.HasSuffix(pic.FileURL, "/en/wol/mp/r1/lp-e/nwtsty/2026/665") {
+		t.Errorf("picture = %+v", pic)
 	}
 }
 

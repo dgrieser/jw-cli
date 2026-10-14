@@ -1,0 +1,60 @@
+{
+  "media": [
+    {
+      "guid": "677eb09723b10352cf966733",
+      "languageAgnosticNaturalKey": "pub-gnj_3_VIDEO",
+      "naturalKey": "pub-gnj_E_3_VIDEO",
+      "type": "video",
+      "primaryCategory": "SeriesGoodNews",
+      "title": "Episode 3: “I Am He”",
+      "durationFormattedMinSec": "39m 40s",
+      "duration": 2380.757333,
+      "firstPublished": "2026-01-19T15:52:40.667Z",
+      "files": [
+        {
+          "progressiveDownloadURL": "https://cfp2.jw-cdn.org/a/fdedfe0/2/o/gnj_E_03_r240P.mp4",
+          "checksum": "ee87417483576062326ac7bd84a8a049",
+          "filesize": 58044821,
+          "modifiedDatetime": "2025-05-02T17:17:22.000Z",
+          "bitRate": 190.47517265906075,
+          "duration": 2380.757333,
+          "frameHeight": 234,
+          "frameWidth": 416,
+          "label": "240p",
+          "frameRate": 23.976023976023978,
+          "mimetype": "video/mp4",
+          "subtitled": false
+        },
+        {
+          "progressiveDownloadURL": "https://cfp2.jw-cdn.org/a/5f915ea/2/o/gnj_E_03_r720P.mp4",
+          "checksum": "7cd08427c78322e77a9e1d46b5d9f549",
+          "filesize": 527800244,
+          "modifiedDatetime": "2025-05-02T17:17:02.000Z",
+          "bitRate": 1731.9864351962494,
+          "duration": 2380.757333,
+          "frameHeight": 720,
+          "frameWidth": 1280,
+          "label": "720p",
+          "frameRate": 23.976023976023978,
+          "mimetype": "video/mp4",
+          "subtitled": false
+        },
+        {
+          "progressiveDownloadURL": "https://cfp2.jw-cdn.org/a/b15676d/2/o/gnj_E_03_r1080P.mp4",
+          "checksum": "7dff78acd3cb43b63434536d79929ffd",
+          "filesize": 2465148586,
+          "modifiedDatetime": "2025-05-02T17:16:01.000Z",
+          "bitRate": 8089.431485172286,
+          "duration": 2380.757333,
+          "frameHeight": 1080,
+          "frameWidth": 1920,
+          "label": "1080p",
+          "frameRate": 23.976023976023978,
+          "mimetype": "video/mp4",
+          "subtitled": false
+        }
+      ],
+      "images": {}
+    }
+  ]
+}
