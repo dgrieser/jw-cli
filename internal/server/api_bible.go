@@ -68,11 +68,18 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	body, err := service.FormatPassages(res, format, render.Options{BaseURL: s.svc.HTTP.Base.WOL})
+	opts := render.Options{BaseURL: s.svc.HTTP.Base.WOL}
+	var lazy lazyMarks
+	read := res
+	if format != render.HTML {
+		read = lazy.markPassages(res)
+	}
+	body, err := service.FormatPassages(read, format, opts)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
+	body = lazy.restore(body, format, opts.NoURLs)
 	writeJSON(w, http.StatusOK, readResponse{
 		Ref: ref, Format: format.String(), Body: body,
 		Passages: res.Passages, Missing: res.Missing,

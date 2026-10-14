@@ -188,11 +188,17 @@ func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng mo
 		}
 		art.HTML = body
 	}
-	body, err := render.Render(art.HTML, format, render.Options{BaseURL: s.svc.ArticleBase(art)})
+	opts := render.Options{BaseURL: s.svc.ArticleBase(art)}
+	var lazy lazyMarks
+	if format != render.HTML {
+		art.HTML = lazy.mark(art.HTML)
+	}
+	body, err := render.Render(art.HTML, format, opts)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
+	body = lazy.restore(body, format, opts.NoURLs)
 	writeJSON(w, http.StatusOK, articleResponse{
 		DocID: art.DocID, Title: art.Title, URL: art.URL,
 		Format: format.String(), Body: body,
