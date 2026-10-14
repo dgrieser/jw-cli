@@ -555,6 +555,12 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	// the same search on the site it searched
+	if p.Engine == "wol" {
+		page.SiteURL = s.wolSearchPage(r.Context(), lng, p.Query, p.Scope, p.Sort, p.Categories.List)
+	} else {
+		page.SiteURL = jwSearchPage(p.Query, lng)
+	}
 	page.Page = pageNum
 	txt := text(lng)
 	if out.Kind == "wol-search" {
@@ -926,7 +932,10 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	page := mediaPage{basePage: s.base(r, text(lng).UINavMedia), Heading: text(lng).MediaCategories}
+	page := mediaPage{
+		basePage: s.base(r, text(lng).UINavMedia).withSite(videoLibraryPage(lng, "")),
+		Heading:  text(lng).MediaCategories,
+	}
 	if hero := featured[0]; len(hero.Media) > 0 {
 		v := s.resultViews(service.MediaToResults(hero.Media[:1]), page.Lang)[0]
 		page.Sections = append(page.Sections, mediaSection{Heading: hero.Name, Hero: &v})
@@ -970,7 +979,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := mediaPage{
-		basePage: s.base(r, cat.Name),
+		basePage: s.base(r, cat.Name).withSite(videoLibraryPage(lng, cat.Key)),
 		Heading:  cat.Name,
 	}
 	page.Crumbs = s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage)
@@ -1347,6 +1356,16 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 			page.BookNames[b] = res.Table.Name(b)
 		}
 	}
+	// on wol, the reading is its first chapter of the edition, opened at its
+	// first verse
+	if len(res.Passages) > 0 && res.Passages[0].Book > 0 && res.Passages[0].Chapter > 0 {
+		p := res.Passages[0]
+		u := s.wolPage(r.Context(), lng, "b", fmt.Sprintf("/%s/%d/%d", url.PathEscape(firstNonEmpty(p.Bible, page.Edition)), p.Book, p.Chapter))
+		if u != "" && len(p.Verses) > 0 && p.Verses[0].ID > 0 {
+			u += verseFragment(p.Verses[0].ID)
+		}
+		page.SiteURL = u
+	}
 	s.render(w, http.StatusOK, "bible", page)
 }
 
@@ -1359,6 +1378,8 @@ func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePag
 		page.Error = readable(err, page.T)
 		return
 	}
+	// the Online Library's own search of its bibles for the same words
+	page.SiteURL = s.wolSearchPage(r.Context(), lng, page.Ref, "par", "occ", []string{wol.CategoryBibles})
 	txt := text(lng)
 	table := s.svc.BookTable(r.Context(), lng)
 	view := &bibleSearchView{Header: fmt.Sprintf(txt.UIBibleSearchHeader, len(res.Hits), page.Ref)}
@@ -1412,6 +1433,7 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
+			page.SiteURL = s.wolPage(r.Context(), lng, "binav", fmt.Sprintf("/%s/%d", url.PathEscape(page.Edition), book))
 			if view := r.FormValue("view"); view != "" {
 				s.bookDoc(r, lng, view, page)
 			}
@@ -1427,6 +1449,7 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		return
 	}
 	page.Nav = &nav
+	page.SiteURL = s.wolPage(r.Context(), lng, "binav", "/"+url.PathEscape(page.Edition))
 }
 
 // outlineBlock is the headings of the book's outline ahead of a verse, small

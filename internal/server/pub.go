@@ -158,7 +158,8 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		return
 	}
 	txt := text(lng)
-	page := pubPage{basePage: s.base(r, firstNonEmpty(lib.Title, txt.UINavPublications))}
+	// every level of the library is a page of wol of its own
+	page := pubPage{basePage: s.base(r, firstNonEmpty(lib.Title, txt.UINavPublications)).withSite(lib.URL)}
 	// a bible is read as one
 	if lib.Bible && lib.Symbol != "" {
 		http.Redirect(w, r, page.WithLang("/bible?bible="+url.QueryEscape(lib.Symbol)), http.StatusSeeOther)
@@ -188,7 +189,6 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	if lib.Symbol != "" || kind == wol.PublicationKind {
 		page.Publication = true
 		page.Cover = lib.Thumbnail
-		page.SiteURL = lib.URL
 		if lib.Symbol != "" {
 			page.Facts = append(page.Facts, pubFact{txt.UISymbol, lib.Symbol})
 		}

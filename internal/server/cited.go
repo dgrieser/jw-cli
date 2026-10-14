@@ -96,6 +96,8 @@ func (s *Server) uiCited(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	// the same citation search on the Online Library
+	page.SiteURL = s.wolSearchPage(ctx, lng, query, p.Scope, p.Sort, p.Categories.List)
 	page.Header = text(lng).CitedResults(out.Total, label)
 	page.Items = s.resultViews(out.Items, page.Lang)
 	s.render(w, http.StatusOK, "cited", page)
