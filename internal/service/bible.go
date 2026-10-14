@@ -26,6 +26,10 @@ type Verse struct {
 	// verse: those that begin here, and on the first verse read those it is
 	// already inside of.
 	Outline []model.OutlineItem `json:"outline,omitempty"`
+	// StartsLine says the verse begins a line of its own rather than running on
+	// from the verse before it: a verse of poetry, or the prose after poetry.
+	// The lines within a verse are already broken in its HTML.
+	StartsLine bool `json:"startsLine,omitempty"`
 }
 
 // Passage is one reference read, in one bible edition.
@@ -162,7 +166,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				}
 			}
 			for i, v := range verses {
-				verse := Verse{Verse: v}
+				verse := Verse{Verse: v, StartsLine: doc.StartsLine(v.ID % 1000)}
 				if i < len(unfolded) {
 					verse.Unfold = unfolded[i]
 					if len(verses) > 1 {
@@ -203,23 +207,36 @@ func FormatPassages(res ReadResult, format render.Format, opts render.Options) (
 			b.WriteString("\n")
 		}
 		var html strings.Builder
+		// whether verse text was the last thing written, which a verse that
+		// starts a line of its own has to be broken from; after a heading or an
+		// expansion it already stands on a line of its own
+		running := false
 		for _, run := range verseRuns(p.Verses) {
 			for j, v := range run {
 				// a verse's headings stand ahead of everything printed for it
-				html.WriteString(outlineHTML(v.Outline, format))
+				if outline := outlineHTML(v.Outline, format); outline != "" {
+					html.WriteString(outline)
+					running = false
+				}
 				if j == 0 {
 					if cite := runCitation(run, res.Table); cite != "" {
 						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
+						running = false
 					}
+				}
+				if v.StartsLine && running {
+					html.WriteString("<br/>")
 				}
 				html.WriteString(v.HTML)
 				html.WriteString(" ")
+				running = true
 				if v.Unfold != "" {
 					// what a verse brought, kept together and marked as its
 					// own: a reader of the rendered page can then fold it
 					// away, and the markdown and text renderers pass a plain
 					// div through untouched
 					html.WriteString(`<div class="expansion">` + v.Unfold + `</div>`)
+					running = false
 				}
 			}
 		}
