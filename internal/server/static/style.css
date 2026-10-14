@@ -1049,6 +1049,9 @@ html:not(.js) .unfold-tools { display: none; }
 /* with a script, the page bar's diamond picks the level, and a page with
    nothing to unfold has nothing to pick */
 .js .unfold-bar .tabs.unfold { display: none; }
+/* a lazy section's way to what it holds, for a browser without a script:
+   with one, the section loads it in place once opened */
+html.js .lazy-fallback { display: none; }
 button.pill {
   min-height: 2.1rem;
   padding: 0 0.85rem;
@@ -1583,7 +1586,9 @@ a.ps-item:hover { background: var(--field); color: var(--ink); }
 }
 /* away from the bible, a way into it: first of the controls on the right */
 .pb .pb-jump { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
-html:not(.js) .pb-jump { display: none; }
+/* the bible's book picker in the bar, and the way into the bible away from
+   it, are dialogs a script opens: without one, the page's own links lead */
+html:not(.js) :is(.pb-jump, .pb-bible) { display: none; }
 .pb-bible {
   flex: 1 1 auto;
   min-width: 0;
