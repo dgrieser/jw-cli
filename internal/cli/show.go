@@ -24,22 +24,18 @@ rendered in the selected output format, videos/audio show their details.`,
 				return err
 			}
 			ctx := cmd.Context()
-			switch item.Kind {
-			case "video", "audio":
-				lng, err := a.Lang(ctx)
-				if err != nil {
-					return err
-				}
-				mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
+			if mi, ok, err := mediaOf(ctx, a, item); ok {
 				if err != nil {
 					return err
 				}
 				// the files it lists are numbered for jw download, which
 				// must then find them, not the listing this row came from
-				return writeMediaInfo(a, lng.Symbol, mi)
-			case "category":
+				return writeMediaInfo(a, mi)
+			}
+			switch {
+			case item.Kind == "category":
 				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
-			case "file", "image":
+			case item.Kind == "file" || item.Kind == "image" || item.FileURL != "":
 				format, err := a.Format()
 				if err != nil {
 					return err

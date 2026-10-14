@@ -146,20 +146,24 @@ func docKey(lank string) (model.PubKey, bool) {
 // downloadResult dispatches a cached listing item to the right downloader, by
 // what the row names. A file is downloaded as is: rows from `jw media info`
 // carry both a LANK and the exact rendition, and the row's rendition wins
-// unless a quality was asked for. A media item is downloaded in the quality
-// asked for; a publication or a document — a jw.org search finds those too —
-// in the formats pub-media has for it.
+// unless a quality was asked for. A media item — by its LANK, or a gallery
+// video by its gallery page — is downloaded in the quality asked for; a
+// publication or a document — a jw.org search finds those too — in the
+// formats pub-media has for it.
 func downloadResult(ctx context.Context, a *app.App, item model.Result, opts downloadOpts) error {
-	media := isMediaLANK(item.LANK)
-	switch {
-	case item.FileURL != "" && (!opts.qualitySet || !media):
+	media := isMediaLANK(item.LANK) || isGalleryVideo(item)
+	if item.FileURL != "" && (!opts.qualitySet || !media) {
 		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, opts.dir, "")
 		if err != nil {
 			return err
 		}
 		return a.Writef(a.Text().Downloaded+"\n", path)
-	case media:
-		return downloadLANK(ctx, a, item.LANK, opts)
+	}
+	if mi, ok, err := mediaOf(ctx, a, item); ok {
+		if err != nil {
+			return err
+		}
+		return downloadMedia(ctx, a, mi, opts)
 	}
 	key, ok := docKey(item.LANK)
 	switch {
@@ -204,6 +208,12 @@ func downloadLANK(ctx context.Context, a *app.App, lank string, opts downloadOpt
 	if err != nil {
 		return err
 	}
+	return downloadMedia(ctx, a, item, opts)
+}
+
+// downloadMedia downloads the rendition of a media item the quality asks
+// for, and its subtitles with --subtitles.
+func downloadMedia(ctx context.Context, a *app.App, item model.MediaItem, opts downloadOpts) error {
 	file, err := download.PickVideo(item.Files, opts.quality)
 	if err != nil {
 		return fmt.Errorf("%s: %w", item.Title, err)

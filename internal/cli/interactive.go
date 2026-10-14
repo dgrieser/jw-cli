@@ -21,13 +21,13 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 		NoColor: a.Flags.NoColor,
 		Text:    a.Text(),
 		Show: func(item model.Result) (tui.Content, error) {
-			switch item.Kind {
-			case "video", "audio":
-				mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
+			if mi, ok, err := mediaOf(ctx, a, item); ok {
 				if err != nil {
 					return tui.Content{}, err
 				}
 				return tui.Content{Text: mediaInfoText(mi, a.Text(), a.Flags.NoURLs)}, nil
+			}
+			switch item.Kind {
 			case "file", "image":
 				parts := []string{strings.Join(imageDetailLines(item, a.Text()), "\n")}
 				if !a.Flags.NoURLs && item.FileURL != "" {
@@ -67,7 +67,7 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 			return tui.Content{Text: body, Markdown: format == render.Markdown}, nil
 		},
 		Download: func(item model.Result) (string, error) {
-			return tuiDownload(ctx, a, lng, item)
+			return tuiDownload(ctx, a, item)
 		},
 		Open: func(item model.Result) error {
 			link := preferredLink(item)
@@ -85,22 +85,22 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 	}
 }
 
-func tuiDownload(ctx context.Context, a *app.App, lng model.Language, item model.Result) (string, error) {
-	switch {
-	case item.LANK != "" && (item.Kind == "video" || item.Kind == "audio"):
-		mi, err := a.Service().MediaItem(ctx, lng.Symbol, item.LANK)
-		if err != nil {
-			return "", err
-		}
-		file, err := service.PickBest(mi)
-		if err != nil {
-			return "", err
-		}
-		return downloadURL(ctx, a, file.URL, file.Checksum, file.Filesize, "", "")
-	case item.FileURL != "":
+func tuiDownload(ctx context.Context, a *app.App, item model.Result) (string, error) {
+	if item.FileURL != "" {
 		return downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, "", "")
 	}
-	return "", fmt.Errorf("%s has nothing directly downloadable", item.Title)
+	mi, ok, err := mediaOf(ctx, a, item)
+	if !ok {
+		return "", fmt.Errorf("%s has nothing directly downloadable", item.Title)
+	}
+	if err != nil {
+		return "", err
+	}
+	file, err := service.PickBest(mi)
+	if err != nil {
+		return "", err
+	}
+	return downloadURL(ctx, a, file.URL, file.Checksum, file.Filesize, "", "")
 }
 
 // categoryFetcher pages through one mediator category ("" = root list).

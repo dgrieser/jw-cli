@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"cmp"
+	"context"
 	"fmt"
 	"strings"
 
@@ -103,18 +105,70 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 			if err != nil {
 				return err
 			}
-			return writeMediaInfo(a, lng.Symbol, item)
+			return writeMediaInfo(a, item)
 		},
 	}
 	return cmd
+}
+
+// isGalleryVideo reports whether a row is a video of a bible book's media
+// gallery. The gallery names no LANK for it, only its gallery page, which
+// names the video the library plays (see galleryVideo).
+func isGalleryVideo(r model.Result) bool {
+	return r.Kind == "video" && r.LANK == "" && r.WOLLink != ""
+}
+
+// mediaOf resolves a listing row to the media item behind it: a video or an
+// audio track by its LANK, from the mediator, or a gallery video from its
+// gallery page. ok is false for a row that is neither, which has no media item
+// to ask for — not even one by an empty key.
+func mediaOf(ctx context.Context, a *app.App, r model.Result) (item model.MediaItem, ok bool, err error) {
+	switch {
+	case isMediaLANK(r.LANK):
+		lng, err := a.Lang(ctx)
+		if err != nil {
+			return model.MediaItem{}, true, err
+		}
+		item, err = a.Service().MediaItem(ctx, lng.Symbol, r.LANK)
+		return item, true, err
+	case isGalleryVideo(r):
+		item, err = galleryVideo(ctx, a, r.WOLLink)
+		return item, true, err
+	}
+	return model.MediaItem{}, false, nil
+}
+
+// galleryVideo reads a gallery video as a media item: its gallery page has the
+// title and the caption, and names the address its player reads the
+// renditions from.
+func galleryVideo(ctx context.Context, a *app.App, page string) (model.MediaItem, error) {
+	asset, err := a.WOL().GalleryItem(ctx, page)
+	if err != nil {
+		return model.MediaItem{}, err
+	}
+	if asset.VideoSource == "" {
+		return model.MediaItem{}, fmt.Errorf("%s: the gallery page names no video", page)
+	}
+	v, err := a.WOL().Video(ctx, asset.VideoSource)
+	if err != nil {
+		return model.MediaItem{}, err
+	}
+	item := model.MediaItem{
+		Type: "video", Title: cmp.Or(asset.Caption, v.Title),
+		Description: asset.Description, Files: v.Files,
+	}
+	if d := v.Files[0].Duration; d > 0 {
+		item.DurationSec, item.DurationFormatted = d, subtitles.Clock(d)
+	}
+	return item, nil
 }
 
 // writeMediaInfo prints a media item's details and saves its renditions as
 // the last listing, numbered as the details number them, so `jw download <n>`
 // downloads file n. jw media info and jw show on a video or audio row print
 // the same thing and leave the same listing behind.
-func writeMediaInfo(a *app.App, lang string, item model.MediaItem) error {
-	rs := results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lang, Items: mediaFileRows(item)}
+func writeMediaInfo(a *app.App, item model.MediaItem) error {
+	rs := results.ResultSet{Kind: "media-info", Query: item.LANK, Items: mediaFileRows(item)}
 	if err := results.Save(a.Cache().Dir(), &rs); err != nil {
 		return err
 	}
@@ -152,7 +206,10 @@ func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {
 	if m.Description != "" {
 		fmt.Fprintf(&b, "%s\n\n", m.Description)
 	}
-	fmt.Fprintf(&b, "- %s: %s\n- %s: %s\n", txt.LabelLANK, m.LANK, txt.LabelType, m.Type)
+	if m.LANK != "" {
+		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelLANK, m.LANK)
+	}
+	fmt.Fprintf(&b, "- %s: %s\n", txt.LabelType, m.Type)
 	if m.DurationFormatted != "" {
 		fmt.Fprintf(&b, "- %s: %s\n", txt.LabelDuration, m.DurationFormatted)
 	}
@@ -187,9 +244,16 @@ func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {
 				fmt.Fprintf(&b, "   <%s>\n", f.URL)
 			}
 		}
-		fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
+		if m.LANK != "" {
+			fmt.Fprintf(&b, "\n"+txt.DownloadHint+"\n", m.LANK)
+		} else {
+			b.WriteString("\n" + txt.DownloadHintFiles + "\n")
+		}
 	}
-	fmt.Fprintf(&b, "\n"+txt.MediaTextHint+"\n", m.LANK)
+	// jw media text looks an item up by its LANK; a gallery video has none
+	if m.LANK != "" {
+		fmt.Fprintf(&b, "\n"+txt.MediaTextHint+"\n", m.LANK)
+	}
 	return b.String()
 }
 

@@ -57,6 +57,8 @@ var en = Messages{
 	NoMediaText:         "No lyrics, text or subtitles found for %s.",
 	MediaTextHint:       "Lyrics, text or transcript: `jw media text %s`",
 
+	DownloadHintFiles: "Download with: `jw download <n>`",
+
 	ColSymbol:     "SYMBOL",
 	ColLocale:     "LOCALE",
 	ColName:       "NAME",
