@@ -130,7 +130,7 @@ func (e *eventStream) finishRun(r *http.Request, note string, requests int, err 
 				Text: fmt.Sprintf(txt.UIExpensiveBody, te.level, te.requests),
 			})
 		} else {
-			e.send(streamEvent{Type: "error", Text: err.Error()})
+			e.send(streamEvent{Type: "error", Text: readable(err, txt)})
 		}
 	}
 	e.mu.Lock()

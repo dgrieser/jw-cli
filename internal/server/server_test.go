@@ -687,6 +687,10 @@ func TestUIError(t *testing.T) {
 	if !strings.Contains(body, "HTTP 404") {
 		t.Errorf("error page:\n%s", body)
 	}
+	// it says what upstream's answer means, not the request it answered
+	if !strings.Contains(body, "jw.org has no page for this.") || strings.Contains(body, "GET http") {
+		t.Errorf("error page quotes the upstream request:\n%s", body)
+	}
 }
 
 // TestConcurrentRequests feeds the race detector: several goroutines share the

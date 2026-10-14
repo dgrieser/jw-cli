@@ -171,7 +171,7 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		err = fmt.Errorf("unknown view %q (want %s, %s or %s)", view, viewIntro, viewOutline, viewGallery)
 	}
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
 	page.Doc = doc

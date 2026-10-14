@@ -260,10 +260,11 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 		})
 		return
 	}
+	page := s.base(r, "Error")
 	s.render(w, status, "error", errorPage{
-		basePage: s.base(r, "Error"),
+		basePage: page,
 		Status:   status,
-		Message:  err.Error(),
+		Message:  readable(err, page.T),
 	})
 }
 
@@ -523,7 +524,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	p, pageNum, err := s.searchParams(r, lng)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		s.render(w, http.StatusBadRequest, "search", page)
 		return
 	}
@@ -1303,7 +1304,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePage) {
 	res, err := s.svc.SearchBible(r.Context(), lng, page.Ref, page.Edition)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
 	txt := text(lng)
@@ -1352,7 +1353,7 @@ func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePag
 func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 	lng, err := s.language(r)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
 	if book, _ := intParam(r, "book", 0); book != 0 {
@@ -1364,12 +1365,12 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 			}
 			return
 		}
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 	}
 	nav, err := s.svc.BibleNav(r.Context(), lng, page.Edition)
 	if err != nil {
 		if page.Error == "" {
-			page.Error = err.Error()
+			page.Error = readable(err, page.T)
 		}
 		return
 	}

@@ -215,6 +215,11 @@ var en = Messages{
 	UIProgressItems:    "%d of %d",
 	UIUnfolding:        "Unfolding",
 
+	UIErrNotFound:    "jw.org has no page for this.",
+	UIErrUpstream:    "jw.org answered with an error (HTTP %d). Please try again later.",
+	UIErrUnreachable: "jw.org could not be reached. Please try again later.",
+	UIErrTimeout:     "jw.org took too long to answer. Please try again later.",
+
 	UIAbort:                "Abort",
 	UIAborted:              "Aborted.",
 	UIFollow:               "Open",

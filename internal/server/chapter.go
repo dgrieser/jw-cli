@@ -177,7 +177,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		mu.Lock()
-		failed = append(failed, err.Error())
+		failed = append(failed, readable(err, txt))
 		mu.Unlock()
 	}
 	send := func(name string, order int, v chapterStudyView) {

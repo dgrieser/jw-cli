@@ -318,6 +318,17 @@ type Messages struct {
 	UIProgressLevel   string
 	UIProgressItems   string
 	UIUnfolding       string
+
+	// UIErr* are what a page of the server says in place of an answer of
+	// jw.org or wol.jw.org that was not the page asked for — a request line
+	// and a status code mean nothing to a reader: that there is no such page,
+	// that the site failed (UIErrUpstream takes the status code), could not
+	// be reached, or did not answer in time.
+	UIErrNotFound    string
+	UIErrUpstream    string
+	UIErrUnreachable string
+	UIErrTimeout     string
+
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string
