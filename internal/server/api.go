@@ -199,6 +199,19 @@ func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng mo
 		return
 	}
 	body = lazy.restore(body, format, opts.NoURLs)
+	// the title heads a markdown or text body, as jw article prints it,
+	// unless the document opens with it; an HTML body goes under whatever
+	// header shows it, as the web page's does
+	switch format {
+	case render.Markdown:
+		if art.Title != "" && !strings.HasPrefix(body, "# ") {
+			body = "# " + art.Title + "\n\n" + body
+		}
+	case render.Text:
+		if art.Title != "" && !strings.HasPrefix(body, art.Title) {
+			body = art.Title + "\n\n" + body
+		}
+	}
 	writeJSON(w, http.StatusOK, articleResponse{
 		DocID: art.DocID, Title: art.Title, URL: art.URL,
 		Format: format.String(), Body: body,
