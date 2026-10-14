@@ -3193,9 +3193,11 @@
           res.expensive = ev;
           break;
         case "error":
-          res.failure = ev.text || "";
+          // a failure without words is a failure still
+          res.failure = ev.text || "?";
           break;
         case "done":
+          res.done = true;
           res.note = ev.text || "";
           res.requests = ev.requests || 0;
           break;
@@ -3208,6 +3210,10 @@
       })
       .then(function () {
         if (res.aborted) return res;
+        // every stream ends saying it is done: one that ends without was
+        // cut off on its way, and what it did not bring is not known to be
+        // nothing
+        if (!res.done && !res.failure && !res.stopped) res.failure = T.aborted || "…";
         if (res.stopped) {
           var note = make("p", "note unfold-aborted", T.aborted || "×");
           loader.replaceWith(note);
@@ -3689,15 +3695,17 @@
   // --- sections that load once they are opened -------------------------------
 
   // a lazy section — a verse's other translations — reads its body the first
-  // time it is opened, and again after a failure
-  function loadLazy(d) {
+  // time it is opened, and again after a failure; force spends an expensive
+  // level the reader asked for. It settles with what the stream said.
+  function loadLazy(d, force) {
     var url = d.getAttribute("data-lazy");
-    if (!url) return Promise.resolve();
+    if (!url) return Promise.resolve(null);
     // loading or loaded already: settles with that
-    if (d.getAttribute("data-loaded")) return d._loading || Promise.resolve();
+    if (d.getAttribute("data-loaded")) return d._loading || Promise.resolve(null);
     d.setAttribute("data-loaded", "1");
     // a section the server folded names what to load without the language
     if (lang && !/[?&]lang=/.test(url)) url += (url.indexOf("?") < 0 ? "?" : "&") + "lang=" + encodeURIComponent(lang);
+    if (force) url += (url.indexOf("?") < 0 ? "?" : "&") + "force=1";
     // who quotes a verse: never the documents the reader got to it through
     if (/^\/unfold\/cited\?/.test(url)) {
       selfDocs(d).forEach(function (id) {
@@ -3711,6 +3719,13 @@
     }
     var list = body.querySelector(":scope > .sections");
     if (!list) list = body.appendChild(make("div", "sections"));
+    // asked for again after a failure: what that brought, and what it said,
+    // make way for the answer
+    body.querySelectorAll(":scope > .lazy-failed").forEach(function (m) { m.remove(); });
+    if (d.hasAttribute("data-failed")) {
+      d.removeAttribute("data-failed");
+      list.textContent = "";
+    }
     var loader = makeLoader();
     list.appendChild(loader);
     d._loading = streamSections(url, list, loader, null).then(function (res) {
@@ -3721,18 +3736,42 @@
           list.textContent = "";
           d.open = false;
         }
-      } else if (res.failure) {
+      } else if (res.failure || res.expensive) {
+        // what went wrong, and a way to ask again — never that the section
+        // holds nothing, which a failure does not tell. Opened again, it
+        // loads again too.
         d.removeAttribute("data-loaded");
-        body.appendChild(make("div", "unfold-msg error", fmt(T.error, res.failure)));
+        d.setAttribute("data-failed", "1");
+        lazyFailed(d, body, res);
+        res.told = true;
       } else if (res.count <= 0) {
         // opened and found to hold nothing: it says so for a moment, then
         // the heading goes, and with it a group of sections left with none
         vanish(d, body);
-        return;
+        return res;
       }
       saveState(d);
+      return res;
     });
     return d._loading;
+  }
+
+  // lazyFailed says under a lazy section's sections why they did not come,
+  // with a button that asks again — or, for a level the server asks about
+  // first, that spends it. Not kept with the page: a section that failed is
+  // kept unloaded, and loads again once it is open.
+  function lazyFailed(d, body, res) {
+    var exp = res.expensive && !res.failure;
+    var msg = make("div", "unfold-msg lazy-failed" + (exp ? "" : " error"), (exp ? res.expensive.text : fmt(T.error, res.failure)) + " ");
+    msg.setAttribute("data-ui", "");
+    var again = button("small", null, exp ? T.unfoldAnyway || "OK" : T.retry || "Retry");
+    again.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      loadLazy(d, exp);
+    });
+    msg.appendChild(again);
+    body.appendChild(msg);
   }
 
   doc.addEventListener("toggle", function (e) {
@@ -3930,6 +3969,23 @@
     return streamSections(url, list, loader, null);
   }
 
+  // streamFailed says in where why a followed link brought nothing, with a
+  // button that follows it again. Not kept with the page: followed again, it
+  // is asked for anew.
+  function streamFailed(where, text, again) {
+    var msg = make("div", "unfold-msg error", fmt(T.error, text) + " ");
+    msg.setAttribute("data-ui", "");
+    var retry = button("small", null, T.retry || "Retry");
+    retry.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      msg.remove();
+      again();
+    });
+    msg.appendChild(retry);
+    where.appendChild(msg);
+  }
+
   // numberItem is the item a number unfolds: a verse's — the chapter's, on a
   // chapter's first verse — or the one in a chapter's heading
   function numberItem(a) {
@@ -3980,7 +4036,15 @@
       return true;
     }
     var list = listOf(owner);
-    var done = function () {
+    // done settles a load with what its stream said. One that failed says
+    // so where it loaded, with a way to follow the link again — a lazy
+    // section that failed says so itself — and is not found to be nothing.
+    var done = function (res, where) {
+      if (res && res.failure) {
+        if (!res.told) streamFailed(where || list, res.failure, function () { follow(a, target); });
+        return;
+      }
+      if (res && res.stopped) return;
       if (owner.item) setState(owner.item, "done");
       var el = findRef(scopeOf(owner), target.key);
       if (el) reveal(el, true);
@@ -4019,9 +4083,9 @@
           q.set("part", "marginal");
           q.set("lazy", "1");
           q.set("depth", String(depth));
-          streamOne("/unfold/verse?" + q.toString(), list).then(function () {
-            if (!(owner.item.level > 0)) setLevel(owner.item, depth);
-            done();
+          streamOne("/unfold/verse?" + q.toString(), list).then(function (res) {
+            if (!res.failure && !(owner.item.level > 0)) setLevel(owner.item, depth);
+            done(res);
           });
           return true;
         }
@@ -4048,9 +4112,9 @@
           var body = existing.querySelector(":scope > .section-body");
           existing.open = true;
           inView(existing);
-          streamOne("/unfold/footnote?" + q.toString(), tmp).then(function () {
+          streamOne("/unfold/footnote?" + q.toString(), tmp).then(function (res) {
             tmp.querySelectorAll(".footnote").forEach(function (f) { body.appendChild(f); });
-            done();
+            done(res, body);
           });
         } else {
           streamOne("/unfold/footnote?" + q.toString(), list).then(done);
