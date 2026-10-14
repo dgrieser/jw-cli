@@ -1218,12 +1218,25 @@
   // the cache, the way past the browser's copy to a login
   var TRANSIENT = ["lazy", "force", "unfold", "refresh", "nosw"];
 
-  // pageKey names a page, for the records kept about it
+  // pageKey names a page by its address: what the histories compare
   function pageKey(u) {
     var q = new URLSearchParams(u.search);
     TRANSIENT.forEach(function (k) { q.delete(k); });
     q.sort();
     return u.pathname + "?" + q.toString();
+  }
+
+  // recordKey names this page for the record kept about it: its address, in
+  // the language it was read in rather than the one its address names. A
+  // page without ?lang= is read in whichever language was picked last, and
+  // what was unfolded on it in one language is no record for another; a page
+  // asked for with ?lang=de, ?lang=X or none, read in German each time, is
+  // one record.
+  function recordKey(u) {
+    var q = new URLSearchParams(u.search);
+    TRANSIENT.concat("lang").forEach(function (k) { q.delete(k); });
+    q.sort();
+    return readLang + ":" + u.pathname + "?" + q.toString();
   }
 
   // pageHref is a page's address as a section keeps it: the page itself,
@@ -1245,6 +1258,12 @@
   var here = sectionOf(location.pathname);
   var hereQuery = new URLSearchParams(location.search);
   var pageLang = hereQuery.get("lang") || "";
+  // the language the page was read in, as the server resolved it: the one
+  // the language picker shows as chosen, else the document's own
+  var readLang = (function () {
+    var t = document.querySelector(".lang-toggle[data-current]");
+    return (t && t.getAttribute("data-current")) || root.lang || "";
+  })();
   // a page that failed, or asks before spending, is not a place to come back to
   var failed = !!document.querySelector("main .notice, main > .error");
   var inSection = !!here && !failed && here.keep(hereQuery, location.pathname);
@@ -1309,7 +1328,7 @@
     return name + " · " + week;
   }
 
-  var PS = { key: failed ? null : pageKey(location), record: null, loaded: false, restored: false };
+  var PS = { key: failed ? null : recordKey(location), record: null, loaded: false, restored: false };
   // the last page of a section is the page itself, never a level to unfold
   // it to on the way back
   PS.remember = function () {
@@ -1437,7 +1456,8 @@
   }
 
   // once per page load, the records of pages not seen for a while go, and
-  // with them the scroll positions an older version kept elsewhere
+  // with them the scroll positions an older version kept elsewhere and the
+  // records it kept without their language (a key that is the address alone)
   setTimeout(function () {
     try {
       for (var i = localStorage.length - 1; i >= 0; i--) {
@@ -1454,7 +1474,7 @@
         req.onsuccess = function () {
           var c = req.result;
           if (!c) return;
-          if (!c.value || Date.now() - c.value.t > STATE_MAX_AGE) c.delete();
+          if (!c.value || Date.now() - c.value.t > STATE_MAX_AGE || String(c.key).charAt(0) === "/") c.delete();
           c.continue();
         };
       } catch (err) {
