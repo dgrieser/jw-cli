@@ -7,11 +7,14 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	xhtml "golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // sanitize normalizes a site HTML fragment before conversion:
 //   - drops script/style/noscript and hidden UI chrome: the image viewer's
-//     lightbox and the page's form controls (pageChrome)
+//     lightbox and the page's form controls (pageChrome), and HTML comments
+//   - writes an ordered list whose items carry their own number as plain
+//     blocks, so the number is printed once
 //   - materializes responsive images (span.jsRespImg data attributes) into
 //     plain <img> tags with the largest available source
 //   - prefers data-img-size-* attributes on <img> tags
@@ -51,7 +54,9 @@ func sanitize(fragment string, o Options) (string, error) {
 	body.Find("script, style, noscript").Remove()
 	body.Find(pageChrome).Remove()
 	flattenLinkCards(body)
+	unlistSelfNumbered(body)
 	for _, n := range body.Nodes {
+		dropComments(n)
 		stripSoftHyphens(n)
 	}
 
@@ -124,6 +129,43 @@ func flattenLinkCards(body *goquery.Selection) {
 		}
 		card.SetHtml(html.EscapeString(strings.Join(lines, cardSeparator)))
 	})
+}
+
+// selOwnNumber is the number an item of a list carries in its text: wol's
+// study questions are an <ol> whose every item opens with "<span
+// class="txtSrcBullet"><strong>1.</strong></span>".
+const selOwnNumber = ".txtSrcBullet"
+
+// unlistSelfNumbered writes an ordered list whose every item carries its own
+// number as plain blocks. Kept a list, each item would be numbered twice —
+// "1. **1.** Why can we say ..." — and the number the source prints is the one
+// to keep: it need not start at one, nor be a digit.
+func unlistSelfNumbered(body *goquery.Selection) {
+	body.Find("ol").Each(func(_ int, ol *goquery.Selection) {
+		items := ol.ChildrenFiltered("li")
+		if items.Length() == 0 || items.FilterFunction(func(_ int, li *goquery.Selection) bool {
+			return li.Find(selOwnNumber).Length() == 0
+		}).Length() > 0 {
+			return
+		}
+		for _, n := range append(ol.Nodes, items.Nodes...) {
+			n.Data, n.DataAtom = "div", atom.Div
+		}
+	})
+}
+
+// dropComments removes the HTML comments, which no format prints on purpose:
+// a jw.org article ends in "<!--THE END-->", which markdown kept as it is.
+func dropComments(n *xhtml.Node) {
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		if c.Type == xhtml.CommentNode {
+			n.RemoveChild(c)
+		} else {
+			dropComments(c)
+		}
+		c = next
+	}
 }
 
 // softHyphen is U+00AD, a conditional hyphen: it marks where a word may be
