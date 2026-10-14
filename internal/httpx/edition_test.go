@@ -209,6 +209,71 @@ func TestEditionsProbeOtherLibraries(t *testing.T) {
 	}
 }
 
+// A page a lagging server says is gone is asked for once more past the CDN
+// before what is kept of it — the body, a memo built from it — is given up.
+func TestGoneIsConfirmedPastTheCDN(t *testing.T) {
+	ctx := context.Background()
+	var mu sync.Mutex
+	plain, busted := http.StatusOK, http.StatusOK
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		status := plain
+		if r.URL.Query().Has("_") {
+			status = busted
+		}
+		mu.Unlock()
+		if r.Method != http.MethodGet {
+			status = http.StatusMethodNotAllowed
+		}
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		fmt.Fprint(w, "page ed=2027")
+	}))
+	defer srv.Close()
+	set := func(p, b int) { mu.Lock(); plain, busted = p, b; mu.Unlock() }
+	cache := Open(t.TempDir(), CacheOptions{Fresh: -1})
+	c := New(WithResponseCache(cache), WithEditions(fakeEditions{}))
+	id := entryID(c.responseKey(srv.URL, http.Header{}))
+	builds := 0
+	memo := func() (string, error) {
+		return Memo(ctx, cache, "m", func(ctx context.Context) (string, error) {
+			builds++
+			return c.GetText(ctx, srv.URL, nil)
+		})
+	}
+	if _, err := memo(); err != nil {
+		t.Fatal(err)
+	}
+
+	// a stale body said to be gone by a lagging server is kept
+	set(http.StatusNotFound, http.StatusOK)
+	if got, err := c.GetText(ctx, srv.URL, nil); err != nil || got != "page ed=2027" {
+		t.Fatalf("revalidated: %q, %v", got, err)
+	}
+	if _, _, ok := cache.loadEntry(id, true); !ok {
+		t.Fatal("the kept body was dropped")
+	}
+	// and so is a memo whose source had to be read again
+	cache.removeEntry(id)
+	if got, err := memo(); err != nil || got != "page ed=2027" || builds != 2 {
+		t.Fatalf("memo: %q, %v after %d builds", got, err, builds)
+	}
+
+	// gone past the CDN too: gone
+	set(http.StatusNotFound, http.StatusNotFound)
+	if _, err := c.GetText(ctx, srv.URL, nil); !IsGone(err) {
+		t.Fatalf("err = %v, want a 404", err)
+	}
+	if _, _, ok := cache.loadEntry(id, true); ok {
+		t.Error("a body gone everywhere was kept")
+	}
+	if _, err := memo(); !IsGone(err) {
+		t.Errorf("memo: err = %v, want a 404", err)
+	}
+}
+
 // A page asked past the caches is followed past them through a redirect.
 func TestEditionsBustThroughRedirects(t *testing.T) {
 	c, site, srv := editionClient(t)

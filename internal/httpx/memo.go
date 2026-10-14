@@ -22,7 +22,8 @@ import (
 //
 // When a rebuild fails for any reason but the content being gone (HTTP 404 or
 // 410), the last value is returned instead: a page that cannot be read now is
-// better shown as it was than not at all.
+// better shown as it was than not at all. A page said to be gone is asked
+// for once more past the CDN before the last value is given up.
 //
 // Every caller gets a copy of its own: values travel as JSON, as they are kept.
 func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.Context) (T, error)) (T, error) {
@@ -35,6 +36,9 @@ func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.C
 	flightKey, anew := key, refreshFirst(ctx, "memo "+key)
 	if anew {
 		flightKey += "\x00refresh"
+	}
+	if hasKept(ctx) {
+		flightKey += "\x00kept"
 	}
 	ch := c.memoFlight.DoChan(flightKey, func() (any, error) {
 		// shared by every caller waiting on key, so not cut short by the first
@@ -76,7 +80,12 @@ func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(cont
 	if have && !anew && c.memoCurrent(ctx, old) {
 		return memoResult{old.Value, old.Deps}, nil
 	}
-	tctx, t := withTracker(ctx)
+	bctx := ctx
+	if have && !anew {
+		// the last value stands in for what upstream cannot answer now
+		bctx = withKept(ctx)
+	}
+	tctx, t := withTracker(bctx)
 	v, err := build(tctx)
 	if err != nil {
 		if IsGone(err) {
@@ -173,6 +182,21 @@ func (t *tracker) snapshot() map[string]string {
 		return nil
 	}
 	return maps.Clone(t.deps)
+}
+
+// keptKey marks the context of a request that something kept can stand in
+// for: a body being revalidated, or a memo being rebuilt that has a value
+// from before. What upstream says is weighed against losing that: a body said
+// to be gone is asked for once more past the CDN before it is believed.
+type keptKey struct{}
+
+func withKept(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keptKey{}, true)
+}
+
+func hasKept(ctx context.Context) bool {
+	kept, _ := ctx.Value(keptKey{}).(bool)
+	return kept
 }
 
 // record notes a body as a source of the memo being built under ctx, if any.

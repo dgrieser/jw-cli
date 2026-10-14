@@ -186,6 +186,21 @@ func (c *Client) downloadPast(ctx context.Context, rawURL string, hdr http.Heade
 	return c.download(context.WithValue(ctx, bustKey{}, try), u, hdr)
 }
 
+// confirmGone asks once more, past the CDN, for a body upstream said is gone
+// (err): a server with last year's library lacks what was published since,
+// and the CDN keeps its answer for hours, so a kept copy is not given up on
+// the word of one of them. Where the site cannot be asked so, err stands.
+func (c *Client) confirmGone(ctx context.Context, rawURL string, hdr http.Header, err error) ([]byte, *http.Response, error) {
+	if c.editions == nil || c.editions.Bust(rawURL, 0) == "" {
+		return nil, nil, err
+	}
+	body, resp, err := c.downloadPast(ctx, rawURL, hdr, 0)
+	if err == nil {
+		c.verbose("GET %s (there after all)", rawURL)
+	}
+	return body, resp, err
+}
+
 // bustRedirect asks the target of a redirect past the caches when the
 // request it answers was: the page a redirect leads to is in the CDN's
 // store as much as any.

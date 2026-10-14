@@ -40,6 +40,11 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 	if refreshFirst(ctx, "GET "+id) {
 		flightKey, lookup = id+"\x00refresh", c.lookupAnew
 	}
+	// nor does a read something kept stands in for, which weighs upstream's
+	// answers differently
+	if hasKept(ctx) {
+		flightKey += "\x00kept"
+	}
 	ch := c.flight.DoChan(flightKey, func() (any, error) {
 		return lookup(context.WithoutCancel(ctx), id, rawURL, hdr)
 	})
@@ -92,6 +97,9 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		return c.refresh(ctx, id, e, body)
 	}
 	body, resp, err := c.download(ctx, rawURL, hdr)
+	if IsGone(err) && hasKept(ctx) {
+		body, resp, err = c.confirmGone(ctx, rawURL, hdr, err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -106,6 +114,11 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Header) (*fetched, error) {
 	// past the CDN too, which keeps what it got for hours
 	body, resp, err := c.downloadPast(ctx, rawURL, hdr, 0)
+	if IsGone(err) {
+		if _, _, ok := c.responses.loadEntry(id, true); ok || hasKept(ctx) {
+			body, resp, err = c.confirmGone(ctx, rawURL, hdr, err)
+		}
+	}
 	if err == nil {
 		body, resp = c.latest(ctx, rawURL, hdr, body, resp)
 	}
@@ -182,11 +195,13 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 		}
 	}
 	nbody, resp, err := c.download(ctx, e.URL, hdr)
-	if err != nil {
-		if IsGone(err) {
+	if IsGone(err) {
+		if nbody, resp, err = c.confirmGone(ctx, e.URL, hdr, err); IsGone(err) {
 			c.responses.removeEntry(id)
 			return nil, err
 		}
+	}
+	if err != nil {
 		c.backOff(id)
 		c.verbose("GET %s (cached, upstream unavailable: %v)", e.URL, err)
 		return stale, nil
