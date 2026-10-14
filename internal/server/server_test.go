@@ -292,6 +292,19 @@ func TestAPISearchValidation(t *testing.T) {
 	if resp.StatusCode != 400 || !strings.Contains(body, "invalid limit") {
 		t.Errorf("bad limit: status %d body %s", resp.StatusCode, body)
 	}
+	// the category filter is checked with the jw.org engine too, as the CLI
+	// checks its flags
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=zz")
+	if resp.StatusCode != 400 || !strings.Contains(body, `unknown publication category \"zz\"`) {
+		t.Errorf("unknown category: status %d body %s", resp.StatusCode, body)
+	}
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&all=1&exclude=w")
+	if resp.StatusCode != 400 || !strings.Contains(body, "cannot be combined") {
+		t.Errorf("all with exclude: status %d body %s", resp.StatusCode, body)
+	}
+	if resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=w,g"); resp.StatusCode != 200 {
+		t.Errorf("known categories: status %d body %s", resp.StatusCode, body)
+	}
 }
 
 func TestAPIArticle(t *testing.T) {

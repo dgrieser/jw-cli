@@ -72,17 +72,23 @@ func (s *Server) searchParams(r *http.Request, lng model.Language) (*service.Sea
 		Limit:    limit,
 		Excerpts: boolParamOr(r, "excerpts", true),
 	}
+	// the filter is wol's, but it is checked whichever engine runs, as the
+	// CLI checks its flags: a mistyped category is an error, not a filter
+	// quietly dropped. Only wol's search knows the language's own list.
+	var known []string
 	if p.Engine == "wol" {
-		if p.Categories, err = s.categoriesParam(r, lng, nil); err != nil {
-			return nil, 0, err
-		}
+		known = s.svc.KnownCategories(r.Context(), lng)
+	}
+	if p.Categories, err = categoriesParam(r, nil, known); err != nil {
+		return nil, 0, err
 	}
 	return p, page, nil
 }
 
 // categoriesParam reads the wol category filter (?all, ?include=, ?exclude=)
-// the way the CLI flags resolve it.
-func (s *Server) categoriesParam(r *http.Request, lng model.Language, defaultExclude []string) (service.WOLCategories, error) {
+// the way the CLI flags resolve it, against the categories known to the
+// language (none: every category wol has anywhere).
+func categoriesParam(r *http.Request, defaultExclude, known []string) (service.WOLCategories, error) {
 	q := r.URL.Query()
 	all := boolParam(r, "all")
 	include := splitCSV(q.Get("include"))
@@ -99,8 +105,7 @@ func (s *Server) categoriesParam(r *http.Request, lng model.Language, defaultExc
 	if len(include) > 0 && exclude != nil {
 		return service.WOLCategories{}, errExclusive("include", "exclude")
 	}
-	return service.ResolveCategories(all, include, exclude, defaultExclude,
-		s.svc.KnownCategories(r.Context(), lng))
+	return service.ResolveCategories(all, include, exclude, defaultExclude, known)
 }
 
 func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +133,8 @@ func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
 		// include names the publications to cover, which no video is
 		Videos: boolParamOr(r, "videos", true) && !r.URL.Query().Has("include"),
 	}
-	if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
+	if p.Categories, err = categoriesParam(r, []string{wol.CategoryBibles, wol.CategoryIndex},
+		s.svc.KnownCategories(r.Context(), lng)); err != nil {
 		badRequest(w, "%s", err)
 		return
 	}
