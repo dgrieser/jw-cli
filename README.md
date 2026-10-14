@@ -240,8 +240,13 @@ Every listing is numbered and cached, so follow-up commands take an index:
 ```sh
 jw show 3        # render result 3 (article text, media details, ...)
 jw open 3        # print its link (-b opens the browser)
-jw download 3    # download it (video/audio/file)
+jw download 3    # download it (video/audio/file, a publication's files)
 ```
+
+`jw download <n>` on a publication or an article a jw.org search found
+downloads the files pub-media has for it — the key of the row (`pub-lmd`,
+`pi-wp_202005`, `pa-2016330`) says which; `-F` narrows them down to a format.
+After `jw show <n>` on a video, the numbers are its files.
 
 ### Bible
 
@@ -318,12 +323,18 @@ jw show 1                                    # the same for one listed image
 jw media browse                              # top-level categories
 jw media browse VideoOnDemand                # drill into a category
 jw media browse LatestVideos -n 25 -i        # interactive
-jw media info pub-jwb_202401_1_VIDEO         # renditions of one item
+jw media info pub-jwbcov_201505_1_VIDEO      # renditions of one item
 jw media text pub-sjjm_1_VIDEO               # a song's lyrics
 jw media text pub-osg_118_AUDIO -l de        # an original song, in German
 jw media text pub-mwbv_202705_1_VIDEO        # a video's transcript
 jw media text pub-sjjc_1_AUDIO --timestamps  # each line's time in the recording
 ```
+
+Every video and audio row of a listing shows its LANK, which `jw media info`,
+`jw media text` and `jw download` take. `jw open <n>` prints a row's page on
+jw.org — a category's too. `jw show <n>` prints an item's details like `jw media
+info`, and leaves its files numbered for `jw download <n>`; a video of a bible
+book's gallery, which has no LANK, is read through its gallery page.
 
 `jw media text` prints the words of a video or audio item, from the first of
 these that has them:

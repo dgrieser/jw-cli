@@ -33,7 +33,7 @@ Examples:
   jw pub nwt -F PDF,EPUB              files of the New World Translation
   jw pub w --issue 202405             Watchtower May 2024 in all formats
   jw pub nwt --booknum 40 -F MP3      Matthew audio chapters
-  jw pub sjj --track 1 -F MP3         song no. 1
+  jw pub sjjm --track 1 -F MP3        song no. 1, as sung at the meetings
   jw pub w --issue 202405 --download  download instead of listing`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

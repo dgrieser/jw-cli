@@ -184,6 +184,10 @@ func formatResult(r model.Result, style listStyle) string {
 	if r.Filesize > 0 {
 		meta = append(meta, humanSize(r.Filesize))
 	}
+	// what jw media info, jw media text and jw download take for the item
+	if isMediaLANK(r.LANK) {
+		meta = append(meta, r.LANK)
+	}
 	title := render.Inline(r.Title, style.inline)
 	if title == "" && r.Kind == "image" {
 		title = style.imageFallbackTitle(r.Index)

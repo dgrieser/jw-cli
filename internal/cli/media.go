@@ -163,9 +163,14 @@ func newMediaInfoCmd(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "info <LANK>",
 		Short: "Show details and downloadable files of a media item",
-		Long: `Show a media item's metadata and all downloadable renditions.
-The LANK (language-agnostic natural key) looks like pub-jwb_202401_1_VIDEO
-and is shown by 'jw media browse' and 'jw search -t videos'.`,
+		Long: `Show a media item's metadata and all downloadable renditions,
+numbered for jw download. The LANK (language-agnostic natural key) looks like
+pub-jwbcov_201505_1_VIDEO and is shown with every video and audio row of
+'jw media browse' and 'jw search -t videos'.
+
+Examples:
+  jw media info pub-jwbcov_201505_1_VIDEO
+  jw media info pub-jwbcov_201505_1_VIDEO && jw download 1`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lng, err := a.Lang(cmd.Context())

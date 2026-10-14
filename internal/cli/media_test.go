@@ -175,7 +175,8 @@ func TestMediaBrowseCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "A New Video (5:00)") {
+	// the LANK is what jw media info and jw download take, so the row shows it
+	if !strings.Contains(out, "A New Video (5:00, pub-abc_1_VIDEO)") {
 		t.Fatalf("unexpected output:\n%s", out)
 	}
 }
