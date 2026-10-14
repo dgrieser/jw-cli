@@ -5,7 +5,12 @@
 package server
 
 import (
+	"bytes"
+	"context"
+	"fmt"
+	"maps"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +41,9 @@ type Server struct {
 	logf        func(format string, args ...any)
 	auth        *Credentials
 	pageCache   string
+	// apiTimeout is how long one request to the JSON API may take
+	// (limitsAPI).
+	apiTimeout time.Duration
 	// langMemo caches resolved languages by the specs the language list names
 	// them by (resolveLanguage), so the list is not re-scanned on every
 	// request.
@@ -55,6 +63,7 @@ func New(cfg Config) *Server {
 		logf:        cfg.Logf,
 		auth:        cfg.Auth,
 		pageCache:   cfg.PageCache,
+		apiTimeout:  apiTimeout,
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}
@@ -126,7 +135,94 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
-	return s.logged(s.auth.RequireAuth(s.remembersLanguage(refreshes(mux))))
+	return s.logged(s.auth.RequireAuth(s.remembersLanguage(refreshes(s.limitsAPI(mux)))))
+}
+
+// apiTimeout bounds one request to the JSON API. It is generous: an
+// expansion forced past the confirmation (force=1) is documented to take
+// minutes. A page is read by somebody who can stop it, and a stream says
+// how far it has got and stops when its page does; a call to the API is
+// often unattended, and without a bound one would run for as long as its
+// expansion does.
+const apiTimeout = 10 * time.Minute
+
+// limitsAPI answers a request to the JSON API that is not done within
+// s.apiTimeout with 504 and the API's error envelope, and stops what it was
+// doing. The handler writes to a buffer meanwhile, so whatever it would still
+// write once the deadline has passed goes nowhere, and a handler that does
+// not notice the deadline at once does not hold the answer up.
+func (s *Server) limitsAPI(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), s.apiTimeout)
+		defer cancel()
+		buf := &bufferedResponse{header: http.Header{}}
+		done := make(chan struct{})
+		panicked := make(chan any, 1)
+		go func() {
+			defer func() {
+				if p := recover(); p != nil {
+					panicked <- p
+				}
+			}()
+			next.ServeHTTP(buf, r.WithContext(ctx))
+			close(done)
+		}()
+		select {
+		case p := <-panicked:
+			panic(p)
+		case <-done:
+			buf.writeTo(w)
+		case <-ctx.Done():
+			if r.Context().Err() != nil {
+				return // the client went away; nobody is listening
+			}
+			select {
+			case <-done: // done just in time after all
+				buf.writeTo(w)
+				return
+			default:
+			}
+			writeError(w, http.StatusGatewayTimeout, "timeout",
+				fmt.Sprintf("the request was not done within %s and was stopped", s.apiTimeout))
+		}
+	})
+}
+
+// bufferedResponse holds what a handler writes until it is done.
+type bufferedResponse struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (b *bufferedResponse) Header() http.Header { return b.header }
+
+func (b *bufferedResponse) WriteHeader(code int) {
+	if b.status == 0 {
+		b.status = code
+	}
+}
+
+func (b *bufferedResponse) Write(p []byte) (int, error) {
+	if b.status == 0 {
+		b.status = http.StatusOK
+	}
+	return b.body.Write(p)
+}
+
+// writeTo sends what was held on, over whatever headers the middleware
+// around the handler set already.
+func (b *bufferedResponse) writeTo(w http.ResponseWriter) {
+	maps.Copy(w.Header(), b.header)
+	if b.status == 0 {
+		b.status = http.StatusOK
+	}
+	w.WriteHeader(b.status)
+	_, _ = b.body.WriteTo(w)
 }
 
 // refreshes reads past the cache for a request that asks with ?refresh=1:
