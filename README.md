@@ -435,7 +435,9 @@ order, and leaves out whatever the verse does not have:
    where the verse stands. The heading names the reference it
    answers for. A quotation is where an expansion ends: what it cites is never
    unfolded in turn, and the document being unfolded is never listed as
-   quoting a verse it cites itself.
+   quoting a verse it cites itself. When the search fails — wol answers 503
+   now and then — the heading stays and says the quotations could not be
+   listed, so an outage never reads as nobody quoting the verse.
 
 Each unfolded reference is a verse in its own right, so at `--unfold 2` it
 brings its own notes, indexes and margin in turn, one level deeper. The

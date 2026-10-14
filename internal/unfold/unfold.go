@@ -90,13 +90,17 @@ type Cited struct {
 	// Lazy is set instead of Results when the search was left for later: what
 	// a page asks for to load the citations once the reader opens them.
 	Lazy string
+	// Err says the lookup failed: who quotes the verse is not known, which is
+	// not the same as nobody quoting it.
+	Err error
 }
 
 // CitedResolver is an optional capability of a Resolver: who quotes the verse
 // a citation resolved to. It is asked only within Options.CitedDepth, because
 // one lookup reads a page of results and then a document per result — far more
-// than everything else a level spends. A failed lookup comes back empty: the
-// verse is worth reading without it.
+// than everything else a level spends. A failed lookup comes back with its
+// error and no results: the verse is worth reading without them, and the
+// output says they are missing.
 type CitedResolver interface {
 	Cited(ctx context.Context, verseTitle string) Cited
 }
@@ -145,6 +149,9 @@ type Node struct {
 	CitedLazy  string
 	StudyErr   error
 	Children   []Node
+	// CitedErr says who quotes the verse could not be looked up, for the same
+	// reason StudyErr is kept.
+	CitedErr error
 	// Hops is what an expansion counted in bible references (Options.Hops)
 	// has left at this node: for a verse, how many more references deep its
 	// own material unfolds; for a passage of another publication, that of the

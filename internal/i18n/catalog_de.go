@@ -87,6 +87,8 @@ var de = Messages{
 	MediaHeading:             "Mediengalerie",
 	StudyFailed:              "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
 
+	CitedFailed: "Die Zitate konnten nicht aufgelistet werden: %s",
+
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",
 

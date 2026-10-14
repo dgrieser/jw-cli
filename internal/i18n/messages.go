@@ -192,6 +192,11 @@ type Messages struct {
 	// UnfoldFailed takes the reason a reference could not be resolved.
 	UnfoldFailed string
 
+	// CitedFailed takes the reason the publications quoting a verse could not
+	// be listed. It stands where they would have, so a search that failed
+	// never reads as nobody quoting the verse.
+	CitedFailed string
+
 	// --- dates ------------------------------------------------------------
 	// Weekdays is indexed by time.Weekday, Months by time.Month minus one.
 	Weekdays [7]string

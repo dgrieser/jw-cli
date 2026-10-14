@@ -138,17 +138,22 @@ func translationsSection(list []EditionVerse, lazy string, level int, txt *i18n.
 	return sec, true
 }
 
-// citedSection is who quotes a passage: the publications the search found, or
-// — when the search was left to the page — where they load from.
+// citedSection is who quotes a passage: the publications the search found,
+// where they load from when the search was left to the page, or that the
+// search failed — which is not the same as nobody quoting it.
 func citedSection(c unfold.Cited, level int, txt *i18n.Messages) (UnfoldSection, bool) {
-	if c.Ref == "" || (len(c.Results) == 0 && c.Lazy == "") {
+	if c.Ref == "" || (len(c.Results) == 0 && c.Lazy == "" && c.Err == nil) {
 		return UnfoldSection{}, false
 	}
 	sec := UnfoldSection{
 		Title: html.EscapeString(fmt.Sprintf(txt.CitedInHeading, c.Ref)), Lazy: c.Lazy, Order: orderCited,
 		Ref: CitedRef,
 	}
-	if c.Lazy == "" {
+	switch {
+	case c.Err != nil:
+		sec.Lazy = ""
+		sec.Body = fmt.Sprintf("<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.CitedFailed, c.Err)))
+	case c.Lazy == "":
 		var b strings.Builder
 		writeCitedItems(&b, c.Results, level)
 		sec.Body = b.String()
@@ -158,7 +163,7 @@ func citedSection(c unfold.Cited, level int, txt *i18n.Messages) (UnfoldSection,
 
 // nodeCited is what the engine found quoting the verse a node resolved to.
 func nodeCited(n unfold.Node) unfold.Cited {
-	return unfold.Cited{Results: n.Cited, Total: n.CitedTotal, Ref: n.CitedRef, Lazy: n.CitedLazy}
+	return unfold.Cited{Results: n.Cited, Total: n.CitedTotal, Ref: n.CitedRef, Lazy: n.CitedLazy, Err: n.CitedErr}
 }
 
 // LazyClass marks the placeholder a lazy section written in one piece carries

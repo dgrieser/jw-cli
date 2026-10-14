@@ -199,11 +199,21 @@ func (s *Service) StreamPassageParts(ctx context.Context, lng model.Language, ed
 // self are the documents the page read the passage from — an article citing
 // it, the passage of another article that did: a publication is never listed
 // as quoting a verse in the very document the reader followed it from.
+//
+// A search that fails is the error, worded for the reader in the passage's
+// language: who quotes the passage is not known, which a page must not show
+// as nobody quoting it.
 func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bibleref.Ref, self []int,
 	out UnfoldStream) (int, error) {
 	out.stage(StageCited)
 	r := newTooltipResolver(s, lng, nil).withCited(ctx, true).excluding(self...)
 	c := r.citedFor(ctx, refs, "")
+	if c.Err != nil {
+		if err := ctx.Err(); err != nil {
+			return c.Requests, err
+		}
+		return c.Requests, citedFailure{text: fmt.Sprintf(i18n.TextFor(lng.Locale).CitedFailed, c.Err), err: c.Err}
+	}
 	for i, item := range c.Results {
 		var b strings.Builder
 		writeCitedItems(&b, []model.Result{item}, SectionLevel)
@@ -212,6 +222,15 @@ func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bi
 	}
 	return c.Requests, ctx.Err()
 }
+
+// citedFailure is a citation search that failed, worded for the reader.
+type citedFailure struct {
+	text string
+	err  error
+}
+
+func (e citedFailure) Error() string { return e.text }
+func (e citedFailure) Unwrap() error { return e.err }
 
 // splitHeading takes the heading a writer opened its output with apart from
 // what follows it: the inside of the heading, already HTML, and the rest.

@@ -293,30 +293,42 @@ func (r *tooltipResolver) Cited(ctx context.Context, title string) unfold.Cited 
 	return r.citedFor(ctx, refs, strings.TrimRight(title, ",;. "))
 }
 
-// addCited lists the publications quoting refs and drops the ones the verse's
-// research guide already points at. Best effort: a search that fails leaves the
-// study material it was meant to complement standing.
 // citedFor lists the publications quoting refs and drops the ones the indexes
 // of the same verses already point at. label is how the reference is spelled
-// over the answer; empty spells it out of the references themselves. Best
-// effort: a search that fails comes back empty, having cost what it cost.
+// over the answer; empty spells it out of the references themselves. A search
+// that fails comes back with its error and no results, having cost what it
+// cost: the verse is worth reading without them, and whoever prints it says
+// they are missing rather than that nobody quotes it.
 func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, label string) unfold.Cited {
 	if !r.cited || len(refs) == 0 {
 		return unfold.Cited{}
 	}
 	table := r.bookTable(ctx)
+	spell := func() string {
+		spelled := make([]string, len(refs))
+		for i, ref := range refs {
+			spelled[i] = RefString(ref, table)
+		}
+		return strings.Join(spelled, "; ")
+	}
 	if r.lazyCited {
 		if label == "" {
-			spelled := make([]string, len(refs))
-			for i, ref := range refs {
-				spelled[i] = RefString(ref, table)
-			}
-			label = strings.Join(spelled, "; ")
+			label = spell()
 		}
 		return unfold.Cited{Ref: label, Lazy: citedURL(refs, r.self...)}
 	}
+	// failed, the lookup still cost the page it asked for
+	failed := func(err error) unfold.Cited {
+		if label == "" {
+			label = spell()
+		}
+		return unfold.Cited{Ref: label, Err: err, Requests: 1}
+	}
 	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, table)
-	if err != nil || query == "" {
+	if err != nil {
+		return failed(err)
+	}
+	if query == "" {
 		return unfold.Cited{}
 	}
 	if label == "" {
@@ -328,7 +340,7 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	}
 	found, err := r.s.CitedListing(ctx, r.lng, &p, nil)
 	if err != nil {
-		return unfold.Cited{}
+		return failed(err)
 	}
 	out := unfold.Cited{Total: found.Total, Ref: label, Requests: citedRequests(len(found.Items))}
 	// the indexes of these very verses, read back out of the chapter pages

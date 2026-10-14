@@ -57,7 +57,7 @@ func (n *Node) resolved(tip model.Tooltip) {
 
 // setCited records who quotes the verse a node resolved to.
 func (n *Node) setCited(c Cited) {
-	n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy = c.Results, c.Total, c.Ref, c.Lazy
+	n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy, n.CitedErr = c.Results, c.Total, c.Ref, c.Lazy, c.Err
 }
 
 // splitItems makes a node of every passage after the first of a citation
