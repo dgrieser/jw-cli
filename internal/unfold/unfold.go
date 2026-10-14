@@ -220,6 +220,12 @@ type Options struct {
 	// it: a reference whose every verse is in it is not shown again
 	// (Options.Hops only). Nil keeps a set of the session's own.
 	Verses *Verses
+	// Workers is how many references of a level are resolved at once, each
+	// with what it brings beside its text. Zero or one resolves them one at a
+	// time; more needs a Resolver, and whatever else it answers, that is safe
+	// for concurrent use. The output, the requests counted and what Progress
+	// is told do not depend on it.
+	Workers int
 }
 
 // Result is an expansion and how far it got.
@@ -414,7 +420,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		// the research-guide passages each verse turned out to have, kept aside
 		// so they join the citations found in its text. Keyed by path rather
 		// than by node: dropping a duplicate moves the nodes of a tier around.
-		research := map[string][]Ref{}
+		research := &refsByPath{}
 		// what a verse brings beside its text: its study material, and who
 		// quotes it
 		verse := func(n *Node) int {
@@ -429,7 +435,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 					n.StudyErr = err
 				} else {
 					n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
-					research[n.Ref.Path] = st.Research
+					research.set(n.Ref.Path, st.Research)
 				}
 			}
 			if cited != nil && level <= o.CitedDepth {
@@ -480,7 +486,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		// the tiers themselves
 		var next []*[]Node
 		for _, n := range nodesIn(tiers) {
-			refs := plan(append(Refs(n.HTML), research[n.Ref.Path]...), seen)
+			refs := plan(append(Refs(n.HTML), research.get(n.Ref.Path)...), seen)
 			if level == o.Depth {
 				// the depth is used up: report what was left rather than
 				// letting the output look complete

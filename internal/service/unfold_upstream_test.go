@@ -35,7 +35,8 @@ func wolFile(t *testing.T, name string) []byte {
 
 // unfoldUpstream is wol as far as an expansion of John 3:16 reads it: the
 // English library, the chapter of the study bible with the marginal reference
-// put back into verse 16, and that reference's answer. handle adds more.
+// put back into verse 16, and that reference's answer. handle adds more, and
+// what it adds is asked before any of those.
 func unfoldUpstream(t *testing.T, handle func(mux *http.ServeMux)) *Service {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -52,10 +53,17 @@ func unfoldUpstream(t *testing.T, handle func(mux *http.ServeMux)) *Service {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(multi)
 	})
+	own := http.NewServeMux()
 	if handle != nil {
-		handle(mux)
+		handle(own)
 	}
-	srv := httptest.NewServer(mux)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, pattern := own.Handler(r); pattern != "" {
+			own.ServeHTTP(w, r)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 	t.Cleanup(srv.Close)
 	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: srv.URL, JWOrg: srv.URL, WOL: srv.URL}))
 	return New(hc, httpx.OpenCacheAt(t.TempDir()))

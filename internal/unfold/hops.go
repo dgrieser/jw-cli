@@ -8,6 +8,8 @@ import (
 	"sync"
 
 	"github.com/PuerkitoBio/goquery"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 // An expansion counted in bible references (Options.Hops) reads a verse the way
@@ -204,26 +206,44 @@ func (s *Session) shownAlready(n *Node) bool {
 // other one lists. What it cost is spent like everything else.
 func (s *Session) Show(ctx context.Context, refs []Ref) error {
 	s.run++
+	var nodes []*Node
 	for _, ref := range refs {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
 		if s.seen[ref.Path] {
 			continue
 		}
 		s.seen[ref.Path] = true
-		tip, err := s.r.Resolve(ctx, ref.Path)
-		s.Spend(1)
+		nodes = append(nodes, &Node{Ref: ref})
+	}
+	// read as a level is, several at a time, and weighed in order once back
+	tips := make(map[*Node]model.Tooltip, len(nodes))
+	var mu sync.Mutex
+	p := &pass{s: s, quiet: true}
+	spent, _, err := p.each(ctx, nodes, func(n *Node) int {
+		tip, err := s.r.Resolve(ctx, n.Ref.Path)
 		if err != nil {
+			n.Err = err
+			return 1
+		}
+		mu.Lock()
+		tips[n] = tip
+		mu.Unlock()
+		return 1
+	})
+	s.Spend(spent)
+	if err != nil {
+		return err
+	}
+	for _, ref := range nodes {
+		if ref.Err != nil {
 			continue
 		}
 		// every passage the citation names says what it says
-		for i, item := range tip.Items() {
-			path := ItemPath(ref.Path, i+1)
-			n := Node{Ref: ref, Title: item.Title, HTML: item.ContentHTML, URL: item.URL}
+		for i, item := range tips[ref].Items() {
+			path := ItemPath(ref.Ref.Path, i+1)
+			n := Node{Ref: ref.Ref, Title: item.Title, HTML: item.ContentHTML, URL: item.URL}
 			if text := plainText(&n); text != "" {
 				doc := document(&n)
-				s.shown[doc] = append(s.shown[doc], passage{path: path, text: text, rank: ref.Rank, run: s.run})
+				s.shown[doc] = append(s.shown[doc], passage{path: path, text: text, rank: ref.Ref.Rank, run: s.run})
 			}
 		}
 	}
@@ -376,7 +396,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 		if ok, err := ask(level, s.hopCost(frontier)-(len(frontier)-unknown), len(frontier)); err != nil || !ok {
 			return res, err
 		}
-		research := map[string][]Ref{}
+		research := &refsByPath{}
 		// what a verse brings beside its text: where who quotes it loads
 		// from, and with references left its study material
 		verse := func(n *Node) int {
@@ -397,7 +417,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 					n.StudyErr = err
 				} else {
 					n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
-					research[n.Ref.Path] = st.Research
+					research.set(n.Ref.Path, st.Research)
 				}
 			} else if ks, ok := study.(KnownStudier); ok && study != nil {
 				// what loads once opened: its pictures, if they are known
@@ -464,7 +484,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 			if n.Parts == nil || n.Parts.Lazy {
 				continue
 			}
-			n.Parts.Research = s.planHops(research[n.Ref.Path], n.Hops)
+			n.Parts.Research = s.planHops(research.get(n.Ref.Path), n.Hops)
 			for _, p := range footnotePaths(n.HTML) {
 				if s.seen[p] {
 					continue

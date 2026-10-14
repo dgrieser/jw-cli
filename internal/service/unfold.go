@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
@@ -74,10 +75,15 @@ type UnfoldConfig struct {
 const studyEdition = "nwtsty"
 
 // tooltipResolver adapts the wol client to unfold.Resolver, and reads the study
-// pane of every verse an expansion touches.
+// pane of every verse an expansion touches. It is safe for concurrent use, as
+// an expansion resolving several references at once needs
+// (unfold.Options.Workers): what it keeps is behind mu, and a chapter is read
+// by one of the verses asking for it while the others wait for it.
 type tooltipResolver struct {
-	s     *Service
-	lng   model.Language
+	s   *Service
+	lng model.Language
+	mu  sync.Mutex
+	// table is the language's book table, read once it is first needed
 	table *bibleref.Table
 	// cited turns the citation search on; cats is the publication filter it
 	// runs with, resolved once for the language.
@@ -98,6 +104,8 @@ type tooltipResolver struct {
 	// docs are chapter pages the caller already holds, borrowed rather than
 	// fetched again. Same key as sections.
 	docs map[string]*wol.ChapterDoc
+	// reading holds a lock per chapter being read, same key as sections
+	reading map[string]*sync.Mutex
 	// self are the documents the expansion is read from, by docid: a
 	// publication quoting a verse is never the document that cited the verse
 	// in the first place.
@@ -125,7 +133,27 @@ func (r *tooltipResolver) isSelf(item model.Result) bool {
 }
 
 func newTooltipResolver(s *Service, lng model.Language, docs map[string]*wol.ChapterDoc) *tooltipResolver {
-	return &tooltipResolver{s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs}
+	return &tooltipResolver{
+		s: s, lng: lng, sections: map[string]map[int]model.StudySection{}, docs: docs,
+		reading: map[string]*sync.Mutex{},
+	}
+}
+
+// bookTable is the language's book table, read when it is first needed.
+func (r *tooltipResolver) bookTable(ctx context.Context) *bibleref.Table {
+	r.mu.Lock()
+	table := r.table
+	r.mu.Unlock()
+	if table != nil {
+		return table
+	}
+	table = r.s.BookTable(ctx, r.lng)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.table == nil {
+		r.table = table
+	}
+	return r.table
 }
 
 // withCited turns the citation search on for this run, with the filter
@@ -163,7 +191,7 @@ func (r *tooltipResolver) Resolve(ctx context.Context, path string) (model.Toolt
 		}
 		return model.Tooltip{}, fmt.Errorf("no passage %d at %s", item, base)
 	}
-	if tip, ok := r.tips[path]; ok {
+	if tip, ok := r.kept(path); ok {
 		return tip, nil
 	}
 	r.s.mem.init()
@@ -213,10 +241,7 @@ func (r *tooltipResolver) passageOf(ctx context.Context, tip model.Tooltip) (str
 // locates the chapter page the pane lives on; a title that is not a reference
 // belongs to something other than a verse and has no pane to look for.
 func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study, error) {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil {
 		return unfold.Study{}, nil
 	}
@@ -238,17 +263,16 @@ func (r *tooltipResolver) Study(ctx context.Context, title string) (unfold.Study
 // KnownStudy answers unfold.KnownStudier: a verse's study pane when every
 // chapter it needs was read before, by this expansion or this service.
 func (r *tooltipResolver) KnownStudy(ctx context.Context, title string) (unfold.Study, bool) {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil || len(refs) == 0 {
 		return unfold.Study{}, false
 	}
 	for _, ref := range refs {
 		key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+		r.mu.Lock()
 		_, cached := r.sections[key]
 		_, borrowed := r.docs[key]
+		r.mu.Unlock()
 		if _, known := r.chapterMemo(ctx, ref.Book, ref.Chapter); !cached && !borrowed && !known {
 			return unfold.Study{}, false
 		}
@@ -262,10 +286,7 @@ func (r *tooltipResolver) KnownStudy(ctx context.Context, title string) (unfold.
 // "Jeremia 33:1-5" is one question, not five — and wol's own title for it is
 // the compact way the language spells it, which is what heads the answer.
 func (r *tooltipResolver) Cited(ctx context.Context, title string) unfold.Cited {
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	refs, err := bibleref.Parse(title, r.table)
+	refs, err := bibleref.Parse(title, r.bookTable(ctx))
 	if err != nil {
 		return unfold.Cited{}
 	}
@@ -283,20 +304,18 @@ func (r *tooltipResolver) citedFor(ctx context.Context, refs []bibleref.Ref, lab
 	if !r.cited || len(refs) == 0 {
 		return unfold.Cited{}
 	}
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
+	table := r.bookTable(ctx)
 	if r.lazyCited {
 		if label == "" {
 			spelled := make([]string, len(refs))
 			for i, ref := range refs {
-				spelled[i] = RefString(ref, r.table)
+				spelled[i] = RefString(ref, table)
 			}
 			label = strings.Join(spelled, "; ")
 		}
 		return unfold.Cited{Ref: label, Lazy: citedURL(refs, r.self...)}
 	}
-	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, r.table)
+	query, spelled, err := r.s.CitationQueryFor(ctx, r.lng, refs, table)
 	if err != nil || query == "" {
 		return unfold.Cited{}
 	}
@@ -389,14 +408,32 @@ func (r *tooltipResolver) namedByResearch(ctx context.Context, st *unfold.Study)
 		add(item.ArticleURL, item.Source)
 		add("", item.Title)
 	}
-	for _, ref := range st.Research {
-		tip, err := r.Resolve(ctx, ref.Path)
+	// read several at a time, as an expansion reads them, and named in the
+	// order the index lists them
+	tips := make([]model.Tooltip, len(st.Research))
+	failed := make([]bool, len(st.Research))
+	var (
+		wg  sync.WaitGroup
+		sem = make(chan struct{}, unfoldWorkers)
+	)
+	for i, ref := range st.Research {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			tip, err := r.Resolve(ctx, ref.Path)
+			tips[i], failed[i] = tip, err != nil
+		}()
+	}
+	wg.Wait()
+	for i, ref := range st.Research {
 		requests++
-		if err != nil {
+		if failed[i] {
 			add("", ref.Text)
 			continue
 		}
-		for _, item := range tip.Items() {
+		for _, item := range tips[i].Items() {
 			add(item.URL, ref.Text)
 		}
 	}
@@ -433,27 +470,10 @@ func normalizeCitation(line string) string {
 
 // studyOf collects the study material of every verse ref covers.
 func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold.Study, error) {
-	key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
-	sections, ok := r.sections[key]
-	var out unfold.Study
-	if !ok {
-		// read before, by this service: nothing to ask
-		cm, known := r.chapterMemo(ctx, ref.Book, ref.Chapter)
-		if !known {
-			doc, borrowed := r.docs[key]
-			if !borrowed {
-				var err error
-				doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
-				out.Requests++
-				if err != nil {
-					return out, err
-				}
-			}
-			cm = newChapterMemo(doc)
-			r.s.mem.chapters.put(chapterKey(r.lng, studyEdition, ref.Book, ref.Chapter), cm)
-		}
-		sections = cm.sections
-		r.sections[key] = sections
+	sections, requests, err := r.chapterSections(ctx, ref)
+	out := unfold.Study{Requests: requests}
+	if err != nil {
+		return out, err
 	}
 	from, to := ref.VerseStart, ref.VerseEnd
 	switch {
@@ -486,6 +506,49 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		}
 	}
 	return out, nil
+}
+
+// chapterSections is the study pane of the chapter ref is in, and what reading
+// it cost. Verses of one chapter asked about at once wait for the one reading
+// it rather than reading it again, so the chapter costs one request however
+// the verses arrive.
+func (r *tooltipResolver) chapterSections(ctx context.Context, ref bibleref.Ref) (map[int]model.StudySection, int, error) {
+	key := fmt.Sprintf("%s-%d-%d", studyEdition, ref.Book, ref.Chapter)
+	r.mu.Lock()
+	reading, ok := r.reading[key]
+	if !ok {
+		reading = &sync.Mutex{}
+		r.reading[key] = reading
+	}
+	r.mu.Unlock()
+	reading.Lock()
+	defer reading.Unlock()
+	r.mu.Lock()
+	sections, ok := r.sections[key]
+	doc, borrowed := r.docs[key]
+	r.mu.Unlock()
+	if ok {
+		return sections, 0, nil
+	}
+	requests := 0
+	// read before, by this service: nothing to ask
+	cm, known := r.chapterMemo(ctx, ref.Book, ref.Chapter)
+	if !known {
+		if !borrowed {
+			var err error
+			doc, err = r.s.Chapter(ctx, r.lng, studyEdition, ref)
+			requests++
+			if err != nil {
+				return nil, requests, err
+			}
+		}
+		cm = newChapterMemo(doc)
+		r.s.mem.chapters.put(chapterKey(r.lng, studyEdition, ref.Book, ref.Chapter), cm)
+	}
+	r.mu.Lock()
+	r.sections[key] = cm.sections
+	r.mu.Unlock()
+	return cm.sections, requests, nil
 }
 
 // researchLabel is how a research-guide passage is cited. The entry's own line
@@ -968,12 +1031,19 @@ func unfoldOptions(cfg UnfoldConfig) unfold.Options {
 		Progress:  cfg.Progress,
 		Hops:      cfg.Hops,
 		Verses:    cfg.Verses,
+		Workers:   unfoldWorkers,
 	}
 	if cfg.Cited {
 		o.CitedDepth, o.CitedCost = cfg.CitedDepth, citedCostEstimate
 	}
 	return o
 }
+
+// unfoldWorkers is how many citations an expansion resolves at once. Each is a
+// round trip of a second or more to wol, and the index of a verse lists
+// hundreds of them; the per-host limiter in internal/httpx caps the real rate,
+// as it does for the excerpts of a listing.
+const unfoldWorkers = excerptWorkers
 
 // citedCostEstimate is what one verse's citation lookup is priced at before it
 // runs: two pages of results and a document read for each of them. How many

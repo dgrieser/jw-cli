@@ -502,7 +502,9 @@ Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 The count is an upper bound: verses of one chapter share its page, and a verse's
 citation lookup is priced at two full pages of results before anyone knows how
 many there are. Documents are cached, so a second run of the same
-material spends almost nothing.
+material spends almost nothing. The references of a level are read eight at a
+time, since wol takes a second or more per answer; what comes out, what is
+counted and the order it comes in are the same as one at a time.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
 since a script has nobody to ask. Declining stops there and the output says how
