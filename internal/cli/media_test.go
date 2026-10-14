@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 func mediaMux(t *testing.T) *http.ServeMux {
@@ -96,6 +98,65 @@ func TestShowVideoThenDownloadFile(t *testing.T) {
 	}
 	if !strings.Contains(out, "v_r240P.mp4") {
 		t.Errorf("download 1 after show should be file 1 (240p):\n%s", out)
+	}
+}
+
+// Every row of a media listing leads to its page on jw.org: a media item by
+// its LANK, a category in the video library — or the audio library, for the
+// Audio tree.
+func TestMediaBrowseThenOpen(t *testing.T) {
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	open := func(index string) string {
+		t.Helper()
+		out, err := runCmdWithCache(t, mux, cacheDir, "open", index)
+		if err != nil {
+			t.Fatalf("open %s: %v\n%s", index, err, out)
+		}
+		return out
+	}
+
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if out := open("1"); !strings.Contains(out, "https://www.jw.org/finder?lank=pub-abc_1_VIDEO&wtlocale=E") {
+		t.Errorf("open on a media item: %s", out)
+	}
+
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if out := open("1"); !strings.Contains(out, "https://www.jw.org/open?category=VideoOnDemand&docid=1011214&wtlocale=E") {
+		t.Errorf("open on a video category: %s", out)
+	}
+	if out := open("2"); !strings.Contains(out, "https://www.jw.org/open?category=Audio&docid=1011994&wtlocale=E") {
+		t.Errorf("open on the audio category: %s", out)
+	}
+}
+
+// The categories of the Audio tree link the audio library, and a category of
+// tracks with audio descriptions — made up by the service — the category it
+// describes, which is the one jw.org has.
+func TestCategoryRowsLinkTheirLibrary(t *testing.T) {
+	cat := model.Category{
+		Key: "AudioOriginalSongs", Parent: &model.CategoryRef{Key: "Audio"},
+		Subcategories: []model.Category{{Key: "Albums"}, {Key: "AudioOriginalSongs-AudioDescriptions"}},
+		Media:         []model.MediaItem{{LANK: "pub-osg_1_AUDIO", Type: "audio"}},
+	}
+	rows := categoryRows(cat, "X")
+	for i, want := range []string{
+		"https://www.jw.org/open?category=Albums&docid=1011994&wtlocale=X",
+		"https://www.jw.org/open?category=AudioOriginalSongs&docid=1011994&wtlocale=X",
+		"https://www.jw.org/finder?lank=pub-osg_1_AUDIO&wtlocale=X",
+	} {
+		if rows[i].JWLink != want {
+			t.Errorf("row %d links %q, want %q", i+1, rows[i].JWLink, want)
+		}
+	}
+
+	videos := categoryRows(model.Category{Key: "VODChildren", Subcategories: []model.Category{{Key: "ChildrenMovies"}}}, "E")
+	if want := "https://www.jw.org/open?category=ChildrenMovies&docid=1011214&wtlocale=E"; videos[0].JWLink != want {
+		t.Errorf("video category links %q, want %q", videos[0].JWLink, want)
 	}
 }
 

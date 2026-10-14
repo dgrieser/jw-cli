@@ -112,7 +112,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			if err != nil {
 				return results.ResultSet{}, "", err
 			}
-			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: service.CategoriesToResults(cats)}
+			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: rootCategoryRows(cats, lng.Symbol)}
 			_ = results.Save(a.Cache().Dir(), &rs)
 			return rs, a.Text().MediaCategories, nil
 		}
@@ -120,7 +120,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 		if err != nil {
 			return results.ResultSet{}, "", err
 		}
-		items := append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
+		items := categoryRows(cat, lng.Symbol)
 		if len(items) == 0 && page > 1 {
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreItems)
 		}

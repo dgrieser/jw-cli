@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -61,14 +62,14 @@ Examples:
 					return err
 				}
 				header = a.Text().MediaCategories
-				items = service.CategoriesToResults(cats)
+				items = rootCategoryRows(cats, lng.Symbol)
 			} else {
 				cat, err := a.Service().Category(cmd.Context(), lng.Symbol, key, limit, offset)
 				if err != nil {
 					return err
 				}
 				header = fmt.Sprintf("%s (%s)", cat.Name, cat.Key)
-				items = append(service.CategoriesToResults(cat.Subcategories), service.MediaToResults(cat.Media)...)
+				items = categoryRows(cat, lng.Symbol)
 			}
 			rs := results.ResultSet{Kind: "media-browse", Query: key, Lang: lng.Symbol, Items: items}
 			return writeListing(a, rs, header)
@@ -79,6 +80,75 @@ Examples:
 	fl.IntVar(&offset, "offset", 0, "pagination offset")
 	fl.BoolVarP(&interactive, "interactive", "i", false, "browse interactively (TUI)")
 	return cmd
+}
+
+// The jw.org documents of the video library and of the audio library. jw.org's
+// own search links a media category as one of them opened on the category,
+// and that is the only address of a category the site answers: its finder
+// knows media items, not categories.
+const (
+	videoLibraryDocID = "1011214"
+	audioLibraryDocID = "1011994"
+)
+
+// describedSuffix ends the key of a category of tracks with audio
+// descriptions: the service makes those up after the category whose tracks
+// they describe, which is where jw.org has them.
+const describedSuffix = "-AudioDescriptions"
+
+// categoryLink is the jw.org page of a media category in language symbol.
+func categoryLink(key, symbol string, audio bool) string {
+	docid := videoLibraryDocID
+	if audio {
+		docid = audioLibraryDocID
+	}
+	key = strings.TrimSuffix(key, describedSuffix)
+	return "https://www.jw.org/open?" + url.Values{"docid": {docid}, "category": {key}, "wtlocale": {symbol}}.Encode()
+}
+
+// rootCategoryRows lists the top of the category tree, each row linked to its
+// page on jw.org so jw open has one to print.
+func rootCategoryRows(cats []model.Category, symbol string) []model.Result {
+	rows := service.CategoriesToResults(cats)
+	for i := range rows {
+		rows[i].JWLink = categoryLink(rows[i].CategoryKey, symbol, inAudioLibrary(cats[i]))
+	}
+	return rows
+}
+
+// categoryRows lists a category's subcategories, then its media, each row
+// linked to its page on jw.org.
+func categoryRows(cat model.Category, symbol string) []model.Result {
+	subs := service.CategoriesToResults(cat.Subcategories)
+	for i := range subs {
+		audio := inAudioLibrary(cat) || inAudioLibrary(cat.Subcategories[i])
+		subs[i].JWLink = categoryLink(subs[i].CategoryKey, symbol, audio)
+	}
+	media := service.MediaToResults(cat.Media)
+	for i := range media {
+		media[i].JWLink = service.VideoLink(media[i].LANK, symbol)
+	}
+	return append(subs, media...)
+}
+
+// inAudioLibrary reports whether a category belongs to the audio library: it
+// is the Audio tree or right under it, or its media — or its subcategories'
+// — are audio. The mediator names a category's parent, not its whole line,
+// so a container deeper down that holds no media of its own goes to the
+// video library, which is where every other category is.
+func inAudioLibrary(cat model.Category) bool {
+	if cat.Key == "Audio" || cat.Parent != nil && cat.Parent.Key == "Audio" {
+		return true
+	}
+	if strings.HasSuffix(cat.Key, describedSuffix) {
+		return true
+	}
+	for _, c := range append([]model.Category{cat}, cat.Subcategories...) {
+		if len(c.Media) > 0 {
+			return c.Media[0].Type == "audio"
+		}
+	}
+	return false
 }
 
 func argOrEmpty(args []string) string {
