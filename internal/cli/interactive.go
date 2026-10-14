@@ -158,12 +158,14 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p servic
 func dropRepeats(items []model.Result, page int, listed map[string]int) []model.Result {
 	kept := items[:0:0]
 	for _, r := range items {
-		key := firstNonEmpty(r.LANK, r.JWLink, r.WOLLink)
-		if first, ok := listed[key]; key != "" && ok && first < page {
-			continue
-		}
-		if _, ok := listed[key]; key != "" && !ok {
-			listed[key] = page
+		if key := firstNonEmpty(r.LANK, r.JWLink, r.WOLLink); key != "" {
+			first, ok := listed[key]
+			if ok && first < page {
+				continue
+			}
+			if !ok {
+				listed[key] = page
+			}
 		}
 		kept = append(kept, r)
 	}
