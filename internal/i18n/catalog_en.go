@@ -91,6 +91,10 @@ var en = Messages{
 
 	CitedFailed: "the quotations could not be listed: %s",
 
+	CitedVideosFailed:     "the videos quoting the verse could not be searched for: %s",
+	CitedUnread:           "results whose document could not be read, shown with the search's teaser only: %d",
+	ResearchExcerptFailed: "the excerpt could not be read: %s",
+
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
 

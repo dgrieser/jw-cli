@@ -201,7 +201,7 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, p *service.S
 // what the engine says about the whole query.
 func listingOf(out service.SearchOutcome) results.ResultSet {
 	return results.ResultSet{Kind: out.Kind, Query: out.Query, Lang: out.Lang, Page: out.Page,
-		Total: out.Total, Items: out.Items}
+		Total: out.Total, Items: out.Items, Notes: out.Notes}
 }
 
 func runSearchTUI(ctx context.Context, a *app.App, lng model.Language, fetch tui.Fetcher, header string) error {

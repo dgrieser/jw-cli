@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"net/http"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -50,6 +52,23 @@ func TestCitedListingKeepsARowItCouldNotRead(t *testing.T) {
 	}
 	if out.Items[0].Excerpt != "" || out.Items[0].Snippet == "" {
 		t.Errorf("the unread row should keep its teaser: %+v", out.Items[0])
+	}
+	// and the listing says so, in the reader's language
+	if len(out.Notes) != 1 || !strings.Contains(out.Notes[0], "nur die Vorschau") || !strings.HasSuffix(out.Notes[0], ": 1") {
+		t.Errorf("notes = %q, want the one unread row noted", out.Notes)
+	}
+
+	// a video search that fails leaves the publications listed and says the
+	// videos are missing, rather than the listing reading as complete
+	p.Videos = true
+	out, err = s.CitedListing(context.Background(), german, &p, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Items) != 2 || !slices.ContainsFunc(out.Notes, func(n string) bool {
+		return strings.HasPrefix(n, "Die Videos, die den Vers zitieren, konnten nicht gesucht werden: ")
+	}) {
+		t.Errorf("rows %d, notes = %q, want the failed video search noted", len(out.Items), out.Notes)
 	}
 }
 

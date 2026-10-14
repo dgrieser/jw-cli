@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
@@ -541,8 +542,8 @@ type ResearchEntry struct {
 }
 
 // Research lists the Research Guide entries attached to each verse; with
-// excerpts the referenced passage of each publication is fetched too (best
-// effort).
+// excerpts the referenced passage of each publication is fetched too, eight
+// at a time, and one that cannot be read says why on its entry.
 func (s *Service) Research(ctx context.Context, lng model.Language, input string, excerpts bool) ([]ResearchEntry, error) {
 	var entries []ResearchEntry
 	err := s.ForEachStudySection(ctx, lng, input, func(ref string, verse model.Verse, sec model.StudySection) {
@@ -554,26 +555,39 @@ func (s *Service) Research(ctx context.Context, lng model.Language, input string
 		return nil, err
 	}
 	if excerpts {
+		var (
+			wg  sync.WaitGroup
+			sem = make(chan struct{}, excerptWorkers)
+		)
 		for _, e := range entries {
 			for i := range e.Items {
-				if e.Items[i].PCPath == "" {
+				it := &e.Items[i]
+				if it.PCPath == "" {
 					continue
 				}
-				tip, err := s.WOL.Tooltip(ctx, e.Items[i].PCPath)
-				if err != nil {
-					continue // excerpts are best effort
-				}
-				e.Items[i].ExcerptHTML = tip.ContentHTML
-				if e.Items[i].ArticleURL == "" {
-					e.Items[i].ArticleURL = tip.URL
-				}
-				if e.Items[i].Title == "" {
-					e.Items[i].Title = tip.Title
-				}
+				wg.Add(1)
+				sem <- struct{}{}
+				go func() {
+					defer wg.Done()
+					defer func() { <-sem }()
+					tip, err := s.WOL.Tooltip(ctx, it.PCPath)
+					if err != nil {
+						it.ExcerptErr = failureCause(err)
+						return
+					}
+					it.ExcerptHTML = tip.ContentHTML
+					if it.ArticleURL == "" {
+						it.ArticleURL = tip.URL
+					}
+					if it.Title == "" {
+						it.Title = tip.Title
+					}
+				}()
 			}
 		}
+		wg.Wait()
 	}
-	return entries, nil
+	return entries, ctx.Err()
 }
 
 // BibleMedia lists images and clips attached to the verses of the references.

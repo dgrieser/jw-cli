@@ -411,6 +411,9 @@ type ResearchItem struct {
 	PCPath      string `json:"pcPath,omitempty"` // wol /pc/ path for the excerpt
 	ExcerptHTML string `json:"excerptHtml,omitempty"`
 	ArticleURL  string `json:"articleUrl,omitempty"`
+	// ExcerptErr says why an excerpt asked for could not be read, so a
+	// missing passage is told from one the entry never had.
+	ExcerptErr string `json:"excerptError,omitempty"`
 }
 
 // SameTarget reports whether href points at what this entry already points at.

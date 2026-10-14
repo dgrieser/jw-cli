@@ -1507,7 +1507,7 @@ func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string,
 				html.EscapeString(n.Ref.Path), html.EscapeString(n.Ref.Text))
 		}
 		fmt.Fprintf(b, "<p%s><em>%s</em></p>", attrs,
-			html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, n.Err)))
+			html.EscapeString(fmt.Sprintf(txt.UnfoldFailed, failureCause(n.Err))))
 	case strings.TrimSpace(n.HTML) != "":
 		var content string
 		content, rest = inlineChildren(demoteHeadings(n.HTML, level), rest,

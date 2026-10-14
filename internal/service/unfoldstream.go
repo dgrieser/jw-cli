@@ -214,7 +214,7 @@ func (s *Service) StreamCited(ctx context.Context, lng model.Language, refs []bi
 		if err := ctx.Err(); err != nil {
 			return c.Requests, err
 		}
-		return c.Requests, citedFailure{text: fmt.Sprintf(i18n.TextFor(lng.Locale).CitedFailed, c.Err), err: c.Err}
+		return c.Requests, citedFailure{text: fmt.Sprintf(i18n.TextFor(lng.Locale).CitedFailed, failureCause(c.Err)), err: c.Err}
 	}
 	for i, item := range c.Results {
 		var b strings.Builder

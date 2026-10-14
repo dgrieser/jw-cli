@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -305,6 +306,12 @@ shown, including a link to the full article.`,
 					if it.ExcerptHTML != "" {
 						out, err := render.Render(it.ExcerptHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 						if err == nil {
+							body = strings.TrimSpace(out)
+						}
+					}
+					if body == "" && it.ExcerptErr != "" {
+						note := "<p><em>" + html.EscapeString(fmt.Sprintf(a.Text().ResearchExcerptFailed, it.ExcerptErr)) + "</em></p>"
+						if out, err := render.Render(note, format, a.RenderOptions(a.HTTP().Base.WOL)); err == nil {
 							body = strings.TrimSpace(out)
 						}
 					}

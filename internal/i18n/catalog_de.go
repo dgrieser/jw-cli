@@ -91,6 +91,10 @@ var de = Messages{
 
 	CitedFailed: "Die Zitate konnten nicht aufgelistet werden: %s",
 
+	CitedVideosFailed:     "Die Videos, die den Vers zitieren, konnten nicht gesucht werden: %s",
+	CitedUnread:           "Treffer, deren Dokument nicht gelesen werden konnte und die deshalb nur die Vorschau der Suche zeigen: %d",
+	ResearchExcerptFailed: "Der Auszug konnte nicht gelesen werden: %s",
+
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",
 

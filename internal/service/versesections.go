@@ -37,7 +37,7 @@ func (l *sectionList) add(sec UnfoldSection, ok bool) {
 func notesSection(notes []model.StudyNote, err error, level int, txt *i18n.Messages) (UnfoldSection, bool) {
 	var b strings.Builder
 	if err != nil {
-		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.StudyFailed, err)))
+		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.StudyFailed, failureCause(err))))
 	}
 	for _, note := range notes {
 		// a note is the inside of its paragraph, so it needs one of its own:
@@ -152,7 +152,7 @@ func citedSection(c unfold.Cited, level int, txt *i18n.Messages) (UnfoldSection,
 	switch {
 	case c.Err != nil:
 		sec.Lazy = ""
-		sec.Body = fmt.Sprintf("<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.CitedFailed, c.Err)))
+		sec.Body = fmt.Sprintf("<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.CitedFailed, failureCause(c.Err))))
 	case c.Lazy == "":
 		var b strings.Builder
 		writeCitedItems(&b, c.Results, level)

@@ -202,6 +202,16 @@ type Messages struct {
 	// never reads as nobody quoting the verse.
 	CitedFailed string
 
+	// CitedVideosFailed takes the reason the videos quoting a verse could
+	// not be searched for; CitedUnread the number of results shown with the
+	// search's teaser because their documents could not be read, and so not
+	// judged on what they say. Both are notes under a listing, so what it
+	// lacks never reads as there being nothing more. ResearchExcerptFailed
+	// takes the reason a Research Guide passage could not be read.
+	CitedVideosFailed     string
+	CitedUnread           string
+	ResearchExcerptFailed string
+
 	// --- dates ------------------------------------------------------------
 	// Weekdays is indexed by time.Weekday, Months by time.Month minus one.
 	Weekdays [7]string

@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -41,6 +42,11 @@ type SearchOutcome struct {
 	// Total is what the engine reports; zero when it reports none.
 	Total int            `json:"total,omitempty"`
 	Items []model.Result `json:"items"`
+	// Notes say, in the content language, what the listing could not
+	// include or judge: videos that could not be searched for, documents
+	// that could not be read. A listing that lacks something says so rather
+	// than reading as complete.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // RunSearch executes one page of a search on the chosen engine. Excerpts, when
@@ -63,13 +69,29 @@ func (s *Service) RunSearch(ctx context.Context, lng model.Language, p *SearchPa
 		if err != nil {
 			return SearchOutcome{}, err
 		}
+		out := SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol,
+			Page: sp.Page, Total: sp.Total, Items: sp.Results}
 		if p.Excerpts {
-			s.FillExcerpts(ctx, sp.Results, progress)
+			out.Notes = unreadNote(out.Notes, s.FillExcerpts(ctx, sp.Results, progress), lng)
 		}
-		return SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol,
-			Page: sp.Page, Total: sp.Total, Items: sp.Results}, nil
+		return out, nil
 	}
 	return SearchOutcome{}, fmt.Errorf("invalid engine %q (want jworg or wol)", p.Engine)
+}
+
+// unreadNote adds to notes how many results kept the search's teaser because
+// their documents could not be read, if any did.
+func unreadNote(notes []string, unread []bool, lng model.Language) []string {
+	n := 0
+	for _, u := range unread {
+		if u {
+			n++
+		}
+	}
+	if n == 0 {
+		return notes
+	}
+	return append(notes, fmt.Sprintf(i18n.TextFor(lng.Locale).CitedUnread, n))
 }
 
 // searchWOL runs the wol search engine for jw search -e wol and jw bible cited.
