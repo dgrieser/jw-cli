@@ -74,10 +74,11 @@ func tuiActions(ctx context.Context, a *app.App, lng model.Language) tui.Actions
 			return openInBrowser(link)
 		},
 		Browse: func(item model.Result) (tui.Fetcher, string, bool) {
-			if item.Kind != "category" {
+			key := categoryKeyOf(item)
+			if key == "" {
 				return nil, "", false
 			}
-			return categoryFetcher(ctx, a, lng, item.CategoryKey), item.Title, true
+			return categoryFetcher(ctx, a, lng, key), item.Title, true
 		},
 	}
 }

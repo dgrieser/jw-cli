@@ -176,6 +176,27 @@ func TestDropRepeats(t *testing.T) {
 	}
 }
 
+// The jw.org search finds media categories too. jw show on one points at
+// jw media browse, as it does for a category of the media library, instead of
+// reading the category's jw.org page as an article.
+func TestShowSearchCategory(t *testing.T) {
+	mux := searchMux(t)
+	mux.HandleFunc("/apis/search/results/E/audio", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"results": [{"type": "item", "subtype": "audioCategory", "title": "Kingdom Melodies",
+			"lank": "mc-KingdomMelodies", "links": {"jw.org": "https://www.jw.org/open?docid=1011994&category=KingdomMelodies"}}],
+			"insight": {"total": {"value": 1}}}`)
+	})
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "search", "-l", "en", "-t", "audio", "kingdom"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runCmdWithCache(t, mux, cacheDir, "show", "1", "-l", "en")
+	if err == nil || !strings.Contains(err.Error(), "jw media browse KingdomMelodies") {
+		t.Errorf("show on a category: %v", err)
+	}
+}
+
 // TestSearchHeaderLanguage pins the header to the requested language, with
 // English for a language that has no translation.
 func TestSearchHeaderLanguage(t *testing.T) {

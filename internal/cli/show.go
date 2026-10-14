@@ -33,8 +33,8 @@ rendered in the selected output format, videos/audio show their details.`,
 				return writeMediaInfo(a, mi)
 			}
 			switch {
-			case item.Kind == "category":
-				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
+			case categoryKeyOf(item) != "":
+				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, categoryKeyOf(item))
 			case item.Kind == "file" || item.Kind == "image" || item.FileURL != "":
 				format, err := a.Format()
 				if err != nil {

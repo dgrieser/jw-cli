@@ -187,6 +187,19 @@ Examples:
 	return cmd
 }
 
+// categoryKeyOf is the mediator category a row stands for, or "" for a row
+// that is none: a category of jw media browse, or one the jw.org search found,
+// which it keys "mc-<category>" (kind videoCategory or audioCategory).
+func categoryKeyOf(r model.Result) string {
+	if r.CategoryKey != "" {
+		return r.CategoryKey
+	}
+	if key, ok := strings.CutPrefix(r.LANK, "mc-"); ok {
+		return key
+	}
+	return ""
+}
+
 // isGalleryVideo reports whether a row is a video of a bible book's media
 // gallery. The gallery names no LANK for it, only its gallery page, which
 // names the video the library plays (see galleryVideo).
