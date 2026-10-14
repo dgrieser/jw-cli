@@ -199,8 +199,11 @@ const excerptWorkers = 8
 // FillExcerpts replaces each result's teaser with the passage it was cut from.
 // Best effort: a result whose document cannot be read, or whose fragment cannot
 // be placed in it, keeps the teaser. Only wol results carry a document to read.
-// progress, when non-nil, reports each finished document.
-func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progress func(done, total int)) {
+// progress, when non-nil, reports each finished document. unread says, by
+// position, which results' documents could not be read: their teaser stands in
+// for a passage nobody has seen, which tells nothing of what it says.
+func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progress func(done, total int)) (unread []bool) {
+	unread = make([]bool, len(items))
 	todo := make([]int, 0, len(items))
 	for i, r := range items {
 		if r.WOLLink != "" && r.Snippet != "" {
@@ -208,7 +211,7 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 		}
 	}
 	if len(todo) == 0 {
-		return
+		return unread
 	}
 	var (
 		wg   sync.WaitGroup
@@ -225,6 +228,7 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 			blocks, err := s.WOL.Excerpts(ctx, items[i].WOLLink, items[i].Snippet)
 			mu.Lock()
 			defer mu.Unlock()
+			unread[i] = err != nil
 			if err == nil && len(blocks) > 0 {
 				items[i].Excerpt = strings.Join(blocks, "\n")
 			}
@@ -238,4 +242,5 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 	if progress != nil {
 		progress(len(todo), len(todo))
 	}
+	return unread
 }

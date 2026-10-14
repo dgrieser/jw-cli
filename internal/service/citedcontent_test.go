@@ -57,7 +57,7 @@ func TestKeepTellingFiltersBlockByBlock(t *testing.T) {
 		{Title: "Mein persönliches Bibellesen", Snippet: "33 34 35 36"},
 		{Title: "Lassen wir Gott täglich zu uns sprechen?", Snippet: "<p>/ 34-36 □</p>"},
 	}
-	got := keepTelling(items)
+	got := keepTelling(items, nil)
 	var titles []string
 	for _, item := range got {
 		titles = append(titles, item.Title)
@@ -77,7 +77,7 @@ func TestKeepTellingFiltersBlockByBlock(t *testing.T) {
 // teaser, and kept when the teaser says something.
 func TestKeepTellingJudgesTheTeaserWhenThereIsNoPassage(t *testing.T) {
 	items := []model.Result{{Title: "w14", Snippet: insightProse}}
-	if got := keepTelling(items); len(got) != 1 {
+	if got := keepTelling(items, nil); len(got) != 1 {
 		t.Errorf("a telling teaser should stand in for a passage: %+v", got)
 	}
 }

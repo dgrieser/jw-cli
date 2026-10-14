@@ -61,14 +61,15 @@ func (s *Service) CitedListing(ctx context.Context, lng model.Language, p *Searc
 		}
 	}
 	if p.Excerpts {
-		s.FillExcerpts(ctx, out.Items, progress)
+		unread := s.FillExcerpts(ctx, out.Items, progress)
 		// a citation search matches wherever the verse is named; what only
 		// names it is not an answer to "who quotes this?". Judged on the
 		// passages just read: wol's own teaser is cut short, so without them
-		// there is nothing fair to judge, and --no-excerpts shows everything.
+		// there is nothing fair to judge, and --no-excerpts shows everything
+		// — as does a result whose document could not be read this time.
 		// The total follows the listing, so its head never counts rows nobody
 		// is shown.
-		out.Items = keepTelling(out.Items)
+		out.Items = keepTelling(out.Items, unread)
 		out.Total = len(out.Items)
 	}
 	// the videos were judged as they were found
