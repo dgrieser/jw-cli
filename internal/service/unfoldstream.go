@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
@@ -506,8 +508,14 @@ func joinNotes(notes []string) string { return strings.Join(notes, " ") }
 
 // CitationPage is where a citation of the library leads when it is read on a
 // page of its own: the bible text it quotes, or else the document it was
-// taken from (docURL, without the anchor naming the passage).
+// taken from (docURL, without the anchor naming the passage). A footnote leads
+// to the document it belongs to: for one of the bible, the verse carrying its
+// marker, or the book's first chapter when that cannot be told. A link
+// written without a locale, as wol's own endpoints are, is read in the
+// locale of lng: wol answers it with links without one too, which lead
+// nowhere.
 func (s *Service) CitationPage(ctx context.Context, lng model.Language, path string) (refs []bibleref.Ref, docURL string, err error) {
+	path = s.withLocale(ctx, lng, path)
 	tip, err := newTooltipResolver(s, lng, nil).Resolve(ctx, path)
 	if err != nil {
 		return nil, "", err
@@ -515,6 +523,91 @@ func (s *Service) CitationPage(ctx context.Context, lng model.Language, path str
 	if refs = itemPassageRefs(tip.Items()); len(refs) > 0 {
 		return refs, "", nil
 	}
+	if IsFootnote(path) && tip.URL == "" {
+		return s.footnotePage(ctx, path, tip)
+	}
 	docURL, _, _ = strings.Cut(tip.URL, "#")
 	return nil, docURL, nil
+}
+
+// withLocale is a link of the library with a locale: its own, or the one the
+// library of lng is read in when it has none ("/wol/pc/r10/lp-x/...").
+func (s *Service) withLocale(ctx context.Context, lng model.Language, path string) string {
+	if !strings.HasPrefix(path, "/wol/") {
+		return path
+	}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil || cfg.Locale == "" {
+		return path
+	}
+	return "/" + cfg.Locale + path
+}
+
+// footnoteLink matches the link of a footnote marker,
+// "/de/wol/fn/r10/lp-x/1001070147/8": the locale and the library the document
+// it belongs to is read in.
+var footnoteLink = regexp.MustCompile(`^/([\w-]+)/wol/fn/([^/]+)/([^/]+)/\d+/`)
+
+// footnotePage is where a footnote leads, as CitationPage says: its answer
+// names the document by id alone, which is read in the locale and library
+// the marker's link names.
+func (s *Service) footnotePage(ctx context.Context, path string, tip model.Tooltip) ([]bibleref.Ref, string, error) {
+	m := footnoteLink.FindStringSubmatch(RefPath(path))
+	if m == nil || tip.DocID == 0 {
+		return nil, "", nil
+	}
+	docURL := fmt.Sprintf("%s/%s/wol/d/%s/%s/%d", s.HTTP.Base.WOL, m[1], m[2], m[3], tip.DocID)
+	if !tip.Bible {
+		return nil, docURL, nil
+	}
+	// a book of the bible is one document; the verse is the one whose text
+	// carries the marker, and it is read in the bible rather than as an
+	// article
+	art, err := s.WOL.DocumentByURL(ctx, docURL)
+	if err != nil {
+		return nil, "", err
+	}
+	if ref, ok := footnoteVerse(art.HTML, path); ok {
+		return []bibleref.Ref{ref}, "", nil
+	}
+	return nil, docURL, nil
+}
+
+// footnoteVerse is the verse of a bible document carrying the marker of the
+// footnote at path, or, when no verse carries it, the first chapter of the
+// document; ok is false for a document that is no bible text at all.
+func footnoteVerse(document, path string) (bibleref.Ref, bool) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(document))
+	if err != nil {
+		return bibleref.Ref{}, false
+	}
+	marker := RefPath(path)
+	marker = marker[strings.Index(marker, footnotePath):]
+	var at *goquery.Selection
+	doc.Find(`a[href*="` + footnotePath + `"]`).EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		if strings.HasSuffix(RefPath(a.AttrOr("href", "")), marker) {
+			at = a
+		}
+		return at == nil
+	})
+	if at != nil {
+		if m := verseSpan.FindStringSubmatch(at.Closest("span.v").AttrOr("id", "")); m != nil {
+			return spanRef(m), true
+		}
+	}
+	// the marker is not where the document has it: the book, at its start
+	if m := verseSpan.FindStringSubmatch(doc.Find("span.v[id]").First().AttrOr("id", "")); m != nil {
+		ref := spanRef(m)
+		ref.VerseStart, ref.VerseEnd = 0, 0
+		return ref, true
+	}
+	return bibleref.Ref{}, false
+}
+
+// spanRef is the verse a verseSpan match names.
+func spanRef(m []string) bibleref.Ref {
+	book, _ := strconv.Atoi(m[1])
+	chapter, _ := strconv.Atoi(m[2])
+	verse, _ := strconv.Atoi(m[3])
+	return bibleref.Ref{Book: book, Chapter: chapter, VerseStart: verse, VerseEnd: verse}
 }

@@ -42,6 +42,31 @@ func TestTooltipKeepsEveryItem(t *testing.T) {
 	}
 }
 
+// A footnote comes without a URL: the document it belongs to is named by the
+// classes of its answer, and whether that is a book of the bible.
+func TestTooltipNamesTheDocumentOfAFootnote(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/wol/fn/r10/lp-x/1001070147/8", serveFile(t, "testdata/footnote_bible.json"))
+	mux.HandleFunc("/wol/fn/r10/lp-x/1102025912/0", serveFile(t, "testdata/footnote_article.json"))
+	c := testClient(t, mux)
+	for path, want := range map[string]struct {
+		doc   int
+		bible bool
+		text  string
+	}{
+		"/de/wol/fn/r10/lp-x/1001070147/8": {1001070147, true, "Glauben ausübt"},
+		"/de/wol/fn/r10/lp-x/1102025912/0": {1102025912, false, "Leviten"},
+	} {
+		tip, err := c.Tooltip(context.Background(), path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tip.DocID != want.doc || tip.Bible != want.bible || tip.URL != "" || !strings.Contains(tip.ContentHTML, want.text) {
+			t.Errorf("%s: DocID=%d Bible=%v URL=%q content=%.80q", path, tip.DocID, tip.Bible, tip.URL, tip.ContentHTML)
+		}
+	}
+}
+
 // Only a link to a document names one: the numbers ending a daily text or a
 // week of meetings are a date, and a citation names the document citing it.
 func TestDocIDFromURL(t *testing.T) {

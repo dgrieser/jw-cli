@@ -2,7 +2,9 @@ package wol
 
 import (
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/model"
 )
@@ -32,6 +34,11 @@ type tooltipItem struct {
 	URL              string `json:"url"`
 	ImageURL         string `json:"imageUrl"`
 	PublicationTitle string `json:"publicationTitle"`
+	// ArticleClasses are the classes of the document the passage is from,
+	// its id among them ("document html5 docId-1001070147 pub-nwtsty bible
+	// bibleBook …"): what names the document of a footnote, which comes
+	// without a URL.
+	ArticleClasses string `json:"articleClasses"`
 }
 
 // tooltip turns the items of an answer into the tooltip holding them, the
@@ -48,6 +55,8 @@ func (c *Client) tooltip(items []tooltipItem, locale string) model.Tooltip {
 			URL:              absURL(c.hc.Base.WOL, relocalizeURL(it.URL, locale)),
 			ImageURL:         absURL(c.hc.Base.WOL, relocalizeURL(it.ImageURL, locale)),
 			PublicationTitle: it.PublicationTitle,
+			DocID:            DocIDOfClasses(it.ArticleClasses),
+			Bible:            slices.Contains(strings.Fields(it.ArticleClasses), "bible"),
 		}
 	}
 	tip := tips[0]
