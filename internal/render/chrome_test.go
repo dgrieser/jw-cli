@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -113,5 +114,32 @@ func TestRenderNoURLsLeavesNoAddress(t *testing.T) {
 	}
 	if !strings.Contains(got, "Num. 14:8") || !strings.Contains(got, `data-pid="17"`) {
 		t.Errorf("--no-urls lost the text or its other attributes:\n%s", got)
+	}
+}
+
+// A document's printed pages, one block per spread under the same title, are
+// headed by the title once in markdown and text — not one bare title a spread
+// — while HTML keeps the blocks for jw serve to fold.
+func TestPrintEditionsTitledOnce(t *testing.T) {
+	block := func(n int) string {
+		return `<div class="alternatePresentation"><div class="thumbnail">` +
+			fmt.Sprintf(`<img src="https://wol.jw.org/en/wol/mp/r1/lp-e/wcg/2025/%d"/>`, n) +
+			`</div><div class="title">Printed Edition</div></div>`
+	}
+	fragment := block(288) + block(289) + `<p>ABOUT the time that Moses fled from Egypt.</p>`
+	for _, f := range []Format{Markdown, Text} {
+		out, err := Render(fragment, f, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(out, "Printed Edition"); f == Text && n != 1 {
+			t.Errorf("%v: the title %d times:\n%s", f, n, out)
+		}
+		if title, pic := strings.Index(out, "Printed Edition"), strings.Index(out, "2025/288"); f == Markdown && (title < 0 || pic < title || !strings.Contains(out, "2025/289")) {
+			t.Errorf("%v: the title should head both pictures:\n%s", f, out)
+		}
+	}
+	if out, _ := Render(fragment, HTML, Options{}); strings.Count(out, "alternatePresentation") != 2 {
+		t.Errorf("html should keep the blocks for jw serve:\n%s", out)
 	}
 }

@@ -3,10 +3,14 @@ package pubmedia
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -14,9 +18,14 @@ import (
 
 func testClient(t *testing.T, handler http.HandlerFunc) (*Client, *http.Request) {
 	t.Helper()
-	var captured *http.Request
+	var (
+		mu       sync.Mutex
+		captured *http.Request
+	)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
 		captured = r
+		mu.Unlock()
 		handler(w, r)
 	}))
 	t.Cleanup(srv.Close)
@@ -184,5 +193,47 @@ func TestLinksAnyFormat(t *testing.T) {
 	}
 	if query.Has("fileformat") || query.Get("track") != "1" {
 		t.Errorf("query = %v", query)
+	}
+}
+
+// pub-media refuses a whole list of formats for one it cannot serve of a
+// publication — the New World Translation with MP4 in the list — so the
+// formats are asked for one by one and what they have is listed together.
+func TestLinksFormatByFormat(t *testing.T) {
+	var (
+		mu    sync.Mutex
+		asked []string
+	)
+	c, _ := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		ff := r.URL.Query().Get("fileformat")
+		mu.Lock()
+		asked = append(asked, ff)
+		mu.Unlock()
+		if strings.Contains(ff, "MP4") || ff == "AAC" {
+			http.Error(w, `{"0":{"title":"Bad Request","status":"400"}}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"pubName":"New World Translation","pub":"nwt","issue":"","booknum":null,`+
+			`"languages":{"E":{"name":"English","locale":"en"}},`+
+			`"files":{"E":{%q:[{"title":"NWT","file":{"url":"https://download.example/nwt_E.%s","checksum":"x"},"filesize":1}]}}}`,
+			ff, strings.ToLower(ff))
+	})
+	pm, err := c.Links(context.Background(), Query{Pub: "nwt", Lang: "E", Formats: []string{"PDF", "EPUB", "MP4", "AAC"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(asked[1:]) // asked at once, in no order
+	if want := []string{"PDF,EPUB,MP4,AAC", "AAC", "EPUB", "MP4", "PDF"}; !slices.Equal(asked, want) {
+		t.Errorf("asked %q, want %q", asked, want)
+	}
+	if len(pm.Files["E"]["PDF"]) != 1 || len(pm.Files["E"]["EPUB"]) != 1 || len(pm.Files["E"]) != 2 || pm.PubName != "New World Translation" {
+		t.Errorf("files = %+v (%q)", pm.Files, pm.PubName)
+	}
+
+	// a publication none of the formats is found for is not found
+	_, err = c.Links(context.Background(), Query{Pub: "nwt", Lang: "E", Formats: []string{"MP4", "AAC"}})
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
 	}
 }

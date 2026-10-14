@@ -186,7 +186,10 @@ func flatten(in []wireResult) []wireResult {
 	return out
 }
 
-var lankDocID = regexp.MustCompile(`(\d+)$`)
+// lankDocID is the LANK of a document, "pa-1102025912": its number is the
+// MEPS document id. Other keys end in numbers too — a publication "pub-t-36",
+// an issue "pi-wp_202005" — which are no document ids.
+var lankDocID = regexp.MustCompile(`^pa-(\d+)$`)
 
 func (w wireResult) toModel() model.Result {
 	r := model.Result{
@@ -205,9 +208,8 @@ func (w wireResult) toModel() model.Result {
 	if w.Image != nil {
 		r.ImageURL = w.Image.URL
 	}
-	// lank like "pa-1102025912": numeric tail is the MEPS docId
-	if m := lankDocID.FindString(w.LANK); m != "" {
-		r.DocID, _ = strconv.Atoi(m)
+	if m := lankDocID.FindStringSubmatch(w.LANK); m != nil {
+		r.DocID, _ = strconv.Atoi(m[1])
 	}
 	if key := categoryKey(w); key != "" {
 		// a series or other category of videos or audio is browsed, not read:

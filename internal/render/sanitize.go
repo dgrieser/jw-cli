@@ -256,3 +256,46 @@ func absolutize(body *goquery.Selection, tag, attr string, base *url.URL) {
 		s.SetAttr(attr, base.ResolveReference(u).String())
 	})
 }
+
+// printEditionsOnce writes a run of wol's "Printed Edition" blocks — one per
+// spread of the printed page, each a picture and the same title — as that
+// title once, followed by the pictures. Text drops pictures, so each block
+// came out as a bare "Printed Edition" line, as many as there are spreads.
+// HTML keeps the blocks as they are: jw serve folds the same run into one
+// disclosure of its own.
+func printEditionsOnce(fragment string) string {
+	if !strings.Contains(fragment, "alternatePresentation") {
+		return fragment
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	doc.Find("div.alternatePresentation").Each(func(_ int, div *goquery.Selection) {
+		// a run of them is written from its first
+		if prev := div.Prev(); prev.Length() > 0 && prev.HasClass("alternatePresentation") {
+			return
+		}
+		run := div
+		for next := div.Next(); next.Length() > 0 && next.HasClass("alternatePresentation"); next = next.Next() {
+			run = run.AddSelection(next)
+		}
+		title := collapseSpace(div.Find(".title").First().Text())
+		var b strings.Builder
+		if title != "" {
+			b.WriteString("<p>" + html.EscapeString(title) + "</p>")
+		}
+		run.Find("img").Each(func(_ int, img *goquery.Selection) {
+			if h, err := goquery.OuterHtml(img); err == nil {
+				b.WriteString("<p>" + h + "</p>")
+			}
+		})
+		div.BeforeHtml(b.String())
+		run.Remove()
+	})
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return fragment
+	}
+	return out
+}
