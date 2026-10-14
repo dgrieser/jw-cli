@@ -96,3 +96,44 @@ func TestImagesMetadataStaysWithItsFigure(t *testing.T) {
 		t.Errorf("second figure borrowed metadata: %+v", imgs[1])
 	}
 }
+
+// A citation whose link spells only what changes from the one before it is
+// listed as the full reference; one naming its book stands as it is.
+func TestScriptureRefsContinue(t *testing.T) {
+	const wolDoc = `<p>(<a href="/en/wol/bc/r1/lp-e/1/7/0" data-bid="8-1" class="b">Nu 14:5,</a>
+<a href="/en/wol/bc/r1/lp-e/1/7/1" data-bid="8-2" class="b">20-38</a>;
+<a href="/en/wol/bc/r1/lp-e/1/8/0" data-bid="9-1" class="b">1 Sam. 18:5</a>,
+<a href="/en/wol/bc/r1/lp-e/1/8/1" data-bid="9-2" class="b">9-11</a>;
+<a href="/en/wol/bc/r1/lp-e/1/9/0" data-bid="10-1" class="b">Ps. 83</a>,
+<a href="/en/wol/bc/r1/lp-e/1/9/1" data-bid="10-2" class="b">84</a>;
+<a href="/en/wol/bc/r1/lp-e/1/10/0" data-bid="11-1" class="b">Pr 8:30–9:2</a>,
+<a href="/en/wol/bc/r1/lp-e/1/10/1" data-bid="11-2" class="b">6</a>)</p>`
+	refs := ScriptureRefs(parseSel(t, wolDoc), "https://wol.jw.org")
+	want := []string{"Nu 14:5", "Nu 14:20-38", "1 Sam. 18:5", "1 Sam. 18:9-11", "Ps. 83", "Ps. 84", "Pr 8:30–9:2", "Pr 9:6"}
+	if len(refs) != len(want) {
+		t.Fatalf("got %d references, want %d: %+v", len(refs), len(want), refs)
+	}
+	for i, w := range want {
+		if refs[i].Text != w {
+			t.Errorf("reference %d = %q, want %q", i, refs[i].Text, w)
+		}
+	}
+	if refs[1].BID != "8-2" || refs[1].BCPath != "https://wol.jw.org/en/wol/bc/r1/lp-e/1/7/1" {
+		t.Errorf("continued reference lost its link: %+v", refs[1])
+	}
+}
+
+func TestCompleteCitation(t *testing.T) {
+	for _, c := range []struct{ text, prev, want string }{
+		{"20-38", "", "20-38"}, // nothing to lend it the rest
+		{"John 3:16", "Nu 14:5", "John 3:16"},
+		{"2 John 5", "Nu 14:5", "2 John 5"},
+		{"6:31-34", "Mark 1:40, 41", "Mark 6:31-34"},
+		{"5, 6", "Isaiah 35:1", "Isaiah 35:5, 6"},
+		{"16", "約翰福音3：15", "約翰福音3：16"}, // the full-width colon
+	} {
+		if got := completeCitation(c.text, c.prev); got != c.want {
+			t.Errorf("completeCitation(%q, %q) = %q, want %q", c.text, c.prev, got, c.want)
+		}
+	}
+}
