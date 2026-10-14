@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -33,9 +34,14 @@ func newDownloadCmd(a *app.App) *cobra.Command {
 		Short: "Download videos, audio, and publication files",
 		Long: `Download media. The target can be:
   - an index into the last listing (jw search, jw pub, jw media browse, ...)
-  - a media LANK like pub-jwb_202401_1_VIDEO (from jw media browse/info)
+  - a media LANK like pub-jwbcov_201505_1_VIDEO (from jw media browse/info)
   - a direct file URL
   - a publication symbol (like jw pub ... --download)
+  - the key of a publication or a document as jw search -o json shows it,
+    like pub-lmd or pa-2016330
+
+A publication or a document — an index or a key — downloads every file
+pub-media has for it; -F narrows that down to the formats asked for.
 
 Examples:
   jw search "kingdom" -t videos && jw download 1 -q 720p
@@ -46,17 +52,20 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target := args[0]
 			ctx := cmd.Context()
+			opts := downloadOpts{
+				quality: quality, qualitySet: cmd.Flags().Changed("quality"),
+				subtitles: subtitles, formats: service.SplitFormats(formats), dir: dir,
+			}
 
 			if idx, err := strconv.Atoi(target); err == nil {
 				item, err := results.Resolve(a.Cache().Dir(), idx)
 				if err != nil {
 					return err
 				}
-				qualitySet := cmd.Flags().Changed("quality")
-				return downloadResult(ctx, a, item, quality, qualitySet, subtitles, dir)
+				return downloadResult(ctx, a, item, opts)
 			}
-			if looksLikeLANK(target) {
-				return downloadLANK(ctx, a, target, quality, subtitles, dir)
+			if isMediaLANK(target) {
+				return downloadLANK(ctx, a, target, opts)
 			}
 			if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
 				path, err := downloadURL(ctx, a, target, "", 0, dir, "")
@@ -65,19 +74,16 @@ Examples:
 				}
 				return a.Writef(a.Text().Downloaded+"\n", path)
 			}
-			// publication symbol
-			lng, err := a.Lang(ctx)
-			if err != nil {
-				return err
+			// a search result's key, as -o json shows it, or a publication
+			// symbol with the flags that narrow it down
+			key, ok := docKey(target)
+			if !ok {
+				key = model.PubKey{Pub: target}
 			}
-			pm, err := a.PubMedia().Links(ctx, pubmedia.Query{
-				Pub: target, Issue: issue, BookNum: booknum, Track: track,
-				Formats: service.SplitFormats(formats), Lang: lng.Symbol,
-			})
-			if err != nil {
-				return err
-			}
-			return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
+			key.Issue = cmp.Or(key.Issue, issue)
+			key.BookNum = cmp.Or(key.BookNum, booknum)
+			key.Track = cmp.Or(key.Track, track)
+			return downloadPub(ctx, a, key, opts)
 		},
 	}
 	fl := cmd.Flags()
@@ -91,65 +97,109 @@ Examples:
 	return cmd
 }
 
-func looksLikeLANK(s string) bool {
+// downloadOpts are the download flags that apply to whatever the target turns
+// out to be.
+type downloadOpts struct {
+	quality string
+	// qualitySet is whether --quality was given rather than defaulted: only
+	// then does it override a listed rendition.
+	qualitySet bool
+	subtitles  bool
+	formats    []string // publication file formats; empty takes them all
+	dir        string
+}
+
+// isMediaLANK reports whether a natural key names a mediator media item — a
+// video or an audio track. The jw.org search keys its other results too, and
+// those name a publication or a document instead (see docKey).
+func isMediaLANK(s string) bool {
 	if strings.ContainsAny(s, "/ ") {
 		return false
 	}
 	up := strings.ToUpper(s)
-	return strings.HasSuffix(up, "_VIDEO") || strings.HasSuffix(up, "_AUDIO") ||
-		((strings.HasPrefix(s, "pub-") || strings.HasPrefix(s, "docid-")) && strings.Contains(s, "_"))
+	return strings.HasSuffix(up, "_VIDEO") || strings.HasSuffix(up, "_AUDIO")
 }
 
-// downloadResult dispatches a cached listing item to the right downloader.
-// Rows from `jw media info` carry both a LANK and the exact rendition URL;
-// the row's URL wins unless the user explicitly asked for a quality.
-func downloadResult(ctx context.Context, a *app.App, item model.Result, quality string, qualitySet, subtitles bool, dir string) error {
-	switch {
-	case item.FileURL != "" && (!qualitySet || item.LANK == ""):
-		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, dir, "")
-		if err != nil {
-			return err
-		}
-		return a.Writef(a.Text().Downloaded+"\n", path)
-	case item.LANK != "" && (item.Kind == "video" || item.Kind == "audio"):
-		return downloadLANK(ctx, a, item.LANK, quality, subtitles, dir)
-	case item.FileURL != "":
-		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, dir, "")
-		if err != nil {
-			return err
-		}
-		return a.Writef(a.Text().Downloaded+"\n", path)
-	case item.LANK != "":
-		return downloadLANK(ctx, a, item.LANK, quality, subtitles, dir)
-	case item.Pub != nil:
-		lng, err := a.Lang(ctx)
-		if err != nil {
-			return err
-		}
-		pm, err := a.PubMedia().Links(ctx, pubmedia.Query{
-			Pub: item.Pub.Pub, DocID: item.Pub.DocID, Issue: item.Pub.Issue,
-			BookNum: item.Pub.BookNum, Track: item.Pub.Track, Lang: lng.Symbol,
-		})
-		if err != nil {
-			return err
-		}
-		return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
-	case item.DocID != 0:
-		lng, err := a.Lang(ctx)
-		if err != nil {
-			return err
-		}
-		pm, err := a.PubMedia().Links(ctx, pubmedia.Query{DocID: item.DocID, Lang: lng.Symbol})
-		if err != nil {
-			return err
-		}
-		return downloadAll(ctx, a, service.PubFilesToResults(pm), dir)
+// docKey reads the publication or document out of the natural key the jw.org
+// search gives a result that is not a media item: "pub-lmd" is a publication,
+// "pi-wp_202005" an issue of a periodical, "pa-2016330" a document by its MEPS
+// id. ok is false for any other key — a media item's, a bible verse's, a
+// category's — which pub-media has no files for.
+func docKey(lank string) (model.PubKey, bool) {
+	if isMediaLANK(lank) {
+		return model.PubKey{}, false
 	}
-	return fmt.Errorf("result %d (%s) has nothing downloadable; try 'jw show %d'", item.Index, item.Title, item.Index)
+	if id, ok := strings.CutPrefix(lank, "pa-"); ok {
+		n, err := strconv.Atoi(id)
+		return model.PubKey{DocID: n}, err == nil && n > 0
+	}
+	if rest, ok := strings.CutPrefix(lank, "pi-"); ok {
+		sym, issue, ok := strings.Cut(rest, "_")
+		return model.PubKey{Pub: sym, Issue: issue}, ok && sym != "" && issue != ""
+	}
+	if sym, ok := strings.CutPrefix(lank, "pub-"); ok && sym != "" {
+		return model.PubKey{Pub: sym}, true
+	}
+	return model.PubKey{}, false
+}
+
+// downloadResult dispatches a cached listing item to the right downloader, by
+// what the row names. A file is downloaded as is: rows from `jw media info`
+// carry both a LANK and the exact rendition, and the row's rendition wins
+// unless a quality was asked for. A media item — by its LANK, or a gallery
+// video by its gallery page — is downloaded in the quality asked for; a
+// publication or a document — a jw.org search finds those too — in the
+// formats pub-media has for it.
+func downloadResult(ctx context.Context, a *app.App, item model.Result, opts downloadOpts) error {
+	media := isMediaLANK(item.LANK) || isGalleryVideo(item)
+	if item.FileURL != "" && (!opts.qualitySet || !media) {
+		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, opts.dir, "")
+		if err != nil {
+			return err
+		}
+		return a.Writef(a.Text().Downloaded+"\n", path)
+	}
+	if mi, ok, err := mediaOf(ctx, a, item); ok {
+		if err != nil {
+			return err
+		}
+		return downloadMedia(ctx, a, mi, opts)
+	}
+	key, ok := docKey(item.LANK)
+	switch {
+	case ok:
+	case item.Pub != nil:
+		key = *item.Pub
+	case item.DocID != 0:
+		key = model.PubKey{DocID: item.DocID}
+	default:
+		return fmt.Errorf("result %d (%s) has nothing downloadable; try 'jw show %d'", item.Index, item.Title, item.Index)
+	}
+	if err := downloadPub(ctx, a, key, opts); err != nil {
+		return fmt.Errorf("result %d (%s): %w", item.Index, item.Title, err)
+	}
+	return nil
+}
+
+// downloadPub downloads the files pub-media lists for a publication or a
+// document, in the formats asked for.
+func downloadPub(ctx context.Context, a *app.App, key model.PubKey, opts downloadOpts) error {
+	lng, err := a.Lang(ctx)
+	if err != nil {
+		return err
+	}
+	pm, err := a.PubMedia().Links(ctx, pubmedia.Query{
+		Pub: key.Pub, DocID: key.DocID, Issue: key.Issue, BookNum: key.BookNum, Track: key.Track,
+		Formats: opts.formats, Lang: lng.Symbol,
+	})
+	if err != nil {
+		return err
+	}
+	return downloadAll(ctx, a, service.PubFilesToResults(pm), opts.dir)
 }
 
 // downloadLANK fetches a mediator item and downloads the chosen rendition.
-func downloadLANK(ctx context.Context, a *app.App, lank, quality string, subtitles bool, dir string) error {
+func downloadLANK(ctx context.Context, a *app.App, lank string, opts downloadOpts) error {
 	lng, err := a.Lang(ctx)
 	if err != nil {
 		return err
@@ -158,19 +208,25 @@ func downloadLANK(ctx context.Context, a *app.App, lank, quality string, subtitl
 	if err != nil {
 		return err
 	}
-	file, err := download.PickVideo(item.Files, quality)
+	return downloadMedia(ctx, a, item, opts)
+}
+
+// downloadMedia downloads the rendition of a media item the quality asks
+// for, and its subtitles with --subtitles.
+func downloadMedia(ctx context.Context, a *app.App, item model.MediaItem, opts downloadOpts) error {
+	file, err := download.PickVideo(item.Files, opts.quality)
 	if err != nil {
 		return fmt.Errorf("%s: %w", item.Title, err)
 	}
-	path, err := downloadURL(ctx, a, file.URL, file.Checksum, file.Filesize, dir, "")
+	path, err := downloadURL(ctx, a, file.URL, file.Checksum, file.Filesize, opts.dir, "")
 	if err != nil {
 		return err
 	}
 	if err := a.Writef(a.Text().Downloaded+"\n", path); err != nil {
 		return err
 	}
-	if subtitles && file.SubtitlesURL != "" {
-		sp, err := downloadURL(ctx, a, file.SubtitlesURL, "", 0, dir, "")
+	if opts.subtitles && file.SubtitlesURL != "" {
+		sp, err := downloadURL(ctx, a, file.SubtitlesURL, "", 0, opts.dir, "")
 		if err != nil {
 			return fmt.Errorf("subtitles: %w", err)
 		}

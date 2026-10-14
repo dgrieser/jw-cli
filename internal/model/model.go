@@ -26,9 +26,11 @@ type PubKey struct {
 
 // Result is one row in any listing (search results, category browse, file
 // lists). It is self-contained so follow-up commands (show/open/download) can
-// act on it from the results cache without re-querying.
+// act on it from the results cache without re-querying. Index is the 1-based
+// number a CLI listing prints; rows that were never numbered — the web API's —
+// leave it out rather than all claiming 0.
 type Result struct {
-	Index   int    `json:"index"`
+	Index   int    `json:"index,omitempty"`
 	Kind    string `json:"kind"` // article|video|audio|publication|bible|category|file|image
 	Title   string `json:"title"`
 	Snippet string `json:"snippet,omitempty"`

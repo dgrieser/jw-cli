@@ -24,7 +24,7 @@ var de = Messages{
 
 	BibleRefsIn:  "Bibelstellen in %q:",
 	NoBibleRefs:  "Keine Bibelstellen in %q gefunden.",
-	ReadOneHint:  `Eine davon lesen mit: jw bible read "<Bibelstelle>"`,
+	ReadOneHint:  "Eine davon lesen mit: `jw bible read \"<Bibelstelle>\"`",
 	NoStudyNotes: "Keine Studienanmerkungen gefunden (Studienanmerkungen gibt es in der Studienausgabe, nwtsty).",
 	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
@@ -56,6 +56,8 @@ var de = Messages{
 	PrintedEdition:      "Druckausgabe",
 	NoMediaText:         "Kein Liedtext, Text oder Untertitel zu %s gefunden.",
 	MediaTextHint:       "Liedtext, Text oder Transkript: `jw media text %s`",
+
+	DownloadHintFiles: "Herunterladen mit: `jw download <n>`",
 
 	ColSymbol:     "SYMBOL",
 	ColLocale:     "LOCALE",

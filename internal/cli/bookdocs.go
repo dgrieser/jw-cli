@@ -267,7 +267,9 @@ Examples:
 }
 
 // galleryResults lists a gallery's tiles as rows, each under its chapter. A
-// picture downloads as its large rendition; a video's row leads to its page.
+// picture downloads as its large rendition. A video has no LANK, only its
+// gallery page: jw show and jw download read the video from that page (see
+// isGalleryVideo).
 func galleryResults(g model.BookGallery) []model.Result {
 	var out []model.Result
 	for _, grp := range g.Groups {

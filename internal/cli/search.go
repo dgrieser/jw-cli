@@ -50,6 +50,9 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			query := strings.Join(args, " ")
 			ctx := cmd.Context()
+			if err := checkLimit(engine, limit, cmd.Flags().Changed("limit")); err != nil {
+				return err
+			}
 			lng, err := a.Lang(ctx)
 			if err != nil {
 				return err
@@ -80,7 +83,7 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 	fl := cmd.Flags()
 	fl.StringVarP(&facet, "type", "t", "all", "content type: all, publications, videos, audio, bible, indexes (jworg engine)")
 	fl.StringVarP(&sortBy, "sort", "s", "rel", "sort order: rel, newest, oldest (wol engine: occ, newest, oldest)")
-	fl.IntVarP(&limit, "limit", "n", 10, "results per page")
+	fl.IntVarP(&limit, "limit", "n", 10, fmt.Sprintf("results per page, 1-%d (jworg engine; wol pages hold %d)", maxJWOrgLimit, wolPageSize))
 	fl.IntVarP(&page, "page", "p", 1, "page number")
 	fl.StringVarP(&engine, "engine", "e", "jworg", "search engine: jworg or wol")
 	fl.StringVar(&scope, "scope", "par", "wol match unit: par (paragraph) or sen (sentence)")
@@ -88,6 +91,30 @@ it Insight, bk books, mwb workbooks, es daily texts, ...).`,
 	fl.BoolVar(&noExcerpts, "no-excerpts", false, "keep wol's short teasers instead of reading each document (wol engine)")
 	cats.bind(cmd)
 	return cmd
+}
+
+// maxJWOrgLimit is the largest page the jw.org search serves: it answers a
+// limit of 37 or more with HTTP 400. wolPageSize is the page wol serves
+// whatever is asked; its search takes no page size at all.
+const (
+	maxJWOrgLimit = 36
+	wolPageSize   = 40
+)
+
+// checkLimit rejects a page size the engine would not serve, before anything
+// is asked of it: an error from jw.org would say only "HTTP 400", and wol
+// would quietly serve its pages of 40 regardless.
+func checkLimit(engine string, limit int, set bool) error {
+	if engine == "wol" {
+		if set && limit != wolPageSize {
+			return fmt.Errorf("-n/--limit does not apply to the wol engine: its pages hold %d results; page through them with -p", wolPageSize)
+		}
+		return nil
+	}
+	if limit < 1 || limit > maxJWOrgLimit {
+		return fmt.Errorf("invalid -n/--limit %d: the jworg engine serves 1 to %d results per page", limit, maxJWOrgLimit)
+	}
+	return nil
 }
 
 func newOpenCmd(a *app.App) *cobra.Command {

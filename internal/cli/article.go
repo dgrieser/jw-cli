@@ -3,9 +3,11 @@ package cli
 import (
 	"context"
 	"fmt"
+	"html"
 	"strconv"
 	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
@@ -128,17 +130,44 @@ func writeArticle(a *app.App, art model.Article) error {
 	if err != nil {
 		return err
 	}
-	switch format {
-	case render.Markdown, render.Raw:
-		if art.Title != "" && !strings.HasPrefix(body, "# ") {
-			body = "# " + art.Title + "\n\n" + body
+	return a.WriteMarkdown(headedBody(art, format, body))
+}
+
+// headedBody puts an article's title above its rendered body, unless the
+// document already heads itself with it. HTML is left as the document has it.
+func headedBody(art model.Article, format render.Format, body string) string {
+	if art.Title == "" || carriesTitle(art.HTML, art.Title) {
+		return body
+	}
+	switch {
+	case format.IsMarkdown():
+		if !strings.HasPrefix(body, "# ") {
+			return "# " + art.Title + "\n\n" + body
 		}
-	case render.Text:
-		if art.Title != "" && !strings.HasPrefix(body, art.Title) {
-			body = art.Title + "\n\n" + body
+	case format == render.Text:
+		if !strings.HasPrefix(body, art.Title) {
+			return art.Title + "\n\n" + body
 		}
 	}
-	return a.WriteMarkdown(body)
+	return body
+}
+
+// carriesTitle reports whether a document's HTML holds the heading its title
+// was read from. That heading need not open the document — a study article
+// puts its number and theme above it ("12 CALEB") — so a check of how the
+// rendered body begins misses it, and the title came out twice.
+func carriesTitle(fragment, title string) bool {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return false
+	}
+	want := strings.Join(strings.Fields(title), " ")
+	found := false
+	doc.Find("h1").EachWithBreak(func(_ int, h *goquery.Selection) bool {
+		found = strings.Join(strings.Fields(h.Text()), " ") == want
+		return !found
+	})
+	return found
 }
 
 func writeScriptureRefs(a *app.App, art model.Article) error {
@@ -152,11 +181,16 @@ func writeScriptureRefs(a *app.App, art model.Article) error {
 	if len(art.ScriptureRefs) == 0 {
 		return a.Write(fmt.Sprintf(a.Text().NoBibleRefs, art.Title))
 	}
+	esc := html.EscapeString
 	var b strings.Builder
-	fmt.Fprintf(&b, a.Text().BibleRefsIn+"\n\n", art.Title)
+	b.WriteString("<p>" + esc(fmt.Sprintf(a.Text().BibleRefsIn, art.Title)) + "</p><ul>")
 	for _, r := range art.ScriptureRefs {
-		fmt.Fprintf(&b, "- %s\n", mdLinked(r.Text, linkTarget(a, r.BCPath)))
+		ref := esc(strings.TrimSpace(r.Text))
+		if r.BCPath != "" {
+			ref = `<a href="` + esc(r.BCPath) + `">` + ref + "</a>"
+		}
+		b.WriteString("<li>" + ref + "</li>")
 	}
-	b.WriteString("\n" + a.Text().ReadOneHint + "\n")
-	return a.WriteMarkdown(b.String())
+	b.WriteString("</ul><p>" + inlineHTML(a.Text().ReadOneHint) + "</p>")
+	return writeComposed(a, format, b.String())
 }

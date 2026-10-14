@@ -107,6 +107,11 @@ type Messages struct {
 	// MediaTextHint takes the media item's LANK.
 	MediaTextHint string
 
+	// DownloadHintFiles stands for DownloadHint under a video that has no
+	// LANK to download it by — one of a bible book's gallery — so only the
+	// numbers of its files are offered.
+	DownloadHintFiles string
+
 	// --- languages table --------------------------------------------------
 	ColSymbol     string
 	ColLocale     string
