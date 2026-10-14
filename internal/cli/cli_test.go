@@ -53,7 +53,7 @@ func fixture(t *testing.T, path, contentType string) http.HandlerFunc {
 
 func languagesMux(t *testing.T) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/apis/mediator/v1/languages/E/web", fixture(t, "languages.json", "application/json"))
+	mux.HandleFunc("/apis/mediator/v1/languages/E/all", fixture(t, "languages.json", "application/json"))
 	return mux
 }
 
