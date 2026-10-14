@@ -348,6 +348,10 @@ type Messages struct {
 	UICatsExclude string
 	UICatsHint    string
 
+	// UILazyFallback leads a page read without scripts from a section that
+	// loads once opened to a page showing what it would load.
+	UILazyFallback string
+
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string

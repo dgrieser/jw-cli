@@ -170,7 +170,8 @@ func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
 	b.WriteString(`><summary>`)
 	b.WriteString(sec.Title)
 	b.WriteString(`</summary><div class="section-body">`)
-	b.WriteString(foldFragment(foldPrintEditions(body)))
+	// a stream is read by a script, which loads a lazy section itself
+	b.WriteString(foldFragment(foldPrintEditions(body), lazyFallback{}))
 	if sec.Key != "" {
 		fmt.Fprintf(&b, `<div class="sections" data-key="%s"></div>`, html.EscapeString(sec.Key))
 	}

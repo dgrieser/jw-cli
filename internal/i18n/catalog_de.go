@@ -231,6 +231,8 @@ var de = Messages{
 	UICatsExclude: "Alle Publikationen außer",
 	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
 
+	UILazyFallback: "Auf einer eigenen Seite anzeigen",
+
 	UIAbort:                "Abbrechen",
 	UIAborted:              "Abgebrochen.",
 	UIFollow:               "Öffnen",

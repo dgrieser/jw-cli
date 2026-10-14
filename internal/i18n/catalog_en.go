@@ -231,6 +231,8 @@ var en = Messages{
 	UICatsExclude: "All publications except",
 	UICatsHint:    "codes such as w, g, bk, it, bi, dx",
 
+	UILazyFallback: "Show on a page of its own",
+
 	UIAbort:                "Abort",
 	UIAborted:              "Aborted.",
 	UIFollow:               "Open",

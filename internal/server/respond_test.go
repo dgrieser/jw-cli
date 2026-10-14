@@ -157,7 +157,7 @@ func TestFoldSections(t *testing.T) {
 		`<h3>Querverweis Jeremia 37:17</h3><p>another verse</p>` +
 		`<h3>Zitate von Jeremia 34:3</h3><h4>Zedekia</h4><p>a quotation</p>` +
 		`</div>`
-	out := foldSections(body)
+	out := foldSections(body, lazyFallback{})
 	if n := strings.Count(out, "<details"); n != 5 {
 		t.Fatalf("%d disclosures, want one per section and entry:\n%s", n, out)
 	}
@@ -184,7 +184,7 @@ func TestFoldSections(t *testing.T) {
 		t.Errorf("the verse itself was folded:\n%s", out)
 	}
 	// nothing to fold changes nothing
-	if got := foldSections("<h2>Jeremia 34:3</h2><p>the verse</p>"); !strings.Contains(got, "<p>the verse</p>") ||
+	if got := foldSections("<h2>Jeremia 34:3</h2><p>the verse</p>", lazyFallback{}); !strings.Contains(got, "<p>the verse</p>") ||
 		strings.Contains(got, "<details") {
 		t.Errorf("a verse without sections should be left alone: %s", got)
 	}
@@ -193,14 +193,14 @@ func TestFoldSections(t *testing.T) {
 // A streamed section is folded all the way down: text before the first
 // heading stays open, every heading opens on its own.
 func TestFoldFragment(t *testing.T) {
-	out := foldFragment(`<p>intro</p><h3>a</h3><p>one</p><h4>a.1</h4><p>deep</p><h3>b</h3><p>two</p>`)
+	out := foldFragment(`<p>intro</p><h3>a</h3><p>one</p><h4>a.1</h4><p>deep</p><h3>b</h3><p>two</p>`, lazyFallback{})
 	if !strings.HasPrefix(out, `<p>intro</p><div class="sections">`) {
 		t.Errorf("intro folded or list missing:\n%s", out)
 	}
 	if n := strings.Count(out, "<details"); n != 3 {
 		t.Errorf("%d disclosures, want 3:\n%s", n, out)
 	}
-	if got := foldFragment("<p>plain</p>"); got != "<p>plain</p>" {
+	if got := foldFragment("<p>plain</p>", lazyFallback{}); got != "<p>plain</p>" {
 		t.Errorf("headingless fragment changed: %s", got)
 	}
 }

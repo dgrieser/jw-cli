@@ -2022,3 +2022,10 @@ details.section.print-edition .section-body img { display: block; width: 100%; h
 .ref-suggest button:hover, .ref-suggest button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .ref-suggest.numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr)); gap: 0.25rem; }
 .ref-suggest.numbers button { justify-content: center; padding: 0; border-color: var(--line); }
+
+/* --- server-side additions --- */
+
+/* a section left to load leads, without scripts, to a page showing what it
+   would load; with them it loads in place */
+.lazy-fallback { margin: 0.25rem 0; font-size: 0.9em; }
+html.js .lazy-fallback { display: none; }

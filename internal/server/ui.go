@@ -344,7 +344,8 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 	}
 	out := s.sanitized(art.HTML, s.svc.ArticleBase(art))
 	if depth > 0 {
-		out = template.HTML(foldSections(string(out))) //nolint:gosec // sanitized above
+		fb := lazyFallback{text: text(lng).UILazyFallback, lang: r.URL.Query().Get("lang")}
+		out = template.HTML(foldSections(string(out), fb)) //nolint:gosec // sanitized above
 	}
 	return out, nil
 }
@@ -1443,6 +1444,7 @@ var headingNumber = regexp.MustCompile(`\s(\d+)(?:[:,\-–\s]|$)`)
 // folded under it, and says to what level.
 func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int) template.HTML {
 	wolBase := s.svc.HTTP.Base.WOL
+	fb := lazyFallback{text: page.T.UILazyFallback, lang: page.Lang}
 	var b strings.Builder
 	for _, p := range res.Passages {
 		edition := firstNonEmpty(p.Bible, page.Edition)
@@ -1467,7 +1469,7 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			if strings.TrimSpace(v.Unfold) != "" {
 				exp := strings.TrimSpace(string(s.sanitized(v.Unfold, wolBase)))
 				exp = strings.TrimSuffix(strings.TrimSuffix(exp, "<hr/>"), "<hr>")
-				b.WriteString(foldSections(`<div class="expansion">` + exp + `</div>`))
+				b.WriteString(foldSections(`<div class="expansion">`+exp+`</div>`, fb))
 			}
 			b.WriteString(`</div>`)
 		}
