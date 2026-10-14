@@ -125,7 +125,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
-	return s.logged(s.auth.RequireAuth(remembersLanguage(refreshes(mux))))
+	return s.logged(s.auth.RequireAuth(s.remembersLanguage(refreshes(mux))))
 }
 
 // refreshes reads past the cache for a request that asks with ?refresh=1:
@@ -144,15 +144,6 @@ func refreshes(next http.Handler) http.Handler {
 		r.URL.RawQuery = q.Encode()
 		r.Form = nil
 		w.Header().Set("Cache-Control", "no-store")
-		next.ServeHTTP(w, r)
-	})
-}
-
-// remembersLanguage keeps the language a reader picks, so it survives the next
-// link that carries no ?lang= of its own.
-func remembersLanguage(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rememberLanguage(w, r)
 		next.ServeHTTP(w, r)
 	})
 }
