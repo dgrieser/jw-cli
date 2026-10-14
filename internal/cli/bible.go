@@ -226,8 +226,9 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 
 func newBibleMediaCmd(a *app.App) *cobra.Command {
 	var (
-		doDL bool
-		dir  string
+		doDL    bool
+		dir     string
+		quality string
 	)
 	cmd := &cobra.Command{
 		Use:   "media <reference...>",
@@ -247,7 +248,26 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 				if len(items) == 0 {
 					return fmt.Errorf("no media found")
 				}
-				return downloadAll(cmd.Context(), a, items, dir)
+				// a clip is the stretch of a whole video, which is what
+				// there is to save: in the rendition asked for
+				var pictures []model.Result
+				for _, it := range items {
+					if it.Kind != "video" || it.LANK == "" || !cmd.Flags().Changed("quality") {
+						pictures = append(pictures, it)
+						continue
+					}
+					item, err := a.Service().MediaItem(ctx, lng.Symbol, it.LANK)
+					if err != nil {
+						return err
+					}
+					if err := downloadMedia(ctx, a, item, downloadOpts{quality: quality, qualitySet: true, dir: dir}); err != nil {
+						return err
+					}
+				}
+				if len(pictures) == 0 {
+					return nil
+				}
+				return downloadAll(ctx, a, pictures, dir)
 			}
 			rs := results.ResultSet{Kind: "bible-media", Query: strings.Join(args, " "), Items: items}
 			return writeListing(a, rs, fmt.Sprintf(a.Text().MediaOn, strings.Join(args, " ")))
@@ -255,6 +275,8 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&doDL, "download", false, "download the media files")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download directory")
+	cmd.Flags().StringVarP(&quality, "quality", "q", "best",
+		"video quality of a clip's video (the whole video is saved; the listing names the clip's stretch): best, worst, 1080p, 720p, 480p, 360p, 240p")
 	return cmd
 }
 
