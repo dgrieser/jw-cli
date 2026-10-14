@@ -505,7 +505,7 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		}
 		out.Notes = append(out.Notes, sec.Notes...)
 		out.Media = append(out.Media, sec.Media...)
-		for _, item := range sec.Research {
+		for _, item := range researchItems(sec.Research) {
 			if item.PCPath == "" {
 				// a whole article rather than a passage: nothing to resolve
 				out.Links = append(out.Links, item)
@@ -561,6 +561,24 @@ func (r *tooltipResolver) chapterSections(ctx context.Context, ref bibleref.Ref)
 	r.sections[key] = cm.sections
 	r.mu.Unlock()
 	return cm.sections, requests, nil
+}
+
+// researchItems are the entries of a verse's indexes, each citing what it
+// points at in full. An index writes "it-2 53, 760, 1000" as an entry per
+// page, and every entry after the first names a page alone, which says
+// nothing on its own: it continues the entry before it in the same index.
+func researchItems(items []model.ResearchItem) []model.ResearchItem {
+	out := make([]model.ResearchItem, len(items))
+	prev := ""
+	for i, item := range items {
+		if i > 0 && items[i-1].Source != item.Source {
+			prev = ""
+		}
+		item.Title = unfold.Continue(prev, item.Title)
+		prev = item.Title
+		out[i] = item
+	}
+	return out
 }
 
 // researchLabel is how a research-guide passage is cited. The entry's own line
@@ -736,20 +754,31 @@ func citingBlocks(doc *goquery.Document) []citingBlock {
 	seen := map[string]bool{}
 	// nothing seen yet: the document's own title is the heading above it
 	heading := documentUnfoldLevel - 1
+	// the citation of a publication before, which one naming a page alone
+	// continues ("it-2 53, 760")
+	prev := ""
 	doc.Find("body *").Each(func(_ int, s *goquery.Selection) {
 		name := goquery.NodeName(s)
 		if level, ok := headingLevel(name); ok {
 			heading = level
 		}
 		href, _ := s.Attr("href")
-		if name != "a" || !unfold.IsCitation(href) || seen[href] {
+		if name != "a" || !unfold.IsCitation(href) {
+			return
+		}
+		text := collapseSpace(s.Text())
+		if !(unfold.Ref{Path: href}).IsVerse() {
+			text = unfold.Continue(prev, text)
+			prev = text
+		}
+		if seen[href] {
 			return
 		}
 		seen[href] = true
 		block, isBlock := blockOf(s)
 		chapter, verse := verseAt(s)
 		cite := citation{
-			ref:     unfold.Ref{Text: collapseSpace(s.Text()), Path: href},
+			ref:     unfold.Ref{Text: text, Path: href},
 			chapter: chapter,
 			verse:   verse,
 		}
@@ -1185,6 +1214,11 @@ const refSeparator = " → "
 // text, so both are named — the passage the marker sits in and the one it points
 // at: "Querverweis Apostelgeschichte 24:15 → Jesaja 26:19". At the top level
 // there is no enclosing passage to name, and the label carries the target alone.
+//
+// A citation naming no more than verses or a page is the end of the one before
+// it ("4. Mo. 14:1-10, 20-38", "it-2 53, 760"), which says nothing on its own:
+// a verse is named by its own title, and a page that no citation before it
+// spells out (unfold.Continue) by the publication it is a page of.
 func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
@@ -1200,16 +1234,24 @@ func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
 		}
 		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source)
 	}
-	if n.Ref.IsVerse() && n.Item > 0 && n.Title != "" {
-		// one of several verses the citation names: the citation names them
-		// all, the verse's own title only itself
+	if n.Ref.IsVerse() && n.Title != "" && (n.Item > 0 || !hasLetter(ref)) {
+		// one of several verses the citation names, which names them all, or
+		// a citation naming verses alone ("20-38", continuing "4. Mo. 14:1-10"):
+		// the verse's own title says which they are
 		return strings.TrimRight(n.Title, ",;. ")
+	}
+	if !n.Ref.IsVerse() && !hasLetter(ref) && n.Publication != "" {
+		// a page alone, with no citation before it to say of what
+		ref = n.Publication + ", " + ref
 	}
 	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
 		return ref
 	}
 	return ref + refSeparator + n.Title
 }
+
+// hasLetter reports whether s names anything in words rather than numbers.
+func hasLetter(s string) bool { return strings.IndexFunc(s, unicode.IsLetter) >= 0 }
 
 // nodeTitle is the heading of an expanded reference as HTML: a passage of a
 // publication links to the document it was taken from, which a page offers

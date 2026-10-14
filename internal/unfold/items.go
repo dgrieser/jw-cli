@@ -52,7 +52,7 @@ func CitationPath(path string) string {
 // resolved fills in what a citation turned out to be: its first passage, and
 // the others for splitItems to make nodes of.
 func (n *Node) resolved(tip model.Tooltip) {
-	n.Title, n.HTML, n.URL, n.more = tip.Title, tip.ContentHTML, tip.URL, tip.More
+	n.Title, n.HTML, n.URL, n.Publication, n.more = tip.Title, tip.ContentHTML, tip.URL, tip.PublicationTitle, tip.More
 }
 
 // setCited records who quotes the verse a node resolved to.

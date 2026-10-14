@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -132,6 +133,10 @@ type Node struct {
 	// passage apart from two references pointing at different ones.
 	URL string
 	Err error
+	// Publication is the publication the passage is from, as wol names it
+	// ("Insight on the Scriptures, Volume 2"): what a citation naming a page
+	// alone is a page of.
+	Publication string
 	// Notes, Links and Cited are the study material of a verse; StudyErr says
 	// the study pane could not be read, for the same reason Err is kept.
 	Notes []model.StudyNote
@@ -706,16 +711,53 @@ func Refs(fragment string) []Ref {
 	}
 	var out []Ref
 	seen := map[string]bool{}
+	// the citation of a publication before, which one naming a page alone
+	// continues
+	prev := ""
 	doc.Find(citationLinks).Each(func(_ int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
+		text := collapseSpace(s.Text())
+		if !strings.Contains(href, versePath) {
+			text = Continue(prev, text)
+			prev = text
+		}
 		if href == "" || seen[href] {
 			return
 		}
 		seen[href] = true
-		out = append(out, Ref{Text: collapseSpace(s.Text()), Path: href})
+		out = append(out, Ref{Text: text, Path: href})
 	})
 	return out
 }
+
+// Continue spells out a citation of a publication that only continues the
+// one before it, prev. wol writes "it-2 53, 760, 1000" as a link per page, and
+// every link after the first names a page alone: a heading saying "760" says
+// nothing. The page takes the place of the last word of the citation before —
+// keeping what that word opens with that is no digit, so "w24.04 2 ¶1, 3"
+// continues to "w24.04 2 ¶3" — and a citation that names anything itself, or
+// follows none, stays as it is. The punctuation joining a citation to the next
+// is dropped either way.
+func Continue(prev, text string) string {
+	text = strings.TrimRight(collapseSpace(text), ",;")
+	if hasLetter(text) || text == "" {
+		return text
+	}
+	words := strings.Fields(strings.TrimRight(collapseSpace(prev), ",;"))
+	if len(words) < 2 {
+		return text
+	}
+	last := words[len(words)-1]
+	digit := strings.IndexFunc(last, unicode.IsDigit)
+	if digit < 0 {
+		// the citation before ends in a word, not a page: the page follows it
+		return strings.Join(append(words, text), " ")
+	}
+	return strings.Join(append(words[:len(words)-1], last[:digit]+text), " ")
+}
+
+// hasLetter reports whether s names anything in words rather than numbers.
+func hasLetter(s string) bool { return strings.IndexFunc(s, unicode.IsLetter) >= 0 }
 
 // Count is how many citations a fragment holds, for sizing an expansion before
 // starting one.

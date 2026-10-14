@@ -294,9 +294,17 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 	depth := max(cfg.Depth, 1)
 	var plan []unfold.Ref
 	var self []int
+	// the citation of a publication before, which one naming a page alone
+	// continues ("it-2 53, 760")
+	prev := ""
 	for _, c := range refs {
 		if unfold.IsCitation(c.Path) {
-			plan = append(plan, unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)})
+			ref := unfold.Ref{Path: c.Path, Text: collapseSpace(c.Text)}
+			if !ref.IsVerse() {
+				ref.Text = unfold.Continue(prev, ref.Text)
+				prev = ref.Text
+			}
+			plan = append(plan, ref)
 			self = append(self, citingDoc(c.Path))
 		}
 	}
