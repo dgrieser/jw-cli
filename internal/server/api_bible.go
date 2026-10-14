@@ -68,7 +68,7 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	opts := render.Options{BaseURL: s.svc.HTTP.Base.WOL}
+	opts := bodyOptions(r, s.svc.HTTP.Base.WOL)
 	var lazy lazyMarks
 	read := res
 	if format != render.HTML {

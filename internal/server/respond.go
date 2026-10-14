@@ -163,6 +163,13 @@ func bodyFormat(r *http.Request) (render.Format, error) {
 	}
 }
 
+// bodyOptions are how a body is rendered for the API: links and pictures
+// resolved against base, or with ?urls=0 — what --no-urls is on the command
+// line — left out, a link keeping its text and a picture its alt text.
+func bodyOptions(r *http.Request, base string) render.Options {
+	return render.Options{BaseURL: base, NoURLs: !boolParamOr(r, "urls", true)}
+}
+
 // intParam parses an optional integer query parameter.
 func intParam(r *http.Request, name string, def int) (int, error) {
 	v := r.FormValue(name)

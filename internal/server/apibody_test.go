@@ -51,3 +51,28 @@ func TestAPIBodyTitle(t *testing.T) {
 		t.Errorf("titled document:\n%s", md)
 	}
 }
+
+// urls=0 renders a body as --no-urls does: a link keeps its text, a picture
+// its alt text, and nothing says where either was.
+func TestAPIBodyNoURLs(t *testing.T) {
+	srv := newTestServer(t, untitledMux(t))
+	for _, format := range []string{"markdown", "text", "html"} {
+		_, body := get(t, srv, "/api/v1/article?target=2024361&lang=en&urls=0&format="+format)
+		out := apiBody(t, body)
+		if !strings.Contains(out, "Num. 14:24") || !strings.Contains(out, "[image: a field]") ||
+			strings.Contains(out, "http") || strings.Contains(out, "href") {
+			t.Errorf("%s body:\n%s", format, out)
+		}
+	}
+	_, body := get(t, srv, "/api/v1/article?target=2024361&lang=en&format=markdown")
+	if md := apiBody(t, body); !strings.Contains(md, "[Num. 14:24](http") {
+		t.Errorf("without urls=0 the link stays:\n%s", md)
+	}
+	// a section left to load says so without its address
+	srv = newTestServer(t, hopsMux(t))
+	_, body = get(t, srv, "/api/v1/bible/read?ref=John+3:16&lang=en&unfold=1&format=markdown&urls=0")
+	if md := apiBody(t, body); strings.Contains(md, "/unfold/") || strings.Contains(md, "](") ||
+		!strings.Contains(md, "### Quotations of John 3:16\n\n…") {
+		t.Errorf("bible read without urls:\n%s", md)
+	}
+}

@@ -188,7 +188,7 @@ func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng mo
 		}
 		art.HTML = body
 	}
-	opts := render.Options{BaseURL: s.svc.ArticleBase(art)}
+	opts := bodyOptions(r, s.svc.ArticleBase(art))
 	var lazy lazyMarks
 	if format != render.HTML {
 		art.HTML = lazy.mark(art.HTML)
