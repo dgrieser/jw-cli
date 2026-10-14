@@ -1953,6 +1953,12 @@
     if ((a.classList.contains("vl") || a.classList.contains("cl")) && a.closest(".item[data-vid] > .item-text")) {
       return { kind: "translations", key: "translations", url: u };
     }
+    // one in what was unfolded is the verse it numbers, never wol's index of
+    // what was written on it (/wol/dx/)
+    if (a.classList.contains("vl") || a.classList.contains("cl") || /\/wol\/dx\//.test(path)) {
+      var v = verseOf(a);
+      return { kind: "verse", key: v ? "verse:" + v.vid : "", url: u, verse: v };
+    }
     var host = u.hostname.toLowerCase();
     // a video quoting a verse: its player page here, not a document to unfold
     if (/(^|\.)jw\.org$/.test(host) && u.searchParams.get("lank")) {
@@ -1963,6 +1969,57 @@
       return { kind: "article", key: path, url: u };
     }
     return null;
+  }
+
+  // verseOf is the verse a number in what was unfolded stands for, as wol's
+  // markup names it — {vid, bible, span} — or null. A verse's text is a span
+  // with an id: v1-22-2-1 is the first part of 1. Mose 22:2. Another
+  // translation of a verse has none: its number is a verse of the passage
+  // the section around it loads.
+  var VERSE_ID = /^v(\d+)-(\d+)-(\d+)-\d+$/;
+  function verseOf(a) {
+    var body = a.closest(".section-body");
+    var vid = 0, span = null, m;
+    for (var n = a.parentElement; n && n !== body && n !== document.body; n = n.parentElement) {
+      if ((m = VERSE_ID.exec(n.id || ""))) {
+        span = n;
+        vid = +m[1] * 1e6 + +m[2] * 1e3 + +m[3];
+        break;
+      }
+    }
+    if (!span) {
+      var tr = a.closest('details[data-lazy^="/unfold/translations"]');
+      var q = tr ? lazyQuery(tr) : null;
+      var first = q ? parseInt(q.get("vid"), 10) || 0 : 0;
+      // the chapter's number stands for its first verse
+      var num = a.classList.contains("cl") ? 1 : parseInt(a.textContent, 10);
+      if (!first || !(num > 0)) return null;
+      vid = parseInt(q.get("to"), 10) > 0 ? Math.floor(first / 1e3) * 1e3 + num : first;
+    }
+    return { vid: vid, bible: bibleNear(a), span: span };
+  }
+
+  // bibleNear is the edition a verse in what was unfolded is unfolded in:
+  // the one the sections around it load from, else the page's. A verse of
+  // another translation is the one of the edition its section was opened
+  // from, whose study material it has.
+  function bibleNear(a) {
+    var lazy = a.closest('details[data-lazy*="bible="]');
+    var body = a.closest(".section-body");
+    if (!lazy && body) lazy = body.querySelector('details[data-lazy*="bible="]');
+    var b = lazy ? lazyQuery(lazy).get("bible") : "";
+    if (b) return b;
+    var passage = a.closest(".passage[data-bible]");
+    return passage ? passage.getAttribute("data-bible") : hereQuery.get("bible") || "";
+  }
+
+  // lazyQuery is the query a lazy section loads with
+  function lazyQuery(d) {
+    try {
+      return new URL(d.getAttribute("data-lazy"), location.href).searchParams;
+    } catch (err) {
+      return new URLSearchParams();
+    }
   }
 
   // the pages of this site, as a link names them
@@ -2007,6 +2064,11 @@
         if (!verse) return null;
         q.set("vid", verse.getAttribute("data-vid"));
         if (bible) q.set("bible", bible);
+        return { href: "/bible?" + q.toString(), sec: sectionOf("/bible") };
+      case "verse":
+        if (!target.verse) return null;
+        q.set("vid", String(target.verse.vid));
+        if (target.verse.bible || bible) q.set("bible", target.verse.bible || bible);
         return { href: "/bible?" + q.toString(), sec: sectionOf("/bible") };
     }
     return null;
@@ -2766,9 +2828,10 @@
   // addItem makes el unfoldable. A nested item sits inside what another item
   // brought: it unfolds on its own, and is left out of "unfold all". An item
   // has no control of its own: its links unfold it — a verse's number, a
-  // chapter's — and, held, offer how deep.
-  function addItem(el, host, params, nested) {
-    var item = { el: el, host: host, params: params, level: 0, state: "idle", exp: null, ctrl: null };
+  // chapter's — and, held, offer how deep. place is where a verse in what was
+  // unfolded has its expansion (see nestedVerse).
+  function addItem(el, host, params, nested, place) {
+    var item = { el: el, host: host, params: params, place: place || null, level: 0, state: "idle", exp: null, ctrl: null };
     el._unfold = item;
     el.classList.add("unfold-item");
     if (nested) el.classList.add("nested");
@@ -2783,17 +2846,36 @@
   }
 
   // the div.expansion an item carries, which sits after a block and inside a
-  // verse or a list item
+  // verse or a list item. A verse in what was unfolded has its own, which
+  // names it (data-vid), beside the one of the block it is in.
   function existingExpansion(item) {
-    if (item.host === item.el) {
-      return item.el.querySelector(":scope > .expansion");
+    var vid = item.place ? item.params.vid : "";
+    if (item.place && item.place.into) return expansionIn(item.place.into, vid);
+    if (item.place) return expansionAfter(item.place.after, vid);
+    if (item.host === item.el) return expansionIn(item.el, "");
+    return expansionAfter(item.el, "");
+  }
+
+  // expansionAfter is the expansion following block that belongs to the
+  // verse vid, or with none to the block itself; expansionIn the one inside
+  // el
+  function expansionAfter(block, vid) {
+    for (var n = block.nextElementSibling; n && n.classList.contains("expansion"); n = n.nextElementSibling) {
+      if ((n.getAttribute("data-vid") || "") === (vid || "")) return n;
     }
-    var next = item.el.nextElementSibling;
-    return next && next.classList.contains("expansion") ? next : null;
+    return null;
+  }
+
+  function expansionIn(el, vid) {
+    return el.querySelector(vid ? ":scope > .expansion[data-vid=" + cssString(vid) + "]" : ":scope > .expansion:not([data-vid])");
   }
 
   function placeExpansion(item, exp) {
-    if (item.host === item.el) {
+    if (item.place) {
+      exp.setAttribute("data-vid", item.params.vid);
+      if (item.place.into) item.place.into.insertBefore(exp, item.place.before || null);
+      else item.place.after.insertAdjacentElement("afterend", exp);
+    } else if (item.host === item.el) {
       item.el.appendChild(exp);
     } else {
       item.el.insertAdjacentElement("afterend", exp);
@@ -2900,7 +2982,7 @@
     if (!doc.contains(a) || a.target || a.closest("[data-ui]")) return false;
     if (numberItem(a)) return true;
     var target = linkTarget(a);
-    return !!onThisPage(a) || (!!target && target.kind !== "media");
+    return !!onThisPage(a) || (!!target && target.kind !== "media" && target.kind !== "verse");
   };
 
   // citingBlocks makes every block of root that cites something an item of
@@ -3880,10 +3962,14 @@
   function scopeOf(owner) {
     if (owner.item) return owner.item.exp;
     if (owner.details) return owner.details.querySelector(":scope > .section-body");
-    var b = owner.block;
-    if (b.tagName === "LI") return b.querySelector(":scope > .expansion");
-    var next = b.nextElementSibling;
-    return next && next.classList.contains("expansion") ? next : null;
+    return blockExpansion(owner.block);
+  }
+
+  // blockExpansion is the expansion of a block that is no item, which links
+  // followed from it brought: after it, or inside a list item — past those
+  // of the verses in it
+  function blockExpansion(b) {
+    return b.tagName === "LI" ? expansionIn(b, "") : expansionAfter(b, "");
   }
 
   // listOf is the list an owner's sections go into, made when there is none
@@ -3987,23 +4073,83 @@
   }
 
   // numberItem is the item a number unfolds: a verse's — the chapter's, on a
-  // chapter's first verse — or the one in a chapter's heading
+  // chapter's first verse — or the one in a chapter's heading. A verse's
+  // number in what was unfolded unfolds that verse, as one of the page does.
   function numberItem(a) {
     if (a.classList.contains("chapter-num")) {
       var h = a.closest(".passage > h2");
       return h && h._unfold || null;
     }
-    if (!a.classList.contains("vl") && !a.classList.contains("cl")) return null;
+    var target = linkTarget(a);
+    if (!target || (target.kind !== "translations" && target.kind !== "verse")) return null;
     var verse = a.closest(".item[data-vid]");
-    return verse && verse._unfold && a.closest(".item-text") ? verse._unfold : null;
+    if (verse && verse._unfold && a.closest(".item-text")) return verse._unfold;
+    return target.verse ? nestedVerse(a, target.verse) : null;
+  }
+
+  // nestedVerse is the item of a verse in what was unfolded, made the first
+  // time its number is pressed or held. Its expansion goes under the verse:
+  // after the last block that holds part of it, inside it for a list item,
+  // and in a translation's text, which has no blocks, before the next
+  // verse's number.
+  function nestedVerse(a, v) {
+    if (!doc.contains(a) || !a.closest(".expansion")) return null;
+    var el = v.span || a;
+    if (el._unfold) return el._unfold;
+    var body = el.closest(".section-body") || el.parentElement;
+    var last = el;
+    if (v.span) {
+      var exp = el.closest(".expansion");
+      body.querySelectorAll('[id^="' + v.span.id.replace(/\d+$/, "") + '"]').forEach(function (part) {
+        if (part.closest(".expansion") === exp && part.closest(".section-body") === body) last = part;
+      });
+    }
+    var block = last.closest(BLOCKS);
+    var place = block && body.contains(block) ? (block.tagName === "LI" ? { into: block } : { after: block }) : { into: body };
+    if (place.into === body && last.parentNode === body) {
+      for (var next = last.nextElementSibling; next; next = next.nextElementSibling) {
+        if (next.matches("a.vl, a.cl")) {
+          place.before = next;
+          break;
+        }
+      }
+    }
+    return addItem(el, null, { kind: "verse", vid: String(v.vid), bible: v.bible }, true, place);
+  }
+
+  // shownSections is the list of a verse's sections that its passage shows
+  // already — a passage of that one verse comes with them, and another
+  // translation of a verse sits among them — or null
+  function shownSections(item) {
+    if (!item.place) return null;
+    var tr = item.el.closest('details[data-lazy^="/unfold/translations"]');
+    var scope = tr ? tr.parentElement : item.el.closest(".section-body");
+    if (!scope) return null;
+    var exp = (tr || item.el).closest(".expansion");
+    var verse = +item.params.vid % 1000;
+    var shown = null;
+    scope.querySelectorAll("details.section[data-lazy]").forEach(function (d) {
+      if (shown || d.closest(".expansion") !== exp) return;
+      var q = lazyQuery(d);
+      var to = parseInt(q.get("to"), 10) || 0;
+      if (q.get("vid") === item.params.vid && (to === 0 || to === verse)) shown = d.parentElement;
+    });
+    return shown;
   }
 
   // toggleNumber unfolds what a number's item has, its sections as headings
-  // that load once opened, or folds it away again
+  // that load once opened, or folds it away again. A verse whose passage
+  // shows its sections already has them brought into view instead.
   function toggleNumber(item) {
     dequeue(item);
     if (item.level > 0 || item.state === "loading") {
       removeExpansion(item);
+      return;
+    }
+    var shown = shownSections(item);
+    if (shown) {
+      reveal(shown, true);
+      inView(shown);
       return;
     }
     unfold(item, 1, { lazy: true });
@@ -4152,6 +4298,9 @@
       location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
       return;
     }
+    // a verse's number that has no verse to unfold here goes nowhere: never
+    // off to wol
+    if (target.kind === "verse") return;
     follow(a, target);
   });
 
@@ -4197,9 +4346,7 @@
     var out = [];
     topBlocks().forEach(function (b, i) {
       if (b._unfold) return;
-      var next = b.nextElementSibling;
-      var exp = b.tagName === "LI" ? b.querySelector(":scope > .expansion")
-        : next && next.classList.contains("expansion") ? next : null;
+      var exp = blockExpansion(b);
       if (exp) out.push({ b: i, el: exp });
     });
     return out;
