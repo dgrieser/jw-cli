@@ -1022,6 +1022,8 @@ details.section .empty-note { margin: 0.2rem 0; color: var(--muted); font-size: 
 .unfold-msg { margin: 0.5rem 0 0.75rem; font-size: 0.9rem; color: var(--muted); }
 .unfold-msg.error { max-width: none; color: var(--danger); padding: 0.5rem 0.75rem; }
 .unfold-msg button { margin-left: 0.25rem; }
+/* among the sections a link brought, where it failed takes a row of its own */
+.sections > .unfold-msg { flex: 1 1 100%; margin: 0; }
 
 /* the unfold-all bar: levels, how far a run got, and open/close for all */
 .unfold-bar {
@@ -1049,6 +1051,9 @@ html:not(.js) .unfold-tools { display: none; }
 /* with a script, the page bar's diamond picks the level, and a page with
    nothing to unfold has nothing to pick */
 .js .unfold-bar .tabs.unfold { display: none; }
+/* a lazy section's way to what it holds, for a browser without a script:
+   with one, the section loads it in place once opened */
+html.js .lazy-fallback { display: none; }
 button.pill {
   min-height: 2.1rem;
   padding: 0 0.85rem;
@@ -1147,7 +1152,6 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 }
 .player.audio img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: var(--r); background: var(--field); margin-bottom: 0.75rem; }
 .player audio { display: block; width: 100%; }
-.mediaactions { margin: 1rem 0 0; }
 
 /* the words of a media item: a song's lyrics, the document a recording
    reads, the transcript of its subtitles. A line the player is at is marked;
@@ -1584,7 +1588,9 @@ a.ps-item:hover { background: var(--field); color: var(--ink); }
 }
 /* away from the bible, a way into it: first of the controls on the right */
 .pb .pb-jump { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
-html:not(.js) .pb-jump { display: none; }
+/* the bible's book picker in the bar, and the way into the bible away from
+   it, are dialogs a script opens: without one, the page's own links lead */
+html:not(.js) :is(.pb-jump, .pb-bible) { display: none; }
 .pb-bible {
   flex: 1 1 auto;
   min-width: 0;
@@ -2023,3 +2029,17 @@ details.section.print-edition .section-body img { display: block; width: 100%; h
 .ref-suggest button:hover, .ref-suggest button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .ref-suggest.numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr)); gap: 0.25rem; }
 .ref-suggest.numbers button { justify-content: center; padding: 0; border-color: var(--line); }
+
+/* --- server-side additions --- */
+
+/* a section left to load leads, without scripts, to a page showing what it
+   would load; with them it loads in place */
+.lazy-fallback { margin: 0.25rem 0; font-size: 0.9em; }
+html.js .lazy-fallback { display: none; }
+
+/* what a picture of a document says about itself: its alt text, its size */
+ul.gallery .imagemeta { color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+
+/* the text fields and the page size among the search's options */
+.options .opt input[type="text"], .options .opt input[type="number"] { width: 100%; }
+.options .opt.off input:not([type="hidden"]) { opacity: 0.45; }

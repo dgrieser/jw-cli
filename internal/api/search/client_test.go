@@ -171,3 +171,18 @@ func TestTokenCaching(t *testing.T) {
 		t.Errorf("invalidate should force refetch: fetches=%d", fetches.Load())
 	}
 }
+
+// Only a document's key names a document id; a publication's or an issue's
+// ends in a number that is none.
+func TestDocIDOnlyFromDocumentKeys(t *testing.T) {
+	for lank, want := range map[string]int{
+		"pa-1102025912": 1102025912,
+		"pub-t-36":      0,
+		"pi-wp_202005":  0,
+		"pub-lmd":       0,
+	} {
+		if got := (wireResult{LANK: lank}).toModel().DocID; got != want {
+			t.Errorf("%s: DocID = %d, want %d", lank, got, want)
+		}
+	}
+}

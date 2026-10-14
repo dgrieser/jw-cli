@@ -1,0 +1,44 @@
+{{define "content"}}
+<h1>{{.T.UICitedTitle}}</h1>
+<form class="form" method="get" action="/cited" role="search">
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <div class="query">
+    <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UICitedHint}}" aria-label="{{.T.UICitedTitle}}" data-autofocus autocapitalize="off">
+    <button type="button" class="search-opts" hidden aria-haspopup="dialog" title="{{.T.UISearchOptions}}" aria-label="{{.T.UISearchOptions}}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 1.5v-8z"/></svg></button>
+    <button type="submit" class="primary">{{.T.UINavSearch}}</button>
+  </div>
+  <fieldset class="options">
+    <legend>{{.T.UISearchOptions}}</legend>
+    <label class="opt"><span class="name">{{.T.UISort}}</span>
+      <select name="sort">
+        <option value="newest" {{if eq .Sort "newest"}}selected{{end}}>{{.T.UISortNewest}}</option>
+        <option value="oldest" {{if eq .Sort "oldest"}}selected{{end}}>{{.T.UISortOldest}}</option>
+        <option value="occ" {{if or (eq .Sort "occ") (eq .Sort "rel")}}selected{{end}}>{{.T.UISortRelevance}}</option>
+      </select>
+    </label>
+    <label class="opt"><span class="name">{{.T.UIScope}}</span>
+      <select name="scope">
+        <option value="par" {{if ne .Scope "sen"}}selected{{end}}>{{.T.UIScopePar}}</option>
+        <option value="sen" {{if eq .Scope "sen"}}selected{{end}}>{{.T.UIScopeSen}}</option>
+      </select>
+    </label>
+    <label class="opt check"><input type="hidden" name="all" value="false"><input type="checkbox" name="all" value="true" {{if .AllCats}}checked{{end}}><span class="name">{{.T.UICatsAll}}</span></label>
+    <label class="opt"><span class="name">{{.T.UICatsInclude}}<small>{{.T.UICatsHint}}</small></span>
+      <input type="text" name="include" value="{{.Include}}" autocapitalize="off" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="opt"><span class="name">{{.T.UICatsExclude}}<small>{{.T.UICatsHint}}</small></span>
+      <input type="text" name="exclude" value="{{.Exclude}}" autocapitalize="off" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="opt check"><input type="hidden" name="videos" value="false"><input type="checkbox" name="videos" value="true" {{if .Videos}}checked{{end}}><span class="name">{{.T.UICitedVideos}}</span></label>
+    <label class="opt check"><input type="hidden" name="excerpts" value="false"><input type="checkbox" name="excerpts" value="true" {{if .Excerpts}}checked{{end}}><span class="name">{{.T.UIFullExcerpts}}</span></label>
+  </fieldset>
+</form>
+
+{{- if .Header}}
+<h2 class="listheader">{{.Header}}</h2>
+{{template "listing" .}}
+{{- range .Notes}}
+<p class="note">{{.}}</p>
+{{- end}}
+{{- end}}
+{{end}}

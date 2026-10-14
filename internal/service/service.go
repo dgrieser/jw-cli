@@ -96,7 +96,39 @@ func (s *Service) Chapter(ctx context.Context, lng model.Language, edition strin
 	if err != nil {
 		return nil, err
 	}
-	return s.WOL.Chapter(ctx, cfg, edition, ref.Book, ref.Chapter)
+	return s.WOL.Chapter(ctx, cfg, s.readableEdition(ctx, cfg, edition), ref.Book, ref.Chapter)
+}
+
+// plainEdition is the New World Translation without the study material.
+const plainEdition = "nwt"
+
+// readableEdition is the edition a chapter is read in when edition is asked
+// for. The study edition is what every reading defaults to, and it is in a few
+// dozen languages only; in a language that has the plain New World
+// Translation but not its study edition, the plain one is read — the same
+// text, without the notes — rather than nothing. Any other edition is read as
+// asked, and refused by the library if the language lacks it.
+func (s *Service) readableEdition(ctx context.Context, cfg wol.Config, edition string) string {
+	if edition != studyEdition {
+		return edition
+	}
+	editions, err := s.WOL.Bibles(ctx, cfg)
+	if err != nil || len(editions) == 0 {
+		return edition
+	}
+	plain := false
+	for _, e := range editions {
+		switch e.Symbol {
+		case studyEdition:
+			return edition
+		case plainEdition:
+			plain = true
+		}
+	}
+	if plain {
+		return plainEdition
+	}
+	return edition
 }
 
 // ArticleBase is the base URL an article's relative links resolve against:

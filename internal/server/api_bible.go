@@ -45,6 +45,12 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		badRequest(w, "%s", err)
 		return
 	}
+	// every bible is not the one named, as on the command line; the reader's
+	// form sends its edition along with all=1, but that is the page's affair
+	if boolParam(r, "all") && r.FormValue("bible") != "" {
+		badRequest(w, "%s", errExclusive("bible", "all"))
+		return
+	}
 	lng, err := s.language(r)
 	if err != nil {
 		failJSON(w, r, err)
@@ -62,11 +68,18 @@ func (s *Server) apiBibleRead(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	body, err := service.FormatPassages(res, format, render.Options{BaseURL: s.svc.HTTP.Base.WOL})
+	opts := bodyOptions(r, s.svc.HTTP.Base.WOL)
+	var lazy lazyMarks
+	read := res
+	if format != render.HTML {
+		read = lazy.markPassages(res)
+	}
+	body, err := service.FormatPassages(read, format, opts)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
+	body = lazy.restore(body, format, opts.NoURLs)
 	writeJSON(w, http.StatusOK, readResponse{
 		Ref: ref, Format: format.String(), Body: body,
 		Passages: res.Passages, Missing: res.Missing,
@@ -155,6 +168,64 @@ func (s *Server) apiBibleNav(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// apiBibleIntro is a book's introduction, as jw bible intro -o json prints
+// it: GET /api/v1/bible/intro?book=Mt.
+func (s *Server) apiBibleIntro(w http.ResponseWriter, r *http.Request) {
+	s.bookDocument(w, r, func(r *http.Request, lng model.Language, edition string, book int) (any, error) {
+		return s.svc.BookIntro(r.Context(), lng, edition, book)
+	})
+}
+
+// apiBibleOutline is a book's outline of contents, or the overview of the
+// Gospels and Acts, as jw bible outline -o json prints it.
+func (s *Server) apiBibleOutline(w http.ResponseWriter, r *http.Request) {
+	s.bookDocument(w, r, func(r *http.Request, lng model.Language, edition string, book int) (any, error) {
+		return s.svc.BookOutlineDoc(r.Context(), lng, edition, book)
+	})
+}
+
+// apiBibleGallery is a book's media gallery, as jw bible gallery -o json
+// prints it.
+func (s *Server) apiBibleGallery(w http.ResponseWriter, r *http.Request) {
+	s.bookDocument(w, r, func(r *http.Request, lng model.Language, edition string, book int) (any, error) {
+		return s.svc.BookGallery(r.Context(), lng, edition, book)
+	})
+}
+
+// bookDocument is the shared shape of the book document endpoints: a book
+// (?book=, named the way a reference names it or by number) of an edition
+// (?bible=) in, the document as JSON out. A document the library does not
+// list for the book is not found.
+func (s *Server) bookDocument(w http.ResponseWriter, r *http.Request,
+	fetch func(r *http.Request, lng model.Language, edition string, book int) (any, error)) {
+	name := strings.TrimSpace(r.FormValue("book"))
+	if name == "" {
+		badRequest(w, "%s", errMissing("book"))
+		return
+	}
+	edition := valueOr(r, "bible", "nwtsty")
+	if !editionSymbol.MatchString(edition) {
+		badRequest(w, "invalid bible edition %q", edition)
+		return
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	book, err := s.svc.ParseBook(r.Context(), lng, name)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	doc, err := fetch(r, lng, edition, book)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, doc)
 }
 
 // apiBibleVerses says how many verses a chapter has in an edition:

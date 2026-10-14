@@ -1,7 +1,6 @@
 {{define "content"}}
 <div class="notice">
   <h1>{{.T.UIExpensiveTitle}}</h1>
-  <p class="error">{{.Message}}</p>
   <p>{{printf .T.UIExpensiveBody .Level .Requests}}</p>
   <p class="actions">
     <a class="btn primary" href="{{.BackURL}}">{{.T.UIWithoutUnfolding}}</a>

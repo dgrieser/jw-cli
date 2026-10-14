@@ -13,6 +13,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -32,10 +33,17 @@ const maxCitedPages = 100
 func (s *Service) CitedListing(ctx context.Context, lng model.Language, p *SearchParams,
 	progress func(done, total int)) (SearchOutcome, error) {
 	out := SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol, Page: 1}
-	var videos chan []datedVideo
+	type videoSearch struct {
+		found []datedVideo
+		err   error
+	}
+	var videos chan videoSearch
 	if p.Videos {
-		videos = make(chan []datedVideo, 1)
-		go func() { videos <- s.citedVideos(ctx, lng, citationTerms(p.Query), p.Excerpts) }()
+		videos = make(chan videoSearch, 1)
+		go func() {
+			found, err := s.citedVideos(ctx, lng, citationTerms(p.Query), p.Excerpts)
+			videos <- videoSearch{found, err}
+		}()
 	}
 	seen := map[string]bool{}
 	for page := 1; page <= maxCitedPages; page++ {
@@ -61,28 +69,33 @@ func (s *Service) CitedListing(ctx context.Context, lng model.Language, p *Searc
 		}
 	}
 	if p.Excerpts {
-		s.FillExcerpts(ctx, out.Items, progress)
+		unread := s.FillExcerpts(ctx, out.Items, progress)
 		// a citation search matches wherever the verse is named; what only
 		// names it is not an answer to "who quotes this?". Judged on the
 		// passages just read: wol's own teaser is cut short, so without them
-		// there is nothing fair to judge, and --no-excerpts shows everything.
+		// there is nothing fair to judge, and --no-excerpts shows everything
+		// — as does a result whose document could not be read this time.
 		// The total follows the listing, so its head never counts rows nobody
 		// is shown.
-		out.Items = keepTelling(out.Items)
+		out.Items = keepTelling(out.Items, unread)
 		out.Total = len(out.Items)
+		out.Notes = unreadNote(out.Notes, unread, lng)
 	}
 	// the videos were judged as they were found
 	if videos != nil {
-		found := <-videos
-		out.Items = mergeVideos(out.Items, found, p.Sort)
-		out.Total += len(found)
+		v := <-videos
+		out.Items = mergeVideos(out.Items, v.found, p.Sort)
+		out.Total += len(v.found)
+		if v.err != nil {
+			out.Notes = append(out.Notes, fmt.Sprintf(i18n.TextFor(lng.Locale).CitedVideosFailed, failureCause(v.err)))
+		}
 	}
 	return out, nil
 }
 
 // videoPageSize is how many videos one jw.org search page is asked for: the
-// most the API serves, as it answers a larger limit with HTTP 400.
-const videoPageSize = 30
+// most the API serves, as it answers a larger limit (37 on) with HTTP 400.
+const videoPageSize = 36
 
 // maxVideoPages bounds the walk through the video results of one reference.
 // Even the most quoted verses are a page or two of videos.
@@ -95,7 +108,8 @@ var refInTitle = regexp.MustCompile(`\d+:\d+`)
 // citedVideos asks jw.org for the videos quoting any of terms: one search per
 // reference, as the API reads a citation the way wol does but has no OR. Best
 // effort: the publications are the answer, the videos an addition to it, so a
-// search that fails leaves out what it would have found.
+// search that fails leaves out what it would have found — and says so with the
+// first error, for the listing to note.
 //
 // The snippet is the passage of the transcript the verse is quoted in; with
 // excerpts on it stands as the excerpt, the way a publication's passage does
@@ -103,10 +117,11 @@ var refInTitle = regexp.MustCompile(`\d+:\d+`)
 // read (see dateVideos) — and a video that shows no such passage and names
 // no verse in its title — a song matched by its theme text — is left out, as
 // keepTelling leaves out the publications that only name a verse.
-func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []string, excerpts bool) []datedVideo {
+func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []string, excerpts bool) ([]datedVideo, error) {
 	if s.Search == nil {
-		return nil
+		return nil, nil
 	}
+	var failed error
 	var out []model.Result
 	var found []string // the reference each video was found by
 	seen := map[string]bool{}
@@ -117,6 +132,9 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 				Offset: page * videoPageSize, Limit: videoPageSize,
 			})
 			if err != nil {
+				if failed == nil {
+					failed = err
+				}
 				break
 			}
 			for _, r := range sp.Results {
@@ -140,7 +158,7 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 	if excerpts {
 		refs = found
 	}
-	return s.dateVideos(ctx, lng, out, refs)
+	return s.dateVideos(ctx, lng, out, refs), failed
 }
 
 // datedVideo is a video of a citation listing and the day it was first

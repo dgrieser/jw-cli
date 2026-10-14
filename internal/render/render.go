@@ -42,7 +42,7 @@ func StyledText(fragment string, o Options, style TextStyle) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("sanitize HTML: %w", err)
 	}
-	return toText(clean, style)
+	return toText(printEditionsOnce(clean), style)
 }
 
 // Render converts a site HTML fragment into the requested output format.
@@ -56,13 +56,13 @@ func Render(fragment string, f Format, o Options) (string, error) {
 	case HTML:
 		return clean, nil
 	case Markdown, Raw:
-		md, err := markdownConverter.ConvertString(clean)
+		md, err := markdownConverter.ConvertString(printEditionsOnce(clean))
 		if err != nil {
 			return "", fmt.Errorf("convert to markdown: %w", err)
 		}
 		return md, nil
 	case Text:
-		return toText(clean, TextStyle{})
+		return toText(printEditionsOnce(clean), TextStyle{})
 	case JSON:
 		return "", fmt.Errorf("render: JSON output must be handled by the caller")
 	}

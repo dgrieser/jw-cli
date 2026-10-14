@@ -130,7 +130,7 @@ func (e *eventStream) finishRun(r *http.Request, note string, requests int, err 
 				Text: fmt.Sprintf(txt.UIExpensiveBody, te.level, te.requests),
 			})
 		} else {
-			e.send(streamEvent{Type: "error", Text: err.Error()})
+			e.send(streamEvent{Type: "error", Text: readable(err, txt)})
 		}
 	}
 	e.mu.Lock()
@@ -170,7 +170,8 @@ func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
 	b.WriteString(`><summary>`)
 	b.WriteString(sec.Title)
 	b.WriteString(`</summary><div class="section-body">`)
-	b.WriteString(foldFragment(foldPrintEditions(body)))
+	// a stream is read by a script, which loads a lazy section itself
+	b.WriteString(foldFragment(foldPrintEditions(body), lazyFallback{}))
 	if sec.Key != "" {
 		fmt.Fprintf(&b, `<div class="sections" data-key="%s"></div>`, html.EscapeString(sec.Key))
 	}
@@ -205,7 +206,7 @@ func (s *Server) streamConfig(r *http.Request, depth int) (service.UnfoldConfig,
 
 // editionSymbol is what a bible edition symbol looks like, which is all a
 // stream checks before handing it on to wol.
-var editionSymbol = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
+var editionSymbol = regexp.MustCompile(`^[A-Za-z0-9]{1,16}$`)
 
 // unfoldVerse streams the expansion of one verse: GET /unfold/verse?vid=
 // 43003016&depth=1&bible=nwtsty, a range of verses with &to=. &part= narrows

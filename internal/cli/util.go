@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"html"
 	"os/exec"
 	"regexp"
 	"runtime"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 )
 
@@ -54,6 +56,38 @@ var listMarker = regexp.MustCompile(`^(\d+)([.)])`)
 
 func escapeListMarker(text string) string {
 	return listMarker.ReplaceAllString(text, `$1\$2`)
+}
+
+// formatLink writes text linked to url the way format writes a link: a
+// markdown link, an HTML anchor, or — in plain text, which has no links — the
+// text alone. Without a url it is the text, made safe for the format.
+func formatLink(f render.Format, text, url string) string {
+	text = strings.TrimSpace(text)
+	switch {
+	case f.IsMarkdown():
+		return mdLinked(text, url)
+	case f == render.HTML && url != "":
+		return `<a href="` + html.EscapeString(url) + `">` + html.EscapeString(text) + "</a>"
+	case f == render.HTML:
+		return html.EscapeString(text)
+	}
+	return text
+}
+
+// writeList writes a list of entries, each already written for the format by
+// formatLink, the way the format writes a list.
+func writeList(b *strings.Builder, f render.Format, items []string) {
+	if len(items) == 0 {
+		return
+	}
+	if f == render.HTML {
+		fmt.Fprintf(b, "<ul><li>%s</li></ul>\n", strings.Join(items, "</li><li>"))
+		return
+	}
+	for _, it := range items {
+		fmt.Fprintf(b, "- %s\n", it)
+	}
+	b.WriteString("\n")
 }
 
 func openInBrowser(url string) error {

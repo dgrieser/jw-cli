@@ -28,7 +28,8 @@ func newTestServer(t *testing.T, upstream *http.ServeMux) *httptest.Server {
 	t.Helper()
 	up := httptest.NewServer(upstream)
 	t.Cleanup(up.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}),
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	svc := service.New(hc, httpx.OpenCacheAt(t.TempDir()))
 	srv := httptest.NewServer(server.New(server.Config{Svc: svc}).Handler())
 	t.Cleanup(srv.Close)
@@ -84,7 +85,7 @@ func wolFixture(t *testing.T, name string) http.HandlerFunc {
 
 func languagesMux(t *testing.T) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/apis/mediator/v1/languages/E/web", fixture(t, "languages.json", "application/json"))
+	mux.HandleFunc("/apis/mediator/v1/languages/E/all", fixture(t, "languages.json", "application/json"))
 	return mux
 }
 
@@ -292,6 +293,45 @@ func TestAPISearchValidation(t *testing.T) {
 	if resp.StatusCode != 400 || !strings.Contains(body, "invalid limit") {
 		t.Errorf("bad limit: status %d body %s", resp.StatusCode, body)
 	}
+	// the category filter is checked with the jw.org engine too, as the CLI
+	// checks its flags
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=zz")
+	if resp.StatusCode != 400 || !strings.Contains(body, `unknown publication category \"zz\"`) {
+		t.Errorf("unknown category: status %d body %s", resp.StatusCode, body)
+	}
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&all=1&exclude=w")
+	if resp.StatusCode != 400 || !strings.Contains(body, "cannot be combined") {
+		t.Errorf("all with exclude: status %d body %s", resp.StatusCode, body)
+	}
+	if resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=w,g"); resp.StatusCode != 200 {
+		t.Errorf("known categories: status %d body %s", resp.StatusCode, body)
+	}
+}
+
+// The jw.org search refuses a page of 37 results or more, so the API asks
+// for no more than 36.
+func TestAPISearchLimitCap(t *testing.T) {
+	mux := searchMux(t)
+	var mu sync.Mutex
+	var limits []string
+	up := http.NewServeMux()
+	up.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/search/") {
+			mu.Lock()
+			limits = append(limits, r.URL.Query().Get("limit"))
+			mu.Unlock()
+		}
+		mux.ServeHTTP(w, r)
+	})
+	srv := newTestServer(t, up)
+	if resp, body := get(t, srv, "/api/v1/search?q=x&type=videos&limit=50"); resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(limits) != 1 || limits[0] != "36" {
+		t.Errorf("jw.org was asked for limits %q, want [36]", limits)
+	}
 }
 
 func TestAPIArticle(t *testing.T) {
@@ -357,6 +397,11 @@ func TestAPIBibleRead(t *testing.T) {
 	if !strings.Contains(out.Body, "John 3:16") {
 		t.Errorf("rendered body: %q", out.Body)
 	}
+	// every bible is not the one named, as the CLI says
+	resp, body = get(t, srv, "/api/v1/bible/read?ref=John+3:16&lang=en&bible=nwt&all=1")
+	if resp.StatusCode != 400 || !strings.Contains(body, "bible and all cannot be combined") {
+		t.Errorf("bible with all: status %d body %s", resp.StatusCode, body)
+	}
 }
 
 func TestAPIBibleBooks(t *testing.T) {
@@ -421,11 +466,15 @@ func TestUIMediaItemText(t *testing.T) {
 		`<p class="line" data-start="16.016" data-end="24.016">Jehovah our God, exalted in might,</p>`,
 		`<p class="line">Creator of life.</p>`,
 		`<dt>Publication</dt><dd>Sing Out Joyfully—Vocals</dd>`,
-		`/finder?docid=1102016801&amp;wtlocale=E" target="_blank" rel="noopener">Open on site</a>`,
+		// the item's own page is opened from the settings, not the page
+		`class="ps-row ps-item ps-site" href="https://www.jw.org/finder?lank=pub-sjjc_1_AUDIO&amp;wtlocale=E"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("song page lacks %s: %.4000s", want, body)
 		}
+	}
+	if strings.Count(body, "jw.org/finder?") != 1 {
+		t.Errorf("song page links jw.org outside the settings: %.4000s", body)
 	}
 
 	_, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
@@ -434,11 +483,14 @@ func TestUIMediaItemText(t *testing.T) {
 		`data-start="1" data-end="2"><button type="button" class="cue-time" title="Play from here" aria-label="Play from here 0:01" hidden>0:01</button> Hello world.</span>`,
 		`<span class="cue" data-start="4" data-end="5"><button`,
 		`<td class="hint">1280 × 720 · 29.97 fps</td>`,
-		`href="https://www.jw.org/finder?lank=pub-abc_1_VIDEO&amp;wtlocale=E"`,
+		`class="ps-row ps-item ps-site" href="https://www.jw.org/finder?lank=pub-abc_1_VIDEO&amp;wtlocale=E"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("video page lacks %s: %.5000s", want, body)
 		}
+	}
+	if strings.Contains(body, "mediaactions") {
+		t.Error("video page still links jw.org outside the settings")
 	}
 	if strings.Contains(body, "<h2>Lyrics</h2>") {
 		t.Error("a video without a document has no lyrics")
@@ -588,6 +640,11 @@ func TestUISearch(t *testing.T) {
 			t.Errorf("missing %q in:\n%s", want, body)
 		}
 	}
+	// a row's own page on jw.org is offered by its menu, not linked
+	if !strings.Contains(body, `data-site="https://www.jw.org/finder?lank=pub-xyz_1_VIDEO"`) ||
+		strings.Contains(body, `href="https://www.jw.org/finder?lank=pub-xyz_1_VIDEO"`) {
+		t.Errorf("the row links jw.org instead of naming it for its menu:\n%s", body)
+	}
 	// the empty form renders without hitting upstream
 	resp, _ = get(t, srv, "/search")
 	if resp.StatusCode != 200 {
@@ -674,6 +731,10 @@ func TestUIError(t *testing.T) {
 	}
 	if !strings.Contains(body, "HTTP 404") {
 		t.Errorf("error page:\n%s", body)
+	}
+	// it says what upstream's answer means, not the request it answered
+	if !strings.Contains(body, "jw.org has no page for this.") || strings.Contains(body, "GET http") {
+		t.Errorf("error page quotes the upstream request:\n%s", body)
 	}
 }
 
@@ -1251,5 +1312,23 @@ func TestUIBibleChapterNav(t *testing.T) {
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)
+	}
+}
+
+// A page's title follows its language like the rest of its frame, and names
+// what it shows where it shows one thing: the passage read, the words
+// searched for.
+func TestUITitlesFollowTheLanguage(t *testing.T) {
+	srv := newTestServer(t, languagesMux(t))
+	for path, want := range map[string]string{
+		"/search?lang=de":  "<title>Suchen · JW</title>",
+		"/search?lang=en":  "<title>Search · JW</title>",
+		"/article?lang=de": "<title>Artikel · JW</title>",
+		"/cited?lang=de":   "<title>Zitate · JW</title>",
+	} {
+		_, body := get(t, srv, path)
+		if !strings.Contains(body, want) {
+			t.Errorf("%s lacks %s", path, want)
+		}
 	}
 }

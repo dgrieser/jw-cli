@@ -24,7 +24,7 @@ var en = Messages{
 
 	BibleRefsIn:  "Bible references in %q:",
 	NoBibleRefs:  "No bible references found in %q.",
-	ReadOneHint:  `Read one with: jw bible read "<reference>"`,
+	ReadOneHint:  "Read one with: `jw bible read \"<reference>\"`",
 	NoStudyNotes: "No study notes found (study notes are available in the study edition, nwtsty).",
 	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",
@@ -57,6 +57,8 @@ var en = Messages{
 	NoMediaText:         "No lyrics, text or subtitles found for %s.",
 	MediaTextHint:       "Lyrics, text or transcript: `jw media text %s`",
 
+	DownloadHintFiles: "Download with: `jw download <n>`",
+
 	ColSymbol:     "SYMBOL",
 	ColLocale:     "LOCALE",
 	ColName:       "NAME",
@@ -86,6 +88,12 @@ var en = Messages{
 	TranslationsHeading:      "Other translations",
 	MediaHeading:             "Media gallery",
 	StudyFailed:              "the study notes on this verse could not be read: %s",
+
+	CitedFailed: "the quotations could not be listed: %s",
+
+	CitedVideosFailed:     "the videos quoting the verse could not be searched for: %s",
+	CitedUnread:           "results whose document could not be read, shown with the search's teaser only: %d",
+	ResearchExcerptFailed: "the excerpt could not be read: %s",
 
 	DailyTextTitle: "Daily text, %s",
 	MeetingsTitle:  "Meetings, week %d/%d",
@@ -215,6 +223,30 @@ var en = Messages{
 	UIProgressItems:    "%d of %d",
 	UIUnfolding:        "Unfolding",
 
+	UIErrNotFound:    "jw.org has no page for this.",
+	UIErrUpstream:    "jw.org answered with an error (HTTP %d). Please try again later.",
+	UIErrUnreachable: "jw.org could not be reached. Please try again later.",
+	UIErrTimeout:     "jw.org took too long to answer. Please try again later.",
+
+	UIPageArticle: "Article",
+	UIPageError:   "Error",
+
+	UICitedTitle:  "Quotations",
+	UICitedHint:   "Jer 31:15 — the verse whose quotations are listed",
+	UICitedVideos: "Videos quoting it",
+	UIScope:       "Words together in",
+	UIScopePar:    "a paragraph",
+	UIScopeSen:    "a sentence",
+	UICatsAll:     "Every publication, bibles and indexes included",
+	UICatsInclude: "Only these publications",
+	UICatsExclude: "All publications except",
+	UICatsHint:    "codes such as w, g, bk, it, bi, dx",
+	UIPageSize:    "Results per page",
+
+	UIAllTranslations: "All translations",
+
+	UILazyFallback: "Show on a page of its own",
+
 	UIAbort:                "Abort",
 	UIAborted:              "Aborted.",
 	UIFollow:               "Open",
@@ -260,5 +292,4 @@ var en = Messages{
 	UIResolution:           "Resolution",
 	UIPrintedEdition:       "Printed edition",
 	UIBurnedIn:             "subtitles in the picture",
-	UIOnJWOrg:              "On jw.org",
 }

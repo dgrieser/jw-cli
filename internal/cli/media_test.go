@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 func mediaMux(t *testing.T) *http.ServeMux {
@@ -74,6 +76,90 @@ func TestDownloadMediaInfoRendition(t *testing.T) {
 	}
 }
 
+// jw show on a video numbers its files for jw download, so the next
+// `jw download 1` is file 1 — the 240p rendition — not the video of row 1 of
+// the listing it was shown from, in the best quality.
+func TestShowVideoThenDownloadFile(t *testing.T) {
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCmdWithCache(t, mux, cacheDir, "show", "1", "-l", "en")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "jw download <n>") {
+		t.Fatalf("show should offer the numbered files:\n%s", out)
+	}
+	out, err = runCmdWithCache(t, mux, cacheDir, "download", "1", "-l", "en", "-d", t.TempDir())
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "v_r240P.mp4") {
+		t.Errorf("download 1 after show should be file 1 (240p):\n%s", out)
+	}
+}
+
+// Every row of a media listing leads to its page on jw.org: a media item by
+// its LANK, a category in the video library — or the audio library, for the
+// Audio tree.
+func TestMediaBrowseThenOpen(t *testing.T) {
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	open := func(index string) string {
+		t.Helper()
+		out, err := runCmdWithCache(t, mux, cacheDir, "open", index)
+		if err != nil {
+			t.Fatalf("open %s: %v\n%s", index, err, out)
+		}
+		return out
+	}
+
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if out := open("1"); !strings.Contains(out, "https://www.jw.org/finder?lank=pub-abc_1_VIDEO&wtlocale=E") {
+		t.Errorf("open on a media item: %s", out)
+	}
+
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	if out := open("1"); !strings.Contains(out, "https://www.jw.org/open?category=VideoOnDemand&docid=1011214&wtlocale=E") {
+		t.Errorf("open on a video category: %s", out)
+	}
+	if out := open("2"); !strings.Contains(out, "https://www.jw.org/open?category=Audio&docid=1011994&wtlocale=E") {
+		t.Errorf("open on the audio category: %s", out)
+	}
+}
+
+// The categories of the Audio tree link the audio library, and a category of
+// tracks with audio descriptions — made up by the service — the category it
+// describes, which is the one jw.org has.
+func TestCategoryRowsLinkTheirLibrary(t *testing.T) {
+	cat := model.Category{
+		Key: "AudioOriginalSongs", Parent: &model.CategoryRef{Key: "Audio"},
+		Subcategories: []model.Category{{Key: "Albums"}, {Key: "AudioOriginalSongs-AudioDescriptions"}},
+		Media:         []model.MediaItem{{LANK: "pub-osg_1_AUDIO", Type: "audio"}},
+	}
+	rows := categoryRows(cat, "X")
+	for i, want := range []string{
+		"https://www.jw.org/open?category=Albums&docid=1011994&wtlocale=X",
+		"https://www.jw.org/open?category=AudioOriginalSongs&docid=1011994&wtlocale=X",
+		"https://www.jw.org/finder?lank=pub-osg_1_AUDIO&wtlocale=X",
+	} {
+		if rows[i].JWLink != want {
+			t.Errorf("row %d links %q, want %q", i+1, rows[i].JWLink, want)
+		}
+	}
+
+	videos := categoryRows(model.Category{Key: "VODChildren", Subcategories: []model.Category{{Key: "ChildrenMovies"}}}, "E")
+	if want := "https://www.jw.org/open?category=ChildrenMovies&docid=1011214&wtlocale=E"; videos[0].JWLink != want {
+		t.Errorf("video category links %q, want %q", videos[0].JWLink, want)
+	}
+}
+
 func TestMediaBrowseRoot(t *testing.T) {
 	out, err := runCmd(t, mediaMux(t), "media", "browse", "-l", "en")
 	if err != nil {
@@ -89,7 +175,8 @@ func TestMediaBrowseCategory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "A New Video (5:00)") {
+	// the LANK is what jw media info and jw download take, so the row shows it
+	if !strings.Contains(out, "A New Video (5:00, pub-abc_1_VIDEO)") {
 		t.Fatalf("unexpected output:\n%s", out)
 	}
 }
@@ -103,6 +190,46 @@ func TestMediaInfo(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// A media item's details follow -o like any document: HTML is HTML, text is
+// text with the files' numbers — what jw download takes — spelled out, and
+// neither carries markdown. jw show on a video prints the same.
+func TestMediaInfoFormats(t *testing.T) {
+	out, err := runCmd(t, mediaMux(t), "media", "info", "pub-abc_1_VIDEO", "-l", "en", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"<h1>A New Video</h1>", "<ol><li><strong>240p</strong>", "<code>jw download &lt;n&gt;</code>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-o html: missing %q in\n%s", want, out)
+		}
+	}
+
+	out, err = runCmd(t, mediaMux(t), "media", "info", "pub-abc_1_VIDEO", "-l", "en", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"A New Video\n", "- LANK: pub-abc_1_VIDEO", "1. 240p (5 B)", "2. 720p (5 B)", "jw download <n>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("-o text: missing %q in\n%s", want, out)
+		}
+	}
+	for _, md := range []string{"# ", "**", "`"} {
+		if strings.Contains(out, md) {
+			t.Errorf("-o text carries markdown %q:\n%s", md, out)
+		}
+	}
+
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = runCmdWithCache(t, mux, cacheDir, "show", "1", "-l", "en", "-o", "html")
+	if err != nil || !strings.Contains(out, "<h1>A New Video</h1>") || strings.Contains(out, "**") {
+		t.Errorf("show -o html: %v\n%s", err, out)
 	}
 }
 
@@ -164,6 +291,23 @@ func TestMediaText(t *testing.T) {
 	}
 	if strings.Contains(out, "Transcript") || strings.Contains(out, "`0:11`") || strings.Contains(out, "http") {
 		t.Errorf("unexpected output:\n%s", out)
+	}
+
+	// -o text and -o html carry no markdown: the times and the stanza numbers
+	// are plain in the one and marked up in the other
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--timestamps", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "1. 0:11 Jehovah our God,\nCreator of life.") || strings.ContainsAny(out, "`*") {
+		t.Errorf("-o text:\n%s", out)
+	}
+	out, err = runCmd(t, textMux(t), "media", "text", "pub-sjjm_1_VIDEO", "-l", "en", "--timestamps", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "<p><strong>1.</strong> <code>0:11</code> Jehovah our God,<br/>Creator of life.</p>") {
+		t.Errorf("-o html:\n%s", out)
 	}
 
 	// a video with nothing but subtitles is its transcript

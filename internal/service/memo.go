@@ -87,13 +87,15 @@ func versesKey(lng model.Language, ids []int) string {
 }
 
 // rememberTip keeps what a citation answered, under its link and, for bible
-// text, under the verses it holds.
+// text, every passage of it under the verses that passage holds.
 func (m *memo) rememberTip(lng model.Language, path string, tip model.Tooltip) {
 	m.init()
 	m.tips.put(tipKey(lng, path), tip)
 	if unfold.IsCitation(path) && (unfold.Ref{Path: path}).IsVerse() {
-		if ids := unfold.VerseIDs(tip.ContentHTML); len(ids) > 0 {
-			m.verses.put(versesKey(lng, ids), tip)
+		for _, item := range tip.Items() {
+			if ids := unfold.VerseIDs(item.ContentHTML); len(ids) > 0 {
+				m.verses.put(versesKey(lng, ids), item)
+			}
 		}
 	}
 }
@@ -128,17 +130,14 @@ func (r *tooltipResolver) VersesOf(ctx context.Context, ref unfold.Ref) []int {
 	if !ref.IsVerse() {
 		return nil
 	}
-	if r.table == nil {
-		r.table = r.s.BookTable(ctx, r.lng)
-	}
-	return citedVerses(ref.Text, r.table)
+	return citedVerses(ref.Text, r.bookTable(ctx))
 }
 
 // Known answers unfold.KnownResolver: what a citation says when it was read
 // already — through this link, through another link to the same verses, or as
 // part of a chapter of the study bible read before.
 func (r *tooltipResolver) Known(ctx context.Context, ref unfold.Ref) (model.Tooltip, bool) {
-	if tip, ok := r.tips[ref.Path]; ok {
+	if tip, ok := r.kept(ref.Path); ok {
 		return tip, true
 	}
 	// a request reading past the cache reads past what is in memory too
@@ -175,7 +174,7 @@ func (r *tooltipResolver) Known(ctx context.Context, ref unfold.Ref) (model.Tool
 	}
 	first, last := ids[0]%1000, ids[len(ids)-1]%1000
 	tip := model.Tooltip{
-		Title:       RefString(bibleref.Ref{Book: book, Chapter: chapter, VerseStart: first, VerseEnd: last}, r.table),
+		Title:       RefString(bibleref.Ref{Book: book, Chapter: chapter, VerseStart: first, VerseEnd: last}, r.bookTable(ctx)),
 		ContentHTML: text.String(),
 		URL:         cm.url,
 	}
@@ -185,10 +184,20 @@ func (r *tooltipResolver) Known(ctx context.Context, ref unfold.Ref) (model.Tool
 
 // keep remembers a citation's answer for the rest of this run.
 func (r *tooltipResolver) keep(path string, tip model.Tooltip) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.tips == nil {
 		r.tips = map[string]model.Tooltip{}
 	}
 	r.tips[path] = tip
+}
+
+// kept is a citation's answer this run already has.
+func (r *tooltipResolver) kept(path string) (model.Tooltip, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	tip, ok := r.tips[path]
+	return tip, ok
 }
 
 // chapterMemo is what the study bible's page of a chapter says, when the

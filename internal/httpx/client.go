@@ -52,8 +52,13 @@ type Client struct {
 	// restart — until it changed upstream. Nil keeps nothing.
 	responses *Cache
 	flight    singleflight.Group
-	// failed notes bodies upstream could not be asked about lately
+	// failed notes bodies upstream could not be asked about lately, down the
+	// hosts that failed lately; see outage.go
 	failed sync.Map
+	down   downHosts
+	// retryDelays, when set, replace the pauses before a busy upstream is
+	// asked again (see outage.go)
+	retryDelays []time.Duration
 	// stashed holds changed bodies a memo's revalidation read, for the
 	// rebuild that follows
 	stashMu sync.Mutex
@@ -71,6 +76,13 @@ func WithBaseURLs(b BaseURLs) Option { return func(c *Client) { c.Base = b } }
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.hc = h } }
 
 func WithUserAgent(ua string) Option { return func(c *Client) { c.UserAgent = ua } }
+
+// WithRetryDelays sets the pauses before a busy upstream (429, 502, 503, 504)
+// is asked again, one per retry; none asks only once. For tests, which need
+// not wait the real pauses out.
+func WithRetryDelays(d ...time.Duration) Option {
+	return func(c *Client) { c.retryDelays = append([]time.Duration{}, d...) }
+}
 
 func WithVerbose(f func(format string, args ...any)) Option {
 	return func(c *Client) { c.verbose = f }
@@ -149,16 +161,7 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // Get issues a GET and returns the response if the status is 2xx.
 // The caller must close the body.
 func (c *Client) Get(ctx context.Context, rawURL string, hdr http.Header) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	for k, vs := range hdr {
-		for _, v := range vs {
-			req.Header.Add(k, v)
-		}
-	}
-	resp, err := c.Do(req)
+	resp, err := c.send(ctx, http.MethodGet, rawURL, hdr)
 	if err != nil {
 		return nil, err
 	}

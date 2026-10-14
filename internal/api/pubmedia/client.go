@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -97,16 +99,82 @@ func (m *wireMarkers) UnmarshalJSON(b []byte) error {
 // the language asked for, the bare symbol is tried instead.
 func (c *Client) Links(ctx context.Context, q Query) (model.PubMedia, error) {
 	pm, err := c.links(ctx, q)
-	if err != nil && errors.Is(err, ErrNotFound) {
-		if bare, ok := stripLangSuffix(q.Pub, q.Lang); ok {
-			retry := q
-			retry.Pub = bare
-			if pm, rerr := c.links(ctx, retry); rerr == nil {
-				return pm, nil
-			}
+	if err == nil || !errors.Is(err, ErrNotFound) {
+		return pm, err
+	}
+	if bare, ok := stripLangSuffix(q.Pub, q.Lang); ok {
+		retry := q
+		retry.Pub = bare
+		if pm, rerr := c.links(ctx, retry); rerr == nil {
+			return pm, nil
 		}
 	}
+	if byFormat, ferr := c.linksByFormat(ctx, q); ferr == nil || !errors.Is(ferr, ErrNotFound) {
+		return byFormat, ferr
+	}
 	return pm, err
+}
+
+// linksByFormat asks for the formats of q one by one, at once. pub-media
+// refuses a whole list for one format it cannot serve of a publication — the
+// New World Translation's PDF, EPUB and the rest are not listed while MP4 is
+// asked for with them — and answers that as it answers an unknown symbol, so
+// the formats it can serve are gathered apart; only a publication none of them
+// is found for is not found.
+func (c *Client) linksByFormat(ctx context.Context, q Query) (model.PubMedia, error) {
+	formats := q.Formats
+	if len(formats) == 0 {
+		formats = DefaultFormats
+	}
+	if q.AnyFormat || len(formats) < 2 {
+		return model.PubMedia{}, fmt.Errorf("%w: %s", ErrNotFound, describe(q))
+	}
+	got := make([]model.PubMedia, len(formats))
+	errs := make([]error, len(formats))
+	var wg sync.WaitGroup
+	for i, f := range formats {
+		one := q
+		one.Formats = []string{f}
+		wg.Go(func() { got[i], errs[i] = c.links(ctx, one) })
+	}
+	wg.Wait()
+	var merged model.PubMedia
+	found := false
+	for i, ferr := range errs {
+		switch {
+		case ferr == nil:
+			merged = mergeLinks(merged, got[i], found)
+			found = true
+		case !errors.Is(ferr, ErrNotFound):
+			return model.PubMedia{}, ferr
+		}
+	}
+	if !found {
+		return model.PubMedia{}, fmt.Errorf("%w: %s", ErrNotFound, describe(q))
+	}
+	return merged, nil
+}
+
+// mergeLinks adds the files of b to a; when a holds nothing yet (!have), b
+// is taken as it is.
+func mergeLinks(a, b model.PubMedia, have bool) model.PubMedia {
+	if !have {
+		return b
+	}
+	for lang, formats := range b.Files {
+		if a.Files[lang] == nil {
+			a.Files[lang] = map[string][]model.PubFile{}
+		}
+		for format, files := range formats {
+			a.Files[lang][format] = append(a.Files[lang][format], files...)
+		}
+	}
+	for sym, l := range b.Languages {
+		if _, ok := a.Languages[sym]; !ok {
+			a.Languages[sym] = l
+		}
+	}
+	return a
 }
 
 // stripLangSuffix drops a trailing "_X" or "-X" from a publication symbol when
@@ -195,9 +263,11 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 		return model.PubMedia{}, fmt.Errorf("%w: %s", ErrNotFound, describe(q))
 	}
 
+	// the names are written as HTML would have them, entities and all:
+	// "(2013&nbsp;Revision)"
 	pm := model.PubMedia{
-		PubName:       resp.PubName,
-		ParentPubName: resp.ParentPubName,
+		PubName:       html.UnescapeString(resp.PubName),
+		ParentPubName: html.UnescapeString(resp.ParentPubName),
 		Pub:           resp.Pub,
 		Issue:         resp.Issue.String(),
 		Files:         map[string]map[string][]model.PubFile{},
@@ -208,7 +278,7 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 	}
 	pm.BookNum, _ = atoiNum(resp.BookNum)
 	for sym, l := range resp.Languages {
-		pm.Languages[sym] = model.Language{Symbol: sym, Name: l.Name, Locale: l.Locale}
+		pm.Languages[sym] = model.Language{Symbol: sym, Name: html.UnescapeString(l.Name), Locale: l.Locale}
 	}
 	for sym, byFormat := range resp.Files {
 		pm.Files[sym] = map[string][]model.PubFile{}
@@ -216,7 +286,7 @@ func (c *Client) links(ctx context.Context, q Query) (model.PubMedia, error) {
 			out := make([]model.PubFile, 0, len(files))
 			for _, f := range files {
 				pf := model.PubFile{
-					Title:    f.Title,
+					Title:    html.UnescapeString(f.Title),
 					URL:      f.File.URL,
 					Checksum: f.File.Checksum,
 					Label:    f.Label,

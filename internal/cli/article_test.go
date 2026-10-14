@@ -48,6 +48,25 @@ func TestArticleRefs(t *testing.T) {
 	}
 }
 
+// The list of references follows -o like the document it is taken from.
+func TestArticleRefsFormats(t *testing.T) {
+	out, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--refs", "-o", "html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, `<ul><li><a href="http`) || !strings.Contains(out, ">Num. 14:24</a></li></ul>") ||
+		strings.Contains(out, "- [") {
+		t.Errorf("-o html:\n%s", out)
+	}
+	out, err = runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--refs", "-o", "text")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "- Num. 14:24\n") || strings.Contains(out, "](") || strings.Contains(out, "`") {
+		t.Errorf("-o text:\n%s", out)
+	}
+}
+
 func TestArticleImagesListing(t *testing.T) {
 	out, err := runCmd(t, articleMux(t), "article", "2024360", "-l", "en", "--images")
 	if err != nil {
@@ -111,5 +130,38 @@ func TestArticleTextOutput(t *testing.T) {
 	}
 	if strings.Contains(out, "<") || !strings.Contains(out, "CALEB trusted in Jehovah") {
 		t.Errorf("text output:\n%s", out)
+	}
+}
+
+// A study article heads itself with its number and theme before its title:
+// the title is printed once, as the document's own heading, in every format.
+// A document with no heading of its own still gets the title above it.
+func TestArticleTitleOnce(t *testing.T) {
+	mux := articleMux(t)
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1102025912", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><head><title>t</title></head><body><div id="article">
+		  <header><p class="contextTtl"><strong>12</strong> CALEB</p><h1><strong>He Fought  Loyally for His God</strong></h1></header>
+		  <div class="bodyTxt"><p>ABOUT the time that Moses fled from Egypt, a baby named Caleb was born.</p></div>
+		</div></body></html>`))
+	})
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1102025913", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><head><title>A Page Without a Heading</title></head><body><div id="article">
+		  <div class="bodyTxt"><p>Some text.</p></div></div></body></html>`))
+	})
+	for _, format := range []string{"raw", "text"} {
+		out, err := runCmd(t, mux, "article", "1102025912", "-l", "en", "-o", format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(out, "He Fought Loyally for His God"); n != 1 {
+			t.Errorf("-o %s: the title is printed %d times:\n%s", format, n, out)
+		}
+		out, err = runCmd(t, mux, "article", "1102025913", "-l", "en", "-o", format)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, "A Page Without a Heading") {
+			t.Errorf("-o %s: a document without a heading lost its title:\n%s", format, out)
+		}
 	}
 }

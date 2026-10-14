@@ -186,7 +186,10 @@ func flatten(in []wireResult) []wireResult {
 	return out
 }
 
-var lankDocID = regexp.MustCompile(`(\d+)$`)
+// lankDocID is the LANK of a document, "pa-1102025912": its number is the
+// MEPS document id. Other keys end in numbers too — a publication "pub-t-36",
+// an issue "pi-wp_202005" — which are no document ids.
+var lankDocID = regexp.MustCompile(`^pa-(\d+)$`)
 
 func (w wireResult) toModel() model.Result {
 	r := model.Result{
@@ -205,9 +208,36 @@ func (w wireResult) toModel() model.Result {
 	if w.Image != nil {
 		r.ImageURL = w.Image.URL
 	}
-	// lank like "pa-1102025912": numeric tail is the MEPS docId
-	if m := lankDocID.FindString(w.LANK); m != "" {
-		r.DocID, _ = strconv.Atoi(m)
+	if m := lankDocID.FindStringSubmatch(w.LANK); m != nil {
+		r.DocID, _ = strconv.Atoi(m[1])
+	}
+	if key := categoryKey(w); key != "" {
+		// a series or other category of videos or audio is browsed, not read:
+		// its link opens jw.org's video library rather than a document
+		r.Kind, r.CategoryKey, r.LANK, r.DocID = "category", key, "", 0
 	}
 	return r
+}
+
+// categoryPrefix starts the LANK the search gives a media category,
+// "mc-SeriesLoveMinistry".
+const categoryPrefix = "mc-"
+
+// categoryKey is the mediator category a hit stands for, or empty for any
+// other hit. jw.org links one as "open?docid=1011214&category=SeriesLoveMinistry"
+// and the search types it "videoCategory" (or "audioCategory") with the LANK
+// "mc-SeriesLoveMinistry"; the link's category is the key, the LANK's tail
+// stands in for a link without one. A link naming an item as well is that
+// item, wherever it is filed.
+func categoryKey(w wireResult) string {
+	if u, err := url.Parse(w.Links["jw.org"]); err == nil {
+		q := u.Query()
+		if key := q.Get("category"); key != "" && q.Get("item") == "" && q.Get("lank") == "" {
+			return key
+		}
+	}
+	if strings.HasSuffix(strings.ToLower(w.Subtype), "category") {
+		return strings.TrimPrefix(w.LANK, categoryPrefix)
+	}
+	return ""
 }

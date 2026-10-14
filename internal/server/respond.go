@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -43,8 +45,9 @@ func badRequest(w http.ResponseWriter, format string, args ...any) {
 
 // failJSON maps an operation error onto the API's status codes: what the
 // upstream sites did not have is 404, an expansion past the request budget is
-// 422, an upstream failure is 502, and everything else — bad references, bad
-// parameters the handler could not catch up front — is 400.
+// 422, an upstream failure is 502, no answer in time 504, and everything else
+// — bad references, bad parameters the handler could not catch up front — is
+// 400.
 func failJSON(w http.ResponseWriter, r *http.Request, err error) {
 	status, code := classify(r.Context(), err)
 	if status == 0 {
@@ -54,24 +57,57 @@ func failJSON(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // classify is the shared error mapping of the API and the UI. A zero status
-// means the request was canceled by the client.
+// means the request was canceled by the client. What the service says in
+// words of its own — a reference that names no verse, a parameter it cannot
+// read — is the caller's to fix (400); what it says is not there wraps
+// pubmedia.ErrNotFound (404); what jw.org or wol.jw.org answered, or failed to,
+// is theirs (404 for a page they do not have, 504 for no answer in time, 502
+// for the rest).
 func classify(ctx context.Context, err error) (status int, code string) {
 	var se *httpx.StatusError
 	var te *tooExpensiveError
+	var ue *url.Error
 	switch {
 	case errors.Is(err, context.Canceled) && ctx.Err() != nil:
 		return 0, ""
 	case errors.As(err, &te):
 		return http.StatusUnprocessableEntity, "too_expensive"
-	case errors.Is(err, pubmedia.ErrNotFound), errors.Is(err, wol.ErrNoTranslation):
+	case errors.Is(err, pubmedia.ErrNotFound), errors.Is(err, wol.ErrNoTranslation), errors.Is(err, service.ErrNoBookDoc):
 		return http.StatusNotFound, "not_found"
 	case errors.As(err, &se):
-		if se.StatusCode == http.StatusNotFound {
+		if se.StatusCode == http.StatusNotFound || se.StatusCode == http.StatusGone {
 			return http.StatusNotFound, "not_found"
 		}
 		return http.StatusBadGateway, "upstream"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ue) && ue.Timeout():
+		return http.StatusGatewayTimeout, "timeout"
+	case errors.As(err, &ue) && ue.Op != "parse":
+		// the request went out and never came back: a refused connection,
+		// a name that did not resolve
+		return http.StatusBadGateway, "upstream"
 	}
 	return http.StatusBadRequest, "bad_request"
+}
+
+// readable is what a page tells a reader about a failure: the error itself
+// where the service wrote it for one, and in place of what jw.org or
+// wol.jw.org answered — a request line and a status code — what that answer
+// means.
+func readable(err error, txt *i18n.Messages) string {
+	var se *httpx.StatusError
+	var ue *url.Error
+	switch {
+	case errors.As(err, &se):
+		if se.StatusCode == http.StatusNotFound || se.StatusCode == http.StatusGone {
+			return txt.UIErrNotFound
+		}
+		return fmt.Sprintf(txt.UIErrUpstream, se.StatusCode)
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ue) && ue.Timeout():
+		return txt.UIErrTimeout
+	case errors.As(err, &ue) && ue.Op != "parse":
+		return txt.UIErrUnreachable
+	}
+	return err.Error()
 }
 
 // tooExpensiveError says an unfold level would cost more upstream requests
@@ -125,6 +161,13 @@ func bodyFormat(r *http.Request) (render.Format, error) {
 	default:
 		return render.HTML, fmt.Errorf("invalid format %q (want html, markdown, or text)", v)
 	}
+}
+
+// bodyOptions are how a body is rendered for the API: links and pictures
+// resolved against base, or with ?urls=0 — what --no-urls is on the command
+// line — left out, a link keeping its text and a picture its alt text.
+func bodyOptions(r *http.Request, base string) render.Options {
+	return render.Options{BaseURL: base, NoURLs: !boolParamOr(r, "urls", true)}
 }
 
 // intParam parses an optional integer query parameter.

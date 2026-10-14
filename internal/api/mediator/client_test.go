@@ -33,17 +33,23 @@ func serveFile(t *testing.T, path string) http.HandlerFunc {
 	}
 }
 
+// The languages are the full list, not only those with a website of their
+// own: Assamese has none, and is there all the same. A region is joined on
+// with a hyphen, as the sites spell it.
 func TestLanguages(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/apis/mediator/v1/languages/E/web", serveFile(t, "testdata/languages.json"))
+	mux.HandleFunc("/apis/mediator/v1/languages/E/all", serveFile(t, "testdata/languages.json"))
+	mux.HandleFunc("/apis/mediator/v1/languages/E/web", func(w http.ResponseWriter, r *http.Request) {
+		t.Error("the web list was read although the full one answered")
+	})
 	c := testClient(t, mux)
 
 	langs, err := c.Languages(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(langs) != 5 {
-		t.Fatalf("got %d languages, want 5", len(langs))
+	if len(langs) != 7 {
+		t.Fatalf("got %d languages, want 7", len(langs))
 	}
 	de := langs[1]
 	if de.Symbol != "X" || de.Locale != "de" || de.Name != "German" || de.Vernacular != "Deutsch" {
@@ -51,6 +57,23 @@ func TestLanguages(t *testing.T) {
 	}
 	if !langs[4].IsSignLanguage {
 		t.Errorf("ASL should be a sign language: %+v", langs[4])
+	}
+	if as := langs[5]; as.Symbol != "AE" || as.Locale != "as" {
+		t.Errorf("unexpected Assamese mapping: %+v", as)
+	}
+	if pt := langs[6]; pt.Symbol != "TPO" || pt.Locale != "pt-pt" {
+		t.Errorf("a region is joined with a hyphen: %+v", pt)
+	}
+}
+
+// Should the full list be gone, the web list still serves.
+func TestLanguagesWebFallback(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/apis/mediator/v1/languages/E/web", serveFile(t, "testdata/languages.json"))
+	c := testClient(t, mux)
+	langs, err := c.Languages(context.Background())
+	if err != nil || len(langs) != 7 {
+		t.Fatalf("got %d languages, %v", len(langs), err)
 	}
 }
 

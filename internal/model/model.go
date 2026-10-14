@@ -26,9 +26,11 @@ type PubKey struct {
 
 // Result is one row in any listing (search results, category browse, file
 // lists). It is self-contained so follow-up commands (show/open/download) can
-// act on it from the results cache without re-querying.
+// act on it from the results cache without re-querying. Index is the 1-based
+// number a CLI listing prints; rows that were never numbered — the web API's —
+// leave it out rather than all claiming 0.
 type Result struct {
-	Index   int    `json:"index"`
+	Index   int    `json:"index,omitempty"`
 	Kind    string `json:"kind"` // article|video|audio|publication|bible|category|file|image
 	Title   string `json:"title"`
 	Snippet string `json:"snippet,omitempty"`
@@ -409,6 +411,9 @@ type ResearchItem struct {
 	PCPath      string `json:"pcPath,omitempty"` // wol /pc/ path for the excerpt
 	ExcerptHTML string `json:"excerptHtml,omitempty"`
 	ArticleURL  string `json:"articleUrl,omitempty"`
+	// ExcerptErr says why an excerpt asked for could not be read, so a
+	// missing passage is told from one the entry never had.
+	ExcerptErr string `json:"excerptError,omitempty"`
 }
 
 // SameTarget reports whether href points at what this entry already points at.
@@ -470,4 +475,21 @@ type Tooltip struct {
 	URL              string `json:"url,omitempty"`
 	ImageURL         string `json:"imageUrl,omitempty"`
 	PublicationTitle string `json:"publicationTitle,omitempty"`
+	// DocID is the document the passage belongs to as the answer's classes
+	// name it — all a footnote, which has no URL, says of where it is from —
+	// and Bible says that document is bible text: a book of a bible.
+	DocID int  `json:"docId,omitempty"`
+	Bible bool `json:"bible,omitempty"`
+	// More are the passages after the first of a citation that names
+	// several: a marginal reference pointing at seven verses is one citation
+	// answered with seven passages. The fields above are the first of them.
+	More []Tooltip `json:"more,omitempty"`
+}
+
+// Items are every passage the citation was answered with, the first one
+// included, each on its own.
+func (t Tooltip) Items() []Tooltip {
+	first := t
+	first.More = nil
+	return append([]Tooltip{first}, t.More...)
 }

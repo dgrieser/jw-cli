@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"html"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -197,11 +198,16 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 			var b strings.Builder
 			for _, e := range entries {
 				writeHeading(&b, format, e.Ref)
+				// the citations left unresolved run as one list, in the
+				// format's own list, up to the next resolved one
+				var list []string
 				for _, x := range e.XRefs {
 					if x.ResolvedHTML == "" {
-						fmt.Fprintf(&b, "- %s\n", escapeListMarker(x.Citation))
+						list = append(list, formatLink(format, x.Citation, ""))
 						continue
 					}
+					writeList(&b, format, list)
+					list = nil
 					body, err := render.Render(x.ResolvedHTML, format, a.RenderOptions(a.HTTP().Base.WOL))
 					if err != nil {
 						return err
@@ -209,7 +215,7 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 					writeSubHeading(&b, format, x.Citation)
 					fmt.Fprintf(&b, "%s\n\n", strings.TrimSpace(body))
 				}
-				b.WriteString("\n")
+				writeList(&b, format, list)
 			}
 			return a.WriteMarkdown(b.String())
 		},
@@ -220,8 +226,9 @@ func newBibleXrefsCmd(a *app.App) *cobra.Command {
 
 func newBibleMediaCmd(a *app.App) *cobra.Command {
 	var (
-		doDL bool
-		dir  string
+		doDL    bool
+		dir     string
+		quality string
 	)
 	cmd := &cobra.Command{
 		Use:   "media <reference...>",
@@ -241,7 +248,26 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 				if len(items) == 0 {
 					return fmt.Errorf("no media found")
 				}
-				return downloadAll(cmd.Context(), a, items, dir)
+				// a clip is the stretch of a whole video, which is what
+				// there is to save: in the rendition asked for
+				var pictures []model.Result
+				for _, it := range items {
+					if it.Kind != "video" || it.LANK == "" || !cmd.Flags().Changed("quality") {
+						pictures = append(pictures, it)
+						continue
+					}
+					item, err := a.Service().MediaItem(ctx, lng.Symbol, it.LANK)
+					if err != nil {
+						return err
+					}
+					if err := downloadMedia(ctx, a, item, downloadOpts{quality: quality, qualitySet: true, dir: dir}); err != nil {
+						return err
+					}
+				}
+				if len(pictures) == 0 {
+					return nil
+				}
+				return downloadAll(ctx, a, pictures, dir)
 			}
 			rs := results.ResultSet{Kind: "bible-media", Query: strings.Join(args, " "), Items: items}
 			return writeListing(a, rs, fmt.Sprintf(a.Text().MediaOn, strings.Join(args, " ")))
@@ -249,6 +275,8 @@ func newBibleMediaCmd(a *app.App) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&doDL, "download", false, "download the media files")
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "download directory")
+	cmd.Flags().StringVarP(&quality, "quality", "q", "best",
+		"video quality of a clip's video (the whole video is saved; the listing names the clip's stretch): best, worst, 1080p, 720p, 480p, 360p, 240p")
 	return cmd
 }
 
@@ -288,10 +316,13 @@ shown, including a link to the full article.`,
 				if err := writeVerseText(&b, a, format, e.Verse); err != nil {
 					return err
 				}
+				// the entries without a passage run as one list, in the
+				// format's own list, up to the next entry with one
+				var list []string
 				for _, it := range e.Items {
-					label := mdLinked(it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath)))
+					label := formatLink(format, it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath)))
 					if it.Source != "" {
-						label += fmt.Sprintf(" (%s)", it.Source)
+						label += " (" + formatLink(format, it.Source, "") + ")"
 					}
 					var body string
 					if it.ExcerptHTML != "" {
@@ -300,13 +331,22 @@ shown, including a link to the full article.`,
 							body = strings.TrimSpace(out)
 						}
 					}
+					if body == "" && it.ExcerptErr != "" {
+						note := "<p><em>" + html.EscapeString(fmt.Sprintf(a.Text().ResearchExcerptFailed, it.ExcerptErr)) + "</em></p>"
+						if out, err := render.Render(note, format, a.RenderOptions(a.HTTP().Base.WOL)); err == nil {
+							body = strings.TrimSpace(out)
+						}
+					}
 					if body == "" {
-						fmt.Fprintf(&b, "- %s\n\n", label)
+						list = append(list, label)
 						continue
 					}
+					writeList(&b, format, list)
+					list = nil
 					writeSubHeading(&b, format, label)
 					fmt.Fprintf(&b, "%s\n\n", body)
 				}
+				writeList(&b, format, list)
 			}
 			return a.WriteMarkdown(b.String())
 		},

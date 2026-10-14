@@ -4,8 +4,10 @@ package htmlx
 
 import (
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -146,15 +148,28 @@ func intAttr(s *goquery.Selection, attr string) int {
 	return n
 }
 
-// ScriptureRefs collects bible citation anchors (class "b" with data-bid) as
-// found in wol documents and jw.org articles.
+// selScripture matches a bible citation: wol marks one as a.b carrying a
+// data-bid, and links it to its /bc/ tooltip; jw.org marks it as
+// a.jsBibleLink, names the verses in data-targetverses ("41006031-41006034")
+// and links it to the study bible's page of the chapter.
+const selScripture = "a.b, a[data-bid], a.jsBibleLink[data-targetverses]"
+
+// ScriptureRefs collects the bible citations of wol documents and jw.org
+// articles, in document order. A citation is listed as the full reference
+// even where its link spells only what changes from the one before it — the
+// second link of "Nu 14:5, 20-38" reads "20-38" — and without the separator
+// the link carries along ("Mark 1:14, 15;"). BCPath is the link's own target:
+// the /bc/ tooltip path on wol, the study bible page on jw.org.
 func ScriptureRefs(sel *goquery.Selection, base string) []model.ScriptureAnchor {
 	var out []model.ScriptureAnchor
-	sel.Find("a.b, a[data-bid]").Each(func(_ int, s *goquery.Selection) {
-		text := clean(s.Text())
+	prev := ""
+	sel.Find(selScripture).Each(func(_ int, s *goquery.Selection) {
+		text := strings.TrimRight(clean(s.Text()), ",;")
 		if text == "" {
 			return
 		}
+		text = completeCitation(text, prev)
+		prev = text
 		href, _ := s.Attr("href")
 		bid, _ := s.Attr("data-bid")
 		out = append(out, model.ScriptureAnchor{
@@ -164,6 +179,43 @@ func ScriptureRefs(sel *goquery.Selection, base string) []model.ScriptureAnchor 
 		})
 	})
 	return out
+}
+
+// chapterVerse matches the chapter of a reference where a verse follows it:
+// the "14" of "Nu 14:5", the "35" of "Isaiah 35:1". Some languages write the
+// full-width colon.
+var chapterVerse = regexp.MustCompile(`(\d+)\s*([:：])`)
+
+// lastNumber matches the chapter of a reference without verses, "Ps 83".
+var lastNumber = regexp.MustCompile(`^(.*?)(\d+)\D*$`)
+
+// completeCitation spells out a citation that carries only what changes from
+// the one before it, prev (already complete): verses of the same chapter
+// ("20-38" after "Nu 14:5" is "Nu 14:20-38"), a chapter and verses of the same
+// book ("6:31-34" after "Mark 1:40, 41" is "Mark 6:31-34"), or chapters of the
+// same book ("84" after "Ps 83" is "Ps 84"). A citation naming its book — it
+// has a letter in it, "1 Sam. 18:5" as much as "John 3:16" — is complete as it
+// is, and so is one with nothing before it to lend it the rest.
+func completeCitation(text, prev string) string {
+	if prev == "" || strings.IndexFunc(text, unicode.IsLetter) >= 0 {
+		return text
+	}
+	chapters := chapterVerse.FindAllStringSubmatchIndex(prev, -1)
+	if len(chapters) == 0 {
+		// no verse in the one before: its book is all it lends, to chapters
+		m := lastNumber.FindStringSubmatch(prev)
+		if m == nil || chapterVerse.MatchString(text) {
+			return text
+		}
+		return m[1] + text
+	}
+	book := prev[:chapters[0][2]]
+	if chapterVerse.MatchString(text) {
+		return book + text
+	}
+	// the chapter the one before ended in: "Mark 6:31-7:2" ends in chapter 7
+	last := chapters[len(chapters)-1]
+	return book + prev[last[2]:last[3]] + prev[last[4]:last[5]] + text
 }
 
 func absolutize(raw, base string) string {

@@ -24,7 +24,7 @@ var de = Messages{
 
 	BibleRefsIn:  "Bibelstellen in %q:",
 	NoBibleRefs:  "Keine Bibelstellen in %q gefunden.",
-	ReadOneHint:  `Eine davon lesen mit: jw bible read "<Bibelstelle>"`,
+	ReadOneHint:  "Eine davon lesen mit: `jw bible read \"<Bibelstelle>\"`",
 	NoStudyNotes: "Keine Studienanmerkungen gefunden (Studienanmerkungen gibt es in der Studienausgabe, nwtsty).",
 	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
@@ -57,6 +57,8 @@ var de = Messages{
 	NoMediaText:         "Kein Liedtext, Text oder Untertitel zu %s gefunden.",
 	MediaTextHint:       "Liedtext, Text oder Transkript: `jw media text %s`",
 
+	DownloadHintFiles: "Herunterladen mit: `jw download <n>`",
+
 	ColSymbol:     "SYMBOL",
 	ColLocale:     "LOCALE",
 	ColName:       "NAME",
@@ -86,6 +88,12 @@ var de = Messages{
 	TranslationsHeading:      "Andere Übersetzungen",
 	MediaHeading:             "Mediengalerie",
 	StudyFailed:              "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
+
+	CitedFailed: "Die Zitate konnten nicht aufgelistet werden: %s",
+
+	CitedVideosFailed:     "Die Videos, die den Vers zitieren, konnten nicht gesucht werden: %s",
+	CitedUnread:           "Treffer, deren Dokument nicht gelesen werden konnte und die deshalb nur die Vorschau der Suche zeigen: %d",
+	ResearchExcerptFailed: "Der Auszug konnte nicht gelesen werden: %s",
 
 	DailyTextTitle: "Tagestext, %s",
 	MeetingsTitle:  "Zusammenkünfte, Woche %d/%d",
@@ -215,6 +223,30 @@ var de = Messages{
 	UIProgressItems:    "%d von %d",
 	UIUnfolding:        "Wird aufgeklappt",
 
+	UIErrNotFound:    "Dazu hat jw.org keine Seite.",
+	UIErrUpstream:    "jw.org hat mit einem Fehler geantwortet (HTTP %d). Bitte später erneut versuchen.",
+	UIErrUnreachable: "jw.org war nicht erreichbar. Bitte später erneut versuchen.",
+	UIErrTimeout:     "jw.org hat zu lange nicht geantwortet. Bitte später erneut versuchen.",
+
+	UIPageArticle: "Artikel",
+	UIPageError:   "Fehler",
+
+	UICitedTitle:  "Zitate",
+	UICitedHint:   "Jer 31:15 — der Vers, dessen Zitate aufgelistet werden",
+	UICitedVideos: "Videos, die ihn zitieren",
+	UIScope:       "Wörter zusammen in",
+	UIScopePar:    "einem Absatz",
+	UIScopeSen:    "einem Satz",
+	UICatsAll:     "Alle Publikationen, auch Bibeln und Indizes",
+	UICatsInclude: "Nur diese Publikationen",
+	UICatsExclude: "Alle Publikationen außer",
+	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
+	UIPageSize:    "Ergebnisse pro Seite",
+
+	UIAllTranslations: "Alle Übersetzungen",
+
+	UILazyFallback: "Auf einer eigenen Seite anzeigen",
+
 	UIAbort:                "Abbrechen",
 	UIAborted:              "Abgebrochen.",
 	UIFollow:               "Öffnen",
@@ -260,5 +292,4 @@ var de = Messages{
 	UIResolution:           "Auflösung",
 	UIPrintedEdition:       "Druckausgabe",
 	UIBurnedIn:             "Untertitel im Bild",
-	UIOnJWOrg:              "Auf jw.org",
 }

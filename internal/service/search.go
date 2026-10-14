@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -41,6 +42,11 @@ type SearchOutcome struct {
 	// Total is what the engine reports; zero when it reports none.
 	Total int            `json:"total,omitempty"`
 	Items []model.Result `json:"items"`
+	// Notes say, in the content language, what the listing could not
+	// include or judge: videos that could not be searched for, documents
+	// that could not be read. A listing that lacks something says so rather
+	// than reading as complete.
+	Notes []string `json:"notes,omitempty"`
 }
 
 // RunSearch executes one page of a search on the chosen engine. Excerpts, when
@@ -63,13 +69,29 @@ func (s *Service) RunSearch(ctx context.Context, lng model.Language, p *SearchPa
 		if err != nil {
 			return SearchOutcome{}, err
 		}
+		out := SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol,
+			Page: sp.Page, Total: sp.Total, Items: sp.Results}
 		if p.Excerpts {
-			s.FillExcerpts(ctx, sp.Results, progress)
+			out.Notes = unreadNote(out.Notes, s.FillExcerpts(ctx, sp.Results, progress), lng)
 		}
-		return SearchOutcome{Kind: "wol-search", Query: p.Query, Lang: lng.Symbol,
-			Page: sp.Page, Total: sp.Total, Items: sp.Results}, nil
+		return out, nil
 	}
 	return SearchOutcome{}, fmt.Errorf("invalid engine %q (want jworg or wol)", p.Engine)
+}
+
+// unreadNote adds to notes how many results kept the search's teaser because
+// their documents could not be read, if any did.
+func unreadNote(notes []string, unread []bool, lng model.Language) []string {
+	n := 0
+	for _, u := range unread {
+		if u {
+			n++
+		}
+	}
+	if n == 0 {
+		return notes
+	}
+	return append(notes, fmt.Sprintf(i18n.TextFor(lng.Locale).CitedUnread, n))
 }
 
 // searchWOL runs the wol search engine for jw search -e wol and jw bible cited.
@@ -199,8 +221,11 @@ const excerptWorkers = 8
 // FillExcerpts replaces each result's teaser with the passage it was cut from.
 // Best effort: a result whose document cannot be read, or whose fragment cannot
 // be placed in it, keeps the teaser. Only wol results carry a document to read.
-// progress, when non-nil, reports each finished document.
-func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progress func(done, total int)) {
+// progress, when non-nil, reports each finished document. unread says, by
+// position, which results' documents could not be read: their teaser stands in
+// for a passage nobody has seen, which tells nothing of what it says.
+func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progress func(done, total int)) (unread []bool) {
+	unread = make([]bool, len(items))
 	todo := make([]int, 0, len(items))
 	for i, r := range items {
 		if r.WOLLink != "" && r.Snippet != "" {
@@ -208,7 +233,7 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 		}
 	}
 	if len(todo) == 0 {
-		return
+		return unread
 	}
 	var (
 		wg   sync.WaitGroup
@@ -225,6 +250,7 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 			blocks, err := s.WOL.Excerpts(ctx, items[i].WOLLink, items[i].Snippet)
 			mu.Lock()
 			defer mu.Unlock()
+			unread[i] = err != nil
 			if err == nil && len(blocks) > 0 {
 				items[i].Excerpt = strings.Join(blocks, "\n")
 			}
@@ -238,4 +264,5 @@ func (s *Service) FillExcerpts(ctx context.Context, items []model.Result, progre
 	if progress != nil {
 		progress(len(todo), len(todo))
 	}
+	return unread
 }

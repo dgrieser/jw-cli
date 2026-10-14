@@ -45,15 +45,19 @@ type Cache struct {
 
 	memoFlight singleflight.Group
 
-	// size accounting: size is the bytes on disk as of the last sweep plus what
-	// this process wrote since; scanned is false until a sweep has run
-	mu       sync.Mutex
-	size     int64
-	measured time.Time
-	scanned  bool
-	written  int64
-	sweeping bool
-	sweeps   sync.WaitGroup
+	// size accounting: size is the bytes on disk as of the last sweep, by
+	// this process or another, with what other processes recorded since in
+	// the sweep marker; written is what this process added since, unrecorded
+	// the part of that the marker does not hold yet; scanned is false until
+	// size is known
+	mu         sync.Mutex
+	size       int64
+	measured   time.Time
+	scanned    bool
+	written    int64
+	unrecorded int64
+	sweeping   bool
+	sweeps     sync.WaitGroup
 }
 
 // CacheOptions tunes a cache. Zero values take the defaults.
@@ -118,10 +122,10 @@ func Open(dir string, o CacheOptions) *Cache {
 	c.dir = dir
 	// a cache without a sweep marker is new (or just migrated): there is
 	// nothing to sweep, and what this process writes is all there is
-	marker := filepath.Join(dir, sweepMarker)
-	if _, err := os.Stat(marker); errors.Is(err, fs.ErrNotExist) {
-		if os.WriteFile(marker, []byte("0"), 0o644) == nil {
-			c.scanned, c.measured = true, time.Now()
+	if _, err := os.Stat(c.markerPath()); errors.Is(err, fs.ErrNotExist) {
+		now := time.Now()
+		if c.writeMarker(0, now) {
+			c.scanned, c.measured = true, now
 		}
 	}
 	return c
@@ -146,10 +150,17 @@ func (c *Cache) Fresh() time.Duration {
 }
 
 // Close waits for a sweep under way, so a command that exits right after
-// writing does not leave the cache over its limit.
+// writing does not leave the cache over its limit, and records what this
+// process wrote for the next one to go by.
 func (c *Cache) Close() {
-	if c != nil {
-		c.sweeps.Wait()
+	if !c.active() {
+		return
+	}
+	c.sweeps.Wait()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.sweeping {
+		c.record()
 	}
 }
 
@@ -198,6 +209,9 @@ type entry struct {
 	Size    int64             `json:"s"`
 	Hash    string            `json:"x"`
 	Checked int64             `json:"c"` // unix seconds the body was last known current
+	// Retry is when upstream may be asked about the body again, in unix
+	// seconds, after it could not be lately (see backOff)
+	Retry int64 `json:"r,omitempty"`
 	// NoHead is set for a URL whose server answers HEAD with an error but GET
 	// with the body (the CDN's mediator API): a HEAD would be wasted on it
 	NoHead bool `json:"n,omitempty"`
@@ -220,10 +234,46 @@ func (c *Cache) entryPath(id string) string {
 	return filepath.Join(c.dir, responseDir, id)
 }
 
+// nonceAttr opens the one part of a page that every render fills anew:
+// wol.jw.org gives each response a CSP nonce of its own, on its script and
+// style tags, so two renders of an unchanged page differ in it and in nothing
+// else.
+var nonceAttr = []byte(`nonce="`)
+
+// maxNonce bounds what is taken for a nonce's value, so a stray quote cannot
+// leave a stretch of real content out of the hash.
+const maxNonce = 128
+
+// bodyHash identifies a body by what it says: the values of nonce attributes
+// are left out, or a page rendered again would count as changed — and every
+// result derived from it would be rebuilt — however little it moved. A body
+// without one hashes as it always did.
 func bodyHash(b []byte) string {
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:16])
+	h := sha256.New()
+	for off := 0; ; {
+		i := bytes.Index(b[off:], nonceAttr)
+		if i < 0 {
+			break
+		}
+		start := off + i
+		end := start + len(nonceAttr)
+		off = end
+		// an attribute, not the word in a text
+		if start == 0 || !isSpace(b[start-1]) {
+			continue
+		}
+		j := bytes.IndexByte(b[end:], '"')
+		if j < 0 || j > maxNonce {
+			continue
+		}
+		h.Write(b[:end])
+		b, off = b[end+j:], 0
+	}
+	h.Write(b)
+	return hex.EncodeToString(h.Sum(nil)[:16])
 }
+
+func isSpace(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
 
 func (e *entry) fresh(window time.Duration) bool {
 	return time.Since(time.Unix(e.Checked, 0)) < window
@@ -284,7 +334,7 @@ func (c *Cache) saveEntry(id string, e entry, body []byte) {
 
 func (c *Cache) removeEntry(id string) {
 	if c.active() {
-		_ = os.Remove(c.entryPath(id))
+		c.removeFile(c.entryPath(id))
 	}
 }
 
@@ -296,6 +346,9 @@ type memoRecord struct {
 	Deps  map[string]string `json:"deps,omitempty"`
 	At    int64             `json:"at"`
 	Value json.RawMessage   `json:"v"`
+	// Retry is when a rebuild that failed may be tried again, in unix
+	// seconds; until then the value stands as it is
+	Retry int64 `json:"r,omitempty"`
 }
 
 func (c *Cache) memoPath(key string) string {
@@ -329,7 +382,7 @@ func (c *Cache) saveMemo(key string, m memoRecord) {
 
 func (c *Cache) removeMemo(key string) {
 	if c.active() {
-		_ = os.Remove(c.memoPath(key))
+		c.removeFile(c.memoPath(key))
 	}
 }
 
@@ -372,49 +425,141 @@ func (c *Cache) writeFile(p string, b []byte) {
 	}
 	_, werr := f.Write(b)
 	cerr := f.Close()
+	// what the cache grows by: a file written over replaces the old one
+	n := int64(len(b))
+	if st, err := os.Stat(p); err == nil {
+		n -= st.Size()
+	}
 	if werr != nil || cerr != nil || os.Rename(f.Name(), p) != nil {
 		_ = os.Remove(f.Name())
 		return
 	}
-	c.wrote(int64(len(b)))
+	c.wrote(n)
 }
 
-// sweepMarker records when a sweep last measured the cache and the size it
-// found, so commands run back to back do not each walk the whole directory.
+func (c *Cache) removeFile(p string) {
+	if st, err := os.Stat(p); err == nil && os.Remove(p) == nil {
+		c.wrote(-st.Size())
+	}
+}
+
+// The sweep marker records what the last sweep measured — the size of the
+// cache, and when — and after it, a line each, what processes added since,
+// so commands run back to back neither walk the whole directory each nor
+// lose sight of what the others wrote. Its first line reads "jws2 <size>
+// <unix seconds>", every further one "+<bytes>" (or "-"). Adding a line
+// does not move the time a sweep is due by, as the time is in the content.
 const (
 	sweepMarker = ".swept"
+	markerMagic = "jws2"
 	sweepEvery  = time.Hour
 )
 
-// wrote accounts for n bytes written and starts a sweep when the cache may be
-// past its limit, or when the size it goes by is over an hour old — other
-// processes write to the same directory.
+func (c *Cache) markerPath() string { return filepath.Join(c.dir, sweepMarker) }
+
+// readMarker returns the size the marker gives, and when it was measured.
+// The marker of older versions, a bare size whose time was that of the file,
+// is not read: the cache is measured anew.
+func (c *Cache) readMarker() (int64, time.Time, bool) {
+	b, err := os.ReadFile(c.markerPath())
+	if err != nil {
+		return 0, time.Time{}, false
+	}
+	lines := strings.Split(string(b), "\n")
+	f := strings.Fields(lines[0])
+	if len(f) != 3 || f[0] != markerMagic {
+		return 0, time.Time{}, false
+	}
+	size, err := strconv.ParseInt(f[1], 10, 64)
+	if err != nil {
+		return 0, time.Time{}, false
+	}
+	at, err := strconv.ParseInt(f[2], 10, 64)
+	if err != nil {
+		return 0, time.Time{}, false
+	}
+	for _, l := range lines[1:] {
+		if n, err := strconv.ParseInt(strings.TrimSpace(l), 10, 64); err == nil {
+			size += n
+		}
+	}
+	return max(size, 0), time.Unix(at, 0), true
+}
+
+// writeMarker records a measurement, in place of whatever the marker held.
+func (c *Cache) writeMarker(size int64, at time.Time) bool {
+	f, err := os.CreateTemp(c.dir, ".tmp-*")
+	if err != nil {
+		return false
+	}
+	_, werr := fmt.Fprintf(f, "%s %d %d\n", markerMagic, size, at.Unix())
+	cerr := f.Close()
+	if werr != nil || cerr != nil || os.Rename(f.Name(), c.markerPath()) != nil {
+		_ = os.Remove(f.Name())
+		return false
+	}
+	return true
+}
+
+// record adds what this process wrote and the marker does not hold yet to
+// it; c.mu must be held. An append of a line is whole even with another
+// process appending alongside.
+func (c *Cache) record() {
+	if c.unrecorded == 0 {
+		return
+	}
+	f, err := os.OpenFile(c.markerPath(), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return
+	}
+	_, werr := fmt.Fprintf(f, "%+d\n", c.unrecorded)
+	if f.Close() == nil && werr == nil {
+		c.unrecorded = 0
+	}
+}
+
+// wrote accounts for n bytes added (or, negative, removed) and starts a
+// sweep when the cache may be past its limit, or when the size it goes by
+// was measured over an hour ago. Other processes learn of it from the
+// marker: this process records there what it wrote when it is done, and
+// whenever that comes to a hundredth of the limit.
 func (c *Cache) wrote(n int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.written += n
+	c.unrecorded += n
 	if c.sweeping {
 		return
 	}
 	if !c.scanned {
-		// the size the last sweep of any process found, if it is recent
-		if b, err := os.ReadFile(filepath.Join(c.dir, sweepMarker)); err == nil {
-			st, _ := os.Stat(filepath.Join(c.dir, sweepMarker))
-			if size, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil && st != nil {
-				c.size, c.measured, c.scanned = size, st.ModTime(), true
-			}
+		// the size the last sweep of any process found, with what the
+		// others recorded since
+		if size, at, ok := c.readMarker(); ok {
+			c.size, c.measured, c.scanned = size, at, true
 		}
 	}
 	if !c.scanned || c.size+c.written > c.max || time.Since(c.measured) > sweepEvery {
 		c.startSweep()
+		return
+	}
+	if abs(c.unrecorded) >= max(c.max/100, 1) {
+		c.record()
 	}
 }
 
-// startSweep runs a sweep in the background; c.mu must be held. What is
-// written while it runs is counted from its start.
+func abs(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// startSweep runs a sweep in the background; c.mu must be held. What is on
+// disk now is the sweep's to measure; what is written while it runs is
+// counted from its start.
 func (c *Cache) startSweep() {
 	c.sweeping = true
-	c.written = 0
+	c.written, c.unrecorded = 0, 0
 	c.sweeps.Add(1)
 	go c.sweep()
 }
@@ -431,6 +576,7 @@ type cacheFile struct {
 func (c *Cache) sweep() {
 	defer c.sweeps.Done()
 	start := time.Now()
+	before, beforeAt, known := c.readMarker()
 	var files []cacheFile
 	var total int64
 	for _, sub := range []string{responseDir, memoDir} {
@@ -469,10 +615,18 @@ func (c *Cache) sweep() {
 			}
 		}
 	}
-	_ = os.WriteFile(filepath.Join(c.dir, sweepMarker), []byte(strconv.FormatInt(total, 10)), 0o644)
+	// files written since the sweep began were left out of the walk: what
+	// other processes recorded meanwhile stands for theirs
+	if after, afterAt, ok := c.readMarker(); ok && known && afterAt.Equal(beforeAt) && after > before {
+		total += after - before
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.size, c.measured, c.scanned, c.sweeping = total, start, true, false
+	// and the marker holds what this process wrote meanwhile as well
+	if c.writeMarker(c.size+c.written, start) {
+		c.unrecorded = 0
+	}
 	// what was written meanwhile may have taken the cache over again
 	if c.size+c.written > c.max {
 		c.startSweep()

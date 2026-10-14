@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -90,13 +91,17 @@ type Cited struct {
 	// Lazy is set instead of Results when the search was left for later: what
 	// a page asks for to load the citations once the reader opens them.
 	Lazy string
+	// Err says the lookup failed: who quotes the verse is not known, which is
+	// not the same as nobody quoting it.
+	Err error
 }
 
 // CitedResolver is an optional capability of a Resolver: who quotes the verse
 // a citation resolved to. It is asked only within Options.CitedDepth, because
 // one lookup reads a page of results and then a document per result — far more
-// than everything else a level spends. A failed lookup comes back empty: the
-// verse is worth reading without it.
+// than everything else a level spends. A failed lookup comes back with its
+// error and no results: the verse is worth reading without them, and the
+// output says they are missing.
 type CitedResolver interface {
 	Cited(ctx context.Context, verseTitle string) Cited
 }
@@ -128,6 +133,10 @@ type Node struct {
 	// passage apart from two references pointing at different ones.
 	URL string
 	Err error
+	// Publication is the publication the passage is from, as wol names it
+	// ("Insight on the Scriptures, Volume 2"): what a citation naming a page
+	// alone is a page of.
+	Publication string
 	// Notes, Links and Cited are the study material of a verse; StudyErr says
 	// the study pane could not be read, for the same reason Err is kept.
 	Notes []model.StudyNote
@@ -145,6 +154,9 @@ type Node struct {
 	CitedLazy  string
 	StudyErr   error
 	Children   []Node
+	// CitedErr says who quotes the verse could not be looked up, for the same
+	// reason StudyErr is kept.
+	CitedErr error
 	// Hops is what an expansion counted in bible references (Options.Hops)
 	// has left at this node: for a verse, how many more references deep its
 	// own material unfolds; for a passage of another publication, that of the
@@ -154,8 +166,16 @@ type Node struct {
 	// references, which are Children; nil for a passage, and for any node of
 	// an expansion counted in levels.
 	Parts *Parts
+	// Item numbers the passages of a citation wol answered with several — a
+	// marginal reference pointing at seven verses — from one; zero for a
+	// citation answered with one. Each passage is a node of its own, the
+	// first under the citation's path, the others under ItemPath.
+	Item int
 	// ready says the content was at hand without asking (KnownResolver).
 	ready bool
+	// more are the passages after the first of the citation, until they are
+	// nodes of their own (splitItems).
+	more []model.Tooltip
 }
 
 // Parts is the material of a verse in an expansion counted in bible references
@@ -212,6 +232,12 @@ type Options struct {
 	// it: a reference whose every verse is in it is not shown again
 	// (Options.Hops only). Nil keeps a set of the session's own.
 	Verses *Verses
+	// Workers is how many references of a level are resolved at once, each
+	// with what it brings beside its text. Zero or one resolves them one at a
+	// time; more needs a Resolver, and whatever else it answers, that is safe
+	// for concurrent use. The output, the requests counted and what Progress
+	// is told do not depend on it.
+	Workers int
 }
 
 // Result is an expansion and how far it got.
@@ -381,56 +407,86 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		res.Nodes[i] = plan(append(Refs(g.Fragment), g.RootRefs...), seen)
 		tiers = append(tiers, &res.Nodes[i])
 	}
+	// ask is what Confirm is asked before cost is spent on the level; what is
+	// pending when the answer is no is everything that cost was for
+	ask := func(level, cost, pending int) (bool, error) {
+		if o.Confirm == nil {
+			return true, nil
+		}
+		ok, err := s.Check(level, cost)
+		if err == nil && !ok {
+			res.Pending += pending
+			res.Stopped = true
+		}
+		return ok, err
+	}
 	for level := 1; ; level++ {
 		frontier := nodesIn(tiers)
 		if len(frontier) == 0 {
 			break
 		}
-		if o.Confirm != nil {
-			ok, err := s.Check(level, requestCost(frontier, study != nil, o.citedCostAt(level, cited != nil)))
-			if err != nil {
-				return res, err
-			}
-			if !ok {
-				res.Pending += len(frontier)
-				res.Stopped = true
-				return res, nil
-			}
+		citedCost := o.citedCostAt(level, cited != nil)
+		if ok, err := ask(level, requestCost(frontier, study != nil, citedCost), len(frontier)); err != nil || !ok {
+			return res, err
 		}
 		// the research-guide passages each verse turned out to have, kept aside
 		// so they join the citations found in its text. Keyed by path rather
 		// than by node: dropping a duplicate moves the nodes of a tier around.
-		research := map[string][]Ref{}
-		for i, n := range frontier {
-			if err := ctx.Err(); err != nil {
-				res.Pending += len(frontier) - i
-				return res, err
+		research := &refsByPath{}
+		// what a verse brings beside its text: its study material, and who
+		// quotes it
+		verse := func(n *Node) int {
+			if n.Err != nil || !n.Ref.IsVerse() {
+				return 0
 			}
-			tip, err := r.Resolve(ctx, n.Ref.Path)
-			res.Requests++
-			if err != nil {
-				n.Err = err
-			} else {
-				n.Title, n.HTML, n.URL = tip.Title, tip.ContentHTML, tip.URL
-			}
-			if study != nil && n.Err == nil && n.Ref.IsVerse() {
-				s, err := study.Study(ctx, n.Title)
-				res.Requests += s.Requests
+			requests := 0
+			if study != nil {
+				st, err := study.Study(ctx, n.Title)
+				requests += st.Requests
 				if err != nil {
 					n.StudyErr = err
 				} else {
-					n.Notes, n.Links, n.Media, n.MediaKnown = s.Notes, s.Links, s.Media, true
-					research[n.Ref.Path] = s.Research
+					n.Notes, n.Links, n.Media, n.MediaKnown = st.Notes, st.Links, st.Media, true
+					research.set(n.Ref.Path, st.Research)
 				}
 			}
-			if cited != nil && level <= o.CitedDepth && n.Err == nil && n.Ref.IsVerse() {
+			if cited != nil && level <= o.CitedDepth {
 				c := cited.Cited(ctx, n.Title)
-				res.Requests += c.Requests
-				n.Cited, n.CitedTotal, n.CitedRef, n.CitedLazy = c.Results, c.Total, c.Ref, c.Lazy
+				requests += c.Requests
+				n.setCited(c)
 			}
-			if o.Progress != nil {
-				o.Progress(level, i+1, len(frontier))
+			return requests
+		}
+		lv := s.pass(level)
+		spent, left, err := lv.each(ctx, frontier, func(n *Node) int {
+			tip, err := r.Resolve(ctx, n.Ref.Path)
+			if err != nil {
+				n.Err = err
+			} else {
+				n.resolved(tip)
 			}
+			return 1 + verse(n)
+		})
+		res.Requests += spent
+		if err != nil {
+			res.Pending += left
+			return res, err
+		}
+		// a citation answered with several passages is a reference for each,
+		// which brings what a verse brings like any other; their text is in
+		// hand already, the rest is asked about before it is spent
+		if items := s.splitItems(tiers, nil); len(items) > 0 {
+			cost := requestCost(items, study != nil, citedCost) - len(items)
+			if ok, err := ask(level, cost, len(items)); err != nil || !ok {
+				return res, err
+			}
+			spent, left, err := lv.each(ctx, items, verse)
+			res.Requests += spent
+			if err != nil {
+				res.Pending += left
+				return res, err
+			}
+			frontier = nodesIn(tiers)
 		}
 		if dropped := duplicates(frontier, shown, s.run, level); len(dropped) > 0 {
 			for _, tier := range tiers {
@@ -442,7 +498,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 		// the tiers themselves
 		var next []*[]Node
 		for _, n := range nodesIn(tiers) {
-			refs := plan(append(Refs(n.HTML), research[n.Ref.Path]...), seen)
+			refs := plan(append(Refs(n.HTML), research.get(n.Ref.Path)...), seen)
 			if level == o.Depth {
 				// the depth is used up: report what was left rather than
 				// letting the output look complete
@@ -655,16 +711,53 @@ func Refs(fragment string) []Ref {
 	}
 	var out []Ref
 	seen := map[string]bool{}
+	// the citation of a publication before, which one naming a page alone
+	// continues
+	prev := ""
 	doc.Find(citationLinks).Each(func(_ int, s *goquery.Selection) {
 		href, _ := s.Attr("href")
+		text := collapseSpace(s.Text())
+		if !strings.Contains(href, versePath) {
+			text = Continue(prev, text)
+			prev = text
+		}
 		if href == "" || seen[href] {
 			return
 		}
 		seen[href] = true
-		out = append(out, Ref{Text: collapseSpace(s.Text()), Path: href})
+		out = append(out, Ref{Text: text, Path: href})
 	})
 	return out
 }
+
+// Continue spells out a citation of a publication that only continues the
+// one before it, prev. wol writes "it-2 53, 760, 1000" as a link per page, and
+// every link after the first names a page alone: a heading saying "760" says
+// nothing. The page takes the place of the last word of the citation before —
+// keeping what that word opens with that is no digit, so "w24.04 2 ¶1, 3"
+// continues to "w24.04 2 ¶3" — and a citation that names anything itself, or
+// follows none, stays as it is. The punctuation joining a citation to the next
+// is dropped either way.
+func Continue(prev, text string) string {
+	text = strings.TrimRight(collapseSpace(text), ",;")
+	if hasLetter(text) || text == "" {
+		return text
+	}
+	words := strings.Fields(strings.TrimRight(collapseSpace(prev), ",;"))
+	if len(words) < 2 {
+		return text
+	}
+	last := words[len(words)-1]
+	digit := strings.IndexFunc(last, unicode.IsDigit)
+	if digit < 0 {
+		// the citation before ends in a word, not a page: the page follows it
+		return strings.Join(append(words, text), " ")
+	}
+	return strings.Join(append(words[:len(words)-1], last[:digit]+text), " ")
+}
+
+// hasLetter reports whether s names anything in words rather than numbers.
+func hasLetter(s string) bool { return strings.IndexFunc(s, unicode.IsLetter) >= 0 }
 
 // Count is how many citations a fragment holds, for sizing an expansion before
 // starting one.

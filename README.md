@@ -166,6 +166,14 @@ jw search -e wol '(Mt 24:14)' --exclude bi,dx # without bibles and indexes
 jw search -i bible study                      # interactive TUI
 ```
 
+`-n` is the jw.org page size, 1 to 36: jw.org answers a larger one with
+HTTP 400, so it is refused up front. wol serves pages of 40 and takes no page
+size, so `-n` does not apply to `-e wol`; page with `-p`. An all-types search
+(`-t all`, the default) comes back grouped by type on its first page, which
+jw.org sizes itself — the header then names the page only — and its later
+pages are flat and start over from the first results; the interactive browser
+lists a result once, on the page it first came on.
+
 The wol engine covers every publication category by default. Which categories a
 search covers is controlled by three mutually exclusive flags, also available on
 `jw bible cited`:
@@ -215,6 +223,11 @@ keeps the search's passage.
 `--no-videos` leaves the videos out altogether, and so does `--include`, which
 names the publications to cover.
 
+A listing says what it could not include: a video search that failed, and the
+results whose documents could not be read this time — those keep wol's teaser
+and are left unjudged — are noted under it (`notes` in `-o json`), so a listing
+missing something never reads as complete.
+
 For the wol engine both commands then read each result's document and print the
 passage the hit sits in — the paragraph, list item or table, whole — instead of
 wol's teaser, which is cut mid-sentence. That is one request per result, run
@@ -232,8 +245,13 @@ Every listing is numbered and cached, so follow-up commands take an index:
 ```sh
 jw show 3        # render result 3 (article text, media details, ...)
 jw open 3        # print its link (-b opens the browser)
-jw download 3    # download it (video/audio/file)
+jw download 3    # download it (video/audio/file, a publication's files)
 ```
+
+`jw download <n>` on a publication or an article a jw.org search found
+downloads the files pub-media has for it — the key of the row (`pub-lmd`,
+`pi-wp_202005`, `pa-2016330`) says which; `-F` narrows them down to a format.
+After `jw show <n>` on a video, the numbers are its files.
 
 ### Bible
 
@@ -243,6 +261,7 @@ jw bible read "mt 24:3-14" -o text           # abbreviations, ranges
 jw bible read "Pr 8:8, 9"                    # single verses
 jw bible read "Pr 8-9"                       # whole chapters
 jw bible read "Pr 8:30-9:6"                  # across a chapter boundary
+jw bible read "Jude 3-5"                     # one-chapter books: verses alone; "Jude" is all of it
 jw bible read "Joh 3:16; Ro 5:8"             # multiple references
 jw bible read "Psalm 83" --bible nwt         # other editions: nwt, Rbi8, int, ...
 jw bible read "Joh 3:16" --bible-all         # every edition of the language, compared
@@ -252,7 +271,8 @@ jw bible read "Ge 1" --no-outlines           # without the book outline's headin
 jw bible notes John 3:16                     # study notes (nwtsty)
 jw bible xrefs John 3:16 -r                  # cross references + full text, each headed
 jw bible media John 3:16 --download          # verse images/clips w/ captions, credits
-jw bible research John 3:16 -x               # research guide + excerpts
+jw bible media John 3:16 --download -q 240p  # a clip saves its whole video: in this quality
+jw bible research John 3:16 -x               # research guide + excerpts (a failed one says why)
 jw bible intro Genesis                       # facts, noteworthy facts or transcript, video
 jw bible intro Mt --download -q 480p         # the introduction's video
 jw bible outline Genesis                     # outline of contents (overview for Mt-Acts)
@@ -292,7 +312,9 @@ with every image:
 A study-bible verse picture keeps its explanation and its credit on the gallery
 page its thumbnail links to, so `jw bible media` reads that page as well
 (cached) and lists the full-size rendition instead of the
-thumbnail. Failing to reach it costs the extra words, not the entry.
+thumbnail. Failing to reach it costs the extra words, not the entry. A verse's
+clip is listed as the video it plays a stretch of: its poster is the picture,
+the video is what `--download` and `jw download` save.
 
 The metadata is printed with `--no-urls` too: the flag hides where a picture is,
 not what it shows. `-o json` carries it as the `image` object of a result and on
@@ -310,12 +332,18 @@ jw show 1                                    # the same for one listed image
 jw media browse                              # top-level categories
 jw media browse VideoOnDemand                # drill into a category
 jw media browse LatestVideos -n 25 -i        # interactive
-jw media info pub-jwb_202401_1_VIDEO         # renditions of one item
+jw media info pub-jwbcov_201505_1_VIDEO      # renditions of one item
 jw media text pub-sjjm_1_VIDEO               # a song's lyrics
 jw media text pub-osg_118_AUDIO -l de        # an original song, in German
 jw media text pub-mwbv_202705_1_VIDEO        # a video's transcript
 jw media text pub-sjjc_1_AUDIO --timestamps  # each line's time in the recording
 ```
+
+Every video and audio row of a listing shows its LANK, which `jw media info`,
+`jw media text` and `jw download` take. `jw open <n>` prints a row's page on
+jw.org — a category's too. `jw show <n>` prints an item's details like `jw media
+info`, and leaves its files numbered for `jw download <n>`; a video of a bible
+book's gallery, which has no LANK, is read through its gallery page.
 
 `jw media text` prints the words of a video or audio item, from the first of
 these that has them:
@@ -425,14 +453,19 @@ order, and leaves out whatever the verse does not have:
 3. **The marginal references**, under one heading naming the verse they belong
    to, each headed by the reference it points at and the verse it came from —
    which is what tells them from the references of a reference one level
-   deeper. What belongs to one of them is nested under it.
+   deeper. What belongs to one of them is nested under it. A `+` naming
+   several verses brings every one of them, each a reference of its own with
+   its own material one level deeper; so does a citation of a publication
+   that names several passages.
 4. **Quotations of …** — every publication a citation search finds quoting the
    verse, each with the passage it quotes it in, and every video quoting it,
    with the passage of its transcript: `jw bible cited` for that verse, printed
    where the verse stands. The heading names the reference it
    answers for. A quotation is where an expansion ends: what it cites is never
    unfolded in turn, and the document being unfolded is never listed as
-   quoting a verse it cites itself.
+   quoting a verse it cites itself. When the search fails — wol answers 503
+   now and then — the heading stays and says the quotations could not be
+   listed, so an outage never reads as nobody quoting the verse.
 
 Each unfolded reference is a verse in its own right, so at `--unfold 2` it
 brings its own notes, indexes and margin in turn, one level deeper. The
@@ -498,8 +531,12 @@ Unfolding level 3 needs up to 4820 more requests to wol.jw.org. Continue? [y/N]
 
 The count is an upper bound: verses of one chapter share its page, and a verse's
 citation lookup is priced at two full pages of results before anyone knows how
-many there are. Documents are cached, so a second run of the same
-material spends almost nothing.
+many there are. How many verses a `+` names is only known once it is read, so
+the material of the verses past its first is asked about on its own, before it
+is spent. Documents are cached, so a second run of the same
+material spends almost nothing. The references of a level are read eight at a
+time, since wol takes a second or more per answer; what comes out, what is
+counted and the order it comes in are the same as one at a time.
 
 `-y, --yes` answers in advance, and is required when stdin is not a terminal,
 since a script has nobody to ask. Declining stops there and the output says how
@@ -525,8 +562,8 @@ song's lyrics, the document a recording reads, or the transcript of a video's
 subtitles (behind a fold when lyrics are shown too). The line being sung or
 said is highlighted as the item plays, and pressing a line or a caption's time
 plays from there. The page also names the recording's publication, links the
-item's page on jw.org, the printed edition and the lead sheet, and lists each
-rendition's picture size and frame rate.
+printed edition and the lead sheet, and lists each rendition's picture size and
+frame rate; the item's page on jw.org is opened from the settings.
 
 The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
 it is about to listen on a non-loopback address without authentication.
@@ -591,25 +628,50 @@ holds the on-disk cache; mount a volume to keep it across restarts.
 What jw.org and wol.jw.org answer is kept on disk (in the user cache
 directory, `/data` in the image) with no expiry, and reused — by the next
 command, and by `jw serve` across restarts. For 24 hours an answer is used as
-is; after that, a `HEAD` request asks upstream whether it changed (by ETag,
-length or Last-Modified, whichever the site sends). If not, it is good for
-another 24 hours; if so, only that page is read again, and only the results
-derived from it (a parsed book grid, a library listing) are rebuilt. When
-upstream cannot be reached, what is kept is used. `--cache-ttl 1h` changes the
-window, `--cache-ttl 0` checks on every use.
+is; after that, a `HEAD` request asks upstream whether it changed (by ETag or
+Last-Modified, whichever the site sends). Where that cannot tell — a length
+alone, or a new ETag for every render — a `GET` does, by comparing the page
+itself, leaving out the nonce wol.jw.org puts into every render. If it did not
+change, it is good for another 24 hours; if it did, only that page is read
+again, and only the results derived from it (a parsed book grid, a library
+listing) are rebuilt. A page one server says is gone is asked for once more
+past the CDN before what is kept of it is dropped, as some of wol's servers
+lack what was published lately. When upstream cannot be reached, what is kept
+is used: a server is given 10 seconds to start answering, and once one did
+not, or said it is unavailable, what is kept of its pages is used for 10
+minutes without asking it — by the next command too. A read with nothing kept
+to fall back on asks twice more, after 1 and 3 seconds, when the server says
+it is busy (429, 502, 503, 504). `--cache-ttl 1h` changes the window,
+`--cache-ttl 0` checks on every use.
 
 The cache is bounded at 4 GB by default; past that, what was used least
 recently is dropped. `--cache-max 500MB` or `JW_CACHE_MAX=2GB` changes the
-bound, `0` turns the cache off. Downloads and signed-in search requests are
-never kept.
+bound, `0` turns the cache off. Commands run one after another keep to it
+together: each adds what it wrote to the cache's `.swept` marker for the next
+one to go by, and the cache is measured anew at least once an hour. Downloads
+and signed-in search requests are never kept.
 
 `--lang` sets the default content language; every page and endpoint takes a
-`?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
-endpoints render bodies as sanitized HTML by default; `?format=markdown` and
-`?format=text` select the other formats. Errors come back as
-`{"error": {"code": "...", "message": "..."}}` with `400` (bad parameters),
-`404` (nothing there upstream), `422` (an unfold that would need more upstream
-requests than an unattended server spends), or `502` (upstream failure).
+`?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). A page
+remembers a `?lang=` that resolves in a `lang` cookie, so the next link without
+one comes back in it; the API, the downloads and the streams read that cookie
+but never set it, and a remembered language that no longer resolves is passed
+over for the default. Content endpoints render bodies as sanitized HTML by
+default; `?format=markdown` and `?format=text` select the other formats, headed
+by the document's title as the CLI prints them, and with each section left to
+load (see below) followed by its `/unfold/…` address. `?urls=0` leaves every
+link target and image source out of a body, keeping the words, as `--no-urls`
+does. Any route takes `?refresh=1`, which reads what it needs anew from jw.org
+past every cache (the bar's reload button). Errors come back as
+`{"error": {"code": "...", "message": "..."}}` with `400` (bad parameters, or a
+reference that names nothing), `404` (nothing there upstream), `422` (an unfold
+that would need more upstream requests than an unattended server spends),
+`502` (upstream failure), or `504` (`timeout`: upstream did not answer in time,
+or the request was not done within ten minutes — the deadline every API request
+has; the streams below have none). Web pages say what an upstream failure means
+in their own language instead of quoting it. Pages and API answers are sent
+`Cache-Control: private` with `Vary: Cookie`; the files under `/static/` carry
+an ETag and are revalidated.
 
 `jw bible read` prints the headings of the book's outline of contents between
 the verses — for the Gospels and Acts, the headings of their overview — where
@@ -683,10 +745,16 @@ publication in the library — can be held (a long press, or a right click) for
 the rest of the choices: how deep to unfold the verse or paragraph it is in
 (else open it as a reference, where that is how it opens), open its page here or in a new tab, or **open it in** the section it belongs to
 — the bible, the publications, media — without leaving the page: the section's
-menu entry then leads there, and the section's history lists it.
+menu entry then leads there, and the section's history lists it. A verse's
+number inside something unfolded unfolds that verse in place, as the reader's
+own verse numbers do, and holding it offers the same choices.
+Where a link is read on jw.org or wol.jw.org is offered there too, as **open on
+the website**, and the page's own document is opened on the website from the
+settings in the bar; no page links out to the sites otherwise.
 
-Every page is kept as it was left. What was unfolded, what was open and how far
-down the page was scrolled are kept in the browser (IndexedDB) and put back on
+Every page is kept as it was left, for the language it was read in. What was
+unfolded, what was open and how far down the page was scrolled are kept in the
+browser (IndexedDB) and put back on
 return without asking the server again — an item that found nothing, or
 failed, stays that way until it is asked for again — and the menu leads back to
 the last page of each section: the bible, the meetings, media, publications
@@ -720,7 +788,8 @@ footnotes, the passages its Research Guide and Publications Index point at,
 and its marginal references — and every bible verse any of them cites, as a
 verse at depth N−1. A verse at depth 0 is its text, with all of its sections as
 headings that load once opened; one that turns out to have nothing says so
-for a moment ("Nothing here") and then fades away. Other translations and quotations load once opened at every
+for a moment ("Nothing here") and then fades away; one that could not be
+loaded says why and offers to try again. Other translations and quotations load once opened at every
 depth. A passage of another publication is no step of its own: it brings the
 verses it cites one reference further down than the verse or document citing
 it, and nothing else it cites is followed. Depth 1 on a verse:
@@ -768,7 +837,8 @@ jw.org address it was read from.
 
 Every page keeps a header in view: the page's title, a link up to the page
 above it (the last breadcrumb, the section's start, or the page a document was
-opened from), and buttons for a smaller, the default or a larger text size —
+opened from — a reading leads up to its book's chapters, a book to all books,
+a search to the search page), and buttons for a smaller, the default or a larger text size —
 kept in this browser. On the bible reader the header names the book, chapter
 and verses in view and opens a book picker: the chapters of the current book in
 one row that scrolls sideways, the book grid under it, and a book picked there
@@ -826,24 +896,46 @@ of its own goes through `GET /open?path=/wol/bc/…`, which reads it and goes on
 to the bible reader with the verses it quotes, or to the article a citation of
 a publication or a footnote is part of; `GET /api/v1/open?path=…` names that
 page as `{"url": …}` without going there. The bible reader also takes verses by
-id: `/bible?vid=43003016&to=43003017`. Without JavaScript the switcher reloads
-the page unfolded server-side, and a level that needs more requests than the
-server spends unasked is offered on a confirmation page first (with
-JavaScript, a prompt).
+id: `/bible?vid=43003016&to=43003017`, and its **All translations** box reads
+the passage in every bible of the language (`all=1`). Without JavaScript the
+switcher reloads the page unfolded server-side, and a level that needs more
+requests than the server spends unasked is offered on a confirmation page first
+(with JavaScript, a prompt). A section left to load holds, for a page read
+without JavaScript, a link to a page showing what it would load: the verse
+unfolded (`/bible?vid=…&unfold=1`) for a verse's sections, the verse in every
+bible (`/bible?vid=…&all=1`) for its other translations, and who quotes it
+(`/cited?vid=…`) for its quotations.
 
-The page loads those expansions from two streaming endpoints, answered as
+`GET /cited?ref=Jer+31:15` lists who quotes a verse as `jw bible cited` does —
+every publication of the library citing it, and the videos quoting it — with
+the command's options (sort, scope, all/include/exclude, videos, excerpts) in a
+form; bibles and indexes stay out unless asked for. The search page's options
+cover what `jw search` takes: the engine, jw.org's content type and page size
+(at most 36), the order, and the Online Library's scope, publications
+(all/include/exclude) and full excerpts; a jw.org listing's header says which
+page it shows ("page 2, 10 per page"), except on the first page of everything,
+which jw.org groups by kind past the page size. The daily text and the meeting
+pages list their scripture references and images below the document as an
+article's page does, each picture with its alt text and size. A meeting is
+also found by the CLI's aliases (`/meetings/mw`, `/meetings/we`, …), which lead
+to its own address.
+
+The page loads those expansions from seven streaming endpoints, answered as
 newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `error`, `done`) flushed as they happen:
 `GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse, or a range
 with `to=`: study notes, indexes, marginal references, quotations; `part=notes|
 footnotes|indexes|marginal` — one index with `kind=guide|pubindex` — loads one
-of them alone, and with `lazy=1` loads it while the others come as headings) and
+of them alone, and with `lazy=1` loads it while the others come as headings),
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
-wol citation paths are followed), plus `GET /unfold/footnote?path=…`,
-`GET /unfold/translations?vid=…&bible=…`, `GET /unfold/cited?vid=…&self=…`
-(who quotes a passage, leaving the documents named by `self` out) and
-`GET /unfold/article?url=…&depth=…` (a library document or a jw.org page; only
-its path is kept and read from that site). Everything one request unfolds shares one
+wol citation paths are followed), `GET /unfold/chapter?bible=…&book=…&chapter=…`
+(what the library has on a chapter: the outline's headings covering it, the
+book's introduction, the chapter's part of the gallery),
+`GET /unfold/footnote?path=…`, `GET /unfold/translations?vid=…&bible=…`,
+`GET /unfold/cited?vid=…&self=…` (who quotes a passage, leaving the documents
+named by `self` out) and `GET /unfold/article?url=…&depth=…` (a library
+document or a jw.org page; only its path is kept and read from that site).
+Everything one request unfolds shares one
 request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports
 what the request spent, and **Unfold all** passes the running total of its run
@@ -856,27 +948,31 @@ them; a stream that fails gives its verses back.
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
-| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=0` | `jw search` |
-| `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3) | `jw article` (images and scripture refs are fields of the response) |
-| `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `outlines=0`, `format` | `jw bible read` |
+| `GET /api/v1/open` | `path`* (a wol citation or footnote) | — (the page of this server it is read on, as `{"url": …}`) |
+| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤36, jw.org only: wol's pages are 40 results), `page`, `scope`, `all`/`include`/`exclude` (checked with either engine), `excerpts=0` | `jw search` |
+| `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3), `force=1`, `urls=0` | `jw article` (images and scripture refs are fields of the response) |
+| `GET /api/v1/bible/read` | `ref`*, `bible` or `all=true` (not both), `unfold`, `force=1`, `outlines=0`, `format`, `urls=0` | `jw bible read` |
 | `GET /api/v1/bible/notes` | `ref`* | `jw bible notes` |
 | `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
 | `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |
 | `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
 | `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0`, `videos=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
+| `GET /api/v1/bible/intro` | `book`* (name or number), `bible` | `jw bible intro -o json` |
+| `GET /api/v1/bible/outline` | `book`*, `bible` | `jw bible outline -o json` |
+| `GET /api/v1/bible/gallery` | `book`*, `bible` | `jw bible gallery -o json` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/bible/verses` | `bible`, `book`, `chapter` | — (the chapter's page: how many verses it has) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
-| `GET /api/v1/media/items/{lank}/text` | — | `jw media text` |
+| `GET /api/v1/media/items/{lank}/text` | — | `jw media text` (`404` for an item without words) |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
 | `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
-| `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents) |
-| `GET /api/v1/dailytext` | `date`, `format`, `unfold` | `jw dailytext` |
-| `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold` | `jw meetings ...` |
-| `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` |
-| `GET /download/pub` | pub parameters | `jw pub --download` |
+| `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents; `404` for one wol does not have) |
+| `GET /api/v1/dailytext` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw dailytext` |
+| `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw meetings ...` (also `mid`/`mw`, `we`/`wt`) |
+| `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` (with `subtitles=true` the redirect goes to the `.vtt` alone, `404` when there is none, where `jw download --subtitles` saves the video and its subtitles) |
+| `GET /download/pub` | pub parameters | `jw pub --download` (one file: `302` to it; several: `300 Multiple Choices` with the listing to pick a `fileUrl` from; none: `404`) |
 
 ```sh
 curl 'http://127.0.0.1:8080/api/v1/search?q=kingdom&limit=5'
@@ -933,13 +1029,19 @@ wol.jw.org requests at 50 a second (`requestsPerSecond` in
 user cache directory (`~/.cache/jw` on Linux, `http/`) with their validators,
 and revalidated by `HEAD` once older than the freshness window
 (`internal/httpx/revalidate.go`); a server that cannot answer a `HEAD` usefully
-— the CDN's mediator API answers it with 404, jw.org renders some pages per
-request — is remembered and asked with a `GET` instead, and an equal body is
-still no change. Results derived from bodies (language list, localized bible
-book names, book grids, library pages) are memos (`memo/`, `httpx.Memo`) that
-record the bodies they were built from and are rebuilt only when one of those
-changed. Concurrent reads of one page share one request, and the least recently
-used entries are evicted beyond `--cache-max`.
+— the CDN's mediator API answers it with 404, its other APIs with a length
+alone, jw.org renders some pages per request — is remembered and asked with a
+`GET` instead, and an equal body (its nonce attributes left out) is still no
+change. Results derived from bodies (language list, localized bible book names,
+book grids, library pages) are memos (`memo/`, `httpx.Memo`) that record the
+bodies they were built from and are rebuilt only when one of those changed.
+Requests that a kept body or memo can stand in for give the server 10 seconds
+to answer and are not retried; a host that fails one is backed off for 10
+minutes, and the back-off is kept in the cache along with that of each body and
+each failed rebuild (`internal/httpx/outage.go`). Other `GET` and `HEAD`
+requests are retried twice when upstream is busy. Concurrent reads of one page
+share one request, and the least recently used entries are evicted beyond
+`--cache-max`.
 
 ## Live smoke-test checklist
 

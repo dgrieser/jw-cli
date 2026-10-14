@@ -1,13 +1,20 @@
 package service
 
 import (
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	htmlpkg "html"
+	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -26,6 +33,10 @@ type Verse struct {
 	// verse: those that begin here, and on the first verse read those it is
 	// already inside of.
 	Outline []model.OutlineItem `json:"outline,omitempty"`
+	// StartsLine says the verse begins a line of its own rather than running on
+	// from the verse before it: a verse of poetry, or the prose after poetry.
+	// The lines within a verse are already broken in its HTML.
+	StartsLine bool `json:"startsLine,omitempty"`
 }
 
 // Passage is one reference read, in one bible edition.
@@ -84,6 +95,9 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 	if err != nil {
 		return ReadResult{}, err
 	}
+	if err := bibleref.Validate(refs, table); err != nil {
+		return ReadResult{}, err
+	}
 	editions, err := s.ReadEditions(ctx, lng, req.Edition, req.AllBibles)
 	if err != nil {
 		return ReadResult{}, err
@@ -110,7 +124,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				doc, err = s.Chapter(ctx, lng, ed.Symbol, ref)
 				if err != nil {
 					if !req.AllBibles {
-						return ReadResult{}, err
+						return ReadResult{}, s.chapterError(ctx, lng, ed.Symbol, ref, table, err)
 					}
 					// a translation of part of the Bible only, or one that
 					// numbers its chapters differently
@@ -122,16 +136,17 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 			verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 			if err != nil {
 				if !req.AllBibles {
-					return ReadResult{}, fmt.Errorf("%s: %w", RefString(ref, table), err)
+					return ReadResult{}, verseError(ref, ed.Symbol, doc, table)
 				}
 				skipped = append(skipped, ed.Symbol)
 				continue
 			}
 			// where a reference running past its chapter ends is the edition's
-			// own answer, so it is resolved per edition
+			// own answer, so it is resolved per edition, and the passage is
+			// headed with the verses it shows
 			r := ResolveChapterEnd(ref, verses)
 			p := Passage{Ref: RefString(r, table), Book: r.Book, Chapter: r.Chapter,
-				Whole: ref.IsWholeChapter() || (ref.VerseStart <= 1 && ref.RunsToChapterEnd())}
+				Whole: ref.IsWholeChapter() || (ref.VerseStart <= 1 && ref.VerseEnd >= doc.LastVerse())}
 			if req.AllBibles {
 				p.Bible, p.BibleTitle = ed.Symbol, ed.Label()
 			}
@@ -162,7 +177,7 @@ func (s *Service) ReadPassages(ctx context.Context, lng model.Language, req Read
 				}
 			}
 			for i, v := range verses {
-				verse := Verse{Verse: v}
+				verse := Verse{Verse: v, StartsLine: doc.StartsLine(v.ID % 1000)}
 				if i < len(unfolded) {
 					verse.Unfold = unfolded[i]
 					if len(verses) > 1 {
@@ -203,23 +218,36 @@ func FormatPassages(res ReadResult, format render.Format, opts render.Options) (
 			b.WriteString("\n")
 		}
 		var html strings.Builder
+		// whether verse text was the last thing written, which a verse that
+		// starts a line of its own has to be broken from; after a heading or an
+		// expansion it already stands on a line of its own
+		running := false
 		for _, run := range verseRuns(p.Verses) {
 			for j, v := range run {
 				// a verse's headings stand ahead of everything printed for it
-				html.WriteString(outlineHTML(v.Outline, format))
+				if outline := outlineHTML(v.Outline, format); outline != "" {
+					html.WriteString(outline)
+					running = false
+				}
 				if j == 0 {
 					if cite := runCitation(run, res.Table); cite != "" {
 						html.WriteString(headingHTML(passageUnfoldLevel, htmlpkg.EscapeString(cite)))
+						running = false
 					}
+				}
+				if v.StartsLine && running {
+					html.WriteString("<br/>")
 				}
 				html.WriteString(v.HTML)
 				html.WriteString(" ")
+				running = true
 				if v.Unfold != "" {
 					// what a verse brought, kept together and marked as its
 					// own: a reader of the rendered page can then fold it
 					// away, and the markdown and text renderers pass a plain
 					// div through untouched
 					html.WriteString(`<div class="expansion">` + v.Unfold + `</div>`)
+					running = false
 				}
 			}
 		}
@@ -318,15 +346,87 @@ func RefString(r bibleref.Ref, t *bibleref.Table) string {
 	}
 }
 
-// ResolveChapterEnd names the last verse of a reference that was written as
-// running past its chapter — "Pr 8:5-9:10" takes chapter 8 to its end — now that
-// the chapter has been read and where it ends is known.
+// ResolveChapterEnd names the last verse of a reference that runs past the end
+// of its chapter — "Pr 8:5-9:10" takes chapter 8 to its end, and "Joh 3:16-99"
+// ends where John 3 does, with verse 36 — now that the chapter has been read
+// and its verses are known. verses are the ones read for the reference.
 func ResolveChapterEnd(ref bibleref.Ref, verses []model.Verse) bibleref.Ref {
-	if !ref.RunsToChapterEnd() || len(verses) == 0 {
+	if ref.IsWholeChapter() || len(verses) == 0 {
 		return ref
 	}
-	ref.VerseEnd = verses[len(verses)-1].ID % 1000
+	if last := verses[len(verses)-1].ID % 1000; ref.VerseEnd > last {
+		ref.VerseEnd = last
+	}
 	return ref
+}
+
+// notThere is an error about something the library does not have, worded for
+// the reader. It is pubmedia.ErrNotFound to whoever classifies it — the server
+// answers it with 404 — without that sentinel's own words in the message.
+type notThere string
+
+func (e notThere) Error() string { return string(e) }
+func (e notThere) Unwrap() error { return pubmedia.ErrNotFound }
+
+// chapterError words why a chapter could not be read in an edition. wol refuses
+// a chapter it cannot serve with a bare 400 (or serves a page without verses),
+// whether the edition is none the language has or the edition does not cover
+// that part of the Bible — the Kingdom Interlinear has the Greek Scriptures
+// only — so the language's bible list tells the two apart. A chapter no book
+// has never gets here (bibleref.Validate), and any other failure is passed on
+// as it is.
+func (s *Service) chapterError(ctx context.Context, lng model.Language, edition string, ref bibleref.Ref,
+	t *bibleref.Table, err error) error {
+	if !refused(err) && !errors.Is(err, wol.ErrNoVerses) {
+		return err
+	}
+	cfg, cerr := s.WOLConfig(ctx, lng)
+	if cerr != nil {
+		return err
+	}
+	// the edition that was read, should the study edition have been stood in for
+	edition = s.readableEdition(ctx, cfg, edition)
+	language := cmp.Or(lng.Name, lng.Symbol)
+	editions, berr := s.WOL.Bibles(ctx, cfg)
+	if refused(berr) {
+		// a language with publications in the library but no bible: Kachin
+		return notThere(fmt.Sprintf("the library has no bible in %s", language))
+	}
+	if berr != nil {
+		return err
+	}
+	symbols := make([]string, 0, len(editions))
+	for _, e := range editions {
+		if e.Symbol == edition {
+			chapter := RefString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter}, t)
+			return notThere(fmt.Sprintf("%s is not in %s", chapter, e.Label()))
+		}
+		symbols = append(symbols, e.Symbol)
+	}
+	// the edition asked for by default is no exception: the study edition is
+	// in a few dozen languages only, Assamese has the plain NWT
+	return fmt.Errorf("there is no bible edition %q in %s; the bibles in %s are %s",
+		edition, language, language, strings.Join(symbols, ", "))
+}
+
+// refused reports whether wol refused a page as one it does not have: it
+// answers that with a bare 400 as often as with a 404.
+func refused(err error) bool {
+	var se *httpx.StatusError
+	return errors.As(err, &se) && (se.StatusCode == http.StatusBadRequest || se.StatusCode == http.StatusNotFound)
+}
+
+// verseError words a reference to verses its chapter does not have once the
+// chapter has been read: "Joh 3:99" asks past the end of John 3, which is a
+// mistake of the reference, while a verse inside the chapter that the edition
+// leaves out — the NWT has no Matthew 17:21 — is not there to be read.
+func verseError(ref bibleref.Ref, edition string, doc *wol.ChapterDoc, t *bibleref.Table) error {
+	last := doc.LastVerse()
+	if last > 0 && ref.VerseStart > last {
+		chapter := RefString(bibleref.Ref{Book: ref.Book, Chapter: ref.Chapter}, t)
+		return fmt.Errorf("there is no %s: %s has %d verses", RefString(ref, t), chapter, last)
+	}
+	return notThere(fmt.Sprintf("%s is not in %s", RefString(ref, t), cmp.Or(edition, studyEdition)))
 }
 
 // ForEachStudySection iterates the study sections of every verse in the parsed
@@ -338,6 +438,9 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 	if err != nil {
 		return err
 	}
+	if err := bibleref.Validate(refs, table); err != nil {
+		return err
+	}
 	chapters := map[string]*wol.ChapterDoc{}
 	for _, ref := range refs {
 		key := fmt.Sprintf("%d-%d", ref.Book, ref.Chapter)
@@ -345,7 +448,7 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 		if !ok {
 			doc, err = s.Chapter(ctx, lng, studyEdition, ref)
 			if err != nil {
-				return err
+				return s.chapterError(ctx, lng, studyEdition, ref, table, err)
 			}
 			chapters[key] = doc
 		}
@@ -354,7 +457,7 @@ func (s *Service) ForEachStudySection(ctx context.Context, lng model.Language, i
 		texts := map[int]model.Verse{}
 		verses, err := doc.Verses(ref.VerseStart, ref.VerseEnd)
 		if err != nil {
-			return fmt.Errorf("%s: %w", RefString(ref, table), err)
+			return verseError(ref, studyEdition, doc, table)
 		}
 		ref = ResolveChapterEnd(ref, verses)
 		from, to := ref.VerseStart, ref.VerseEnd
@@ -441,8 +544,8 @@ type ResearchEntry struct {
 }
 
 // Research lists the Research Guide entries attached to each verse; with
-// excerpts the referenced passage of each publication is fetched too (best
-// effort).
+// excerpts the referenced passage of each publication is fetched too, eight
+// at a time, and one that cannot be read says why on its entry.
 func (s *Service) Research(ctx context.Context, lng model.Language, input string, excerpts bool) ([]ResearchEntry, error) {
 	var entries []ResearchEntry
 	err := s.ForEachStudySection(ctx, lng, input, func(ref string, verse model.Verse, sec model.StudySection) {
@@ -454,35 +557,58 @@ func (s *Service) Research(ctx context.Context, lng model.Language, input string
 		return nil, err
 	}
 	if excerpts {
+		var (
+			wg  sync.WaitGroup
+			sem = make(chan struct{}, excerptWorkers)
+		)
 		for _, e := range entries {
 			for i := range e.Items {
-				if e.Items[i].PCPath == "" {
+				it := &e.Items[i]
+				if it.PCPath == "" {
 					continue
 				}
-				tip, err := s.WOL.Tooltip(ctx, e.Items[i].PCPath)
-				if err != nil {
-					continue // excerpts are best effort
-				}
-				e.Items[i].ExcerptHTML = tip.ContentHTML
-				if e.Items[i].ArticleURL == "" {
-					e.Items[i].ArticleURL = tip.URL
-				}
-				if e.Items[i].Title == "" {
-					e.Items[i].Title = tip.Title
-				}
+				wg.Add(1)
+				sem <- struct{}{}
+				go func() {
+					defer wg.Done()
+					defer func() { <-sem }()
+					tip, err := s.WOL.Tooltip(ctx, it.PCPath)
+					if err != nil {
+						it.ExcerptErr = failureCause(err)
+						return
+					}
+					it.ExcerptHTML = tip.ContentHTML
+					if it.ArticleURL == "" {
+						it.ArticleURL = tip.URL
+					}
+					if it.Title == "" {
+						it.Title = tip.Title
+					}
+				}()
 			}
 		}
+		wg.Wait()
 	}
-	return entries, nil
+	return entries, ctx.Err()
 }
 
 // BibleMedia lists images and clips attached to the verses of the references.
 // With meta, what the study pane leaves out is read from each item's gallery
-// page (best effort); a download-bound listing skips that.
+// page (best effort); a download-bound listing skips that, and fails where a
+// clip's file cannot be found, since the file is what it is for.
 func (s *Service) BibleMedia(ctx context.Context, lng model.Language, input string, meta bool) ([]model.Result, error) {
 	var items []model.Result
+	var clipErr error
 	err := s.ForEachStudySection(ctx, lng, input, func(ref string, _ model.Verse, sec model.StudySection) {
 		for _, m := range sec.Media {
+			if lank := clipLANK(m.FinderLink); lank != "" {
+				r, err := s.clipResult(ctx, lng, lank, m, ref)
+				if err != nil && clipErr == nil {
+					clipErr = err
+				}
+				items = append(items, r)
+				continue
+			}
 			if meta {
 				m = s.WithGalleryMeta(ctx, m)
 			}
@@ -491,7 +617,50 @@ func (s *Service) BibleMedia(ctx context.Context, lng model.Language, input stri
 			items = append(items, r)
 		}
 	})
+	if err == nil && !meta {
+		err = clipErr
+	}
 	return items, err
+}
+
+// clipLANK is the video a study pane's media entry plays a stretch of, from
+// its jw.org link ("finder?lank=pub-gnj_3_VIDEO&ts=00:05:02.26-00:07:52.31"),
+// or empty for a picture.
+func clipLANK(finderLink string) string {
+	u, err := url.Parse(finderLink)
+	if err != nil {
+		return ""
+	}
+	lank := u.Query().Get("lank")
+	if !strings.HasSuffix(strings.ToUpper(lank), "_VIDEO") {
+		return ""
+	}
+	return lank
+}
+
+// clipResult lists a verse's clip as the video it is: the study pane shows a
+// poster for it, which stays its picture, and links the stretch of the video
+// the clip is to jw.org, which stays its link. The file is the video's — no
+// rendition holds the stretch alone — so downloading the row saves the video
+// rather than the poster. Without the mediator's word on the video the row
+// still names it by its LANK, which is all jw download needs.
+func (s *Service) clipResult(ctx context.Context, lng model.Language, lank string, m model.MediaAsset,
+	ref string) (model.Result, error) {
+	r := model.Result{
+		Kind: "video", Title: cmp.Or(m.Caption, m.Alt, lank), Context: ref,
+		LANK: lank, ImageURL: m.URL, JWLink: m.FinderLink,
+	}
+	item, err := s.Mediator.MediaItem(ctx, lng.Symbol, lank)
+	if err != nil {
+		return r, err
+	}
+	f, err := PickBest(item)
+	if err != nil {
+		return r, err
+	}
+	r.FileURL, r.Checksum, r.Filesize = f.URL, f.Checksum, f.Filesize
+	r.Duration = item.DurationFormatted
+	return r, nil
 }
 
 // WithGalleryMeta fills in what the study pane leaves out. A verse's picture is
@@ -555,11 +724,10 @@ func (s *Service) BibleNav(ctx context.Context, lng model.Language, edition stri
 	return s.WOL.BibleNav(ctx, cfg, edition)
 }
 
-// BookNav is the chapter grid of one book in an edition.
 // VerseCount is how many verses a chapter has in an edition: the number of
 // its last verse.
 func (s *Service) VerseCount(ctx context.Context, lng model.Language, edition string, book, chapter int) (int, error) {
-	if book < 1 || book > 66 || chapter < 1 {
+	if book < 1 || book > 66 || chapter < 1 || chapter > bibleref.Chapters(book) {
 		return 0, fmt.Errorf("invalid chapter %d:%d", book, chapter)
 	}
 	cfg, err := s.WOLConfig(ctx, lng)
@@ -569,6 +737,7 @@ func (s *Service) VerseCount(ctx context.Context, lng model.Language, edition st
 	return s.WOL.VerseCount(ctx, cfg, edition, book, chapter)
 }
 
+// BookNav is the chapter grid of one book in an edition.
 func (s *Service) BookNav(ctx context.Context, lng model.Language, edition string, book int) (wol.BookNav, error) {
 	if book < 1 || book > 66 {
 		return wol.BookNav{}, fmt.Errorf("invalid book %d (want 1-66)", book)

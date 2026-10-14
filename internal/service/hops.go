@@ -200,7 +200,7 @@ func hopNotesSection(notes []model.StudyNote, err error, cited []unfold.Node, le
 	}
 	var b strings.Builder
 	if err != nil {
-		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.StudyFailed, err)))
+		fmt.Fprintf(&b, "<p><em>%s</em></p>", html.EscapeString(fmt.Sprintf(txt.StudyFailed, failureCause(err))))
 	}
 	b.WriteString(withCited(notesBody(notes), cited, level+1, txt))
 	sec.Body = b.String()

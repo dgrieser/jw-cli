@@ -107,6 +107,11 @@ type Messages struct {
 	// MediaTextHint takes the media item's LANK.
 	MediaTextHint string
 
+	// DownloadHintFiles stands for DownloadHint under a video that has no
+	// LANK to download it by — one of a bible book's gallery — so only the
+	// numbers of its files are offered.
+	DownloadHintFiles string
+
 	// --- languages table --------------------------------------------------
 	ColSymbol     string
 	ColLocale     string
@@ -191,6 +196,21 @@ type Messages struct {
 	UnfoldStopped string
 	// UnfoldFailed takes the reason a reference could not be resolved.
 	UnfoldFailed string
+
+	// CitedFailed takes the reason the publications quoting a verse could not
+	// be listed. It stands where they would have, so a search that failed
+	// never reads as nobody quoting the verse.
+	CitedFailed string
+
+	// CitedVideosFailed takes the reason the videos quoting a verse could
+	// not be searched for; CitedUnread the number of results shown with the
+	// search's teaser because their documents could not be read, and so not
+	// judged on what they say. Both are notes under a listing, so what it
+	// lacks never reads as there being nothing more. ResearchExcerptFailed
+	// takes the reason a Research Guide passage could not be read.
+	CitedVideosFailed     string
+	CitedUnread           string
+	ResearchExcerptFailed string
 
 	// --- dates ------------------------------------------------------------
 	// Weekdays is indexed by time.Weekday, Months by time.Month minus one.
@@ -318,6 +338,49 @@ type Messages struct {
 	UIProgressLevel   string
 	UIProgressItems   string
 	UIUnfolding       string
+
+	// UIErr* are what a page of the server says in place of an answer of
+	// jw.org or wol.jw.org that was not the page asked for — a request line
+	// and a status code mean nothing to a reader: that there is no such page,
+	// that the site failed (UIErrUpstream takes the status code), could not
+	// be reached, or did not answer in time.
+	UIErrNotFound    string
+	UIErrUpstream    string
+	UIErrUnreachable string
+	UIErrTimeout     string
+
+	// UIPageArticle and UIPageError name the article page before it shows a
+	// document, and a page that failed, in the tab and the bar.
+	UIPageArticle string
+	UIPageError   string
+
+	// UICited* are the page listing who quotes a verse (jw bible cited): its
+	// heading, the hint in its field, and the switch for the videos quoting
+	// the verse.
+	UICitedTitle  string
+	UICitedHint   string
+	UICitedVideos string
+	// UIScope* choose what the words looked for in the Online Library are
+	// found together in: a paragraph or a sentence.
+	UIScope    string
+	UIScopePar string
+	UIScopeSen string
+	// UICats* choose the publications a search of the Online Library covers:
+	// every one, bibles and indexes included, only some, or all but some;
+	// UICatsHint names the codes the last two take.
+	UICatsAll     string
+	UICatsInclude string
+	UICatsExclude string
+	UICatsHint    string
+	// UIPageSize sets how many results a page of the jw.org search shows.
+	UIPageSize string
+	// UIAllTranslations reads a passage in every bible of the language.
+	UIAllTranslations string
+
+	// UILazyFallback leads a page read without scripts from a section that
+	// loads once opened to a page showing what it would load.
+	UILazyFallback string
+
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string
@@ -396,12 +459,11 @@ type Messages struct {
 	// UIPublication, UIResolution and UIPrintedEdition label what the page
 	// knows of a media item: the publication it belongs to, the picture size
 	// of a rendition, the printed page of a song. UIBurnedIn marks a rendition
-	// with its subtitles in the picture; UIOnJWOrg links the item's own page.
+	// with its subtitles in the picture.
 	UIPublication    string
 	UIResolution     string
 	UIPrintedEdition string
 	UIBurnedIn       string
-	UIOnJWOrg        string
 }
 
 // Date renders t as a full date in the language's own word order.
