@@ -3351,20 +3351,22 @@
 
   var bar = document.querySelector(".unfold-bar");
   var levelLinks = bar ? bar.querySelectorAll(".tabs.unfold a[data-level]") : [];
-  var status = make("div", "unfold-status");
-  status.hidden = true;
-  status.setAttribute("role", "status");
-  status.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="text"></span>' +
+  // how far a run got — a name of its own: the page's loading status, which a
+  // link leaving the page shows, is another thing in the same scope
+  var runStatus = make("div", "unfold-status");
+  runStatus.hidden = true;
+  runStatus.setAttribute("role", "status");
+  runStatus.innerHTML = '<span class="spinner" aria-hidden="true"></span><span class="text"></span>' +
     '<span class="meter" aria-hidden="true"><i></i></span>';
   var stop = button("small stop", null, T.stop || "Stop");
-  status.appendChild(stop);
+  runStatus.appendChild(stop);
   var tools = make("div", "unfold-tools");
   var openAll = button("small pill", null, T.openAll || "Open all");
   var closeAll = button("small pill", null, T.closeAll || "Close all");
   tools.appendChild(openAll);
   tools.appendChild(closeAll);
   if (bar) {
-    bar.appendChild(status);
+    bar.appendChild(runStatus);
     bar.appendChild(tools);
   }
 
@@ -3403,17 +3405,17 @@
 
   function showStatus() {
     if (!batch) {
-      status.hidden = true;
+      runStatus.hidden = true;
       if (bar) bar.classList.remove("busy");
       if (allBtn) allBtn.classList.remove("busy");
       return;
     }
-    status.hidden = false;
+    runStatus.hidden = false;
     if (bar) bar.classList.add("busy");
     if (allBtn) allBtn.classList.add("busy");
-    status.querySelector(".text").textContent =
+    runStatus.querySelector(".text").textContent =
       (T.unfolding || "") + " " + fmt(T.progressItems, Math.min(batch.done + 1, batch.total), batch.total);
-    status.querySelector(".meter i").style.width = Math.round(100 * batch.done / Math.max(batch.total, 1)) + "%";
+    runStatus.querySelector(".meter i").style.width = Math.round(100 * batch.done / Math.max(batch.total, 1)) + "%";
   }
 
   // the page bar's diamond unfolds everything, the way a held link unfolds
