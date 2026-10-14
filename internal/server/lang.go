@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
@@ -75,16 +76,26 @@ func (s *Server) language(r *http.Request) (model.Language, error) {
 }
 
 // resolveLanguage resolves one language spec. Resolved languages are memoized
-// per spec, so the language list is not re-scanned on every request.
+// by spec, so the language list is not re-scanned on every request — but only
+// the ways the language list itself names a language (its symbol, its locale)
+// and the server's default: any BCP-47 tag resolves too, and a memo of every
+// one a request made up (de-x-abc123) would grow for as long as the server
+// runs. A request reading past the cache (?refresh=1) reads the language list
+// anew rather than the memo.
 func (s *Server) resolveLanguage(ctx context.Context, spec string) (model.Language, error) {
-	if v, ok := s.langMemo.Load(spec); ok {
-		return v.(model.Language), nil
+	key := strings.ToLower(spec)
+	if !httpx.Refreshing(ctx) {
+		if v, ok := s.langMemo.Load(key); ok {
+			return v.(model.Language), nil
+		}
 	}
 	lng, err := s.svc.Language(ctx, spec)
 	if err != nil {
 		return model.Language{}, err
 	}
-	s.langMemo.Store(spec, lng)
+	if key == strings.ToLower(s.defaultLang) || key == strings.ToLower(lng.Symbol) || key == strings.ToLower(lng.Locale) {
+		s.langMemo.Store(key, lng)
+	}
 	return lng, nil
 }
 

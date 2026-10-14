@@ -36,8 +36,9 @@ type Server struct {
 	logf        func(format string, args ...any)
 	auth        *Credentials
 	pageCache   string
-	// langMemo caches resolved languages per spec, so the language list is not
-	// re-scanned on every request.
+	// langMemo caches resolved languages by the specs the language list names
+	// them by (resolveLanguage), so the list is not re-scanned on every
+	// request.
 	langMemo sync.Map
 	// templates holds one parsed set per UI page, built once at startup.
 	templates map[string]*htmlTemplate
