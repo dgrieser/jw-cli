@@ -33,7 +33,7 @@ var KEEP_CURRENT = 6 * HOUR;
 var STAMP = "X-JW-Kept-At";
 
 // the pages of the site, as opposed to its API, streams and downloads
-var PAGE = /^\/(search|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?)?$/;
+var PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?)?$/;
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(STATIC).then(function (c) {

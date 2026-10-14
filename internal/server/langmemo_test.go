@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -28,7 +29,8 @@ func memoServer(t *testing.T) (*Server, *atomic.Int32) {
 		_, _ = w.Write(b)
 	}))
 	t.Cleanup(up.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}),
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	return New(Config{Svc: service.New(hc, httpx.OpenCacheAt(t.TempDir()))}), &hits
 }
 

@@ -206,7 +206,7 @@ func (s *Server) streamConfig(r *http.Request, depth int) (service.UnfoldConfig,
 
 // editionSymbol is what a bible edition symbol looks like, which is all a
 // stream checks before handing it on to wol.
-var editionSymbol = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
+var editionSymbol = regexp.MustCompile(`^[A-Za-z0-9]{1,16}$`)
 
 // unfoldVerse streams the expansion of one verse: GET /unfold/verse?vid=
 // 43003016&depth=1&bible=nwtsty, a range of verses with &to=. &part= narrows

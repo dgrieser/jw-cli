@@ -37,5 +37,8 @@
 {{- if .Header}}
 <h2 class="listheader">{{.Header}}</h2>
 {{template "listing" .}}
+{{- range .Notes}}
+<p class="note">{{.}}</p>
+{{- end}}
 {{- end}}
 {{end}}

@@ -1172,7 +1172,8 @@
 
   var always = function () { return true; };
   var SECTIONS = [
-    { id: "bible", path: /^\/bible$/, name: T.secBible,
+    // who quotes a verse is part of the bible's study, as the menu says
+    { id: "bible", path: /^\/(bible|cited)$/, name: T.secBible,
       keep: function (q) { return !!(clean(q.get("ref")) || q.get("book") || q.get("vid")); } },
     { id: "meetings", path: /^\/meetings(\/(midweek|weekend))?$/, name: T.secMeetings, keep: always },
     { id: "media", path: /^\/media(\/(category|item)\/[^/]+)?$/, name: T.secMedia, keep: always },
@@ -2023,7 +2024,7 @@
   }
 
   // the pages of this site, as a link names them
-  var SITE_PAGE = /^\/(search|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?|open)?$/;
+  var SITE_PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?|open)?$/;
 
   // pageOf is the page of this site a link is read on by itself: {href, sec}
   // — sec being the section it belongs to, when there is one — or null for a

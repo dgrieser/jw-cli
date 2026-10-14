@@ -55,6 +55,9 @@
 {{- if .Header}}
 <h2 class="listheader">{{.Header}}</h2>
 {{template "listing" .}}
+{{- range .Notes}}
+<p class="note">{{.}}</p>
+{{- end}}
 <nav class="pager">
   {{if .PrevURL}}<a class="btn" href="{{.PrevURL}}">{{.T.UIPrevPage}}</a>{{else}}<span></span>{{end}}
   {{if .NextURL}}<a class="btn" href="{{.NextURL}}">{{.T.UINextPage}}</a>{{end}}

@@ -265,7 +265,8 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 		})
 		return
 	}
-	page := s.base(r, "Error")
+	page := s.base(r, "")
+	page.Title = page.T.UIPageError
 	s.render(w, status, "error", errorPage{
 		basePage: page,
 		Status:   status,
@@ -513,8 +514,10 @@ type searchPage struct {
 	Page     int
 	Header   string
 	Items    []resultView
-	PrevURL  string
-	NextURL  string
+	// Notes say what the listing could not include (see service.SearchOutcome)
+	Notes   []string
+	PrevURL string
+	NextURL string
 }
 
 func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
@@ -522,7 +525,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 	dropBlank(r, "include", "exclude", "limit")
 	limit, _ := intParam(r, "limit", defaultSearchLimit)
 	page := searchPage{
-		basePage: s.base(r, "Search"),
+		basePage: s.base(r, ""),
 		Query:    strings.TrimSpace(r.FormValue("q")),
 		Engine:   valueOr(r, "engine", "jworg"),
 		Type:     valueOr(r, "type", "all"),
@@ -535,6 +538,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		Limit:    max(1, min(limit, maxSearchLimit)),
 		MaxLimit: maxSearchLimit,
 	}
+	page.Title = firstNonEmpty(page.Query, page.T.UINavSearch)
 	if page.Query == "" {
 		s.render(w, http.StatusOK, "search", page)
 		return
@@ -579,6 +583,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	page.Items = s.resultViews(out.Items, page.Lang)
+	page.Notes = out.Notes
 	if pageNum > 1 {
 		page.PrevURL = pagedURL(r, pageNum-1)
 	}
@@ -619,7 +624,8 @@ type articlePage struct {
 }
 
 func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
-	page := articlePage{basePage: s.base(r, "Article"), Target: strings.TrimSpace(r.FormValue("target"))}
+	page := articlePage{basePage: s.base(r, ""), Target: strings.TrimSpace(r.FormValue("target"))}
+	page.Title = page.T.UIPageArticle
 	if page.Target == "" {
 		s.render(w, http.StatusOK, "article", page)
 		return
@@ -651,7 +657,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Unfold, page.AutoUnfold = depth, auto
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
-	page.Title = firstNonEmpty(art.Title, "Article")
+	page.Title = firstNonEmpty(art.Title, page.T.UIPageArticle)
 	if len(page.Crumbs) == 0 && art.Title != "" {
 		// filed nowhere the library says: read among the publications, the
 		// document itself the trail's end
@@ -1294,11 +1300,13 @@ func vidRef(vid int, to string) (bibleref.Ref, bool) {
 // brings, so the reader is the only view; the JSON API keeps the others.
 func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page := biblePage{
-		basePage:  s.base(r, "Bible"),
+		basePage:  s.base(r, ""),
 		Ref:       strings.TrimSpace(r.FormValue("ref")),
 		Edition:   valueOr(r, "bible", "nwtsty"),
 		AllBibles: boolParam(r, "all"),
 	}
+	// the tab names the passage read, else the section
+	page.Title = firstNonEmpty(page.Ref, page.T.UINavBible)
 	page.Editions = s.editionOptions(r, page.Edition)
 	// a chapter picked from the header's book picker reads like one typed
 	if book, _ := intParam(r, "book", 0); page.Ref == "" && book >= 1 && book <= 66 {

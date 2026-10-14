@@ -23,7 +23,8 @@ func TestAPIDeadline(t *testing.T) {
 		}
 	}))
 	t.Cleanup(up.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}),
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	s := New(Config{Svc: service.New(hc, httpx.OpenCacheAt(t.TempDir()))})
 	s.apiTimeout = 100 * time.Millisecond
 	srv := httptest.NewServer(s.Handler())

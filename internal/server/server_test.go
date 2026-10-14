@@ -28,7 +28,8 @@ func newTestServer(t *testing.T, upstream *http.ServeMux) *httptest.Server {
 	t.Helper()
 	up := httptest.NewServer(upstream)
 	t.Cleanup(up.Close)
-	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}))
+	hc := httpx.New(httpx.WithBaseURLs(httpx.BaseURLs{CDN: up.URL, JWOrg: up.URL, WOL: up.URL}),
+		httpx.WithRetryDelays(time.Millisecond, time.Millisecond))
 	svc := service.New(hc, httpx.OpenCacheAt(t.TempDir()))
 	srv := httptest.NewServer(server.New(server.Config{Svc: svc}).Handler())
 	t.Cleanup(srv.Close)
@@ -1311,5 +1312,23 @@ func TestUIBibleChapterNav(t *testing.T) {
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)
+	}
+}
+
+// A page's title follows its language like the rest of its frame, and names
+// what it shows where it shows one thing: the passage read, the words
+// searched for.
+func TestUITitlesFollowTheLanguage(t *testing.T) {
+	srv := newTestServer(t, languagesMux(t))
+	for path, want := range map[string]string{
+		"/search?lang=de":  "<title>Suchen · JW</title>",
+		"/search?lang=en":  "<title>Search · JW</title>",
+		"/article?lang=de": "<title>Artikel · JW</title>",
+		"/cited?lang=de":   "<title>Zitate · JW</title>",
+	} {
+		_, body := get(t, srv, path)
+		if !strings.Contains(body, want) {
+			t.Errorf("%s lacks %s", path, want)
+		}
 	}
 }

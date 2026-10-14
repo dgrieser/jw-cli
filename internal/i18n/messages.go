@@ -349,6 +349,11 @@ type Messages struct {
 	UIErrUnreachable string
 	UIErrTimeout     string
 
+	// UIPageArticle and UIPageError name the article page before it shows a
+	// document, and a page that failed, in the tab and the bar.
+	UIPageArticle string
+	UIPageError   string
+
 	// UICited* are the page listing who quotes a verse (jw bible cited): its
 	// heading, the hint in its field, and the switch for the videos quoting
 	// the verse.

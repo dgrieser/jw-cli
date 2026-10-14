@@ -166,7 +166,8 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ctx := r.Context()
 	ev := startStream(w)
-	page := biblePage{basePage: s.base(r, "Bible"), Edition: edition}
+	page := biblePage{basePage: s.base(r, ""), Edition: edition}
+	page.Title = page.T.UINavBible
 	nav, err := s.svc.BookNav(ctx, lng, edition, book)
 	if err != nil {
 		ev.finish(r, "", 0, err, txt)

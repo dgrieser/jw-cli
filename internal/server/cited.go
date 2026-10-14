@@ -26,6 +26,8 @@ type citedPage struct {
 	Excerpts bool
 	Header   string
 	Items    []resultView
+	// Notes say what the listing could not include (see service.SearchOutcome)
+	Notes []string
 }
 
 // citedDefaultExclude is what a listing of who quotes a verse leaves out
@@ -100,6 +102,7 @@ func (s *Server) uiCited(w http.ResponseWriter, r *http.Request) {
 	page.SiteURL = s.wolSearchPage(ctx, lng, query, p.Scope, p.Sort, p.Categories.List)
 	page.Header = text(lng).CitedResults(out.Total, label)
 	page.Items = s.resultViews(out.Items, page.Lang)
+	page.Notes = out.Notes
 	s.render(w, http.StatusOK, "cited", page)
 }
 

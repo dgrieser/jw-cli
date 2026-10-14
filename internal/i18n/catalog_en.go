@@ -228,6 +228,9 @@ var en = Messages{
 	UIErrUnreachable: "jw.org could not be reached. Please try again later.",
 	UIErrTimeout:     "jw.org took too long to answer. Please try again later.",
 
+	UIPageArticle: "Article",
+	UIPageError:   "Error",
+
 	UICitedTitle:  "Quotations",
 	UICitedHint:   "Jer 31:15 — the verse whose quotations are listed",
 	UICitedVideos: "Videos quoting it",

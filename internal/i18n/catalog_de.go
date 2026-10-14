@@ -228,6 +228,9 @@ var de = Messages{
 	UIErrUnreachable: "jw.org war nicht erreichbar. Bitte später erneut versuchen.",
 	UIErrTimeout:     "jw.org hat zu lange nicht geantwortet. Bitte später erneut versuchen.",
 
+	UIPageArticle: "Artikel",
+	UIPageError:   "Fehler",
+
 	UICitedTitle:  "Zitate",
 	UICitedHint:   "Jer 31:15 — der Vers, dessen Zitate aufgelistet werden",
 	UICitedVideos: "Videos, die ihn zitieren",
