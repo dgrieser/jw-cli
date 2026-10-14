@@ -26,6 +26,8 @@ const (
 type bookDocView struct {
 	View  string
 	Title string
+	// URL is the document's page on wol.jw.org.
+	URL string
 	// the introduction: its video, facts, and the text under the video or
 	// what the video says
 	Intro      *model.BookIntro
@@ -128,7 +130,7 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		if err != nil {
 			break
 		}
-		doc.Intro, doc.Title = &intro, intro.Title
+		doc.Intro, doc.Title, doc.URL = &intro, intro.Title, intro.URL
 		if intro.Video != nil {
 			if f, err := download.PickVideo(intro.Video.Files, streamQuality); err == nil {
 				doc.Stream = &f
@@ -144,7 +146,7 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		if err != nil {
 			break
 		}
-		doc.Title = o.Title
+		doc.Title, doc.URL = o.Title, o.URL
 		doc.Outline = outlineRows(o.Items, o.ByChapter(), page)
 	case viewGallery:
 		if item := r.FormValue("item"); item != "" {
@@ -153,7 +155,7 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 			if err != nil {
 				break
 			}
-			doc.Item, doc.Title = &e, e.Caption
+			doc.Item, doc.Title, doc.URL = &e, e.Caption, e.SourceURL
 			if e.Video != nil {
 				if f, err := download.PickVideo(e.Video.Files, streamQuality); err == nil {
 					doc.Stream = &f
@@ -166,15 +168,19 @@ func (s *Server) bookDoc(r *http.Request, lng model.Language, view string, page 
 		if err != nil {
 			break
 		}
-		doc.Gallery, doc.Title = &g, g.Title
+		doc.Gallery, doc.Title, doc.URL = &g, g.Title, g.URL
 	default:
 		err = fmt.Errorf("unknown view %q (want %s, %s or %s)", view, viewIntro, viewOutline, viewGallery)
 	}
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
 	page.Doc = doc
+	// the document's own page on wol, else the book's
+	if doc.URL != "" {
+		page.SiteURL = doc.URL
+	}
 }
 
 // outlineRows lays an outline out for the page, every heading a link to the

@@ -292,6 +292,45 @@ func TestAPISearchValidation(t *testing.T) {
 	if resp.StatusCode != 400 || !strings.Contains(body, "invalid limit") {
 		t.Errorf("bad limit: status %d body %s", resp.StatusCode, body)
 	}
+	// the category filter is checked with the jw.org engine too, as the CLI
+	// checks its flags
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=zz")
+	if resp.StatusCode != 400 || !strings.Contains(body, `unknown publication category \"zz\"`) {
+		t.Errorf("unknown category: status %d body %s", resp.StatusCode, body)
+	}
+	resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&all=1&exclude=w")
+	if resp.StatusCode != 400 || !strings.Contains(body, "cannot be combined") {
+		t.Errorf("all with exclude: status %d body %s", resp.StatusCode, body)
+	}
+	if resp, body = get(t, srv, "/api/v1/search?q=x&type=videos&include=w,g"); resp.StatusCode != 200 {
+		t.Errorf("known categories: status %d body %s", resp.StatusCode, body)
+	}
+}
+
+// The jw.org search refuses a page of 37 results or more, so the API asks
+// for no more than 36.
+func TestAPISearchLimitCap(t *testing.T) {
+	mux := searchMux(t)
+	var mu sync.Mutex
+	var limits []string
+	up := http.NewServeMux()
+	up.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/search/") {
+			mu.Lock()
+			limits = append(limits, r.URL.Query().Get("limit"))
+			mu.Unlock()
+		}
+		mux.ServeHTTP(w, r)
+	})
+	srv := newTestServer(t, up)
+	if resp, body := get(t, srv, "/api/v1/search?q=x&type=videos&limit=50"); resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(limits) != 1 || limits[0] != "36" {
+		t.Errorf("jw.org was asked for limits %q, want [36]", limits)
+	}
 }
 
 func TestAPIArticle(t *testing.T) {
@@ -356,6 +395,11 @@ func TestAPIBibleRead(t *testing.T) {
 	}
 	if !strings.Contains(out.Body, "John 3:16") {
 		t.Errorf("rendered body: %q", out.Body)
+	}
+	// every bible is not the one named, as the CLI says
+	resp, body = get(t, srv, "/api/v1/bible/read?ref=John+3:16&lang=en&bible=nwt&all=1")
+	if resp.StatusCode != 400 || !strings.Contains(body, "bible and all cannot be combined") {
+		t.Errorf("bible with all: status %d body %s", resp.StatusCode, body)
 	}
 }
 
@@ -686,6 +730,10 @@ func TestUIError(t *testing.T) {
 	}
 	if !strings.Contains(body, "HTTP 404") {
 		t.Errorf("error page:\n%s", body)
+	}
+	// it says what upstream's answer means, not the request it answered
+	if !strings.Contains(body, "jw.org has no page for this.") || strings.Contains(body, "GET http") {
+		t.Errorf("error page quotes the upstream request:\n%s", body)
 	}
 }
 

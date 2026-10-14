@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -11,8 +12,13 @@ import (
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
-// maxSearchLimit caps ?limit=: the API serves pages, not dumps.
-const maxSearchLimit = 50
+// maxSearchLimit caps ?limit= at the largest page the jw.org search answers:
+// it refuses 37 results or more with HTTP 400. The wol engine takes no page
+// size at all; its pages are as long as the site makes them.
+const maxSearchLimit = 36
+
+// defaultSearchLimit is the page size without ?limit=, as jw search's.
+const defaultSearchLimit = 10
 
 func (s *Server) apiLanguages(w http.ResponseWriter, r *http.Request) {
 	langs, err := s.svc.Languages(r.Context())
@@ -53,7 +59,7 @@ func (s *Server) searchParams(r *http.Request, lng model.Language) (*service.Sea
 	if q == "" {
 		return nil, 0, errMissing("q")
 	}
-	limit, err := intParam(r, "limit", 10)
+	limit, err := intParam(r, "limit", defaultSearchLimit)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -72,17 +78,23 @@ func (s *Server) searchParams(r *http.Request, lng model.Language) (*service.Sea
 		Limit:    limit,
 		Excerpts: boolParamOr(r, "excerpts", true),
 	}
+	// the filter is wol's, but it is checked whichever engine runs, as the
+	// CLI checks its flags: a mistyped category is an error, not a filter
+	// quietly dropped. Only wol's search knows the language's own list.
+	var known []string
 	if p.Engine == "wol" {
-		if p.Categories, err = s.categoriesParam(r, lng, nil); err != nil {
-			return nil, 0, err
-		}
+		known = s.svc.KnownCategories(r.Context(), lng)
+	}
+	if p.Categories, err = categoriesParam(r, nil, known); err != nil {
+		return nil, 0, err
 	}
 	return p, page, nil
 }
 
 // categoriesParam reads the wol category filter (?all, ?include=, ?exclude=)
-// the way the CLI flags resolve it.
-func (s *Server) categoriesParam(r *http.Request, lng model.Language, defaultExclude []string) (service.WOLCategories, error) {
+// the way the CLI flags resolve it, against the categories known to the
+// language (none: every category wol has anywhere).
+func categoriesParam(r *http.Request, defaultExclude, known []string) (service.WOLCategories, error) {
 	q := r.URL.Query()
 	all := boolParam(r, "all")
 	include := splitCSV(q.Get("include"))
@@ -99,8 +111,7 @@ func (s *Server) categoriesParam(r *http.Request, lng model.Language, defaultExc
 	if len(include) > 0 && exclude != nil {
 		return service.WOLCategories{}, errExclusive("include", "exclude")
 	}
-	return service.ResolveCategories(all, include, exclude, defaultExclude,
-		s.svc.KnownCategories(r.Context(), lng))
+	return service.ResolveCategories(all, include, exclude, defaultExclude, known)
 }
 
 func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
@@ -128,7 +139,8 @@ func (s *Server) apiBibleCited(w http.ResponseWriter, r *http.Request) {
 		// include names the publications to cover, which no video is
 		Videos: boolParamOr(r, "videos", true) && !r.URL.Query().Has("include"),
 	}
-	if p.Categories, err = s.categoriesParam(r, lng, []string{wol.CategoryBibles, wol.CategoryIndex}); err != nil {
+	if p.Categories, err = categoriesParam(r, []string{wol.CategoryBibles, wol.CategoryIndex},
+		s.svc.KnownCategories(r.Context(), lng)); err != nil {
 		badRequest(w, "%s", err)
 		return
 	}
@@ -179,10 +191,29 @@ func (s *Server) writeArticleJSON(w http.ResponseWriter, r *http.Request, lng mo
 		}
 		art.HTML = body
 	}
-	body, err := render.Render(art.HTML, format, render.Options{BaseURL: s.svc.ArticleBase(art)})
+	opts := bodyOptions(r, s.svc.ArticleBase(art))
+	var lazy lazyMarks
+	if format != render.HTML {
+		art.HTML = lazy.mark(art.HTML)
+	}
+	body, err := render.Render(art.HTML, format, opts)
 	if err != nil {
 		failJSON(w, r, err)
 		return
+	}
+	body = lazy.restore(body, format, opts.NoURLs)
+	// the title heads a markdown or text body, as jw article prints it,
+	// unless the document opens with it; an HTML body goes under whatever
+	// header shows it, as the web page's does
+	switch format {
+	case render.Markdown:
+		if art.Title != "" && !strings.HasPrefix(body, "# ") {
+			body = "# " + art.Title + "\n\n" + body
+		}
+	case render.Text:
+		if art.Title != "" && !strings.HasPrefix(body, art.Title) {
+			body = art.Title + "\n\n" + body
+		}
 	}
 	writeJSON(w, http.StatusOK, articleResponse{
 		DocID: art.DocID, Title: art.Title, URL: art.URL,
@@ -263,10 +294,25 @@ func (s *Server) apiMeetings(w http.ResponseWriter, r *http.Request) {
 	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
+// meetingAliases are the names a meeting goes by: its own, and the aliases
+// the CLI's subcommands take (jw meetings mw).
+var meetingAliases = map[string]string{
+	"midweek": "midweek", "mid": "midweek", "mw": "midweek",
+	"weekend": "weekend", "we": "weekend", "wt": "weekend",
+}
+
+// meetingPart is the meeting a path names, by its own name.
+func meetingPart(name string) (string, error) {
+	if part, ok := meetingAliases[strings.ToLower(name)]; ok {
+		return part, nil
+	}
+	return "", fmt.Errorf("unknown meeting %q (want midweek or weekend)", name)
+}
+
 func (s *Server) apiMeetingPart(w http.ResponseWriter, r *http.Request) {
-	part := r.PathValue("part")
-	if part != "midweek" && part != "weekend" {
-		badRequest(w, "unknown meeting %q (want midweek or weekend)", part)
+	part, err := meetingPart(r.PathValue("part"))
+	if err != nil {
+		badRequest(w, "%s", err)
 		return
 	}
 	format, depth, err := articleParams(r)
@@ -298,10 +344,25 @@ func (s *Server) apiMediaCategories(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
+	limit, err := intParam(r, "limit", 0)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	offset, err := intParam(r, "offset", 0)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
 	cats, err := s.svc.Mediator.RootCategories(r.Context(), lng.Symbol)
 	if err != nil {
 		failJSON(w, r, err)
 		return
+	}
+	// the mediator hands the root out whole; it pages as a category does
+	cats = cats[min(max(offset, 0), len(cats)):]
+	if limit > 0 {
+		cats = cats[:min(limit, len(cats))]
 	}
 	writeJSON(w, http.StatusOK, cats)
 }
@@ -357,12 +418,18 @@ func (s *Server) apiMediaText(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
-	text, err := s.svc.MediaText(r.Context(), lng.Symbol, item)
+	words, err := s.svc.MediaText(r.Context(), lng.Symbol, item)
 	if err != nil {
 		failJSON(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, text)
+	// an item without words has no text to answer with, as jw media text
+	// says
+	if words.Empty() {
+		writeError(w, http.StatusNotFound, "not_found", fmt.Sprintf(text(lng).NoMediaText, item.LANK))
+		return
+	}
+	writeJSON(w, http.StatusOK, words)
 }
 
 // pubResponse is /api/v1/pub: the publication's names plus its files as

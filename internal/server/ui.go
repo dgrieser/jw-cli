@@ -94,6 +94,10 @@ func (p basePage) Active(path string) string {
 	if path == "/pub" && p.Path == "/article" {
 		return "active"
 	}
+	// and who quotes a verse is part of the bible's study
+	if path == "/bible" && p.Path == "/cited" {
+		return "active"
+	}
 	return ""
 }
 
@@ -233,10 +237,10 @@ type errorPage struct {
 }
 
 // confirmPage is the web's answer to the terminal prompt: an expansion that
-// costs more than the server spends unasked is offered rather than refused.
+// costs more than the server spends unasked is offered rather than refused,
+// in the page's own words — the error behind it speaks to an API client.
 type confirmPage struct {
 	basePage
-	Message  string
 	Level    int
 	Requests int
 	ForceURL string
@@ -250,9 +254,10 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var te *tooExpensiveError
 	if errors.As(err, &te) {
+		page := s.base(r, "")
+		page.Title = page.T.UIExpensiveTitle
 		s.render(w, status, "confirm", confirmPage{
-			basePage: s.base(r, "Unfold?"),
-			Message:  err.Error(),
+			basePage: page,
 			Level:    te.level,
 			Requests: te.requests,
 			ForceURL: urlWith(r, "force", "1"),
@@ -260,10 +265,11 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 		})
 		return
 	}
+	page := s.base(r, "Error")
 	s.render(w, status, "error", errorPage{
-		basePage: s.base(r, "Error"),
+		basePage: page,
 		Status:   status,
-		Message:  err.Error(),
+		Message:  readable(err, page.T),
 	})
 }
 
@@ -338,7 +344,8 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 	}
 	out := s.sanitized(art.HTML, s.svc.ArticleBase(art))
 	if depth > 0 {
-		out = template.HTML(foldSections(string(out))) //nolint:gosec // sanitized above
+		fb := lazyFallback{text: text(lng).UILazyFallback, lang: r.URL.Query().Get("lang")}
+		out = template.HTML(foldSections(string(out), fb)) //nolint:gosec // sanitized above
 	}
 	return out, nil
 }
@@ -495,6 +502,14 @@ type searchPage struct {
 	Sort     string
 	Scope    string
 	Excerpts bool
+	// AllCats, Include and Exclude are the publications a search of the
+	// Online Library covers (?all, ?include=, ?exclude=); Limit is the page
+	// size of the jw.org search, MaxLimit the most it answers.
+	AllCats  bool
+	Include  string
+	Exclude  string
+	Limit    int
+	MaxLimit int
 	Page     int
 	Header   string
 	Items    []resultView
@@ -503,6 +518,9 @@ type searchPage struct {
 }
 
 func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
+	// a form sends its blank fields, which ask for nothing
+	dropBlank(r, "include", "exclude", "limit")
+	limit, _ := intParam(r, "limit", defaultSearchLimit)
 	page := searchPage{
 		basePage: s.base(r, "Search"),
 		Query:    strings.TrimSpace(r.FormValue("q")),
@@ -511,6 +529,11 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		Sort:     valueOr(r, "sort", "rel"),
 		Scope:    valueOr(r, "scope", "par"),
 		Excerpts: boolParamOr(r, "excerpts", true),
+		AllCats:  boolParam(r, "all"),
+		Include:  r.FormValue("include"),
+		Exclude:  r.FormValue("exclude"),
+		Limit:    max(1, min(limit, maxSearchLimit)),
+		MaxLimit: maxSearchLimit,
 	}
 	if page.Query == "" {
 		s.render(w, http.StatusOK, "search", page)
@@ -523,7 +546,7 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	p, pageNum, err := s.searchParams(r, lng)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		s.render(w, http.StatusBadRequest, "search", page)
 		return
 	}
@@ -532,12 +555,28 @@ func (s *Server) uiSearch(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
+	// the same search on the site it searched
+	if p.Engine == "wol" {
+		page.SiteURL = s.wolSearchPage(r.Context(), lng, p.Query, p.Scope, p.Sort, p.Categories.List)
+	} else {
+		page.SiteURL = jwSearchPage(p.Query, lng)
+	}
 	page.Page = pageNum
 	txt := text(lng)
 	if out.Kind == "wol-search" {
 		page.Header = txt.WolResults(out.Total, out.Query, out.Page)
 	} else {
 		page.Header = txt.Results(out.Total, out.Query)
+		// which page of how many, as jw search says it — but only what is
+		// true: the first page of everything comes grouped by kind, longer
+		// than the page size asked for
+		switch {
+		case out.Total <= p.Limit:
+		case len(out.Items) > p.Limit:
+			page.Header += fmt.Sprintf(txt.PageSuffixShort, out.Page)
+		default:
+			page.Header += fmt.Sprintf(txt.PageSuffix, out.Page, p.Limit)
+		}
 	}
 	page.Items = s.resultViews(out.Items, page.Lang)
 	if pageNum > 1 {
@@ -663,6 +702,10 @@ type documentPage struct {
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
+	// Refs and Images are what the document cites and shows, listed below
+	// it as on an article's page (--refs, --images on the command line).
+	Refs   []model.ScriptureAnchor
+	Images []model.MediaAsset
 }
 
 // PartURL addresses one of the meeting tabs, keeping the chosen week and
@@ -723,14 +766,26 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
+		Refs:         art.ScriptureRefs,
+		Images:       art.Images,
 	})
 }
 
 func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 	part := r.PathValue("part")
-	if part != "" && part != "midweek" && part != "weekend" {
-		s.failUI(w, r, fmt.Errorf("unknown meeting %q (want midweek or weekend)", part))
-		return
+	if part != "" {
+		canonical, err := meetingPart(part)
+		if err != nil {
+			s.failUI(w, r, err)
+			return
+		}
+		// an alias (/meetings/mw) is an address of the meeting's own page
+		if canonical != part {
+			u := *r.URL
+			u.Path = "/meetings/" + canonical
+			http.Redirect(w, r, u.RequestURI(), http.StatusMovedPermanently)
+			return
+		}
 	}
 	lng, err := s.language(r)
 	if err != nil {
@@ -773,6 +828,8 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
+		Refs:         art.ScriptureRefs,
+		Images:       art.Images,
 	})
 }
 
@@ -875,7 +932,10 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	page := mediaPage{basePage: s.base(r, text(lng).UINavMedia), Heading: text(lng).MediaCategories}
+	page := mediaPage{
+		basePage: s.base(r, text(lng).UINavMedia).withSite(videoLibraryPage(lng, "")),
+		Heading:  text(lng).MediaCategories,
+	}
 	if hero := featured[0]; len(hero.Media) > 0 {
 		v := s.resultViews(service.MediaToResults(hero.Media[:1]), page.Lang)[0]
 		page.Sections = append(page.Sections, mediaSection{Heading: hero.Name, Hero: &v})
@@ -919,7 +979,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page := mediaPage{
-		basePage: s.base(r, cat.Name),
+		basePage: s.base(r, cat.Name).withSite(videoLibraryPage(lng, cat.Key)),
 		Heading:  cat.Name,
 	}
 	page.Crumbs = s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage)
@@ -929,7 +989,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 	for _, sub := range cat.Subcategories {
 		// beside a category's own list — the songs of an album, and the
 		// category of their versions with audio descriptions — a subcategory
-		// is a link after it
+		// is a link in it
 		if len(sub.Media) == 0 || len(cat.Media) > 0 {
 			subs = append(subs, sub)
 			continue
@@ -942,10 +1002,9 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 			Rows:    [][]resultView{s.resultViews(service.MediaToResults(media), page.Lang)},
 		})
 	}
+	// the subcategories lead, then the category's own media, as jw media
+	// browse lists them
 	items := append(service.CategoriesToResults(subs), service.MediaToResults(cat.Media)...)
-	if len(cat.Media) > 0 {
-		items = append(service.MediaToResults(cat.Media), service.CategoriesToResults(subs)...)
-	}
 	page.Items = s.resultViews(items, page.Lang)
 	s.render(w, http.StatusOK, "media_category", page)
 }
@@ -1041,7 +1100,9 @@ type biblePage struct {
 	basePage
 	Ref     string
 	Edition string
-	Unfold  int
+	// AllBibles reads the passage in every bible of the language (?all=1).
+	AllBibles bool
+	Unfold    int
 	// AutoUnfold is the level the browser unfolds the reading to once it is
 	// shown, zero for none.
 	AutoUnfold int
@@ -1233,9 +1294,10 @@ func vidRef(vid int, to string) (bibleref.Ref, bool) {
 // brings, so the reader is the only view; the JSON API keeps the others.
 func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page := biblePage{
-		basePage: s.base(r, "Bible"),
-		Ref:      strings.TrimSpace(r.FormValue("ref")),
-		Edition:  valueOr(r, "bible", "nwtsty"),
+		basePage:  s.base(r, "Bible"),
+		Ref:       strings.TrimSpace(r.FormValue("ref")),
+		Edition:   valueOr(r, "bible", "nwtsty"),
+		AllBibles: boolParam(r, "all"),
 	}
 	page.Editions = s.editionOptions(r, page.Edition)
 	// a chapter picked from the header's book picker reads like one typed
@@ -1278,7 +1340,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	page.Unfold, page.AutoUnfold = depth, auto
 	res, err := s.svc.ReadPassages(r.Context(), lng, service.ReadRequest{
-		Refs: page.Ref, Edition: page.Edition, AllBibles: boolParam(r, "all"),
+		Refs: page.Ref, Edition: page.Edition, AllBibles: page.AllBibles,
 		Unfold: unfoldConfig(depth, forceParam(r)),
 	}, text(lng))
 	if err != nil {
@@ -1294,6 +1356,16 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 			page.BookNames[b] = res.Table.Name(b)
 		}
 	}
+	// on wol, the reading is its first chapter of the edition, opened at its
+	// first verse
+	if len(res.Passages) > 0 && res.Passages[0].Book > 0 && res.Passages[0].Chapter > 0 {
+		p := res.Passages[0]
+		u := s.wolPage(r.Context(), lng, "b", fmt.Sprintf("/%s/%d/%d", url.PathEscape(firstNonEmpty(p.Bible, page.Edition)), p.Book, p.Chapter))
+		if u != "" && len(p.Verses) > 0 && p.Verses[0].ID > 0 {
+			u += verseFragment(p.Verses[0].ID)
+		}
+		page.SiteURL = u
+	}
 	s.render(w, http.StatusOK, "bible", page)
 }
 
@@ -1303,9 +1375,11 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePage) {
 	res, err := s.svc.SearchBible(r.Context(), lng, page.Ref, page.Edition)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
+	// the Online Library's own search of its bibles for the same words
+	page.SiteURL = s.wolSearchPage(r.Context(), lng, page.Ref, "par", "occ", []string{wol.CategoryBibles})
 	txt := text(lng)
 	table := s.svc.BookTable(r.Context(), lng)
 	view := &bibleSearchView{Header: fmt.Sprintf(txt.UIBibleSearchHeader, len(res.Hits), page.Ref)}
@@ -1352,28 +1426,30 @@ func (s *Server) bibleSearch(r *http.Request, lng model.Language, page *biblePag
 func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 	lng, err := s.language(r)
 	if err != nil {
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 		return
 	}
 	if book, _ := intParam(r, "book", 0); book != 0 {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
+			page.SiteURL = s.wolPage(r.Context(), lng, "binav", fmt.Sprintf("/%s/%d", url.PathEscape(page.Edition), book))
 			if view := r.FormValue("view"); view != "" {
 				s.bookDoc(r, lng, view, page)
 			}
 			return
 		}
-		page.Error = err.Error()
+		page.Error = readable(err, page.T)
 	}
 	nav, err := s.svc.BibleNav(r.Context(), lng, page.Edition)
 	if err != nil {
 		if page.Error == "" {
-			page.Error = err.Error()
+			page.Error = readable(err, page.T)
 		}
 		return
 	}
 	page.Nav = &nav
+	page.SiteURL = s.wolPage(r.Context(), lng, "binav", "/"+url.PathEscape(page.Edition))
 }
 
 // outlineBlock is the headings of the book's outline ahead of a verse, small
@@ -1427,6 +1503,7 @@ var headingNumber = regexp.MustCompile(`\s(\d+)(?:[:,\-–\s]|$)`)
 // folded under it, and says to what level.
 func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int) template.HTML {
 	wolBase := s.svc.HTTP.Base.WOL
+	fb := lazyFallback{text: page.T.UILazyFallback, lang: page.Lang}
 	var b strings.Builder
 	for _, p := range res.Passages {
 		edition := firstNonEmpty(p.Bible, page.Edition)
@@ -1451,7 +1528,7 @@ func (s *Server) passagesHTML(res service.ReadResult, page *biblePage, depth int
 			if strings.TrimSpace(v.Unfold) != "" {
 				exp := strings.TrimSpace(string(s.sanitized(v.Unfold, wolBase)))
 				exp = strings.TrimSuffix(strings.TrimSuffix(exp, "<hr/>"), "<hr>")
-				b.WriteString(foldSections(`<div class="expansion">` + exp + `</div>`))
+				b.WriteString(foldSections(`<div class="expansion">`+exp+`</div>`, fb))
 			}
 			b.WriteString(`</div>`)
 		}

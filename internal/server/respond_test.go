@@ -2,11 +2,16 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -20,12 +25,54 @@ func TestClassify(t *testing.T) {
 	}{
 		{&tooExpensiveError{level: 1, requests: 5000}, 422, "too_expensive"},
 		{&httpx.StatusError{StatusCode: 404}, 404, "not_found"},
+		{&httpx.StatusError{StatusCode: 410}, 404, "not_found"},
 		{&httpx.StatusError{StatusCode: 500}, 502, "upstream"},
 		{errMissing("q"), 400, "bad_request"},
+		// what the service says in its own words is the caller's to fix, and
+		// what it says is not there is not found
+		{errors.New("John has no chapter 99"), 400, "bad_request"},
+		{fmt.Errorf("no media item pub-x_1_VIDEO: %w", pubmedia.ErrNotFound), 404, "not_found"},
+		{fmt.Errorf("Genesis (nwtsty): no gallery: %w", service.ErrNoBookDoc), 404, "not_found"},
+		// no answer in time, or none at all, is upstream's
+		{context.DeadlineExceeded, 504, "timeout"},
+		{&url.Error{Op: "Get", URL: "https://wol.jw.org/", Err: timeoutErr{}}, 504, "timeout"},
+		{&url.Error{Op: "Get", URL: "https://wol.jw.org/", Err: errors.New("connection refused")}, 502, "upstream"},
+		{&url.Error{Op: "parse", URL: "::", Err: errors.New("missing protocol scheme")}, 400, "bad_request"},
 	} {
 		status, code := classify(ctx, tc.err)
 		if status != tc.status || code != tc.code {
 			t.Errorf("classify(%v) = %d %q, want %d %q", tc.err, status, code, tc.status, tc.code)
+		}
+	}
+}
+
+// timeoutErr is a network error that says it timed out.
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "i/o timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+// A page says what an upstream answer means rather than quoting it; what the
+// service wrote for a reader it shows as written.
+func TestReadable(t *testing.T) {
+	txt := i18n.EN.Text()
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{&httpx.StatusError{URL: "https://wol.jw.org/x", StatusCode: 404}, txt.UIErrNotFound},
+		{fmt.Errorf("chapter: %w", &httpx.StatusError{URL: "https://wol.jw.org/x", StatusCode: 503}), fmt.Sprintf(txt.UIErrUpstream, 503)},
+		{&url.Error{Op: "Get", URL: "https://wol.jw.org/", Err: timeoutErr{}}, txt.UIErrTimeout},
+		{&url.Error{Op: "Get", URL: "https://wol.jw.org/", Err: errors.New("connection refused")}, txt.UIErrUnreachable},
+		{errors.New("John has no chapter 99"), "John has no chapter 99"},
+	} {
+		got := readable(tc.err, txt)
+		if got != tc.want {
+			t.Errorf("readable(%v) = %q, want %q", tc.err, got, tc.want)
+		}
+		if strings.Contains(got, "https://") {
+			t.Errorf("readable(%v) quotes the request: %q", tc.err, got)
 		}
 	}
 }
@@ -110,7 +157,7 @@ func TestFoldSections(t *testing.T) {
 		`<h3>Querverweis Jeremia 37:17</h3><p>another verse</p>` +
 		`<h3>Zitate von Jeremia 34:3</h3><h4>Zedekia</h4><p>a quotation</p>` +
 		`</div>`
-	out := foldSections(body)
+	out := foldSections(body, lazyFallback{})
 	if n := strings.Count(out, "<details"); n != 5 {
 		t.Fatalf("%d disclosures, want one per section and entry:\n%s", n, out)
 	}
@@ -137,7 +184,7 @@ func TestFoldSections(t *testing.T) {
 		t.Errorf("the verse itself was folded:\n%s", out)
 	}
 	// nothing to fold changes nothing
-	if got := foldSections("<h2>Jeremia 34:3</h2><p>the verse</p>"); !strings.Contains(got, "<p>the verse</p>") ||
+	if got := foldSections("<h2>Jeremia 34:3</h2><p>the verse</p>", lazyFallback{}); !strings.Contains(got, "<p>the verse</p>") ||
 		strings.Contains(got, "<details") {
 		t.Errorf("a verse without sections should be left alone: %s", got)
 	}
@@ -146,14 +193,14 @@ func TestFoldSections(t *testing.T) {
 // A streamed section is folded all the way down: text before the first
 // heading stays open, every heading opens on its own.
 func TestFoldFragment(t *testing.T) {
-	out := foldFragment(`<p>intro</p><h3>a</h3><p>one</p><h4>a.1</h4><p>deep</p><h3>b</h3><p>two</p>`)
+	out := foldFragment(`<p>intro</p><h3>a</h3><p>one</p><h4>a.1</h4><p>deep</p><h3>b</h3><p>two</p>`, lazyFallback{})
 	if !strings.HasPrefix(out, `<p>intro</p><div class="sections">`) {
 		t.Errorf("intro folded or list missing:\n%s", out)
 	}
 	if n := strings.Count(out, "<details"); n != 3 {
 		t.Errorf("%d disclosures, want 3:\n%s", n, out)
 	}
-	if got := foldFragment("<p>plain</p>"); got != "<p>plain</p>" {
+	if got := foldFragment("<p>plain</p>", lazyFallback{}); got != "<p>plain</p>" {
 		t.Errorf("headingless fragment changed: %s", got)
 	}
 }

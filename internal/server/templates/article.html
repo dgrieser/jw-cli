@@ -16,39 +16,7 @@
 {{.Body}}
 </article>
 
-{{- if or .Refs .Images}}
-<div class="sections extras">
-{{- if .Refs}}
-<details class="section">
-  <summary>{{.T.UIScriptureRefs}} <span class="count">{{len .Refs}}</span></summary>
-  <div class="section-body">
-  <ul>
-    {{- range .Refs}}
-    <li>{{.Text}}</li>
-    {{- end}}
-  </ul>
-  </div>
-</details>
-{{- end}}
-
-{{- if .Images}}
-<details class="section">
-  <summary>{{.T.UIImages}} <span class="count">{{len .Images}}</span></summary>
-  <div class="section-body">
-  <ul class="gallery">
-    {{- range .Images}}
-    <li>
-      <a href="{{.URL}}" target="_blank" rel="noopener"><img src="{{if .ThumbnailURL}}{{.ThumbnailURL}}{{else}}{{.URL}}{{end}}" alt="{{.Alt}}" loading="lazy"></a>
-      {{- if .Caption}}<p>{{.Caption}}</p>{{end}}
-      {{- if .Credit}}<p class="credit">{{.Credit}}</p>{{end}}
-    </li>
-    {{- end}}
-  </ul>
-  </div>
-</details>
-{{- end}}
-</div>
-{{- end}}
+{{- template "extras" .}}
 
 {{- end}}
 {{end}}

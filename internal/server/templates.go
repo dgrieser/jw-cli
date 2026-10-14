@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/version"
@@ -21,6 +22,39 @@ var templatesFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
+// staticFiles serves the page's own files out of the binary. They change only
+// with the build, under the same names, so each carries a strong ETag — a hash
+// of its content, taken once — and is asked about again on every use
+// (no-cache): a file the browser has is a 304 rather than a download, and a new
+// build's file is fetched at once. http.FileServer answers If-None-Match by an
+// ETag set before it runs.
+func staticFiles() http.Handler {
+	files := http.FileServerFS(staticFS)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tag, ok := staticETags()[strings.TrimPrefix(r.URL.Path, "/")]; ok {
+			w.Header().Set("ETag", tag)
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		files.ServeHTTP(w, r)
+	})
+}
+
+// staticETags are the ETags of the files under static/, by path.
+var staticETags = sync.OnceValue(func() map[string]string {
+	tags := map[string]string{}
+	_ = fs.WalkDir(staticFS, "static", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if b, err := fs.ReadFile(staticFS, path); err == nil {
+			sum := sha256.Sum256(b)
+			tags[path] = `"` + hex.EncodeToString(sum[:16]) + `"`
+		}
+		return nil
+	})
+	return tags
+})
+
 // htmlTemplate keeps server.go readable without importing html/template there.
 type htmlTemplate = template.Template
 
@@ -29,6 +63,7 @@ type htmlTemplate = template.Template
 var uiPages = []string{
 	"index", "search", "article", "bible", "dailytext", "meetings",
 	"media", "media_category", "media_item", "pub", "error", "confirm",
+	"cited",
 }
 
 // parseTemplates builds one template set per page at startup, so a parse error

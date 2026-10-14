@@ -338,6 +338,44 @@ type Messages struct {
 	UIProgressLevel   string
 	UIProgressItems   string
 	UIUnfolding       string
+
+	// UIErr* are what a page of the server says in place of an answer of
+	// jw.org or wol.jw.org that was not the page asked for — a request line
+	// and a status code mean nothing to a reader: that there is no such page,
+	// that the site failed (UIErrUpstream takes the status code), could not
+	// be reached, or did not answer in time.
+	UIErrNotFound    string
+	UIErrUpstream    string
+	UIErrUnreachable string
+	UIErrTimeout     string
+
+	// UICited* are the page listing who quotes a verse (jw bible cited): its
+	// heading, the hint in its field, and the switch for the videos quoting
+	// the verse.
+	UICitedTitle  string
+	UICitedHint   string
+	UICitedVideos string
+	// UIScope* choose what the words looked for in the Online Library are
+	// found together in: a paragraph or a sentence.
+	UIScope    string
+	UIScopePar string
+	UIScopeSen string
+	// UICats* choose the publications a search of the Online Library covers:
+	// every one, bibles and indexes included, only some, or all but some;
+	// UICatsHint names the codes the last two take.
+	UICatsAll     string
+	UICatsInclude string
+	UICatsExclude string
+	UICatsHint    string
+	// UIPageSize sets how many results a page of the jw.org search shows.
+	UIPageSize string
+	// UIAllTranslations reads a passage in every bible of the language.
+	UIAllTranslations string
+
+	// UILazyFallback leads a page read without scripts from a section that
+	// loads once opened to a page showing what it would load.
+	UILazyFallback string
+
 	// UIAbort stops a loader, UIAborted says what it left.
 	UIAbort   string
 	UIAborted string

@@ -223,6 +223,27 @@ var de = Messages{
 	UIProgressItems:    "%d von %d",
 	UIUnfolding:        "Wird aufgeklappt",
 
+	UIErrNotFound:    "Dazu hat jw.org keine Seite.",
+	UIErrUpstream:    "jw.org hat mit einem Fehler geantwortet (HTTP %d). Bitte später erneut versuchen.",
+	UIErrUnreachable: "jw.org war nicht erreichbar. Bitte später erneut versuchen.",
+	UIErrTimeout:     "jw.org hat zu lange nicht geantwortet. Bitte später erneut versuchen.",
+
+	UICitedTitle:  "Zitate",
+	UICitedHint:   "Jer 31:15 — der Vers, dessen Zitate aufgelistet werden",
+	UICitedVideos: "Videos, die ihn zitieren",
+	UIScope:       "Wörter zusammen in",
+	UIScopePar:    "einem Absatz",
+	UIScopeSen:    "einem Satz",
+	UICatsAll:     "Alle Publikationen, auch Bibeln und Indizes",
+	UICatsInclude: "Nur diese Publikationen",
+	UICatsExclude: "Alle Publikationen außer",
+	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
+	UIPageSize:    "Ergebnisse pro Seite",
+
+	UIAllTranslations: "Alle Übersetzungen",
+
+	UILazyFallback: "Auf einer eigenen Seite anzeigen",
+
 	UIAbort:                "Abbrechen",
 	UIAborted:              "Abgebrochen.",
 	UIFollow:               "Öffnen",

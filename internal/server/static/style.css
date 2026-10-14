@@ -2029,3 +2029,17 @@ details.section.print-edition .section-body img { display: block; width: 100%; h
 .ref-suggest button:hover, .ref-suggest button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent); }
 .ref-suggest.numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(3rem, 1fr)); gap: 0.25rem; }
 .ref-suggest.numbers button { justify-content: center; padding: 0; border-color: var(--line); }
+
+/* --- server-side additions --- */
+
+/* a section left to load leads, without scripts, to a page showing what it
+   would load; with them it loads in place */
+.lazy-fallback { margin: 0.25rem 0; font-size: 0.9em; }
+html.js .lazy-fallback { display: none; }
+
+/* what a picture of a document says about itself: its alt text, its size */
+ul.gallery .imagemeta { color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+
+/* the text fields and the page size among the search's options */
+.options .opt input[type="text"], .options .opt input[type="number"] { width: 100%; }
+.options .opt.off input:not([type="hidden"]) { opacity: 0.45; }

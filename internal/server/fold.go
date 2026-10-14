@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -17,7 +18,7 @@ import (
 // verse is opened when it is wanted rather than pushing the next verse off the
 // screen. Only what sits inside a div.expansion is folded: the document's own
 // headings stay as they are.
-func foldSections(fragment string) string {
+func foldSections(fragment string, fb lazyFallback) string {
 	if !strings.Contains(fragment, "expansion") {
 		return fragment
 	}
@@ -26,7 +27,7 @@ func foldSections(fragment string) string {
 		return fragment
 	}
 	doc.Find("div.expansion").Each(func(_ int, div *goquery.Selection) {
-		foldHeadings(div.Nodes[0])
+		foldHeadings(div.Nodes[0], fb)
 	})
 	out, err := doc.Find("body").Html()
 	if err != nil {
@@ -37,7 +38,7 @@ func foldSections(fragment string) string {
 
 // foldFragment folds every heading of a fragment, as foldSections does inside
 // an expansion. A streamed section is expansion from top to bottom.
-func foldFragment(fragment string) string {
+func foldFragment(fragment string, fb lazyFallback) string {
 	if !strings.Contains(fragment, "<h") {
 		return fragment
 	}
@@ -46,7 +47,7 @@ func foldFragment(fragment string) string {
 		return fragment
 	}
 	body := doc.Find("body")
-	foldHeadings(body.Nodes[0])
+	foldHeadings(body.Nodes[0], fb)
 	out, err := body.Html()
 	if err != nil {
 		return fragment
@@ -60,7 +61,7 @@ func foldFragment(fragment string) string {
 // holds; the deeper ones are folded the same way inside the section they belong
 // to, so every level of an expansion opens on its own. Consecutive sections
 // share one div.sections, which is what lays closed ones out side by side.
-func foldHeadings(n *nethtml.Node) {
+func foldHeadings(n *nethtml.Node, fb lazyFallback) {
 	level := 0
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
 		if l := nodeHeading(c); l > 0 && (level == 0 || l < level) {
@@ -70,7 +71,7 @@ func foldHeadings(n *nethtml.Node) {
 	if level == 0 {
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			if c.Type == nethtml.ElementNode && c.DataAtom != atom.Summary {
-				foldHeadings(c)
+				foldHeadings(c, fb)
 			}
 		}
 		return
@@ -85,7 +86,7 @@ func foldHeadings(n *nethtml.Node) {
 	i := 0
 	for ; i < len(kids) && nodeHeading(kids[i]) != level; i++ {
 		if kids[i].Type == nethtml.ElementNode {
-			foldHeadings(kids[i])
+			foldHeadings(kids[i], fb)
 		}
 		n.AppendChild(kids[i])
 	}
@@ -98,8 +99,8 @@ func foldHeadings(n *nethtml.Node) {
 		for ; i < len(kids) && nodeHeading(kids[i]) != level; i++ {
 			body.AppendChild(kids[i])
 		}
-		foldHeadings(body)
-		lazySection(details, body)
+		foldHeadings(body, fb)
+		lazySection(details, body, fb)
 		// a heading with nothing under it — a passage's title, say — stays a
 		// heading: a section of it would open on nothing
 		if attr(details, "data-lazy") == "" && blank(body) {
@@ -161,8 +162,9 @@ func headingLevel(name string) int {
 
 // lazySection makes a section written in one piece whose body was left to
 // the page — who quotes a verse — a section that loads it once it is opened:
-// the placeholder its body holds says from where.
-func lazySection(details, body *nethtml.Node) {
+// the placeholder its body holds says from where. Without scripts nothing
+// loads it, so the body leads to a page showing the same instead (fb).
+func lazySection(details, body *nethtml.Node, fb lazyFallback) {
 	p := body.FirstChild
 	for p != nil && p.Type != nethtml.ElementNode {
 		p = p.NextSibling
@@ -176,6 +178,59 @@ func lazySection(details, body *nethtml.Node) {
 	}
 	body.RemoveChild(p)
 	details.Attr = append(details.Attr, nethtml.Attribute{Key: "data-lazy", Val: lazy})
+	if href := fb.href(lazy); href != "" && fb.text != "" {
+		link := element(atom.A, "")
+		link.Attr = append(link.Attr, nethtml.Attribute{Key: "href", Val: href})
+		link.AppendChild(&nethtml.Node{Type: nethtml.TextNode, Data: fb.text})
+		par := element(atom.P, "lazy-fallback")
+		par.AppendChild(link)
+		body.InsertBefore(par, body.FirstChild)
+	}
+}
+
+// lazyFallback is how a page read without scripts reaches what a section
+// left to load would load: a link to the page of this server that shows the
+// same. text is the link's words, lang the page's ?lang=, kept on it. The
+// zero value adds no link, for a section only a script ever shows.
+type lazyFallback struct {
+	text, lang string
+}
+
+// href is the page showing what a section loading from lazy would load: the
+// verse unfolded, for one of a verse's sections; the verse in every bible,
+// for its other translations; the page of who quotes it, for its quotations.
+// Anything else has none.
+func (fb lazyFallback) href(lazy string) string {
+	u, err := url.Parse(lazy)
+	if err != nil {
+		return ""
+	}
+	in := u.Query()
+	if len(in["vid"]) == 0 {
+		return ""
+	}
+	q := url.Values{"vid": in["vid"]}
+	if to := in["to"]; len(to) > 0 {
+		q["to"] = to
+	}
+	path := "/bible"
+	switch u.Path {
+	case "/unfold/verse":
+		if b := in.Get("bible"); b != "" {
+			q.Set("bible", b)
+		}
+		q.Set("unfold", "1")
+	case "/unfold/translations":
+		q.Set("all", "1")
+	case "/unfold/cited":
+		path = "/cited"
+	default:
+		return ""
+	}
+	if fb.lang != "" {
+		q.Set("lang", fb.lang)
+	}
+	return path + "?" + q.Encode()
 }
 
 func attr(n *nethtml.Node, key string) string {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -11,7 +12,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -146,7 +149,7 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		return
 	}
 	path = strings.Trim(path, "/")
-	lib, err := s.svc.Library(r.Context(), lng, kind, path)
+	lib, err := s.library(r.Context(), lng, kind, path)
 	if err != nil {
 		// a library path with no counterpart in the language asked for —
 		// or one not in English — leads back to the top of the tree
@@ -158,7 +161,8 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		return
 	}
 	txt := text(lng)
-	page := pubPage{basePage: s.base(r, firstNonEmpty(lib.Title, txt.UINavPublications))}
+	// every level of the library is a page of wol of its own
+	page := pubPage{basePage: s.base(r, firstNonEmpty(lib.Title, txt.UINavPublications)).withSite(lib.URL)}
 	// a bible is read as one
 	if lib.Bible && lib.Symbol != "" {
 		http.Redirect(w, r, page.WithLang("/bible?bible="+url.QueryEscape(lib.Symbol)), http.StatusSeeOther)
@@ -188,7 +192,6 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	if lib.Symbol != "" || kind == wol.PublicationKind {
 		page.Publication = true
 		page.Cover = lib.Thumbnail
-		page.SiteURL = lib.URL
 		if lib.Symbol != "" {
 			page.Facts = append(page.Facts, pubFact{txt.UISymbol, lib.Symbol})
 		}
@@ -205,6 +208,20 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		page.Groups = append(page.Groups, pubGroupOf(g, page.basePage))
 	}
 	s.render(w, http.StatusOK, "pub", page)
+}
+
+// library reads the page of the publication tree a page or the API asks for.
+// wol answers a publication it does not have with 400 and "Sorry, the
+// document does not exist in …" — every time, whatever the language — which
+// is a page not found, not a failure; a 503 is wol being unavailable, as it
+// is now and then, and stays one.
+func (s *Server) library(ctx context.Context, lng model.Language, kind, path string) (wol.LibraryPage, error) {
+	lib, err := s.svc.Library(ctx, lng, kind, path)
+	var se *httpx.StatusError
+	if errors.As(err, &se) && se.StatusCode == http.StatusBadRequest {
+		return lib, fmt.Errorf("%w: the library has no %s %q", pubmedia.ErrNotFound, kind, path)
+	}
+	return lib, err
 }
 
 // pubGroupOf sorts a group's cards into the three ways they are shown.
@@ -714,7 +731,7 @@ func (s *Server) apiPubPage(w http.ResponseWriter, r *http.Request, kind string)
 		badRequest(w, "missing publication path")
 		return
 	}
-	lib, err := s.svc.Library(r.Context(), lng, kind, path)
+	lib, err := s.library(r.Context(), lng, kind, path)
 	if err != nil {
 		failJSON(w, r, err)
 		return

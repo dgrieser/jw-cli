@@ -646,12 +646,26 @@ one to go by, and the cache is measured anew at least once an hour. Downloads
 and signed-in search requests are never kept.
 
 `--lang` sets the default content language; every page and endpoint takes a
-`?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). Content
-endpoints render bodies as sanitized HTML by default; `?format=markdown` and
-`?format=text` select the other formats. Errors come back as
-`{"error": {"code": "...", "message": "..."}}` with `400` (bad parameters),
-`404` (nothing there upstream), `422` (an unfold that would need more upstream
-requests than an unattended server spends), or `502` (upstream failure).
+`?lang=` override (symbol, ISO code, or BCP-47, exactly like `-l`). A page
+remembers a `?lang=` that resolves in a `lang` cookie, so the next link without
+one comes back in it; the API, the downloads and the streams read that cookie
+but never set it, and a remembered language that no longer resolves is passed
+over for the default. Content endpoints render bodies as sanitized HTML by
+default; `?format=markdown` and `?format=text` select the other formats, headed
+by the document's title as the CLI prints them, and with each section left to
+load (see below) followed by its `/unfold/…` address. `?urls=0` leaves every
+link target and image source out of a body, keeping the words, as `--no-urls`
+does. Any route takes `?refresh=1`, which reads what it needs anew from jw.org
+past every cache (the bar's reload button). Errors come back as
+`{"error": {"code": "...", "message": "..."}}` with `400` (bad parameters, or a
+reference that names nothing), `404` (nothing there upstream), `422` (an unfold
+that would need more upstream requests than an unattended server spends),
+`502` (upstream failure), or `504` (`timeout`: upstream did not answer in time,
+or the request was not done within ten minutes — the deadline every API request
+has; the streams below have none). Web pages say what an upstream failure means
+in their own language instead of quoting it. Pages and API answers are sent
+`Cache-Control: private` with `Vary: Cookie`; the files under `/static/` carry
+an ETag and are revalidated.
 
 `jw bible read` prints the headings of the book's outline of contents between
 the verses — for the Gospels and Acts, the headings of their overview — where
@@ -871,24 +885,46 @@ of its own goes through `GET /open?path=/wol/bc/…`, which reads it and goes on
 to the bible reader with the verses it quotes, or to the article a citation of
 a publication or a footnote is part of; `GET /api/v1/open?path=…` names that
 page as `{"url": …}` without going there. The bible reader also takes verses by
-id: `/bible?vid=43003016&to=43003017`. Without JavaScript the switcher reloads
-the page unfolded server-side, and a level that needs more requests than the
-server spends unasked is offered on a confirmation page first (with
-JavaScript, a prompt).
+id: `/bible?vid=43003016&to=43003017`, and its **All translations** box reads
+the passage in every bible of the language (`all=1`). Without JavaScript the
+switcher reloads the page unfolded server-side, and a level that needs more
+requests than the server spends unasked is offered on a confirmation page first
+(with JavaScript, a prompt). A section left to load holds, for a page read
+without JavaScript, a link to a page showing what it would load: the verse
+unfolded (`/bible?vid=…&unfold=1`) for a verse's sections, the verse in every
+bible (`/bible?vid=…&all=1`) for its other translations, and who quotes it
+(`/cited?vid=…`) for its quotations.
 
-The page loads those expansions from two streaming endpoints, answered as
+`GET /cited?ref=Jer+31:15` lists who quotes a verse as `jw bible cited` does —
+every publication of the library citing it, and the videos quoting it — with
+the command's options (sort, scope, all/include/exclude, videos, excerpts) in a
+form; bibles and indexes stay out unless asked for. The search page's options
+cover what `jw search` takes: the engine, jw.org's content type and page size
+(at most 36), the order, and the Online Library's scope, publications
+(all/include/exclude) and full excerpts; a jw.org listing's header says which
+page it shows ("page 2, 10 per page"), except on the first page of everything,
+which jw.org groups by kind past the page size. The daily text and the meeting
+pages list their scripture references and images below the document as an
+article's page does, each picture with its alt text and size. A meeting is
+also found by the CLI's aliases (`/meetings/mw`, `/meetings/we`, …), which lead
+to its own address.
+
+The page loads those expansions from seven streaming endpoints, answered as
 newline-delimited JSON events (`stage`, `progress`, `section`, `expensive`,
 `error`, `done`) flushed as they happen:
 `GET /unfold/verse?vid=43003016&depth=1&bible=nwtsty` (one verse, or a range
 with `to=`: study notes, indexes, marginal references, quotations; `part=notes|
 footnotes|indexes|marginal` — one index with `kind=guide|pubindex` — loads one
-of them alone, and with `lazy=1` loads it while the others come as headings) and
+of them alone, and with `lazy=1` loads it while the others come as headings),
 `GET /unfold/refs?path=…&text=…&depth=1` (the citations of one paragraph; only
-wol citation paths are followed), plus `GET /unfold/footnote?path=…`,
-`GET /unfold/translations?vid=…&bible=…`, `GET /unfold/cited?vid=…&self=…`
-(who quotes a passage, leaving the documents named by `self` out) and
-`GET /unfold/article?url=…&depth=…` (a library document or a jw.org page; only
-its path is kept and read from that site). Everything one request unfolds shares one
+wol citation paths are followed), `GET /unfold/chapter?bible=…&book=…&chapter=…`
+(what the library has on a chapter: the outline's headings covering it, the
+book's introduction, the chapter's part of the gallery),
+`GET /unfold/footnote?path=…`, `GET /unfold/translations?vid=…&bible=…`,
+`GET /unfold/cited?vid=…&self=…` (who quotes a passage, leaving the documents
+named by `self` out) and `GET /unfold/article?url=…&depth=…` (a library
+document or a jw.org page; only its path is kept and read from that site).
+Everything one request unfolds shares one
 request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports
 what the request spent, and **Unfold all** passes the running total of its run
@@ -901,27 +937,31 @@ them; a stream that fails gives its verses back.
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
-| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤50), `page`, `scope`, `all`/`include`/`exclude`, `excerpts=0` | `jw search` |
-| `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3) | `jw article` (images and scripture refs are fields of the response) |
-| `GET /api/v1/bible/read` | `ref`*, `bible`, `all=true`, `unfold`, `outlines=0`, `format` | `jw bible read` |
+| `GET /api/v1/open` | `path`* (a wol citation or footnote) | — (the page of this server it is read on, as `{"url": …}`) |
+| `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤36, jw.org only: wol's pages are 40 results), `page`, `scope`, `all`/`include`/`exclude` (checked with either engine), `excerpts=0` | `jw search` |
+| `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3), `force=1`, `urls=0` | `jw article` (images and scripture refs are fields of the response) |
+| `GET /api/v1/bible/read` | `ref`*, `bible` or `all=true` (not both), `unfold`, `force=1`, `outlines=0`, `format`, `urls=0` | `jw bible read` |
 | `GET /api/v1/bible/notes` | `ref`* | `jw bible notes` |
 | `GET /api/v1/bible/xrefs` | `ref`*, `resolve=true` | `jw bible xrefs` |
 | `GET /api/v1/bible/research` | `ref`*, `excerpts=true` | `jw bible research` |
 | `GET /api/v1/bible/media` | `ref`* | `jw bible media` |
 | `GET /api/v1/bible/cited` | `ref`*, `sort`, `scope`, category flags, `excerpts=0`, `videos=0` | `jw bible cited` |
 | `GET /api/v1/bible/books` | — | `jw bible books` |
+| `GET /api/v1/bible/intro` | `book`* (name or number), `bible` | `jw bible intro -o json` |
+| `GET /api/v1/bible/outline` | `book`*, `bible` | `jw bible outline -o json` |
+| `GET /api/v1/bible/gallery` | `book`*, `bible` | `jw bible gallery -o json` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/bible/verses` | `bible`, `book`, `chapter` | — (the chapter's page: how many verses it has) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
-| `GET /api/v1/media/items/{lank}/text` | — | `jw media text` |
+| `GET /api/v1/media/items/{lank}/text` | — | `jw media text` (`404` for an item without words) |
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
 | `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
-| `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents) |
-| `GET /api/v1/dailytext` | `date`, `format`, `unfold` | `jw dailytext` |
-| `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold` | `jw meetings ...` |
-| `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` |
-| `GET /download/pub` | pub parameters | `jw pub --download` |
+| `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents; `404` for one wol does not have) |
+| `GET /api/v1/dailytext` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw dailytext` |
+| `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw meetings ...` (also `mid`/`mw`, `we`/`wt`) |
+| `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` (with `subtitles=true` the redirect goes to the `.vtt` alone, `404` when there is none, where `jw download --subtitles` saves the video and its subtitles) |
+| `GET /download/pub` | pub parameters | `jw pub --download` (one file: `302` to it; several: `300 Multiple Choices` with the listing to pick a `fileUrl` from; none: `404`) |
 
 ```sh
 curl 'http://127.0.0.1:8080/api/v1/search?q=kingdom&limit=5'
