@@ -696,6 +696,10 @@ type documentPage struct {
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
+	// Refs and Images are what the document cites and shows, listed below
+	// it as on an article's page (--refs, --images on the command line).
+	Refs   []model.ScriptureAnchor
+	Images []model.MediaAsset
 }
 
 // PartURL addresses one of the meeting tabs, keeping the chosen week and
@@ -756,6 +760,8 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
+		Refs:         art.ScriptureRefs,
+		Images:       art.Images,
 	})
 }
 
@@ -816,6 +822,8 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
+		Refs:         art.ScriptureRefs,
+		Images:       art.Images,
 	})
 }
 

@@ -2029,3 +2029,10 @@ details.section.print-edition .section-body img { display: block; width: 100%; h
    would load; with them it loads in place */
 .lazy-fallback { margin: 0.25rem 0; font-size: 0.9em; }
 html.js .lazy-fallback { display: none; }
+
+/* what a picture of a document says about itself: its alt text, its size */
+ul.gallery .imagemeta { color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+
+/* the text fields and the page size among the search's options */
+.options .opt input[type="text"], .options .opt input[type="number"] { width: 100%; }
+.options .opt.off input:not([type="hidden"]) { opacity: 0.45; }
