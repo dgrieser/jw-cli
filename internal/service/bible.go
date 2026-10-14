@@ -375,16 +375,19 @@ func (e notThere) Unwrap() error { return pubmedia.ErrNotFound }
 // as it is.
 func (s *Service) chapterError(ctx context.Context, lng model.Language, edition string, ref bibleref.Ref,
 	t *bibleref.Table, err error) error {
-	var se *httpx.StatusError
-	refused := errors.As(err, &se) && (se.StatusCode == http.StatusBadRequest || se.StatusCode == http.StatusNotFound)
-	if !refused && !errors.Is(err, wol.ErrNoVerses) {
+	if !refused(err) && !errors.Is(err, wol.ErrNoVerses) {
 		return err
 	}
 	cfg, cerr := s.WOLConfig(ctx, lng)
 	if cerr != nil {
 		return err
 	}
+	language := cmp.Or(lng.Name, lng.Symbol)
 	editions, berr := s.WOL.Bibles(ctx, cfg)
+	if refused(berr) {
+		// a language with publications in the library but no bible: Kachin
+		return notThere(fmt.Sprintf("the library has no bible in %s", language))
+	}
 	if berr != nil {
 		return err
 	}
@@ -396,8 +399,17 @@ func (s *Service) chapterError(ctx context.Context, lng model.Language, edition 
 		}
 		symbols = append(symbols, e.Symbol)
 	}
-	return fmt.Errorf("unknown bible edition %q: the bibles in %s are %s",
-		edition, cmp.Or(lng.Name, lng.Symbol), strings.Join(symbols, ", "))
+	// the edition asked for by default is no exception: the study edition is
+	// in a few dozen languages only, Assamese has the plain NWT
+	return fmt.Errorf("there is no bible edition %q in %s; the bibles in %s are %s",
+		edition, language, language, strings.Join(symbols, ", "))
+}
+
+// refused reports whether wol refused a page as one it does not have: it
+// answers that with a bare 400 as often as with a 404.
+func refused(err error) bool {
+	var se *httpx.StatusError
+	return errors.As(err, &se) && (se.StatusCode == http.StatusBadRequest || se.StatusCode == http.StatusNotFound)
 }
 
 // verseError words a reference to verses its chapter does not have once the

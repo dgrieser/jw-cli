@@ -6,10 +6,13 @@ package mediator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -33,19 +36,30 @@ type wireLanguage struct {
 	IsSignLanguage bool   `json:"isSignLanguage"`
 }
 
-// Languages lists all languages with web content.
+// Languages lists every language there is content in: the full list (1099
+// languages), not the 312 that have a website of their own on jw.org — the
+// library and the media are in many more, Assamese, Kachin and Acholi among
+// them. Should the mediator stop answering the full list, the web list still
+// serves the common languages.
 func (c *Client) Languages(ctx context.Context) ([]model.Language, error) {
 	var resp struct {
 		Languages []wireLanguage `json:"languages"`
 	}
-	if err := c.hc.GetJSON(ctx, c.base()+"/languages/E/web", nil, &resp); err != nil {
+	err := c.hc.GetJSON(ctx, c.base()+"/languages/E/all", nil, &resp)
+	var se *httpx.StatusError
+	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
+		err = c.hc.GetJSON(ctx, c.base()+"/languages/E/web", nil, &resp)
+	}
+	if err != nil {
 		return nil, err
 	}
 	langs := make([]model.Language, 0, len(resp.Languages))
 	for _, l := range resp.Languages {
 		langs = append(langs, model.Language{
-			Symbol:         l.Code,
-			Locale:         l.Locale,
+			Symbol: l.Code,
+			// the mediator spells a region or script with an underscore
+			// ("pt_pt", "cmn_hant"), the sites and BCP 47 with a hyphen
+			Locale:         strings.ReplaceAll(l.Locale, "_", "-"),
 			Name:           l.Name,
 			Vernacular:     l.Vernacular,
 			Script:         l.Script,

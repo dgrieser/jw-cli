@@ -34,6 +34,11 @@ func bibleUpstream(t *testing.T) *Service {
 		http.Redirect(w, r, "/en/wol/h/r1/lp-e", http.StatusFound)
 	})
 	mux.HandleFunc("/en/wol/h/r1/lp-e", func(w http.ResponseWriter, r *http.Request) {})
+	// Kachin has a library, but neither a bible list nor a bible page
+	mux.HandleFunc("/kac", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/kac/wol/h/r539/lp-ah", http.StatusFound)
+	})
+	mux.HandleFunc("/kac/wol/h/r539/lp-ah", func(w http.ResponseWriter, r *http.Request) {})
 	mux.HandleFunc("/en/wol/bibles/r1/lp-e", file("testdata/bibles_en.html"))
 	mux.HandleFunc("/en/wol/b/r1/lp-e/nwtsty/43/3", file("testdata/chapter_john3.html"))
 	mux.HandleFunc("/en/wol/b/", func(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +69,7 @@ func TestReadPassagesErrors(t *testing.T) {
 		{"Joh 22", "nwtsty", "there is no John 22: John has 21 chapters", false},
 		{"Joh 3:99", "nwtsty", "there is no John 3:99: John 3 has 17 verses", false},
 		{"Jude 2:1", "nwtsty", "there is no Jude 2: Jude has only one chapter", false},
-		{"Joh 3:16", "bogus", `unknown bible edition "bogus": the bibles in English are nwtsty, nwt, int`, false},
+		{"Joh 3:16", "bogus", `there is no bible edition "bogus" in English; the bibles in English are nwtsty, nwt, int`, false},
 		{"Ge 1:1", "int", "Genesis 1 is not in The Kingdom Interlinear Translation of the Greek Scriptures (int, 1985)", true},
 	} {
 		_, err := s.ReadPassages(ctx, english, ReadRequest{Refs: c.ref, Edition: c.edition, NoOutlines: true}, txt)
@@ -98,5 +103,17 @@ func TestReadPassagesClampsRangeEnd(t *testing.T) {
 		if len(res.Passages) != 1 || res.Passages[0].Ref != "John 3:16-17" || len(res.Passages[0].Verses) != 2 {
 			t.Errorf("%s: got %+v", ref, res.Passages)
 		}
+	}
+}
+
+// A language with publications in the library but no bible says so, and as
+// something that is not there.
+func TestReadPassagesNoBible(t *testing.T) {
+	s := bibleUpstream(t)
+	kachin := model.Language{Symbol: "AH", Locale: "kac", Name: "Kachin"}
+	_, err := s.ReadPassages(context.Background(), kachin,
+		ReadRequest{Refs: "Joh 3:16", Edition: "nwtsty", NoOutlines: true}, i18n.TextFor("en"))
+	if err == nil || err.Error() != "the library has no bible in Kachin" || !errors.Is(err, pubmedia.ErrNotFound) {
+		t.Errorf("got %v", err)
 	}
 }
