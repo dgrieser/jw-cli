@@ -232,16 +232,15 @@
     var up = pageBar.querySelector(".pb-up");
     if (!up) return;
     var href = "";
-    var crumbs = document.querySelectorAll("main .crumbs a[href]");
+    // the breadcrumb, or the bible's link back from a book to all books and
+    // from a book's introduction, outline or gallery to the book
+    var crumbs = document.querySelectorAll("main .crumbs a[href], main .bible-nav-back a[href]");
     if (crumbs.length) href = crumbs[crumbs.length - 1].getAttribute("href");
     var nav = document.querySelector(".site-nav a.active[href]");
     // an article is read among the publications, but leads back to where it
     // was opened: a search, another article, a verse
     var opened = location.pathname === "/article";
-    if (!href && nav && !opened) {
-      var u = new URL(nav.href, location.href);
-      if (u.pathname !== location.pathname) href = nav.getAttribute("href");
-    }
+    if (!href && nav && !opened) href = sectionUp(nav);
     // a page of its own, outside the menu's sections: back where it was opened
     if (!href && (!nav || opened) && document.referrer) {
       try {
@@ -259,6 +258,34 @@
       up.hidden = false;
     }
   })();
+
+  // sectionUp is where a page of a section of the menu without a breadcrumb
+  // leads up to: the section's own page, when the page is below it. The whole
+  // address says so, not its path alone — /bible?ref=… is a reading below
+  // /bible, /search?q=… a search below /search — and a reading in one book
+  // leads to that book's chapters. A date names the same page on another
+  // day, not one below it.
+  function sectionUp(nav) {
+    var to = nav.getAttribute("href");
+    var top = new URL(to, location.href);
+    if (top.pathname !== location.pathname) return to;
+    var q = new URLSearchParams(location.search);
+    var names = { "/bible": ["ref", "book", "vid"], "/search": ["q"] }[location.pathname] || [];
+    var below = names.some(function (k) { return (q.get(k) || "").trim() !== ""; });
+    if (!below) return "";
+    if (location.pathname !== "/bible") return to;
+    var books = {};
+    var edition = "";
+    document.querySelectorAll("main .passage[data-book]").forEach(function (p) {
+      books[p.getAttribute("data-book")] = true;
+      edition = edition || p.getAttribute("data-bible") || "";
+    });
+    var only = Object.keys(books);
+    if (only.length !== 1) return to;
+    var b = new URLSearchParams({ bible: edition || q.get("bible") || "nwtsty", book: only[0] });
+    if (q.get("lang")) b.set("lang", q.get("lang"));
+    return "/bible?" + b.toString();
+  }
 
   // --- the bible's header: the verses in view, and a way to another book -----
 
