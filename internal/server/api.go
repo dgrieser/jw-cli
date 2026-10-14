@@ -11,8 +11,10 @@ import (
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
-// maxSearchLimit caps ?limit=: the API serves pages, not dumps.
-const maxSearchLimit = 50
+// maxSearchLimit caps ?limit= at the largest page the jw.org search answers:
+// it refuses 37 results or more with HTTP 400. The wol engine takes no page
+// size at all; its pages are as long as the site makes them.
+const maxSearchLimit = 36
 
 func (s *Server) apiLanguages(w http.ResponseWriter, r *http.Request) {
 	langs, err := s.svc.Languages(r.Context())

@@ -307,6 +307,32 @@ func TestAPISearchValidation(t *testing.T) {
 	}
 }
 
+// The jw.org search refuses a page of 37 results or more, so the API asks
+// for no more than 36.
+func TestAPISearchLimitCap(t *testing.T) {
+	mux := searchMux(t)
+	var mu sync.Mutex
+	var limits []string
+	up := http.NewServeMux()
+	up.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/search/") {
+			mu.Lock()
+			limits = append(limits, r.URL.Query().Get("limit"))
+			mu.Unlock()
+		}
+		mux.ServeHTTP(w, r)
+	})
+	srv := newTestServer(t, up)
+	if resp, body := get(t, srv, "/api/v1/search?q=x&type=videos&limit=50"); resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(limits) != 1 || limits[0] != "36" {
+		t.Errorf("jw.org was asked for limits %q, want [36]", limits)
+	}
+}
+
 func TestAPIArticle(t *testing.T) {
 	srv := newTestServer(t, wolMux(t))
 	resp, body := get(t, srv, "/api/v1/article?target=2024360&lang=en")
