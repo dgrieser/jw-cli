@@ -94,6 +94,14 @@ func TestSearchJSON(t *testing.T) {
 	if !strings.Contains(out, `"lank": "pub-xyz_1_VIDEO"`) || !strings.Contains(out, `"index": 1`) {
 		t.Errorf("json output:\n%s", out)
 	}
+	// the listing says what the engine reported for the whole query, and
+	// when it was made: the stamp Save set, not the zero time of a copy
+	if !strings.Contains(out, `"total": 1`) {
+		t.Errorf("json output lacks the total:\n%s", out)
+	}
+	if strings.Contains(out, `"timestamp": "0001-01-01T00:00:00Z"`) || !strings.Contains(out, `"timestamp": "`) {
+		t.Errorf("json output lacks a timestamp:\n%s", out)
+	}
 }
 
 // TestSearchHeaderLanguage pins the header to the requested language, with

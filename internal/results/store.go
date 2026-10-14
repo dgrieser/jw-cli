@@ -18,22 +18,27 @@ const fileName = "last-results.json"
 
 // ResultSet is one saved listing.
 type ResultSet struct {
-	Kind      string         `json:"kind"` // search|media-browse|pub-files|bible-media|article-images
-	Query     string         `json:"query,omitempty"`
-	Lang      string         `json:"lang,omitempty"`
-	Page      int            `json:"page,omitempty"`
+	Kind  string `json:"kind"` // search|media-browse|pub-files|bible-media|article-images
+	Query string `json:"query,omitempty"`
+	Lang  string `json:"lang,omitempty"`
+	Page  int    `json:"page,omitempty"`
+	// Total is how many results the engine reports for the whole query, of
+	// which Items is one page; zero when it reports none.
+	Total     int            `json:"total,omitempty"`
 	Timestamp time.Time      `json:"timestamp"`
 	Items     []model.Result `json:"items"`
 }
 
-// Save writes the result set into dir (the app cache dir).
-func Save(dir string, rs ResultSet) error {
-	if dir == "" {
-		return nil // cache disabled; indexes just won't be resolvable later
-	}
+// Save numbers and stamps the result set, then writes it into dir (the app
+// cache dir). The numbers and the stamp land in the caller's set, cache or no
+// cache, so a listing prints — and -o json shows — the set exactly as saved.
+func Save(dir string, rs *ResultSet) error {
 	rs.Timestamp = time.Now()
 	for i := range rs.Items {
 		rs.Items[i].Index = i + 1
+	}
+	if dir == "" {
+		return nil // cache disabled; indexes just won't be resolvable later
 	}
 	b, err := json.MarshalIndent(rs, "", "  ")
 	if err != nil {

@@ -76,8 +76,7 @@ Examples:
 				if err != nil {
 					return results.ResultSet{}, "", err
 				}
-				rs := results.ResultSet{Kind: out.Kind, Query: out.Query, Lang: out.Lang, Page: out.Page, Items: out.Items}
-				return rs, a.Text().CitedResults(out.Total, label), nil
+				return listingOf(out), a.Text().CitedResults(out.Total, label), nil
 			}
 			if interactive {
 				return runSearchTUI(ctx, a, lng, func(page int) (results.ResultSet, string, error) {
@@ -85,7 +84,7 @@ Examples:
 					if err != nil {
 						return rs, header, err
 					}
-					_ = results.Save(a.Cache().Dir(), rs)
+					_ = results.Save(a.Cache().Dir(), &rs)
 					return rs, header, nil
 				}, label)
 			}

@@ -122,7 +122,7 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 					LANK: item.LANK, FileURL: f.URL, Checksum: f.Checksum, Filesize: f.Filesize,
 				})
 			}
-			_ = results.Save(a.Cache().Dir(), results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
+			_ = results.Save(a.Cache().Dir(), &results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
 			return a.WriteMarkdown(mediaInfoText(item, a.Text(), a.Flags.NoURLs))
 		},
 	}

@@ -113,7 +113,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 				return results.ResultSet{}, "", err
 			}
 			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: service.CategoriesToResults(cats)}
-			_ = results.Save(a.Cache().Dir(), rs)
+			_ = results.Save(a.Cache().Dir(), &rs)
 			return rs, a.Text().MediaCategories, nil
 		}
 		cat, err := a.Service().Category(ctx, lng.Symbol, key, pageSize, (page-1)*pageSize)
@@ -125,7 +125,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreItems)
 		}
 		rs := results.ResultSet{Kind: "media-browse", Query: key, Lang: lng.Symbol, Page: page, Items: items}
-		_ = results.Save(a.Cache().Dir(), rs)
+		_ = results.Save(a.Cache().Dir(), &rs)
 		header := fmt.Sprintf("%s (%s)", cat.Name, cat.Key)
 		if page > 1 {
 			header += fmt.Sprintf(a.Text().PageSuffixShort, page)
@@ -144,7 +144,7 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p servic
 		if len(rs.Items) == 0 && page > 1 {
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreResults)
 		}
-		_ = results.Save(a.Cache().Dir(), rs)
+		_ = results.Save(a.Cache().Dir(), &rs)
 		return rs, header, nil
 	}
 }
@@ -166,8 +166,14 @@ func runSearch(ctx context.Context, a *app.App, lng model.Language, p *service.S
 			header += fmt.Sprintf(a.Text().PageSuffix, out.Page, p.Limit)
 		}
 	}
-	rs := results.ResultSet{Kind: out.Kind, Query: out.Query, Lang: out.Lang, Page: out.Page, Items: out.Items}
-	return rs, header, nil
+	return listingOf(out), header, nil
+}
+
+// listingOf is the listing a search prints and saves: one page of results and
+// what the engine says about the whole query.
+func listingOf(out service.SearchOutcome) results.ResultSet {
+	return results.ResultSet{Kind: out.Kind, Query: out.Query, Lang: out.Lang, Page: out.Page,
+		Total: out.Total, Items: out.Items}
 }
 
 func runSearchTUI(ctx context.Context, a *app.App, lng model.Language, fetch tui.Fetcher, header string) error {
