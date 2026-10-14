@@ -344,10 +344,25 @@ func (s *Server) apiMediaCategories(w http.ResponseWriter, r *http.Request) {
 		failJSON(w, r, err)
 		return
 	}
+	limit, err := intParam(r, "limit", 0)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	offset, err := intParam(r, "offset", 0)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
 	cats, err := s.svc.Mediator.RootCategories(r.Context(), lng.Symbol)
 	if err != nil {
 		failJSON(w, r, err)
 		return
+	}
+	// the mediator hands the root out whole; it pages as a category does
+	cats = cats[min(max(offset, 0), len(cats)):]
+	if limit > 0 {
+		cats = cats[:min(limit, len(cats))]
 	}
 	writeJSON(w, http.StatusOK, cats)
 }

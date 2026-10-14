@@ -7,6 +7,23 @@ import (
 	"testing"
 )
 
+// The root of the media categories pages with limit and offset as a category
+// does.
+func TestAPIMediaRootPages(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	_, body := get(t, srv, "/api/v1/media/categories?lang=en&limit=1&offset=1")
+	if strings.Contains(body, "VideoOnDemand") || !strings.Contains(body, `"key": "Audio"`) {
+		t.Errorf("second category alone: %s", body)
+	}
+	_, body = get(t, srv, "/api/v1/media/categories?lang=en&offset=5")
+	if strings.TrimSpace(body) != "[]" {
+		t.Errorf("past the end: %s", body)
+	}
+	if resp, _ := get(t, srv, "/api/v1/media/categories?lang=en&limit=x"); resp.StatusCode != 400 {
+		t.Errorf("bad limit: status %d", resp.StatusCode)
+	}
+}
+
 // A category's subcategories lead its listing, then its own media, as jw
 // media browse lists them.
 func TestUIMediaCategorySubcategoriesFirst(t *testing.T) {
