@@ -103,30 +103,47 @@ and is shown by 'jw media browse' and 'jw search -t videos'.`,
 			if err != nil {
 				return err
 			}
-			format, err := a.Format()
-			if err != nil {
-				return err
-			}
-			if format == render.JSON {
-				return a.WriteJSON(item)
-			}
-			// also cache the renditions so `jw download <n>` works
-			var items []model.Result
-			for _, f := range item.Files {
-				label := f.Label
-				if label == "" {
-					label = strings.TrimPrefix(f.MimeType, "audio/")
-				}
-				items = append(items, model.Result{
-					Kind: item.Type, Title: item.Title, Context: label,
-					LANK: item.LANK, FileURL: f.URL, Checksum: f.Checksum, Filesize: f.Filesize,
-				})
-			}
-			_ = results.Save(a.Cache().Dir(), &results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lng.Symbol, Items: items})
-			return a.WriteMarkdown(mediaInfoText(item, a.Text(), a.Flags.NoURLs))
+			return writeMediaInfo(a, lng.Symbol, item)
 		},
 	}
 	return cmd
+}
+
+// writeMediaInfo prints a media item's details and saves its renditions as
+// the last listing, numbered as the details number them, so `jw download <n>`
+// downloads file n. jw media info and jw show on a video or audio row print
+// the same thing and leave the same listing behind.
+func writeMediaInfo(a *app.App, lang string, item model.MediaItem) error {
+	rs := results.ResultSet{Kind: "media-info", Query: item.LANK, Lang: lang, Items: mediaFileRows(item)}
+	if err := results.Save(a.Cache().Dir(), &rs); err != nil {
+		return err
+	}
+	format, err := a.Format()
+	if err != nil {
+		return err
+	}
+	if format == render.JSON {
+		return a.WriteJSON(item)
+	}
+	return a.WriteMarkdown(mediaInfoText(item, a.Text(), a.Flags.NoURLs))
+}
+
+// mediaFileRows are a media item's renditions as listing rows. Each carries
+// the item's LANK as well as its file: the row downloads that file, unless a
+// quality is asked for, which the LANK then picks from all of them.
+func mediaFileRows(item model.MediaItem) []model.Result {
+	var rows []model.Result
+	for _, f := range item.Files {
+		label := f.Label
+		if label == "" {
+			label = strings.TrimPrefix(f.MimeType, "audio/")
+		}
+		rows = append(rows, model.Result{
+			Kind: item.Type, Title: item.Title, Context: label,
+			LANK: item.LANK, FileURL: f.URL, Checksum: f.Checksum, Filesize: f.Filesize,
+		})
+	}
+	return rows
 }
 
 func mediaInfoText(m model.MediaItem, txt *i18n.Messages, noURLs bool) string {

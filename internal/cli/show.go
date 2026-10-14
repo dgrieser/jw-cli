@@ -34,14 +34,9 @@ rendered in the selected output format, videos/audio show their details.`,
 				if err != nil {
 					return err
 				}
-				format, err := a.Format()
-				if err != nil {
-					return err
-				}
-				if format == render.JSON {
-					return a.WriteJSON(mi)
-				}
-				return a.WriteMarkdown(mediaInfoText(mi, a.Text(), a.Flags.NoURLs))
+				// the files it lists are numbered for jw download, which
+				// must then find them, not the listing this row came from
+				return writeMediaInfo(a, lng.Symbol, mi)
 			case "category":
 				return fmt.Errorf("result %d is a category; browse it with: jw media browse %s", item.Index, item.CategoryKey)
 			case "file", "image":

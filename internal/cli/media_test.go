@@ -74,6 +74,31 @@ func TestDownloadMediaInfoRendition(t *testing.T) {
 	}
 }
 
+// jw show on a video numbers its files for jw download, so the next
+// `jw download 1` is file 1 — the 240p rendition — not the video of row 1 of
+// the listing it was shown from, in the best quality.
+func TestShowVideoThenDownloadFile(t *testing.T) {
+	mux := mediaMux(t)
+	cacheDir := t.TempDir()
+	if _, err := runCmdWithCache(t, mux, cacheDir, "media", "browse", "LatestVideos", "-l", "en"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := runCmdWithCache(t, mux, cacheDir, "show", "1", "-l", "en")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "jw download <n>") {
+		t.Fatalf("show should offer the numbered files:\n%s", out)
+	}
+	out, err = runCmdWithCache(t, mux, cacheDir, "download", "1", "-l", "en", "-d", t.TempDir())
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "v_r240P.mp4") {
+		t.Errorf("download 1 after show should be file 1 (240p):\n%s", out)
+	}
+}
+
 func TestMediaBrowseRoot(t *testing.T) {
 	out, err := runCmd(t, mediaMux(t), "media", "browse", "-l", "en")
 	if err != nil {
