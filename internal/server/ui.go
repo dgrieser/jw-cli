@@ -233,10 +233,10 @@ type errorPage struct {
 }
 
 // confirmPage is the web's answer to the terminal prompt: an expansion that
-// costs more than the server spends unasked is offered rather than refused.
+// costs more than the server spends unasked is offered rather than refused,
+// in the page's own words — the error behind it speaks to an API client.
 type confirmPage struct {
 	basePage
-	Message  string
 	Level    int
 	Requests int
 	ForceURL string
@@ -250,9 +250,10 @@ func (s *Server) failUI(w http.ResponseWriter, r *http.Request, err error) {
 	}
 	var te *tooExpensiveError
 	if errors.As(err, &te) {
+		page := s.base(r, "")
+		page.Title = page.T.UIExpensiveTitle
 		s.render(w, status, "confirm", confirmPage{
-			basePage: s.base(r, "Unfold?"),
-			Message:  err.Error(),
+			basePage: page,
 			Level:    te.level,
 			Requests: te.requests,
 			ForceURL: urlWith(r, "force", "1"),
