@@ -729,9 +729,19 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 	part := r.PathValue("part")
-	if part != "" && part != "midweek" && part != "weekend" {
-		s.failUI(w, r, fmt.Errorf("unknown meeting %q (want midweek or weekend)", part))
-		return
+	if part != "" {
+		canonical, err := meetingPart(part)
+		if err != nil {
+			s.failUI(w, r, err)
+			return
+		}
+		// an alias (/meetings/mw) is an address of the meeting's own page
+		if canonical != part {
+			u := *r.URL
+			u.Path = "/meetings/" + canonical
+			http.Redirect(w, r, u.RequestURI(), http.StatusMovedPermanently)
+			return
+		}
 	}
 	lng, err := s.language(r)
 	if err != nil {

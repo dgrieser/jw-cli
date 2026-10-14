@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -271,10 +272,25 @@ func (s *Server) apiMeetings(w http.ResponseWriter, r *http.Request) {
 	s.writeArticleJSON(w, r, lng, art, format, depth)
 }
 
+// meetingAliases are the names a meeting goes by: its own, and the aliases
+// the CLI's subcommands take (jw meetings mw).
+var meetingAliases = map[string]string{
+	"midweek": "midweek", "mid": "midweek", "mw": "midweek",
+	"weekend": "weekend", "we": "weekend", "wt": "weekend",
+}
+
+// meetingPart is the meeting a path names, by its own name.
+func meetingPart(name string) (string, error) {
+	if part, ok := meetingAliases[strings.ToLower(name)]; ok {
+		return part, nil
+	}
+	return "", fmt.Errorf("unknown meeting %q (want midweek or weekend)", name)
+}
+
 func (s *Server) apiMeetingPart(w http.ResponseWriter, r *http.Request) {
-	part := r.PathValue("part")
-	if part != "midweek" && part != "weekend" {
-		badRequest(w, "unknown meeting %q (want midweek or weekend)", part)
+	part, err := meetingPart(r.PathValue("part"))
+	if err != nil {
+		badRequest(w, "%s", err)
 		return
 	}
 	format, depth, err := articleParams(r)
