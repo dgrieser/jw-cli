@@ -457,8 +457,8 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 			}
 			return requests
 		}
-		p := s.pass(level)
-		spent, left, err := p.each(ctx, frontier, func(n *Node) int {
+		lv := s.pass(level)
+		spent, left, err := lv.each(ctx, frontier, func(n *Node) int {
 			tip, err := r.Resolve(ctx, n.Ref.Path)
 			if err != nil {
 				n.Err = err
@@ -480,7 +480,7 @@ func (s *Session) Run(ctx context.Context, groups []Group) (res Grouped, err err
 			if ok, err := ask(level, cost, len(items)); err != nil || !ok {
 				return res, err
 			}
-			spent, left, err := p.each(ctx, items, verse)
+			spent, left, err := lv.each(ctx, items, verse)
 			res.Requests += spent
 			if err != nil {
 				res.Pending += left

@@ -427,8 +427,8 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 			}
 			return requests
 		}
-		p := s.pass(level)
-		spent, left, err := p.each(ctx, frontier, func(n *Node) int { return resolve(n) + verse(n) })
+		lv := s.pass(level)
+		spent, left, err := lv.each(ctx, frontier, func(n *Node) int { return resolve(n) + verse(n) })
 		res.Requests += spent
 		if err != nil {
 			res.Pending += left
@@ -444,7 +444,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 					return res, err
 				}
 			}
-			spent, left, err := p.each(ctx, items, verse)
+			spent, left, err := lv.each(ctx, items, verse)
 			res.Requests += spent
 			if err != nil {
 				res.Pending += left
@@ -503,7 +503,7 @@ func (s *Session) runHops(ctx context.Context, groups []Group) (res Grouped, err
 				return res, err
 			}
 		}
-		spent, _, err = p.each(ctx, append(nodesIn(footnotes), nodesIn(indexes)...), resolve)
+		spent, _, err = lv.each(ctx, append(nodesIn(footnotes), nodesIn(indexes)...), resolve)
 		res.Requests += spent
 		if err != nil {
 			return res, err
