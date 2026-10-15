@@ -1303,12 +1303,12 @@ func TestUIBibleChapterNav(t *testing.T) {
 	if strings.Contains(body, `<p class="whole-chapter">`) {
 		t.Errorf("a whole chapter above the verses:\n%s", body)
 	}
-	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl" data-short="Whole ch.">Whole chapter</span></a>`) ||
+	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl">Whole chapter</span></a>`) ||
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
 	}
 	if !strings.Contains(body, `<span class="lbl">John 2</span>`) {
-		t.Errorf("the chapter nav has no label to shorten:\n%s", body)
+		t.Errorf("the chapter nav has no label to cut short:\n%s", body)
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)

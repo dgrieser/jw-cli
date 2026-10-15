@@ -375,8 +375,6 @@
     var edition = opts.edition || "nwtsty";
     var lang = opts.lang || "";
     var names = opts.names || {};
-    // the books' short names, for a title that would crowd out its row
-    var abbrs = {};
     var dialog = null;
     var row = null;
     var rowDocs = null;
@@ -499,8 +497,8 @@
       row.hidden = false;
       // the book's regular name, with the chapter being read — never the long
       // title the library heads the book with
-      var label = function (short) {
-        var n = (short && abbrs[book]) || names[book] || "";
+      var label = function () {
+        var n = names[book] || "";
         return cur.chapter ? n + " " + cur.chapter : n;
       };
       rowTitle.textContent = label();
@@ -530,7 +528,6 @@
         if (docs) {
           rowDocs.appendChild(docs);
           rowDocs.hidden = false;
-          fitTitle(label);
         }
       }, function (err) {
         row.textContent = String(err && err.message || err);
@@ -538,14 +535,6 @@
       grid.scrollTop = 0;
     }
 
-    // fitTitle names the book short when its documents beside it would not
-    // fit otherwise
-    var fitLabel = null;
-    function fitTitle(label) {
-      fitLabel = label;
-      rowTitle.textContent = label(false);
-      if (rowDocs.scrollWidth > rowDocs.clientWidth + 1) rowTitle.textContent = label(true);
-    }
 
     // one book's chapters as the bible page lays them out: the row is gone
     function showBook(book) {
@@ -629,9 +618,6 @@
       });
       view.querySelector(".bible-nav-heading").textContent = T.chapters || "";
       dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
-      window.addEventListener("resize", function () {
-        if (dialog.open && !rowDocs.hidden && fitLabel) fitTitle(fitLabel);
-      });
       // a click on the backdrop closes it
       dialog.addEventListener("click", function (e) {
         if (e.target === dialog) dialog.close();
@@ -651,7 +637,6 @@
           ul.className = "book-grid " + (sec.key || "");
           (sec.books || []).forEach(function (b) {
             if (!names[b.number]) names[b.number] = b.name;
-            if (b.abbreviation) abbrs[b.number] = b.abbreviation;
             var li = document.createElement("li");
             li.className = "book " + (b.group || "");
             var a = document.createElement("a");
@@ -1746,32 +1731,9 @@
     h1.parentNode.insertBefore(row, h1);
     row.appendChild(h1);
     row.appendChild(bar);
-    var full = h1.textContent;
-    h1.title = full;
-    // a cut the way a word is abbreviated: after a consonant that a vowel
-    // follows ("Zusammenk|ünfte"), else after any letter
-    var VOWEL = /[aeiouyäöüàáâèéêìíîòóôùúû]/i;
-    function cutAt(n) {
-      return !VOWEL.test(full.charAt(n - 1)) && VOWEL.test(full.charAt(n)) && /\S/.test(full.charAt(n - 1));
-    }
-    function fitTitle() {
-      h1.textContent = full;
-      if (h1.scrollWidth <= h1.clientWidth + 1) return;
-      var fits = function (n) {
-        h1.textContent = full.slice(0, n).replace(/[\s.,-]+$/, "") + ".";
-        return h1.scrollWidth <= h1.clientWidth + 1;
-      };
-      var n;
-      for (n = full.length - 1; n > 3; n--) {
-        if (cutAt(n) && fits(n)) return;
-      }
-      for (n = full.length - 1; n > 3; n--) {
-        if (fits(n)) return;
-      }
-    }
-    fitTitle();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
-    window.addEventListener("resize", fitTitle);
+    // a title too long for its row ends in an ellipsis (style.css); the whole
+    // of it is its tooltip
+    h1.title = h1.textContent;
   })();
 
   // --- the overall history: every page read, behind the bar's clock ---------
@@ -2379,45 +2341,6 @@
   // --- bible navigation ----------------------------------------------------
 
 
-  // the chapters before and after a reading and "whole chapter" between
-  // them say it shorter when the row has no room: "whole chapter" first, then
-  // both books by their abbreviation
-  document.querySelectorAll(".chapter-nav").forEach(function (nav) {
-    var wholeLabel = nav.querySelector(".whole-lbl[data-short]");
-    var labels = nav.querySelectorAll(".lbl[data-short]");
-    if (!wholeLabel && !labels.length) return;
-    var all = Array.prototype.slice.call(labels);
-    if (wholeLabel) all.push(wholeLabel);
-    all.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
-    function say(l, short) {
-      l.textContent = l.getAttribute(short ? "data-short" : "data-full");
-    }
-    // each side has half of what "whole chapter" leaves of the row; a
-    // button's width is with its label in full, which it cuts when narrower
-    function cut() {
-      var whole = nav.querySelector(".whole");
-      var gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
-      var room = (nav.clientWidth - (whole ? whole.offsetWidth : 0)) / 2 - gap;
-      return Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
-        var l = b.querySelector(".lbl");
-        return b.offsetWidth + (l ? l.scrollWidth - l.clientWidth : 0) > room;
-      });
-    }
-    function fit() {
-      all.forEach(function (l) { say(l, false); });
-      if (!cut()) return;
-      if (wholeLabel) {
-        say(wholeLabel, true);
-        if (!cut()) return;
-      }
-      labels.forEach(function (l) { say(l, true); });
-    }
-    fit();
-    // the page's own font is narrower than the one it is measured in first
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
-    window.addEventListener("load", fit);
-    window.addEventListener("resize", fit);
-  });
 
   // the search's options: behind the button beside the query, in a dialog,
   // each shown only for the engine it applies to; without a script they

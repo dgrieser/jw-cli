@@ -423,9 +423,7 @@ type Messages struct {
 	// it; UIWatchVideo leads from what a chapter's heading unfolds to the
 	// book introduction's video.
 	UIWholeChapter string
-	// UIWholeChapterShort is UIWholeChapter where there is little room.
-	UIWholeChapterShort string
-	UIWatchVideo        string
+	UIWatchVideo   string
 	// UIFont* are the text size controls of every page.
 	UIFontSmaller string
 	UIFontLarger  string

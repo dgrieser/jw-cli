@@ -269,7 +269,6 @@ var en = Messages{
 	UIPrevBook:             "Previous book",
 	UINextBook:             "Next book",
 	UIWholeChapter:         "Whole chapter",
-	UIWholeChapterShort:    "Whole ch.",
 	UIWatchVideo:           "Watch the video",
 	UIFontSmaller:          "Smaller text",
 	UIFontLarger:           "Larger text",
