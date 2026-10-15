@@ -3802,9 +3802,12 @@
     }
     var list = body.querySelector(":scope > .sections");
     if (!list) list = body.appendChild(make("div", "sections"));
-    // asked for again after a failure: what that brought, and what it said,
-    // make way for the answer
-    body.querySelectorAll(":scope > .lazy-failed").forEach(function (m) { m.remove(); });
+    // what an earlier load put ahead of the sections — a gallery, the
+    // message of a failure — makes way for the answer, or it would be shown
+    // twice; the way in without a script stays
+    Array.prototype.slice.call(body.children).forEach(function (c) {
+      if (c !== list && !c.classList.contains("lazy-fallback")) c.remove();
+    });
     if (d.hasAttribute("data-failed")) {
       d.removeAttribute("data-failed");
       list.textContent = "";
@@ -4324,10 +4327,15 @@
       el.removeAttribute("data-state");
     });
     copy.querySelectorAll(".fresh, .flash").forEach(function (el) { el.classList.remove("fresh", "flash"); });
-    // a lazy section caught loading loads again when it comes back
+    // a lazy section caught loading loads again when it comes back; one that
+    // holds something is loaded, whether its answer came as sections or as
+    // a body of its own ahead of them (a verse's media gallery)
     copy.querySelectorAll("details[data-lazy][data-loaded]").forEach(function (d) {
-      var list = d.querySelector(":scope > .section-body > .sections");
-      if (list && !list.children.length) d.removeAttribute("data-loaded");
+      var body = d.querySelector(":scope > .section-body");
+      var held = body && Array.prototype.some.call(body.children, function (c) {
+        return !c.classList.contains("lazy-fallback") && (!c.classList.contains("sections") || c.children.length > 0);
+      });
+      if (!held) d.removeAttribute("data-loaded");
     });
     return copy.outerHTML;
   }
