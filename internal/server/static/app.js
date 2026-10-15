@@ -1985,6 +1985,19 @@
     }
   }
 
+  // mediaHref is the page here of a video or recording a jw.org link names,
+  // at the stretch the link names: a verse's clip is a link to the whole
+  // video with the clip as ts= ("00:05:02.26-00:07:52.31"), which the page's
+  // player starts at
+  function mediaHref(target, lang) {
+    var q = new URLSearchParams();
+    if (lang) q.set("lang", lang);
+    var ts = target.url.searchParams.get("ts");
+    if (ts) q.set("ts", ts);
+    var s = q.toString();
+    return "/media/item/" + encodeURIComponent(target.key) + (s ? "?" + s : "");
+  }
+
   // the pages of this site, as a link names them
   var SITE_PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?|open)?$/;
 
@@ -2013,7 +2026,7 @@
     if (!target) return null;
     switch (target.kind) {
       case "media":
-        return { href: "/media/item/" + encodeURIComponent(target.key) + (pageLang ? "?" + q.toString() : ""), sec: sectionOf("/media/item/x") };
+        return { href: mediaHref(target, pageLang), sec: sectionOf("/media/item/x") };
       case "article":
         q.set("target", u.href);
         return { href: "/article?" + q.toString(), sec: sectionOf("/article") };
@@ -4228,7 +4241,7 @@
     if (!target) return;
     e.preventDefault();
     if (target.kind === "media") {
-      location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
+      location.href = mediaHref(target, lang);
       return;
     }
     // a verse's number that has no verse to unfold here goes nowhere: never

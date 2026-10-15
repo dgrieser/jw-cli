@@ -1026,6 +1026,34 @@ type mediaItemPage struct {
 	Paragraphs [][]model.Cue
 	// HasResolution says a rendition has a picture size to show.
 	HasResolution bool
+	// Clip is the stretch of the item the link to the page named (?ts=, a
+	// verse's clip), which the player starts at; nil plays it from the start,
+	// which WholeURL leads to.
+	Clip     *mediaClip
+	WholeURL string
+}
+
+// StreamSrc is the address the player plays: the stream, at the clip asked
+// for.
+func (p mediaItemPage) StreamSrc() string {
+	if p.Stream == nil {
+		return ""
+	}
+	if p.Clip == nil {
+		return p.Stream.URL
+	}
+	return p.Stream.URL + p.Clip.Fragment()
+}
+
+// ClipLabel names the clip the player is set to.
+func (p mediaItemPage) ClipLabel() string {
+	if p.Clip == nil {
+		return ""
+	}
+	if p.Clip.End == 0 {
+		return fmt.Sprintf(p.T.UIClipFrom, subtitles.Clock(p.Clip.Start))
+	}
+	return fmt.Sprintf(p.T.UIClip, subtitles.Clock(p.Clip.Start), subtitles.Clock(p.Clip.End))
 }
 
 const streamQuality = "720p"
@@ -1055,6 +1083,10 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, item.Title).withSite(service.VideoLink(item.LANK, lng.Symbol)),
 		Item:     item,
 		Image:    service.BestImage(item.Images),
+		Clip:     parseClip(r.FormValue("ts")),
+	}
+	if page.Clip != nil {
+		page.WholeURL = page.WithLang("/media/item/" + url.PathEscape(item.LANK))
 	}
 	var primary *model.CategoryRef
 	if item.PrimaryCategory != "" {

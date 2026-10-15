@@ -1153,6 +1153,8 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 }
 .player.audio img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: var(--r); background: var(--field); margin-bottom: 0.75rem; }
 .player audio { display: block; width: 100%; }
+/* the clip of it a link asked for, right under the player */
+.clip-note { margin: -0.75rem 0 0; color: var(--muted); font-size: 0.95rem; }
 
 /* the words of a media item: a song's lyrics, the document a recording
    reads, the transcript of its subtitles. A line the player is at is marked;

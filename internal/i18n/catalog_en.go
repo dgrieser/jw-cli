@@ -290,4 +290,8 @@ var en = Messages{
 	UIResolution:           "Resolution",
 	UIPrintedEdition:       "Printed edition",
 	UIBurnedIn:             "subtitles in the picture",
+
+	UIClip:      "Clip %s–%s",
+	UIClipFrom:  "From %s",
+	UIFromStart: "From the start",
 }

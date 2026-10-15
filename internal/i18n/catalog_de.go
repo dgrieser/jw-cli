@@ -290,4 +290,8 @@ var de = Messages{
 	UIResolution:           "Auflösung",
 	UIPrintedEdition:       "Druckausgabe",
 	UIBurnedIn:             "Untertitel im Bild",
+
+	UIClip:      "Ausschnitt %s–%s",
+	UIClipFrom:  "Ab %s",
+	UIFromStart: "Von Anfang an",
 }

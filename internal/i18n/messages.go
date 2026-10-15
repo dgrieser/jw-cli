@@ -461,6 +461,13 @@ type Messages struct {
 	UIResolution     string
 	UIPrintedEdition string
 	UIBurnedIn       string
+
+	// UIClip names the stretch of a recording a link asked for (a verse's
+	// clip), from and to as a player shows them; UIClipFrom one that runs to
+	// the end. UIFromStart plays the whole recording instead.
+	UIClip      string
+	UIClipFrom  string
+	UIFromStart string
 }
 
 // Date renders t as a full date in the language's own word order.

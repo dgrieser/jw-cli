@@ -563,7 +563,10 @@ subtitles (behind a fold when lyrics are shown too). The line being sung or
 said is highlighted as the item plays, and pressing a line or a caption's time
 plays from there. The page also names the recording's publication, links the
 printed edition and the lead sheet, and lists each rendition's picture size and
-frame rate; the item's page on jw.org is opened from the settings.
+frame rate; the item's page on jw.org is opened from the settings. Opened
+from a verse's clip — a stretch of a longer video, which jw.org links with
+`ts=00:05:02.26-00:07:52.31` — the page takes the same `ts=`: the player starts
+at the clip and pauses at its end, and **From the start** plays the whole video.
 
 The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
 it is about to listen on a non-loopback address without authentication.

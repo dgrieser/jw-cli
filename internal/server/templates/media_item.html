@@ -6,17 +6,20 @@
 {{- if eq $.Item.Type "audio"}}
 <div class="player audio">
   {{- if $.Image}}<img src="{{$.Image}}" alt="" loading="lazy">{{end}}
-  <audio controls preload="metadata" src="{{.URL}}"></audio>
+  <audio controls preload="metadata" src="{{$.StreamSrc}}"></audio>
 </div>
 {{- else}}
 <div class="player">
   <video controls playsinline preload="metadata" crossorigin="anonymous"{{if $.Image}} poster="{{$.Image}}"{{end}}>
-    <source src="{{.URL}}"{{if .MimeType}} type="{{.MimeType}}"{{end}}>
+    <source src="{{$.StreamSrc}}"{{if .MimeType}} type="{{.MimeType}}"{{end}}>
     {{- if .SubtitlesURL}}
     <track kind="subtitles" src="{{.SubtitlesURL}}" label="{{$.T.UISubtitles}}">
     {{- end}}
   </video>
 </div>
+{{- end}}
+{{- with $.Clip}}
+<p class="clip-note">{{$.ClipLabel}} · <a href="{{$.WholeURL}}">{{$.T.UIFromStart}}</a></p>
 {{- end}}
 {{- end}}
 {{- else if .Image}}
