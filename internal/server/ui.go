@@ -612,7 +612,6 @@ type articlePage struct {
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
-	Refs         []model.ScriptureAnchor
 	Images       []model.MediaAsset
 	// DocID is the library document shown, zero for a page of jw.org: the
 	// publications quoting what it cites leave it out.
@@ -673,7 +672,6 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	if page.DocID == 0 {
 		page.DocID = wol.DocIDFromURL(art.URL)
 	}
-	page.Refs = art.ScriptureRefs
 	page.Images = art.Images
 	s.render(w, http.StatusOK, "article", page)
 }
@@ -708,9 +706,8 @@ type documentPage struct {
 	// UnfoldLevels is the level switcher above the document.
 	UnfoldLevels []unfoldLevel
 	Body         template.HTML
-	// Refs and Images are what the document cites and shows, listed below
-	// it as on an article's page (--refs, --images on the command line).
-	Refs   []model.ScriptureAnchor
+	// Images are the pictures the document shows, listed below it as on an
+	// article's page (--images on the command line).
 	Images []model.MediaAsset
 }
 
@@ -772,7 +769,6 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Refs:         art.ScriptureRefs,
 		Images:       art.Images,
 	})
 }
@@ -834,7 +830,6 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Refs:         art.ScriptureRefs,
 		Images:       art.Images,
 	})
 }

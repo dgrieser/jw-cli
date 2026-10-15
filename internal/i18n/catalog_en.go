@@ -168,7 +168,6 @@ var en = Messages{
 	UISearchWOLOnly:    "Online Library only",
 	UIPrevPage:         "Previous page",
 	UINextPage:         "Next page",
-	UIScriptureRefs:    "Scripture references",
 	UIImages:           "Images",
 	UIUntitled:         "(untitled)",
 	UIBackToStart:      "Back to the start page",

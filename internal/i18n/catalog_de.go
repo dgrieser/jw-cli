@@ -168,7 +168,6 @@ var de = Messages{
 	UISearchWOLOnly:    "nur in der Online-Bibliothek",
 	UIPrevPage:         "Vorherige Seite",
 	UINextPage:         "Nächste Seite",
-	UIScriptureRefs:    "Bibelstellen",
 	UIImages:           "Bilder",
 	UIUntitled:         "(ohne Titel)",
 	UIBackToStart:      "Zurück zur Startseite",

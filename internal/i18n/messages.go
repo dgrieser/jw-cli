@@ -273,7 +273,6 @@ type Messages struct {
 	UISearchWOLOnly   string
 	UIPrevPage        string
 	UINextPage        string
-	UIScriptureRefs   string
 	UIImages          string
 	UIUntitled        string
 	UIBackToStart     string

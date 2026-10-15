@@ -915,8 +915,9 @@ cover what `jw search` takes: the engine, jw.org's content type and page size
 (all/include/exclude) and full excerpts; a jw.org listing's header says which
 page it shows ("page 2, 10 per page"), except on the first page of everything,
 which jw.org groups by kind past the page size. The daily text and the meeting
-pages list their scripture references and images below the document as an
-article's page does, each picture with its alt text and size. A meeting is
+pages list their images below the document as an article's page does, each
+picture with its alt text and size; the verses a document cites are links in
+its text, and not listed again below it. A meeting is
 also found by the CLI's aliases (`/meetings/mw`, `/meetings/we`, …), which lead
 to its own address.
 
