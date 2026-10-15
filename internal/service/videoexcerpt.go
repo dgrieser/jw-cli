@@ -48,8 +48,9 @@ func (s *Service) widenExcerpt(ctx context.Context, item model.MediaItem, snippe
 // transcriptExcerpt widens snippet, a passage of a video's transcript cues,
 // to whole paragraphs and excerptContextWords on either side, as HTML: a
 // paragraph a <p>, the verse ref names marked where it is said. Without a
-// snippet, the passage is where the transcript first says ref. False when
-// the passage is not found in the transcript.
+// snippet, the passage is where the transcript first says ref, else the
+// transcript's opening (see openingExcerpt). False when the passage is not
+// found in the transcript.
 func transcriptExcerpt(snippet string, cues []model.Cue, ref string) (string, bool) {
 	if len(cues) == 0 {
 		return "", false
@@ -65,6 +66,9 @@ func transcriptExcerpt(snippet string, cues []model.Cue, ref string) (string, bo
 				break
 			}
 		}
+	}
+	if !ok && strings.TrimSpace(snippet) == "" {
+		return openingExcerpt(subtitles.Paragraphs(cues)), true
 	}
 	if !ok {
 		return "", false
@@ -88,8 +92,29 @@ func transcriptExcerpt(snippet string, cues []model.Cue, ref string) (string, bo
 		added += paraWords(paras[hi])
 	}
 
+	return parasHTML(paras[lo:hi+1], mark), true
+}
+
+// openingExcerpt is a video's excerpt when it was found by the verse in its
+// title and its transcript never says the verse: a talk whose theme the verse
+// is, shown on the screen and read out by nobody — "Das Lösegeld – ein
+// unbeschreibliches Geschenk (Joh. 3:16)". All of it is about the verse, and
+// what it makes of it is what it opens with: whole paragraphs from the start,
+// as many words as a passage gets with its context on either side.
+func openingExcerpt(paras [][]model.Cue) string {
+	n, words := 0, 0
+	for n < len(paras) && words < 2*excerptContextWords {
+		words += paraWords(paras[n])
+		n++
+	}
+	return parasHTML(paras[:n], nil)
+}
+
+// parasHTML writes paragraphs of a transcript as HTML, a <p> each, the
+// reference mark finds marked where it is said.
+func parasHTML(paras [][]model.Cue, mark *regexp.Regexp) string {
 	var b strings.Builder
-	for _, para := range paras[lo : hi+1] {
+	for _, para := range paras {
 		texts := make([]string, len(para))
 		for i, c := range para {
 			texts[i] = c.Text
@@ -100,7 +125,7 @@ func transcriptExcerpt(snippet string, cues []model.Cue, ref string) (string, bo
 		}
 		b.WriteString("<p>" + text + "</p>")
 	}
-	return b.String(), true
+	return b.String()
 }
 
 // passageCues are the first and last of cues the search's snippet is from.
