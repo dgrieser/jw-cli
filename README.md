@@ -217,8 +217,13 @@ then to whole paragraphs before and after, until at least 150 words of context
 stand on each side: the reading of the verse and what the speaker makes of it.
 The reference is marked where it is said. A video found only by the verse in
 its title has no passage; its excerpt is where its subtitles first say the
-verse. A video without subtitles, or whose subtitles do not hold the passage,
-keeps the search's passage.
+verse — or, for a talk whose theme the verse is and whose subtitles never say
+it, how the talk opens: whole paragraphs from the start, as many words as a
+passage gets with its context. A video without subtitles, or whose subtitles
+do not hold the passage, keeps the search's passage. The same talk published
+again the same day under its title and a parenthetical — "(mit
+Audiodeskription)", with no subtitles and so nothing to show of its own — is
+listed once.
 
 `--no-videos` leaves the videos out altogether, and so does `--include`, which
 names the publications to cover.

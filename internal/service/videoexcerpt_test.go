@@ -72,7 +72,6 @@ func TestTranscriptExcerptLocate(t *testing.T) {
 		"two three <b>four</b>":  true, // markup and case aside
 		"One two three four five XXX seven eight nine ten eleven twelve": true, // its ends match
 		"something else entirely": false,
-		"":                        false,
 	} {
 		if _, ok := transcriptExcerpt(snippet, cues, "John 3:16"); ok != want {
 			t.Errorf("transcriptExcerpt(%q) found = %v, want %v", snippet, ok, want)
@@ -88,8 +87,36 @@ func TestTranscriptExcerptNoSnippet(t *testing.T) {
 	if !ok || got != "<p>Hello there.</p><p>As <mark>John 3:16</mark> says, God loved the world.</p><p>The end.</p>" {
 		t.Errorf("got %q, %v", got, ok)
 	}
-	if _, ok := transcriptExcerpt("", cues, "Romans 5:12"); ok {
-		t.Error("a verse the transcript never says has no passage")
+}
+
+// A talk whose theme the verse is — named in its title, read out by nobody,
+// as William Malenfant's "Das Lösegeld – ein unbeschreibliches Geschenk
+// (Joh. 3:16)" — is excerpted by how it opens: whole paragraphs from the
+// start, as many words as a passage gets with its context.
+func TestTranscriptExcerptOpening(t *testing.T) {
+	cues := talk([]string{
+		"The Memorial reminds us. " + filler(120),
+		"Jehovah and Jesus did it out of love. " + filler(120),
+		"And that love moves us. " + filler(120),
+		"Fourth paragraph. " + filler(120),
+	})
+	got, ok := transcriptExcerpt("", cues, "Joh 3:16")
+	if !ok {
+		t.Fatal("a talk never saying its theme is excerpted by its opening")
+	}
+	paras := strings.Split(strings.TrimSuffix(strings.TrimPrefix(got, "<p>"), "</p>"), "</p><p>")
+	// three paragraphs make the 300 words, the fourth is left
+	if len(paras) != 3 || !strings.HasPrefix(paras[0], "The Memorial reminds us.") || strings.Contains(got, "<mark>") {
+		t.Errorf("paragraphs = %d: %.200q", len(paras), paras)
+	}
+	// a talk shorter than that is excerpted whole
+	short := talk([]string{"Only this."})
+	if got, ok := transcriptExcerpt("", short, "Joh 3:16"); !ok || got != "<p>Only this.</p>" {
+		t.Errorf("short talk: %q, %v", got, ok)
+	}
+	// a search's passage the transcript does not hold still finds nothing
+	if _, ok := transcriptExcerpt("something else entirely", cues, "Joh 3:16"); ok {
+		t.Error("a passage not in the transcript is not replaced by the opening")
 	}
 }
 

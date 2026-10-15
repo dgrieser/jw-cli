@@ -2,6 +2,7 @@ package service
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -92,5 +93,34 @@ func TestMergeVideos(t *testing.T) {
 	want = []string{"es27", "mwb26", "it-1", "w06", "w51", "talk26", "undated", "convention20", "early26"}
 	if !slices.Equal(got, want) {
 		t.Errorf("occ:\n got %v\nwant %v", got, want)
+	}
+}
+
+// The same talk published again with a narrated description of the picture
+// is listed once: the variant, which has no subtitles and so nothing to show,
+// goes; one that shows a passage of its own stays.
+func TestWithoutVariants(t *testing.T) {
+	day := time.Date(2026, 4, 7, 0, 0, 0, 0, time.UTC)
+	video := func(lank, title, excerpt string) datedVideo {
+		return datedVideo{Result: model.Result{Kind: "video", LANK: lank, Title: title, Excerpt: excerpt}, published: day}
+	}
+	talk := "William Malenfant: Das Lösegeld – ein unbeschreibliches Geschenk (Joh. 3:16)"
+	got := withoutVariants([]datedVideo{
+		video("pub-jwb-136_5_VIDEO", talk, "<p>Das Gedächtnismahl erinnert uns.</p>"),
+		// minutes after the talk itself
+		func() datedVideo {
+			v := video("pub-jwb-136_105_VIDEO", talk+" (mit Audiodeskription)", "")
+			v.published = day.Add(7 * time.Minute)
+			return v
+		}(),
+		video("pub-x_1_VIDEO", "Jahresversammlung", "<p>Teil eins.</p>"),
+		video("pub-x_2_VIDEO", "Jahresversammlung (Teil 2)", "<p>Teil zwei.</p>"),
+	})
+	var lanks []string
+	for _, v := range got {
+		lanks = append(lanks, v.LANK)
+	}
+	if want := "pub-jwb-136_5_VIDEO pub-x_1_VIDEO pub-x_2_VIDEO"; strings.Join(lanks, " ") != want {
+		t.Errorf("kept %q, want %s", lanks, want)
 	}
 }

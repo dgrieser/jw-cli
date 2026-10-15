@@ -158,7 +158,40 @@ func (s *Service) citedVideos(ctx context.Context, lng model.Language, terms []s
 	if excerpts {
 		refs = found
 	}
-	return s.dateVideos(ctx, lng, out, refs), failed
+	return withoutVariants(s.dateVideos(ctx, lng, out, refs)), failed
+}
+
+// withoutVariants leaves out a video that is another one listed, told apart
+// in its title only: the same talk "(mit Audiodeskription)", published the
+// same day, which has no subtitles and so nothing to show of its own. A
+// variant that has something to show — its own passage — is kept.
+func withoutVariants(videos []datedVideo) []datedVideo {
+	out := videos[:0:0]
+	for _, v := range videos {
+		if !variantOf(v, videos) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// sameDay reports whether two videos were first published on the same day: a
+// talk and its variant go up minutes apart.
+func sameDay(a, b time.Time) bool {
+	return a.IsZero() == b.IsZero() && a.Format(time.DateOnly) == b.Format(time.DateOnly)
+}
+
+func variantOf(v datedVideo, videos []datedVideo) bool {
+	if strings.TrimSpace(v.Excerpt) != "" || strings.TrimSpace(v.Snippet) != "" || !strings.HasSuffix(v.Title, ")") {
+		return false
+	}
+	for _, base := range videos {
+		if base.Title != "" && base.LANK != v.LANK && sameDay(base.published, v.published) &&
+			strings.HasPrefix(v.Title, base.Title+" (") {
+			return true
+		}
+	}
+	return false
 }
 
 // datedVideo is a video of a citation listing and the day it was first
