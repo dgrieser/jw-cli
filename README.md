@@ -757,7 +757,8 @@ settings in the bar; no page links out to the sites otherwise.
 
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the
-browser (IndexedDB) and put back on
+browser (IndexedDB) — written before a link of the page is followed, so a
+section opened a moment before is kept too — and put back on
 return without asking the server again — an item that found nothing, or
 failed, stays that way until it is asked for again — and the menu leads back to
 the last page of each section: the bible, the meetings, media, publications

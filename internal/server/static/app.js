@@ -802,7 +802,7 @@
         remember(select.value);
         var u = new URL(location.href);
         u.searchParams.set("lang", select.value);
-        location.assign(u.toString());
+        leave(u.toString());
       });
       document.body.appendChild(dialog);
       fetch("/api/v1/languages", { headers: { Accept: "application/json" } })
@@ -1394,28 +1394,81 @@
     });
   };
 
-  // update merges fields into the record and writes it. Nothing is written
-  // before the record was read, so an early write never drops what it held.
+  // update merges fields into the record and writes it, and settles once it
+  // is written (or could not be). Nothing is written before the record was
+  // read, so an early write never drops what it held.
   PS.update = function (fields) {
-    if (!PS.key) return;
+    if (!PS.key) return Promise.resolve();
     if (!PS.loaded) {
-      PS.load().then(function () { PS.update(fields); });
-      return;
+      return PS.load().then(function () { return PS.update(fields); });
     }
     var rec = PS.record;
     Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
     rec.t = Date.now();
-    var put = function (db) {
-      if (!db) return;
-      try {
-        db.transaction("pages", "readwrite").objectStore("pages").put(rec, PS.key);
-      } catch (err) {
-        // quota or a closed database: this page is simply not remembered
-      }
-    };
-    if (dbHandle) put(dbHandle);
-    else openDB().then(put);
+    // begun at once where the database is open: a page being left has no
+    // time to wait for anything first
+    return new Promise(function (resolve) {
+      var put = function (db) {
+        if (!db) return resolve();
+        try {
+          var tx = db.transaction("pages", "readwrite");
+          tx.objectStore("pages").put(rec, PS.key);
+          tx.oncomplete = tx.onerror = tx.onabort = function () { resolve(); };
+        } catch (err) {
+          // quota or a closed database: this page is simply not remembered
+          resolve();
+        }
+      };
+      if (dbHandle) put(dbHandle);
+      else openDB().then(put);
+    });
   };
+
+  // leaving the page: what it keeps is written on the way out (pagehide),
+  // but a write begun then is cut off as the page goes — a gallery opened a
+  // moment before following its video came back closed and empty. Where
+  // this script is what leads away, it writes first and goes once that is
+  // written, or after a moment should the database not answer. Each part of
+  // the script that keeps something adds how it writes to PS.flushers.
+  PS.flushers = [];
+  var FLUSH_WAIT = 500;
+  PS.flush = function () {
+    var writes = PS.flushers.map(function (f) {
+      try {
+        return f();
+      } catch (err) {
+        return null;
+      }
+    });
+    return Promise.race([
+      Promise.all(writes).catch(function () {}),
+      new Promise(function (resolve) { setTimeout(resolve, FLUSH_WAIT); })
+    ]);
+  };
+  function leave(href, replace) {
+    PS.flush().then(function () {
+      if (replace) location.replace(href);
+      else location.assign(href);
+    });
+  }
+  // and a link that leads away is followed the same way, once whatever else
+  // handles its click (opening it in place, a menu) had its say
+  window.addEventListener("click", function (e) {
+    if (!PS.key || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.hasAttribute("download") || (a.target && a.target !== "_self")) return;
+    var u;
+    try {
+      u = new URL(a.href, location.href);
+    } catch (err) {
+      return;
+    }
+    if (!/^https?:$/.test(u.protocol)) return;
+    // a place on this very page is no leaving
+    if (u.hash && u.origin === location.origin && u.pathname === location.pathname && u.search === location.search) return;
+    e.preventDefault();
+    leave(u.href);
+  });
 
   // how far down the page was: kept as the reader scrolls, put back once
   // the page put back its content
@@ -1431,8 +1484,10 @@
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     var scrollTimer = null;
     var saveScroll = function () {
-      if (PS.restored) PS.update({ y: Math.round(window.scrollY) });
+      clearTimeout(scrollTimer);
+      if (PS.restored) return PS.update({ y: Math.round(window.scrollY) });
     };
+    PS.flushers.push(saveScroll);
     window.addEventListener("scroll", function () {
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(saveScroll, 300);
@@ -2236,7 +2291,7 @@
         // a citation goes where it was found to lead before, else is asked
         // where, else the server is left to lead there itself (/open)
         menuItem(T.followPage || "→", function () {
-          resolvePage(page).then(function (href) { location.assign(href); }, function () { location.assign(page.href); });
+          resolvePage(page).then(function (href) { leave(href); }, function () { leave(page.href); });
         });
       }
       // a new tab opens with the click itself, or the browser blocks it: a
@@ -4241,7 +4296,7 @@
     if (!target) return;
     e.preventDefault();
     if (target.kind === "media") {
-      location.href = mediaHref(target, lang);
+      leave(mediaHref(target, lang));
       return;
     }
     // a verse's number that has no verse to unfold here goes nowhere: never
@@ -4368,8 +4423,8 @@
 
   function writeState() {
     clearTimeout(stateTimer);
-    if (!PS.key || restoring) return;
-    PS.update({
+    if (!PS.key || restoring) return null;
+    return PS.update({
       s: {
         sig: sig,
         level: anchorLevel,
@@ -4387,6 +4442,7 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") writeState();
   });
+  PS.flushers.push(writeState);
 
   // retryButtons gives what failed under an item that came back a way to be
   // asked again
