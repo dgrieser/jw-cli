@@ -273,7 +273,6 @@ type Messages struct {
 	UISearchWOLOnly   string
 	UIPrevPage        string
 	UINextPage        string
-	UIScriptureRefs   string
 	UIImages          string
 	UIUntitled        string
 	UIBackToStart     string
@@ -423,9 +422,7 @@ type Messages struct {
 	// it; UIWatchVideo leads from what a chapter's heading unfolds to the
 	// book introduction's video.
 	UIWholeChapter string
-	// UIWholeChapterShort is UIWholeChapter where there is little room.
-	UIWholeChapterShort string
-	UIWatchVideo        string
+	UIWatchVideo   string
 	// UIFont* are the text size controls of every page.
 	UIFontSmaller string
 	UIFontLarger  string
@@ -464,6 +461,13 @@ type Messages struct {
 	UIResolution     string
 	UIPrintedEdition string
 	UIBurnedIn       string
+
+	// UIClip names the stretch of a recording a link asked for (a verse's
+	// clip), from and to as a player shows them; UIClipFrom one that runs to
+	// the end. UIFromStart plays the whole recording instead.
+	UIClip      string
+	UIClipFrom  string
+	UIFromStart string
 }
 
 // Date renders t as a full date in the language's own word order.

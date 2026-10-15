@@ -375,8 +375,6 @@
     var edition = opts.edition || "nwtsty";
     var lang = opts.lang || "";
     var names = opts.names || {};
-    // the books' short names, for a title that would crowd out its row
-    var abbrs = {};
     var dialog = null;
     var row = null;
     var rowDocs = null;
@@ -499,8 +497,8 @@
       row.hidden = false;
       // the book's regular name, with the chapter being read — never the long
       // title the library heads the book with
-      var label = function (short) {
-        var n = (short && abbrs[book]) || names[book] || "";
+      var label = function () {
+        var n = names[book] || "";
         return cur.chapter ? n + " " + cur.chapter : n;
       };
       rowTitle.textContent = label();
@@ -530,7 +528,6 @@
         if (docs) {
           rowDocs.appendChild(docs);
           rowDocs.hidden = false;
-          fitTitle(label);
         }
       }, function (err) {
         row.textContent = String(err && err.message || err);
@@ -538,14 +535,6 @@
       grid.scrollTop = 0;
     }
 
-    // fitTitle names the book short when its documents beside it would not
-    // fit otherwise
-    var fitLabel = null;
-    function fitTitle(label) {
-      fitLabel = label;
-      rowTitle.textContent = label(false);
-      if (rowDocs.scrollWidth > rowDocs.clientWidth + 1) rowTitle.textContent = label(true);
-    }
 
     // one book's chapters as the bible page lays them out: the row is gone
     function showBook(book) {
@@ -629,9 +618,6 @@
       });
       view.querySelector(".bible-nav-heading").textContent = T.chapters || "";
       dialog.querySelector(".bp-close").addEventListener("click", function () { dialog.close(); });
-      window.addEventListener("resize", function () {
-        if (dialog.open && !rowDocs.hidden && fitLabel) fitTitle(fitLabel);
-      });
       // a click on the backdrop closes it
       dialog.addEventListener("click", function (e) {
         if (e.target === dialog) dialog.close();
@@ -651,7 +637,6 @@
           ul.className = "book-grid " + (sec.key || "");
           (sec.books || []).forEach(function (b) {
             if (!names[b.number]) names[b.number] = b.name;
-            if (b.abbreviation) abbrs[b.number] = b.abbreviation;
             var li = document.createElement("li");
             li.className = "book " + (b.group || "");
             var a = document.createElement("a");
@@ -817,7 +802,7 @@
         remember(select.value);
         var u = new URL(location.href);
         u.searchParams.set("lang", select.value);
-        location.assign(u.toString());
+        leave(u.toString());
       });
       document.body.appendChild(dialog);
       fetch("/api/v1/languages", { headers: { Accept: "application/json" } })
@@ -1409,28 +1394,81 @@
     });
   };
 
-  // update merges fields into the record and writes it. Nothing is written
-  // before the record was read, so an early write never drops what it held.
+  // update merges fields into the record and writes it, and settles once it
+  // is written (or could not be). Nothing is written before the record was
+  // read, so an early write never drops what it held.
   PS.update = function (fields) {
-    if (!PS.key) return;
+    if (!PS.key) return Promise.resolve();
     if (!PS.loaded) {
-      PS.load().then(function () { PS.update(fields); });
-      return;
+      return PS.load().then(function () { return PS.update(fields); });
     }
     var rec = PS.record;
     Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
     rec.t = Date.now();
-    var put = function (db) {
-      if (!db) return;
-      try {
-        db.transaction("pages", "readwrite").objectStore("pages").put(rec, PS.key);
-      } catch (err) {
-        // quota or a closed database: this page is simply not remembered
-      }
-    };
-    if (dbHandle) put(dbHandle);
-    else openDB().then(put);
+    // begun at once where the database is open: a page being left has no
+    // time to wait for anything first
+    return new Promise(function (resolve) {
+      var put = function (db) {
+        if (!db) return resolve();
+        try {
+          var tx = db.transaction("pages", "readwrite");
+          tx.objectStore("pages").put(rec, PS.key);
+          tx.oncomplete = tx.onerror = tx.onabort = function () { resolve(); };
+        } catch (err) {
+          // quota or a closed database: this page is simply not remembered
+          resolve();
+        }
+      };
+      if (dbHandle) put(dbHandle);
+      else openDB().then(put);
+    });
   };
+
+  // leaving the page: what it keeps is written on the way out (pagehide),
+  // but a write begun then is cut off as the page goes — a gallery opened a
+  // moment before following its video came back closed and empty. Where
+  // this script is what leads away, it writes first and goes once that is
+  // written, or after a moment should the database not answer. Each part of
+  // the script that keeps something adds how it writes to PS.flushers.
+  PS.flushers = [];
+  var FLUSH_WAIT = 500;
+  PS.flush = function () {
+    var writes = PS.flushers.map(function (f) {
+      try {
+        return f();
+      } catch (err) {
+        return null;
+      }
+    });
+    return Promise.race([
+      Promise.all(writes).catch(function () {}),
+      new Promise(function (resolve) { setTimeout(resolve, FLUSH_WAIT); })
+    ]);
+  };
+  function leave(href, replace) {
+    PS.flush().then(function () {
+      if (replace) location.replace(href);
+      else location.assign(href);
+    });
+  }
+  // and a link that leads away is followed the same way, once whatever else
+  // handles its click (opening it in place, a menu) had its say
+  window.addEventListener("click", function (e) {
+    if (!PS.key || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || a.hasAttribute("download") || (a.target && a.target !== "_self")) return;
+    var u;
+    try {
+      u = new URL(a.href, location.href);
+    } catch (err) {
+      return;
+    }
+    if (!/^https?:$/.test(u.protocol)) return;
+    // a place on this very page is no leaving
+    if (u.hash && u.origin === location.origin && u.pathname === location.pathname && u.search === location.search) return;
+    e.preventDefault();
+    leave(u.href);
+  });
 
   // how far down the page was: kept as the reader scrolls, put back once
   // the page put back its content
@@ -1446,8 +1484,10 @@
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     var scrollTimer = null;
     var saveScroll = function () {
-      if (PS.restored) PS.update({ y: Math.round(window.scrollY) });
+      clearTimeout(scrollTimer);
+      if (PS.restored) return PS.update({ y: Math.round(window.scrollY) });
     };
+    PS.flushers.push(saveScroll);
     window.addEventListener("scroll", function () {
       clearTimeout(scrollTimer);
       scrollTimer = setTimeout(saveScroll, 300);
@@ -1746,32 +1786,9 @@
     h1.parentNode.insertBefore(row, h1);
     row.appendChild(h1);
     row.appendChild(bar);
-    var full = h1.textContent;
-    h1.title = full;
-    // a cut the way a word is abbreviated: after a consonant that a vowel
-    // follows ("Zusammenk|ünfte"), else after any letter
-    var VOWEL = /[aeiouyäöüàáâèéêìíîòóôùúû]/i;
-    function cutAt(n) {
-      return !VOWEL.test(full.charAt(n - 1)) && VOWEL.test(full.charAt(n)) && /\S/.test(full.charAt(n - 1));
-    }
-    function fitTitle() {
-      h1.textContent = full;
-      if (h1.scrollWidth <= h1.clientWidth + 1) return;
-      var fits = function (n) {
-        h1.textContent = full.slice(0, n).replace(/[\s.,-]+$/, "") + ".";
-        return h1.scrollWidth <= h1.clientWidth + 1;
-      };
-      var n;
-      for (n = full.length - 1; n > 3; n--) {
-        if (cutAt(n) && fits(n)) return;
-      }
-      for (n = full.length - 1; n > 3; n--) {
-        if (fits(n)) return;
-      }
-    }
-    fitTitle();
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitTitle);
-    window.addEventListener("resize", fitTitle);
+    // a title too long for its row ends in an ellipsis (style.css); the whole
+    // of it is its tooltip
+    h1.title = h1.textContent;
   })();
 
   // --- the overall history: every page read, behind the bar's clock ---------
@@ -2023,6 +2040,19 @@
     }
   }
 
+  // mediaHref is the page here of a video or recording a jw.org link names,
+  // at the stretch the link names: a verse's clip is a link to the whole
+  // video with the clip as ts= ("00:05:02.26-00:07:52.31"), which the page's
+  // player starts at
+  function mediaHref(target, lang) {
+    var q = new URLSearchParams();
+    if (lang) q.set("lang", lang);
+    var ts = target.url.searchParams.get("ts");
+    if (ts) q.set("ts", ts);
+    var s = q.toString();
+    return "/media/item/" + encodeURIComponent(target.key) + (s ? "?" + s : "");
+  }
+
   // the pages of this site, as a link names them
   var SITE_PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?|open)?$/;
 
@@ -2051,7 +2081,7 @@
     if (!target) return null;
     switch (target.kind) {
       case "media":
-        return { href: "/media/item/" + encodeURIComponent(target.key) + (pageLang ? "?" + q.toString() : ""), sec: sectionOf("/media/item/x") };
+        return { href: mediaHref(target, pageLang), sec: sectionOf("/media/item/x") };
       case "article":
         q.set("target", u.href);
         return { href: "/article?" + q.toString(), sec: sectionOf("/article") };
@@ -2261,7 +2291,7 @@
         // a citation goes where it was found to lead before, else is asked
         // where, else the server is left to lead there itself (/open)
         menuItem(T.followPage || "→", function () {
-          resolvePage(page).then(function (href) { location.assign(href); }, function () { location.assign(page.href); });
+          resolvePage(page).then(function (href) { leave(href); }, function () { leave(page.href); });
         });
       }
       // a new tab opens with the click itself, or the browser blocks it: a
@@ -2379,45 +2409,6 @@
   // --- bible navigation ----------------------------------------------------
 
 
-  // the chapters before and after a reading and "whole chapter" between
-  // them say it shorter when the row has no room: "whole chapter" first, then
-  // both books by their abbreviation
-  document.querySelectorAll(".chapter-nav").forEach(function (nav) {
-    var wholeLabel = nav.querySelector(".whole-lbl[data-short]");
-    var labels = nav.querySelectorAll(".lbl[data-short]");
-    if (!wholeLabel && !labels.length) return;
-    var all = Array.prototype.slice.call(labels);
-    if (wholeLabel) all.push(wholeLabel);
-    all.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
-    function say(l, short) {
-      l.textContent = l.getAttribute(short ? "data-short" : "data-full");
-    }
-    // each side has half of what "whole chapter" leaves of the row; a
-    // button's width is with its label in full, which it cuts when narrower
-    function cut() {
-      var whole = nav.querySelector(".whole");
-      var gap = parseFloat(getComputedStyle(nav).columnGap) || 0;
-      var room = (nav.clientWidth - (whole ? whole.offsetWidth : 0)) / 2 - gap;
-      return Array.prototype.some.call(nav.querySelectorAll(".prev, .next"), function (b) {
-        var l = b.querySelector(".lbl");
-        return b.offsetWidth + (l ? l.scrollWidth - l.clientWidth : 0) > room;
-      });
-    }
-    function fit() {
-      all.forEach(function (l) { say(l, false); });
-      if (!cut()) return;
-      if (wholeLabel) {
-        say(wholeLabel, true);
-        if (!cut()) return;
-      }
-      labels.forEach(function (l) { say(l, true); });
-    }
-    fit();
-    // the page's own font is narrower than the one it is measured in first
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
-    window.addEventListener("load", fit);
-    window.addEventListener("resize", fit);
-  });
 
   // the search's options: behind the button beside the query, in a dialog,
   // each shown only for the engine it applies to; without a script they
@@ -3802,9 +3793,12 @@
     }
     var list = body.querySelector(":scope > .sections");
     if (!list) list = body.appendChild(make("div", "sections"));
-    // asked for again after a failure: what that brought, and what it said,
-    // make way for the answer
-    body.querySelectorAll(":scope > .lazy-failed").forEach(function (m) { m.remove(); });
+    // what an earlier load put ahead of the sections — a gallery, the
+    // message of a failure — makes way for the answer, or it would be shown
+    // twice; the way in without a script stays
+    Array.prototype.slice.call(body.children).forEach(function (c) {
+      if (c !== list && !c.classList.contains("lazy-fallback")) c.remove();
+    });
     if (d.hasAttribute("data-failed")) {
       d.removeAttribute("data-failed");
       list.textContent = "";
@@ -4302,7 +4296,7 @@
     if (!target) return;
     e.preventDefault();
     if (target.kind === "media") {
-      location.href = "/media/item/" + encodeURIComponent(target.key) + (lang ? "?lang=" + encodeURIComponent(lang) : "");
+      leave(mediaHref(target, lang));
       return;
     }
     // a verse's number that has no verse to unfold here goes nowhere: never
@@ -4324,10 +4318,15 @@
       el.removeAttribute("data-state");
     });
     copy.querySelectorAll(".fresh, .flash").forEach(function (el) { el.classList.remove("fresh", "flash"); });
-    // a lazy section caught loading loads again when it comes back
+    // a lazy section caught loading loads again when it comes back; one that
+    // holds something is loaded, whether its answer came as sections or as
+    // a body of its own ahead of them (a verse's media gallery)
     copy.querySelectorAll("details[data-lazy][data-loaded]").forEach(function (d) {
-      var list = d.querySelector(":scope > .section-body > .sections");
-      if (list && !list.children.length) d.removeAttribute("data-loaded");
+      var body = d.querySelector(":scope > .section-body");
+      var held = body && Array.prototype.some.call(body.children, function (c) {
+        return !c.classList.contains("lazy-fallback") && (!c.classList.contains("sections") || c.children.length > 0);
+      });
+      if (!held) d.removeAttribute("data-loaded");
     });
     return copy.outerHTML;
   }
@@ -4424,8 +4423,8 @@
 
   function writeState() {
     clearTimeout(stateTimer);
-    if (!PS.key || restoring) return;
-    PS.update({
+    if (!PS.key || restoring) return null;
+    return PS.update({
       s: {
         sig: sig,
         level: anchorLevel,
@@ -4443,6 +4442,7 @@
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "hidden") writeState();
   });
+  PS.flushers.push(writeState);
 
   // retryButtons gives what failed under an item that came back a way to be
   // asked again

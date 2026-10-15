@@ -563,7 +563,10 @@ subtitles (behind a fold when lyrics are shown too). The line being sung or
 said is highlighted as the item plays, and pressing a line or a caption's time
 plays from there. The page also names the recording's publication, links the
 printed edition and the lead sheet, and lists each rendition's picture size and
-frame rate; the item's page on jw.org is opened from the settings.
+frame rate; the item's page on jw.org is opened from the settings. Opened
+from a verse's clip — a stretch of a longer video, which jw.org links with
+`ts=00:05:02.26-00:07:52.31` — the page takes the same `ts=`: the player starts
+at the clip and pauses at its end, and **From the start** plays the whole video.
 
 The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
 it is about to listen on a non-loopback address without authentication.
@@ -754,7 +757,8 @@ settings in the bar; no page links out to the sites otherwise.
 
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the
-browser (IndexedDB) and put back on
+browser (IndexedDB) — written before a link of the page is followed, so a
+section opened a moment before is kept too — and put back on
 return without asking the server again — an item that found nothing, or
 failed, stays that way until it is asked for again — and the menu leads back to
 the last page of each section: the bible, the meetings, media, publications
@@ -915,8 +919,9 @@ cover what `jw search` takes: the engine, jw.org's content type and page size
 (all/include/exclude) and full excerpts; a jw.org listing's header says which
 page it shows ("page 2, 10 per page"), except on the first page of everything,
 which jw.org groups by kind past the page size. The daily text and the meeting
-pages list their scripture references and images below the document as an
-article's page does, each picture with its alt text and size. A meeting is
+pages list their images below the document as an article's page does, each
+picture with its alt text and size; the verses a document cites are links in
+its text, and not listed again below it. A meeting is
 also found by the CLI's aliases (`/meetings/mw`, `/meetings/we`, …), which lead
 to its own address.
 

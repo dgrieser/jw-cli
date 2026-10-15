@@ -168,7 +168,6 @@ var de = Messages{
 	UISearchWOLOnly:    "nur in der Online-Bibliothek",
 	UIPrevPage:         "Vorherige Seite",
 	UINextPage:         "Nächste Seite",
-	UIScriptureRefs:    "Bibelstellen",
 	UIImages:           "Bilder",
 	UIUntitled:         "(ohne Titel)",
 	UIBackToStart:      "Zurück zur Startseite",
@@ -269,7 +268,6 @@ var de = Messages{
 	UIPrevBook:             "Vorheriges Buch",
 	UINextBook:             "Nächstes Buch",
 	UIWholeChapter:         "Ganzes Kapitel",
-	UIWholeChapterShort:    "Ganzes Kap.",
 	UIWatchVideo:           "Video ansehen",
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
@@ -292,4 +290,8 @@ var de = Messages{
 	UIResolution:           "Auflösung",
 	UIPrintedEdition:       "Druckausgabe",
 	UIBurnedIn:             "Untertitel im Bild",
+
+	UIClip:      "Ausschnitt %s–%s",
+	UIClipFrom:  "Ab %s",
+	UIFromStart: "Von Anfang an",
 }

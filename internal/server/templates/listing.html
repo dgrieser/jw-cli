@@ -84,22 +84,8 @@
 </nav>
 {{end}}
 {{define "extras"}}
-{{- if or .Refs .Images}}
-<div class="sections extras">
-{{- if .Refs}}
-<details class="section">
-  <summary>{{.T.UIScriptureRefs}} <span class="count">{{len .Refs}}</span></summary>
-  <div class="section-body">
-  <ul>
-    {{- range .Refs}}
-    <li>{{.Text}}</li>
-    {{- end}}
-  </ul>
-  </div>
-</details>
-{{- end}}
-
 {{- if .Images}}
+<div class="sections extras">
 <details class="section">
   <summary>{{.T.UIImages}} <span class="count">{{len .Images}}</span></summary>
   <div class="section-body">
@@ -116,7 +102,6 @@
   </ul>
   </div>
 </details>
-{{- end}}
 </div>
 {{- end}}
 {{end}}

@@ -1303,12 +1303,12 @@ func TestUIBibleChapterNav(t *testing.T) {
 	if strings.Contains(body, `<p class="whole-chapter">`) {
 		t.Errorf("a whole chapter above the verses:\n%s", body)
 	}
-	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl" data-short="Whole ch.">Whole chapter</span></a>`) ||
+	if !strings.Contains(body, `<a class="btn whole" href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en" title="Whole chapter"><span class="whole-lbl">Whole chapter</span></a>`) ||
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
 	}
 	if !strings.Contains(body, `<span class="lbl">John 2</span>`) {
-		t.Errorf("the chapter nav has no label to shorten:\n%s", body)
+		t.Errorf("the chapter nav has no label to cut short:\n%s", body)
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)
@@ -1330,5 +1330,28 @@ func TestUITitlesFollowTheLanguage(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("%s lacks %s", path, want)
 		}
+	}
+}
+
+// A video opened by a verse's clip plays from the clip: the link names it
+// (ts=, as jw.org writes it), the player starts there and pauses at its end,
+// and the page names it, with the way to the whole video.
+func TestUIMediaItemClip(t *testing.T) {
+	srv := newTestServer(t, mediaMux(t))
+	resp, body := get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en&ts=00:00:01.5-00:00:04")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	for _, want := range []string{
+		`<source src="https://cdn.example/v_r720P.mp4#t=1.5,4"`,
+		`<p class="clip-note">Clip 0:01–0:04 · <a href="/media/item/pub-abc_1_VIDEO?lang=en">From the start</a></p>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("clip page lacks %s:\n%.3000s", want, body)
+		}
+	}
+	_, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
+	if strings.Contains(body, "#t=") || strings.Contains(body, "clip-note") {
+		t.Errorf("the whole video is set to a clip:\n%.3000s", body)
 	}
 }
