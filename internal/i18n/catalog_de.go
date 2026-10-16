@@ -242,8 +242,6 @@ var de = Messages{
 	UICatsHint:    "Kürzel wie w, g, bk, it, bi, dx",
 	UIPageSize:    "Ergebnisse pro Seite",
 
-	UIAllTranslations: "Alle Übersetzungen",
-
 	UILazyFallback: "Auf einer eigenen Seite anzeigen",
 
 	UIAbort:                "Abbrechen",
