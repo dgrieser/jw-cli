@@ -163,8 +163,9 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	txt := text(lng)
 	// every level of the library is a page of wol of its own
 	page := pubPage{basePage: s.base(r, firstNonEmpty(lib.Title, txt.UINavPublications)).withSite(lib.URL)}
-	// a bible is read as one
-	if lib.Bible && lib.Symbol != "" {
+	// a bible is read as one: its books are the bible page; its introduction,
+	// index and appendixes, which the bible page leads to, are listed here
+	if lib.Bible && lib.Symbol != "" && len(lib.Groups) == 0 {
 		http.Redirect(w, r, page.WithLang("/bible?bible="+url.QueryEscape(lib.Symbol)), http.StatusSeeOther)
 		return
 	}

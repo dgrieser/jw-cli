@@ -18,19 +18,20 @@ func bibleAllMux(t *testing.T) *http.ServeMux {
 	return mux
 }
 
-// The bible form says whether every translation is read, and sends it again.
+// Every translation is read with ?all=1, which the form has no box for but
+// sends again while it is set.
 func TestUIBibleAllTranslations(t *testing.T) {
 	srv := newTestServer(t, bibleAllMux(t))
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en")
-	if !strings.Contains(body, `<input type="checkbox" name="all" value="1"> All translations`) {
-		t.Errorf("no unticked box:\n%s", body)
+	if strings.Contains(body, `name="all"`) {
+		t.Errorf("the form asks for every translation:\n%s", body)
 	}
 	resp, body := get(t, srv, "/bible?ref=John+3:16&lang=en&all=1")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d:\n%s", resp.StatusCode, body)
 	}
-	if !strings.Contains(body, `<input type="checkbox" name="all" value="1" checked> All translations`) {
-		t.Errorf("the box is not ticked:\n%s", body)
+	if !strings.Contains(body, `<input type="hidden" name="all" value="1">`) {
+		t.Errorf("the form drops every translation:\n%s", body)
 	}
 	if n := strings.Count(body, "God loved the world so much"); n != 2 {
 		t.Errorf("verse shown %d times, want 2", n)

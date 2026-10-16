@@ -1216,6 +1216,7 @@ func binavMux(t *testing.T) *http.ServeMux {
 	mux := wolMux(t)
 	mux.HandleFunc("/en/wol/binav/r1/lp-e/nwtsty", wolFixture(t, "binav_de.html"))
 	mux.HandleFunc("/en/wol/binav/r1/lp-e/nwtsty/40", wolFixture(t, "binav_de_40.html"))
+	mux.HandleFunc("/de/wol/gallery/r10/lp-x/nwtsty", wolFixture(t, "gallery_nwtsty_de.html"))
 	return mux
 }
 
@@ -1233,6 +1234,31 @@ func TestUIBibleNav(t *testing.T) {
 	}
 	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
 		t.Errorf("missing the Matthew tile:\n%s", body)
+	}
+	// around the grid what the library lists there: the bible's parts above,
+	// the books this page; its gallery and other reference works below
+	tabs, gallery, refs := strings.Index(body, `bible-tabs`), strings.Index(body, `class="book-doc gallery"`), strings.Index(body, `class="bible-refs"`)
+	if tabs < 0 || tabs > grid || gallery < grid || refs < gallery {
+		t.Errorf("want the tabs, the grid, the gallery, then the reference works:\n%s", body)
+	}
+	for _, want := range []string{
+		`<a href="/pub/publication/nwtsty/0?lang=en">EINFÜHRUNG</a>`,
+		`<a href="/bible?bible=nwtsty&amp;lang=en" class="active" aria-current="page">BÜCHER</a>`,
+		`<a href="/pub/publication/nwtsty/140?lang=en">ANHANG C</a>`,
+		`href="/bible?bible=nwtsty&amp;view=gallery&amp;lang=en"`,
+		`<h2>Weitere Nachschlagewerke</h2>`,
+		`<a href="/pub/publication/nwtstg?lang=en">`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+
+	// the bible's gallery: its books, each leading to the book's own
+	resp, body = get(t, srv, "/bible?bible=nwtsty&view=gallery&lang=en")
+	if resp.StatusCode != 200 || !strings.Contains(body, `<h2>Mediengalerie</h2>`) ||
+		!strings.Contains(body, `<a class="gallery-tile" href="/bible?bible=nwtsty&amp;book=40&amp;view=gallery&amp;lang=en">`) {
+		t.Errorf("bible gallery: status %d:\n%s", resp.StatusCode, body)
 	}
 
 	// a book opens its chapter grid, every chapter a reading

@@ -1153,6 +1153,9 @@ type biblePage struct {
 	// Doc is one of the documents listed below the chapter grid, opened from
 	// it (?view=): the book's introduction, outline or media gallery.
 	Doc *bookDocView
+	// BibleGallery is the media gallery of the whole bible, opened from below
+	// the book grid (?view=gallery with no book): the books that have one.
+	BibleGallery *model.BookGallery
 	// Search is what a text search found, when what was typed is not a
 	// reference.
 	Search *bibleSearchView
@@ -1208,6 +1211,51 @@ func (p biblePage) ChapterLink(chapter int) string {
 // BooksLink leads from a chapter grid back to the book grid.
 func (p biblePage) BooksLink() string {
 	return p.WithLang("/bible?bible=" + url.QueryEscape(p.Edition))
+}
+
+// NavTabs are the parts of the bible the library lists above its book grid:
+// the books are this page, the others its table of contents' own pages.
+func (p biblePage) NavTabs() []pubTab {
+	if p.Nav == nil {
+		return nil
+	}
+	tabs := make([]pubTab, 0, len(p.Nav.Tabs))
+	for _, t := range p.Nav.Tabs {
+		href := p.BooksLink()
+		if !t.Selected {
+			href = pubHref(wol.PublicationKind, t.Path, p.basePage)
+		}
+		tabs = append(tabs, pubTab{Title: t.Title, Href: href, Active: t.Selected})
+	}
+	return tabs
+}
+
+// NavGalleryLink opens the bible's own media gallery.
+func (p biblePage) NavGalleryLink() string {
+	return p.WithLang("/bible?bible=" + url.QueryEscape(p.Edition) + "&view=" + viewGallery)
+}
+
+// NavRefs are the other reference works the library lists under the book
+// grid, as publications to browse.
+func (p biblePage) NavRefs() []pubTile {
+	if p.Nav == nil {
+		return nil
+	}
+	out := make([]pubTile, 0, len(p.Nav.Refs))
+	for _, c := range p.Nav.Refs {
+		out = append(out, cardTile(c, p.basePage))
+	}
+	return out
+}
+
+// BibleGalleryBookLink leads from a tile of the bible's gallery to the
+// gallery of its book, whose number ends the tile's address.
+func (p biblePage) BibleGalleryBookLink(tileURL string) string {
+	book, err := strconv.Atoi(tileURL[strings.LastIndexByte(tileURL, '/')+1:])
+	if err != nil || book < 1 || book > 66 {
+		return articleHref(tileURL, p.Lang)
+	}
+	return p.WithLang(fmt.Sprintf("/bible?bible=%s&book=%d&view=%s", url.QueryEscape(p.Edition), book, viewGallery))
 }
 
 // editionOption is one entry of the edition picker: the symbol the form sends,
@@ -1485,6 +1533,17 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 	}
 	page.Nav = &nav
 	page.SiteURL = s.wolPage(r.Context(), lng, "binav", "/"+url.PathEscape(page.Edition))
+	if r.FormValue("view") == viewGallery {
+		g, err := s.svc.BibleGallery(r.Context(), lng, page.Edition)
+		if err != nil {
+			page.Error = readable(err, page.T)
+			return
+		}
+		page.BibleGallery = &g
+		if g.URL != "" {
+			page.SiteURL = g.URL
+		}
+	}
 }
 
 // outlineBlock is the headings of the book's outline ahead of a verse, small

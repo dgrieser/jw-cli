@@ -361,6 +361,9 @@
       current: function () { return { book: currentBook, chapter: currentChapter }; }
     });
     btn.addEventListener("click", picker.open);
+    // once the page has settled, so the picker opens with all it shows
+    var idle = window.requestIdleCallback || function (f) { return setTimeout(f, 1500); };
+    window.addEventListener("load", function () { idle(picker.prefetch); }, { once: true });
   })();
 
   // --- the bible's picker: a book's chapters as one row, the books under it --
@@ -370,6 +373,14 @@
   // — a heading and a grid — with the row gone, and a way back to the books.
   // Away from the bible there is no book being read: the books, then their
   // chapters. A chapter is a link: it opens the bible there.
+
+  // the chapters of each book (index = book number), as the library numbers
+  // them: the picker's row is drawn from it before the edition answers
+  var CHAPTERS = [0,
+    50, 40, 27, 36, 34, 24, 21, 4, 31, 24, 22, 25, 29, 36, 10, 13, 10, 42, 150, 31,
+    12, 8, 66, 52, 5, 48, 12, 14, 3, 9, 1, 4, 7, 3, 3, 3, 2, 14, 4,
+    28, 16, 24, 21, 28, 16, 16, 13, 6, 6, 4, 4, 5, 3, 6, 4, 3, 1, 13, 5,
+    5, 3, 5, 1, 1, 1, 22];
 
   function biblePicker(opts) {
     var edition = opts.edition || "nwtsty";
@@ -421,9 +432,13 @@
     function shortTitle(title, book) {
       if (!book || title.length <= book.length || title.slice(-book.length) !== book) return title;
       var rest = title.slice(0, -book.length).replace(/\s+$/, "");
-      // the little word joining them goes too: in, to, zu, de, …
-      var m = /^(.*\S)\s+\p{Ll}{1,4}$/u.exec(rest);
-      return (m ? m[1] : rest) || title;
+      // the little words joining them go too: in, to, zu, de, in die, …
+      for (var i = 0; i < 2; i++) {
+        var m = /^(.*\S)\s+\p{Ll}{1,4}$/u.exec(rest);
+        if (!m) break;
+        rest = m[1];
+      }
+      return rest || title;
     }
 
     // docLinks are the book's documents; compact, the strip beside its name
@@ -463,10 +478,15 @@
     // the arrows beside the title step to the book before or after the one
     // shown, in the same view; with no book shown there is nothing to step from
     var shown = 0;
+    // At the first book or the last, the arrow it has none for keeps its
+    // place unseen, so the name and what follows it never shift sideways.
     function setShown(book) {
       shown = book;
-      prevBtn.hidden = !book || book <= 1;
-      nextBtn.hidden = !book || book >= 66;
+      [[prevBtn, book <= 1], [nextBtn, book >= 66]].forEach(function (s) {
+        s[0].hidden = !book;
+        s[0].disabled = s[1];
+        s[0].classList.toggle("bp-off", s[1]);
+      });
     }
     function step(d) {
       var book = shown + d;
@@ -502,12 +522,13 @@
         return cur.chapter ? n + " " + cur.chapter : n;
       };
       rowTitle.textContent = label();
-      api(book).then(function (nav) {
-        if (row.hidden || cur.book !== book) return;
-        rowTitle.textContent = label();
+      // the row is drawn at once from the chapters the book has, so nothing
+      // moves when the edition's own list arrives; that list only redraws it
+      // where it differs (a book the edition lacks chapters of)
+      var fill = function (chapters) {
         row.textContent = "";
         var chosen = null;
-        (nav.chapters || []).forEach(function (c) {
+        chapters.forEach(function (c) {
           var a = document.createElement("a");
           a.href = chapterHref(book, c);
           a.textContent = String(c);
@@ -518,8 +539,18 @@
           }
           row.appendChild(a);
         });
+        row.setAttribute("data-chapters", chapters.join(","));
         var target = chosen || row.firstElementChild;
         if (target) row.scrollLeft = Math.max(0, target.offsetLeft - row.clientWidth / 2 + target.offsetWidth / 2);
+      };
+      var known = [];
+      for (var c = 1; c <= (CHAPTERS[book] || 0); c++) known.push(c);
+      fill(known);
+      api(book).then(function (nav) {
+        if (row.hidden || cur.book !== book) return;
+        rowTitle.textContent = label();
+        var chapters = nav.chapters || [];
+        if (chapters.join(",") !== row.getAttribute("data-chapters")) fill(chapters);
         // another showBooks may have filled the strip already: the book list
         // arriving while the picker opens shows the books once more
         rowDocs.textContent = "";
@@ -672,6 +703,13 @@
     }
 
     return {
+      // what the picker opens with, asked for ahead: the books, and the
+      // chapters and documents of the book being read
+      prefetch: function () {
+        var c = opts.current ? opts.current() : { book: 0 };
+        api(0).catch(function () {});
+        if (c.book) api(c.book).catch(function () {});
+      },
       open: function () {
         cur = opts.current ? opts.current() : { book: 0, chapter: 0 };
         if (!dialog) build();

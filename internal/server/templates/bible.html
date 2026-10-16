@@ -26,7 +26,7 @@
     <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" data-autofocus autocapitalize="off">
     <button type="submit" class="primary">{{.T.UIGo}}</button>
   </div>
-  <p class="actions"><label class="check"><input type="checkbox" name="all" value="1"{{if .AllBibles}} checked{{end}}> {{.T.UIAllTranslations}}</label></p>
+  {{- if .AllBibles}}<input type="hidden" name="all" value="1">{{end}}
   {{- if .BookNav}}<input type="hidden" name="book" value="{{.BookNav.Book}}" data-nav-only>{{end}}
   {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
 </form>
@@ -88,7 +88,30 @@
   </ul>
   {{- end}}
 </nav>
+{{- else if .BibleGallery}}
+<article class="book-doc-page gallery">
+  <p class="bible-nav-back"><a href="{{.BooksLink}}">‹ {{or .Nav.Title .T.UIAllBooks}}</a></p>
+  <h2>{{.BibleGallery.Title}}</h2>
+  {{- range .BibleGallery.Groups}}
+  {{- if .Heading}}<h3 class="bible-nav-heading">{{.Heading}}</h3>{{end}}
+  <ul class="gallery-grid">
+    {{- range .Items}}
+    <li><a class="gallery-tile" href="{{$.BibleGalleryBookLink .URL}}">
+      <span class="poster">{{if .Thumbnail}}<img src="{{.Thumbnail}}" alt="" loading="lazy">{{end}}</span>
+      <span class="cap">{{.Title}}</span>
+    </a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
+</article>
 {{- else if .Nav}}
+{{- with .NavTabs}}
+<nav class="tabs pubtabs bible-tabs" aria-label="{{$.Nav.Title}}">
+  {{- range .}}
+  <a href="{{.Href}}"{{if .Active}} class="active" aria-current="page"{{end}}>{{.Title}}</a>
+  {{- end}}
+</nav>
+{{- end}}
 <nav class="bible-nav" aria-label="{{.T.UIBook}}">
   {{- range $sec := .Nav.Sections}}
   {{- if $sec.Heading}}<h2 class="bible-nav-heading">{{$sec.Heading}}</h2>{{end}}
@@ -98,7 +121,27 @@
     {{- end}}
   </ul>
   {{- end}}
+  {{- with .Nav.Gallery}}
+  <ul class="book-docs">
+    <li><a class="book-doc gallery" href="{{$.NavGalleryLink}}"><span class="book-doc-icon" aria-hidden="true">{{template "bookdocicon" "gallery"}}</span><span>{{.Title}}</span></a></li>
+  </ul>
+  {{- end}}
 </nav>
+{{- with .NavRefs}}
+<section class="bible-refs">
+  {{- if $.Nav.RefsHeading}}<h2>{{$.Nav.RefsHeading}}</h2>{{end}}
+  <ol class="toc">
+    {{- range .}}
+    <li>
+      <a href="{{.Href}}">
+        <span class="thumb">{{if .Image}}<img src="{{.Image}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{end}}</span>
+        <span class="text"><span class="title">{{.Title}}</span></span>
+      </a>
+    </li>
+    {{- end}}
+  </ol>
+</section>
+{{- end}}
 {{- end}}
 {{end}}
 

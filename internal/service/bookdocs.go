@@ -106,6 +106,26 @@ func (s *Service) BookGallery(ctx context.Context, lng model.Language, edition s
 	return g, nil
 }
 
+// BibleGallery is the media gallery of a whole bible: the books that have one,
+// each tile leading to that book's gallery.
+func (s *Service) BibleGallery(ctx context.Context, lng model.Language, edition string) (model.BookGallery, error) {
+	nav, err := s.BibleNav(ctx, lng, edition)
+	if err != nil {
+		return model.BookGallery{}, err
+	}
+	if nav.Gallery == nil {
+		return model.BookGallery{}, fmt.Errorf("%w: %s has no media gallery", ErrNoBookDoc, edition)
+	}
+	g, err := s.WOL.Gallery(ctx, nav.Gallery.URL)
+	if err != nil {
+		return model.BookGallery{}, err
+	}
+	if g.Title == "" {
+		g.Title = nav.Gallery.Title
+	}
+	return g, nil
+}
+
 // GalleryEntry is one item of a book's media gallery: the picture with its
 // caption, description and rights line, or the video it plays.
 type GalleryEntry struct {
