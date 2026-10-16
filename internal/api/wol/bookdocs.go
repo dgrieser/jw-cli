@@ -28,6 +28,8 @@ const (
 	selGalleryCap = ".title"                         // a tile's title
 	classHasVideo = "hasVideo"                       // a tile that is a video
 	classChapter  = "chapterItem"                    // a row that heads a chapter
+	classGroup    = "group"                          // a row that heads a part of the bible
+	classTile     = "tile"                           // a tile, in the bible's own gallery a book
 	selDocTitle   = "#article .scalableui header h1" // a document's own heading
 )
 
@@ -222,7 +224,9 @@ func FactKey(label string) string {
 }
 
 // Gallery reads a bible book's media gallery (one of BookNav's Links): its
-// pictures and videos, chapter by chapter, as the library lists them.
+// pictures and videos, chapter by chapter, as the library lists them. The
+// gallery of a whole bible (BibleNav's Gallery) reads the same way: its tiles
+// are the books that have one, under the part of the bible they are in.
 func (c *Client) Gallery(ctx context.Context, pageURL string) (model.BookGallery, error) {
 	return httpx.Memo(ctx, c.cache, "bookgallery1-"+pageURL, func(ctx context.Context) (model.BookGallery, error) {
 		doc, err := c.hc.GetHTML(ctx, pageURL)
@@ -245,7 +249,14 @@ func parseGallery(doc *goquery.Document, base string) model.BookGallery {
 			g.Groups = append(g.Groups, model.GalleryGroup{Heading: cleanSpace(li.Find(selGalleryHd).Text())})
 			return
 		}
+		if li.HasClass(classGroup) {
+			g.Groups = append(g.Groups, model.GalleryGroup{Heading: cleanSpace(li.Text())})
+			return
+		}
 		a := li.Find(selGalleryA).First()
+		if a.Length() == 0 && li.HasClass(classTile) {
+			a = li.Find("a[href]").First()
+		}
 		if a.Length() == 0 {
 			return
 		}

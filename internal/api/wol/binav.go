@@ -34,11 +34,23 @@ type NavSection struct {
 	Books   []NavBook `json:"books"`
 }
 
-// BibleNav is a bible's book grid.
+// BibleNav is a bible's book grid, with what the library's page lists around
+// it: the parts of the bible above the grid, its media gallery and other
+// reference works under it.
 type BibleNav struct {
 	Edition  string       `json:"edition"`
 	Title    string       `json:"title,omitempty"`
 	Sections []NavSection `json:"sections"`
+	// Tabs are the parts the bible's table of contents is split into
+	// ("EINFÜHRUNG", "BÜCHER", "INDEX", "ANHANG A"); the books are the one
+	// selected.
+	Tabs []LibraryTab `json:"tabs,omitempty"`
+	// Gallery is the media gallery of the whole bible, its books' galleries.
+	Gallery *BookLink `json:"gallery,omitempty"`
+	// RefsHeading heads Refs, the other reference works the page lists
+	// ("Weitere Nachschlagewerke": a glossary, scriptures for Christian living).
+	RefsHeading string        `json:"refsHeading,omitempty"`
+	Refs        []LibraryCard `json:"refs,omitempty"`
 }
 
 // BookNav is one book's chapter grid.
@@ -68,14 +80,16 @@ type BookLink struct {
 }
 
 const (
-	selNavBooks     = "ul.books"       // one section of the book grid
-	selNavHeading   = "div.group.grid" // the heading printed before it
-	selNavBook      = "li.book"        // one book, its class the group
-	selNavBookLink  = "a.bookLink"     // carrying data-bookid
-	selNavBookName  = "h1.navBook"     // the book's title, on the chapter grid
-	selNavChapter   = "li.chapter a"   // one chapter link
-	selNavPubTitle  = "header h1"
-	selNavBookLinks = "ul.bibleAdditionalLinks li a" // introduction, outline, gallery      // the bible's title, on the book grid
+	selNavBooks     = "ul.books"                                       // one section of the book grid
+	selNavHeading   = "div.group.grid"                                 // the heading printed before it
+	selNavBook      = "li.book"                                        // one book, its class the group
+	selNavBookLink  = "a.bookLink"                                     // carrying data-bookid
+	selNavBookName  = "h1.navBook"                                     // the book's title, on the chapter grid
+	selNavChapter   = "li.chapter a"                                   // one chapter link
+	selNavPubTitle  = "header h1"                                      // the bible's title, on the book grid
+	selNavBookLinks = "ul.bibleAdditionalLinks li a"                   // introduction, outline, gallery
+	selNavGallery   = "ul.bibleAdditionalLinks li.bibleMediaGallery a" // the whole bible's gallery, on the book grid
+	selNavRefs      = "ul.additionalReferenceWorks"                    // other reference works, under a heading
 )
 
 var chapterHref = regexp.MustCompile(`/b/[^/]+/[^/]+/[^/]+/(\d+)/(\d+)$`)
@@ -87,7 +101,7 @@ func (c *Client) BibleNav(ctx context.Context, cfg Config, edition string) (Bibl
 		edition = "nwtsty"
 	}
 	u := c.url(cfg, "binav", "/"+edition)
-	return httpx.Memo(ctx, c.cache, "binav2-"+u, func(ctx context.Context) (BibleNav, error) {
+	return httpx.Memo(ctx, c.cache, "binav4-"+u, func(ctx context.Context) (BibleNav, error) {
 		return c.bibleNav(ctx, u, edition)
 	})
 }
@@ -141,6 +155,27 @@ func (c *Client) bibleNav(ctx context.Context, u, edition string) (BibleNav, err
 	if len(nav.Sections) == 0 {
 		return BibleNav{}, fmt.Errorf("no bible books found at %s (edition missing, or page layout changed)", u)
 	}
+	base := c.hc.Base.WOL
+	doc.Find(selLibTabs).Each(func(_ int, li *goquery.Selection) {
+		a := li.Find("a").First()
+		if link := cardLink(a.AttrOr("href", ""), base); link.Path != "" {
+			nav.Tabs = append(nav.Tabs, LibraryTab{Title: cleanSpace(a.Text()), Path: link.Path, Selected: li.HasClass("selected")})
+		}
+	})
+	if a := doc.Find(selNavGallery).First(); a.Length() > 0 {
+		title := cleanSpace(a.Find(".title").First().Text())
+		if title == "" {
+			title = cleanSpace(a.Text())
+		}
+		nav.Gallery = &BookLink{Kind: BookGallery, Title: title, URL: absURL(base, a.AttrOr("href", ""))}
+	}
+	refs := doc.Find(selNavRefs).First()
+	nav.RefsHeading = cleanSpace(refs.Find("h2").First().Text())
+	refs.Find("li").Each(func(_ int, li *goquery.Selection) {
+		if card, ok := parseCard(li, base); ok {
+			nav.Refs = append(nav.Refs, card)
+		}
+	})
 	return nav, nil
 }
 
