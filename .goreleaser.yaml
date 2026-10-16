@@ -54,14 +54,10 @@ checksum:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
+# A pushed tag's release notes are the ones GitHub generates: the pull
+# requests merged since the previous tag.
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-      - "^ci:"
+  use: github-native
 
 release:
   draft: false
