@@ -112,8 +112,10 @@ body {
 
 main.wrap {
   flex: 1;
-  padding-block: 1.25rem 4rem;
+  padding-block: 1.25rem 2.5rem;
 }
+/* what ends a page leaves the space before the footer to the page */
+main.wrap > :last-child { margin-bottom: 0; }
 
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 0.15em; }
 a:hover { color: var(--accent-hover); }
