@@ -1385,6 +1385,30 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   background: var(--field);
 }
 .toc .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* a list none of whose articles has a picture has no column for one */
+.toc.nothumbs a { grid-template-columns: minmax(0, 1fr); }
+
+/* a songbook's songs, by number */
+.numgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.numgrid a {
+  display: grid;
+  place-items: center;
+  min-height: 2.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--r-small);
+  color: var(--ink);
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.numgrid a:hover { border-color: var(--accent); color: var(--accent); background: var(--field); }
 .toc .text { min-width: 0; }
 .toc .label { display: block; color: var(--muted); font-size: 0.8rem; letter-spacing: 0.02em; }
 .toc .title { display: block; font-weight: 600; line-height: 1.35; }
@@ -1410,7 +1434,7 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   .pubitem { grid-template-columns: 12rem minmax(0, 1fr); }
 }
 
-.pubfiles { max-width: 60rem; margin: 0 0 2rem; }
+.pubfiles { max-width: 60rem; }
 .pubfiles .format {
   display: inline-block;
   min-width: 3.4rem;
@@ -1422,7 +1446,12 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 .pubfiles .meta { color: var(--muted); font-size: 0.9rem; }
 .pubfiles table { table-layout: fixed; }
 .pubfiles col.size { width: 6.5rem; }
-.pubfiles col.action { width: 7.5rem; }
+.pubfiles col.action { width: 8.5rem; }
+/* every table of the formats lines its buttons up in one column, one width */
+.pubfiles td.actions .btn { width: 100%; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 40rem) {
+  .pubfiles col.size { width: 5rem; }
+}
 .filegroup { border-bottom: 1px solid var(--line); }
 .filegroup > summary { padding: 0.55rem 0; cursor: pointer; }
 .filegroup > summary:hover { color: var(--accent); }
@@ -1433,6 +1462,36 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   .car-track.covers { grid-auto-columns: 40%; }
   .pubgrid { grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); }
 }
+
+/* what is there besides the page's content — its details, its files —
+   folded away at its end */
+details.fold { max-width: 60rem; margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
+details.fold + details.fold { margin-top: 0; }
+details.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::before {
+  content: "";
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  background: var(--chevron) center / 1rem no-repeat;
+  transform: rotate(-90deg);
+  transition: transform 140ms;
+}
+details.fold[open] > summary::before { transform: none; }
+details.fold > summary > h2 { margin: 0; font-size: 1.15rem; }
+details.fold > summary:hover { color: var(--accent); }
+details.fold[open] { padding-bottom: 0.5rem; }
+details.fold > dl.facts { margin-bottom: 0.75rem; }
 
 dl.facts {
   display: grid;
@@ -1452,8 +1511,14 @@ table { border-collapse: collapse; width: 100%; max-width: 60rem; }
 th, td { text-align: left; padding: 0.55rem 1rem 0.55rem 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { color: var(--muted); font-weight: 500; font-size: 0.85rem; white-space: nowrap; }
 td.num { white-space: nowrap; color: var(--muted); }
-td.actions { white-space: nowrap; text-align: right; padding-right: 0; }
-td.actions .btn + .btn { margin-left: 0.4rem; }
+/* a cell, not the row of buttons .actions makes elsewhere */
+td.actions { display: table-cell; margin: 0; white-space: nowrap; text-align: right; padding-right: 0; }
+/* a row's buttons side by side, each as wide as the widest; stacked where
+   the row is narrow */
+td.actions .btns { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.4rem; vertical-align: middle; }
+@media (max-width: 40rem) {
+  td.actions .btns { grid-auto-flow: row; }
+}
 tbody tr:hover { background: var(--surface); }
 
 /* messages ------------------------------------------------------------ */
@@ -1862,6 +1927,17 @@ a.img-link > img { display: block; }
 /* a page's title, and its history at the row's end */
 .title-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0 0.5rem; }
 .title-row > h1 { flex: 1 1 auto; min-width: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a long title: smaller, on two lines at most, as high as the history beside it */
+.title-row > h1.long {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+  font-size: 1.05rem;
+  line-height: 1.15;
+  overflow-wrap: break-word;
+}
 .title-row > .hist { flex: none; margin: 0; }
 .title-row .hist-panel, .hist.alone .hist-panel { left: auto; right: 0; }
 .hist.alone { justify-content: flex-end; }

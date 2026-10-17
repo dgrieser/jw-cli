@@ -71,6 +71,12 @@ type pubGroup struct {
 	Tiles   []pubTile
 	Chips   []pubTile
 	Docs    []pubTile
+	// Numbers are articles known by a number alone (a songbook's songs),
+	// laid out as a grid of them.
+	Numbers []pubTile
+	// Thumbs is set when any of the articles has a picture; a list without
+	// any leaves the column out.
+	Thumbs bool
 }
 
 // pubFormat is one format of a publication's files. A format that comes in
@@ -234,8 +240,15 @@ func pubGroupOf(g wol.LibraryGroup, page basePage) pubGroup {
 	for _, c := range latestFirst(g.Cards) {
 		t := cardTile(c, page)
 		switch {
+		case g.Grid:
+			out.Numbers = append(out.Numbers, t)
 		case c.Kind == wol.DocumentKind || c.Kind == "link":
+			// "FRAGE 1" over "Frage 1: Wer ist Gott?" says it twice
+			if t.Subtitle != "" && strings.HasPrefix(strings.ToLower(t.Subtitle), strings.ToLower(t.Title)) {
+				t.Title, t.Subtitle = t.Subtitle, ""
+			}
 			out.Docs = append(out.Docs, t)
+			out.Thumbs = out.Thumbs || t.Image != ""
 		case covers:
 			out.Tiles = append(out.Tiles, t)
 		default:

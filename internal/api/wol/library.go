@@ -48,6 +48,9 @@ type LibraryCard struct {
 type LibraryGroup struct {
 	Title string        `json:"title,omitempty"`
 	Cards []LibraryCard `json:"cards"`
+	// Grid marks cards wol lays out as a grid of bare numbers (a songbook's
+	// songs), with no thumbnail or second line.
+	Grid bool `json:"grid,omitempty"`
 }
 
 // LibraryTab is one part of a publication whose table of contents is split
@@ -89,14 +92,15 @@ func (p LibraryPage) Cards() []LibraryCard {
 }
 
 const (
-	selLibTitle    = "#article h1"
-	selLibBack     = "#article h1 a.backNav"
-	selLibTabs     = "ul.pageList li"
-	selLibDir      = "ul.directory:not(.pageList)"
-	selLibCardLink = "a.cardContainer"
-	selLibLine1    = ".cardLine1"
-	selLibLine2    = ".cardLine2"
-	selLibThumb    = "img.cardThumbnailImage"
+	selLibTitle     = "#article h1"
+	selLibBack      = "#article h1 a.backNav"
+	selLibTabs      = "ul.pageList li"
+	selLibDir       = "ul.directory:not(.pageList)"
+	selLibCardLink  = "a.cardContainer"
+	selLibLine1     = ".cardLine1"
+	selLibLine2     = ".cardLine2"
+	selLibThumb     = "img.cardThumbnailImage"
+	selLibGridTitle = "span.title"
 )
 
 // libraryHref splits a wol href into its command and the rest of its path:
@@ -120,7 +124,7 @@ func (c *Client) Library(ctx context.Context, cfg Config, kind, path string) (Li
 		rest = "/" + escapePath(path)
 	}
 	u := c.url(cfg, kind, rest)
-	return httpx.Memo(ctx, c.cache, "library3-"+u, func(ctx context.Context) (LibraryPage, error) {
+	return httpx.Memo(ctx, c.cache, "library4-"+u, func(ctx context.Context) (LibraryPage, error) {
 		doc, err := c.hc.GetHTML(ctx, u)
 		if err != nil {
 			return LibraryPage{}, err
@@ -198,8 +202,14 @@ func parseLibrary(sel *goquery.Selection, base string) LibraryPage {
 				}
 				return
 			}
-			if !li.HasClass("card") {
+			if !li.HasClass("card") && !li.HasClass("gridItem") {
 				return
+			}
+			if grid := li.HasClass("gridItem"); grid != loose.Grid {
+				if len(loose.Cards) > 0 {
+					page.Groups = append(page.Groups, loose)
+				}
+				loose = LibraryGroup{Grid: grid}
 			}
 			if c, ok := parseCard(li, base); ok {
 				loose.Cards = append(loose.Cards, c)
@@ -224,6 +234,10 @@ func parseCard(li *goquery.Selection, base string) (LibraryCard, bool) {
 	card := cardLink(href, base)
 	card.Title = cleanSpace(a.Find(selLibLine1).First().Text())
 	card.Subtitle = cleanSpace(a.Find(selLibLine2).First().Text())
+	if card.Title == "" && card.Subtitle == "" {
+		// a grid item is a bare number in a span: <a><span class="title">1</span></a>
+		card.Title = cleanSpace(a.Find(selLibGridTitle).First().Text())
+	}
 	if card.Title == "" {
 		card.Title, card.Subtitle = card.Subtitle, ""
 	}

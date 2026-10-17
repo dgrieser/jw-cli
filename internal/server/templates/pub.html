@@ -17,36 +17,6 @@
 </div>
 {{- end}}
 
-{{- if .Files}}
-<section class="pubfiles">
-<h2>{{.T.UIFiles}}</h2>
-{{- range .Files}}
-{{- if .Many}}
-<details class="filegroup">
-  <summary><span class="format">{{.Format}}</span> <span class="meta">{{.Count}}</span></summary>
-{{- end}}
-<div class="tablewrap">
-<table class="files">
-  <colgroup><col><col class="size"><col class="action"></colgroup>
-  <tbody>
-    {{- $format := .Format}}
-    {{- range .Files}}
-    <tr>
-      <td><span class="format">{{$format}}</span> {{.Title}}{{if .Label}} <span class="meta">{{.Label}}</span>{{end}}</td>
-      <td class="num">{{.Size}}</td>
-      <td class="actions"><a class="btn small" href="{{.URL}}" rel="noopener">{{$.T.UIDownload}}</a></td>
-    </tr>
-    {{- end}}
-  </tbody>
-</table>
-</div>
-{{- if .Many}}
-</details>
-{{- end}}
-{{- end}}
-</section>
-{{- end}}
-
 {{- if .Categories}}
 <ul class="pubchips">
   {{- range .Categories}}
@@ -96,12 +66,22 @@
     {{- end}}
   </ul>
   {{- end}}
+  {{- if .Numbers}}
+  <ul class="numgrid">
+    {{- range .Numbers}}
+    <li><a href="{{.Href}}">{{.Title}}</a></li>
+    {{- end}}
+  </ul>
+  {{- end}}
   {{- if .Docs}}
-  <ol class="toc">
+  {{- $thumbs := .Thumbs}}
+  <ol class="toc{{if not .Thumbs}} nothumbs{{end}}">
     {{- range .Docs}}
     <li>
       <a href="{{.Href}}">
+        {{- if $thumbs}}
         <span class="thumb">{{if .Image}}<img src="{{.Image}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{end}}</span>
+        {{- end}}
         <span class="text">
           {{- if .Subtitle}}<span class="label">{{.Title}}</span><span class="title">{{.Subtitle}}</span>
           {{- else}}<span class="title">{{.Title}}</span>{{end -}}
@@ -112,6 +92,35 @@
   </ol>
   {{- end}}
 </section>
+{{- end}}
+{{- if .Files}}
+<details class="fold pubfiles">
+<summary><h2>{{.T.UIFiles}}</h2></summary>
+{{- range .Files}}
+{{- if .Many}}
+<details class="filegroup">
+  <summary><span class="format">{{.Format}}</span> <span class="meta">{{.Count}}</span></summary>
+{{- end}}
+<div class="tablewrap">
+<table class="files">
+  <colgroup><col><col class="size"><col class="action"></colgroup>
+  <tbody>
+    {{- $format := .Format}}
+    {{- range .Files}}
+    <tr>
+      <td><span class="format">{{$format}}</span> {{.Title}}{{if .Label}} <span class="meta">{{.Label}}</span>{{end}}</td>
+      <td class="num">{{.Size}}</td>
+      <td class="actions"><a class="btn small" href="{{.URL}}" rel="noopener">{{$.T.UIDownload}}</a></td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+</div>
+{{- if .Many}}
+</details>
+{{- end}}
+{{- end}}
+</details>
 {{- end}}
 {{end}}
 
