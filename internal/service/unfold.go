@@ -1495,7 +1495,7 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 		// a video has no wol page; its jw.org one names it
 		label := fmt.Sprintf(`<a href="%s">%s</a>`,
 			html.EscapeString(firstNonEmptyString(item.WOLLink, item.JWLink)), html.EscapeString(collapseSpace(item.Title)))
-		if src := citationOf(item.Context); src != "" {
+		if src := CitationOf(item.Context); src != "" {
 			label += " (" + html.EscapeString(src) + ")"
 		}
 		b.WriteString(headingHTML(level+1, label))
@@ -1510,10 +1510,10 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 	}
 }
 
-// citationOf is the citation alone of where a search found a passage, as a
+// CitationOf is the citation alone of where a search found a passage, as a
 // heading names it: "w26 April S. 8-13" of "w26 April S. 8-13 - Der Wachtturm
 // (Studienausgabe) 2026", the publication's title left to its page.
-func citationOf(context string) string {
+func CitationOf(context string) string {
 	if cite, _, ok := strings.Cut(context, " - "); ok && strings.TrimSpace(cite) != "" {
 		return strings.TrimSpace(cite)
 	}
