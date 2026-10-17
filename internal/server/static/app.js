@@ -1810,7 +1810,8 @@
     // beside the page's title, at the row's end; the title gives way, cut to
     // a word's start and a dot ("Zusammenk.") when the row is too narrow
     var h1 = main.querySelector("h1");
-    if (!h1 || h1.children.length) {
+    // a title of text alone moves; one holding a link or a control stays
+    if (!h1 || h1.querySelector("a, button, input, select, img")) {
       // a row of its own, at its end — below the breadcrumb, which always
       // heads the page
       var crumbs = main.querySelector(":scope > .crumbs");
