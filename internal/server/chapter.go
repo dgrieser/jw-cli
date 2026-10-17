@@ -40,6 +40,9 @@ type chapterNavView struct {
 // cuts it short with an ellipsis (style.css), never another wording.
 type chapterLink struct {
 	Label string
+	// Short is the label with the book's abbreviation ("Offb. 2"), which the
+	// page shows instead when the label does not fit; empty when it has none.
+	Short string
 	Href  string
 }
 
@@ -58,10 +61,14 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	link := func(p service.Passage, book, chapter int) chapterLink {
 		name := res.Table.Name(book)
 		edition := firstNonEmpty(p.Bible, page.Edition)
-		return chapterLink{
+		l := chapterLink{
 			Label: fmt.Sprintf("%s %d", name, chapter),
 			Href:  page.chapterHref(edition, name, chapter),
 		}
+		if short := res.Table.Short(book); short != name {
+			l.Short = fmt.Sprintf("%s %d", short, chapter)
+		}
+		return l
 	}
 	chapters := func(p service.Passage, book int) []int {
 		bn, err := s.svc.BookNav(ctx, lng, firstNonEmpty(p.Bible, page.Edition), book)

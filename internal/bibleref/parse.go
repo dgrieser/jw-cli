@@ -66,6 +66,7 @@ func (r Ref) String() string {
 type Table struct {
 	byName map[string]int
 	names  [67]string // display names (localized when merged)
+	shorts [67]string // the merged abbreviation, where shorter than names
 }
 
 // English returns the base table.
@@ -99,11 +100,26 @@ func (t *Table) Merge(localized map[int][]string) {
 			}
 			t.byName[key] = num
 			t.byName[strings.ReplaceAll(key, " ", "")] = num
-			if i == 0 {
+			switch {
+			case i == 0:
 				t.names[num] = n
+				t.shorts[num] = ""
+			case i == 1 && len([]rune(n)) < len([]rune(t.names[num])):
+				// the abbreviation wol writes after the name ("Offb."),
+				// where it is shorter
+				t.shorts[num] = n
 			}
 		}
 	}
+}
+
+// Short returns the abbreviation the language gives a book number ("Offb."),
+// or its display name when it has none shorter.
+func (t *Table) Short(book int) string {
+	if book >= 1 && book <= 66 && t.shorts[book] != "" {
+		return t.shorts[book]
+	}
+	return t.Name(book)
 }
 
 // Name returns the display name of a book number.

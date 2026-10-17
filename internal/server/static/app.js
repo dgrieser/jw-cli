@@ -40,6 +40,25 @@
     });
   }
 
+  // --- the chapters around a reading: the book's abbreviation where its ------
+  // name does not fit ("Offb. 2" for "Offenbarung 2"), and an ellipsis only
+  // where that does not fit either
+
+  (function () {
+    var labels = Array.prototype.slice.call(document.querySelectorAll(".chapter-nav .lbl[data-short]"));
+    if (!labels.length) return;
+    labels.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
+    function fit() {
+      labels.forEach(function (l) { l.textContent = l.getAttribute("data-full"); });
+      labels.forEach(function (l) {
+        if (l.scrollWidth > l.clientWidth + 1) l.textContent = l.getAttribute("data-short");
+      });
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  })();
+
   // --- text size -----------------------------------------------------------
 
   // the size is a percentage of the browser's own, kept in this browser; the
