@@ -1372,6 +1372,8 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 .toc { list-style: none; margin: 0; padding: 0; }
 .toc > li { border-bottom: 1px solid var(--line); }
+/* a list's last row draws no rule: what follows it draws its own */
+.toc > li:last-child { border-bottom: 0; }
 .toc a {
   display: grid;
   grid-template-columns: 3.5rem minmax(0, 1fr);
@@ -1471,10 +1473,8 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 /* what is there besides the page's content — its details, its files —
    folded away at its end */
-/* the first follows the page without a rule of its own, which would double
-   the one its last row already draws; the rest are set off from the one before */
-details.fold { max-width: 60rem; margin: 1.5rem 0 0; }
-details.fold + details.fold { margin-top: 0; border-top: 1px solid var(--line); }
+details.fold { max-width: 60rem; margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
+details.fold + details.fold { margin-top: 0; }
 details.fold > summary {
   display: flex;
   align-items: center;
