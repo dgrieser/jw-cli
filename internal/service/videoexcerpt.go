@@ -31,18 +31,15 @@ var tagPattern = regexp.MustCompile(`<[^>]*>`)
 
 // widenExcerpt is a video's search passage widened from its subtitles, which
 // are read through the cache like any page.
-func (s *Service) widenExcerpt(ctx context.Context, item model.MediaItem, snippet, ref string) (string, bool) {
-	for _, f := range item.Files {
-		if f.SubtitlesURL == "" {
-			continue
-		}
-		vtt, err := s.HTTP.GetText(ctx, f.SubtitlesURL, nil)
-		if err != nil {
-			return "", false
-		}
-		return transcriptExcerpt(snippet, subtitles.ParseVTT(vtt), ref)
+func (s *Service) widenExcerpt(ctx context.Context, subtitlesURL, snippet, ref string) (string, bool) {
+	if subtitlesURL == "" {
+		return "", false
 	}
-	return "", false
+	vtt, err := s.HTTP.GetText(ctx, subtitlesURL, nil)
+	if err != nil {
+		return "", false
+	}
+	return transcriptExcerpt(snippet, subtitles.ParseVTT(vtt), ref)
 }
 
 // transcriptExcerpt widens snippet, a passage of a video's transcript cues,

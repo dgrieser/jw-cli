@@ -226,17 +226,15 @@ func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []m
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			item, err := s.Mediator.MediaItem(ctx, lng.Symbol, v.LANK)
-			if err != nil {
+			facts, ok := s.mediaFacts(ctx, lng, v.LANK)
+			if !ok {
 				return
 			}
-			if t, err := time.Parse(time.RFC3339, item.FirstPublished); err == nil {
-				out[i].published = t
-			}
+			out[i].published = facts.published()
 			// named like a publication: series and year ("vi-jwb23")
-			out[i].Context = MediaCode(item)
+			out[i].Context = facts.code(v.LANK)
 			if i < len(refs) {
-				if excerpt, ok := s.widenExcerpt(ctx, item, v.Snippet, refs[i]); ok {
+				if excerpt, ok := s.widenExcerpt(ctx, facts.Subtitles, v.Snippet, refs[i]); ok {
 					out[i].Excerpt = excerpt
 				}
 			}

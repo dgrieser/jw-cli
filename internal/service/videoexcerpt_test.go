@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
@@ -141,7 +142,9 @@ func TestRefMarker(t *testing.T) {
 // mediator's item; one whose subtitles cannot be read keeps the search's.
 func TestDateVideosWidensExcerpt(t *testing.T) {
 	mux := http.NewServeMux()
+	var items atomic.Int32
 	mux.HandleFunc("/apis/mediator/v1/media-items/E/", func(w http.ResponseWriter, r *http.Request) {
+		items.Add(1)
 		lank := strings.TrimPrefix(r.URL.Path, "/apis/mediator/v1/media-items/E/")
 		vtt := "/talk.vtt"
 		if lank == "pub-b_1_VIDEO" {
@@ -176,5 +179,15 @@ func TestDateVideosWidensExcerpt(t *testing.T) {
 	out = s.dateVideos(context.Background(), model.Language{Symbol: "E"}, videos[:1], nil)
 	if out[0].Excerpt != videos[0].Excerpt {
 		t.Errorf("no refs, no widening: %q", out[0].Excerpt)
+	}
+	// what a video's line needs of its item is kept: listed again, its item
+	// is not asked for, and its excerpt is widened all the same
+	before := items.Load()
+	out = s.dateVideos(context.Background(), model.Language{Symbol: "E"}, videos[:1], []string{"James 5:19"})
+	if n := items.Load() - before; n != 0 {
+		t.Errorf("the item was asked for again: %d requests", n)
+	}
+	if out[0].Excerpt != want || out[0].Context != "vi-a26" || out[0].published.IsZero() {
+		t.Errorf("kept = %q (%s, %v)", out[0].Excerpt, out[0].Context, out[0].published)
 	}
 }
