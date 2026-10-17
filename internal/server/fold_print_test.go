@@ -11,8 +11,8 @@ func TestFoldPrintEditions(t *testing.T) {
 		`<div class="clearfix alternatePresentation clickable hidden"><div class="thumbnail"><img src="b.jpg"/></div><div class="title">Printed edition</div></div>` +
 		`<p>Text</p>`
 	got := foldPrintEditions(in)
-	want := `<header><h1>T</h1></header><details class="section print-edition"><summary>Printed edition</summary>` +
-		`<div class="section-body"><img src="a.jpg"/><img src="b.jpg"/></div></details><p>Text</p>`
+	want := `<header><h1>T</h1></header><details class="fold print-edition"><summary><h2>Printed edition</h2></summary>` +
+		`<div class="fold-body"><img src="a.jpg"/><img src="b.jpg"/></div></details><p>Text</p>`
 	if got != want {
 		t.Errorf("got  %s\nwant %s", got, want)
 	}

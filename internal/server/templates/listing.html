@@ -85,10 +85,9 @@
 {{end}}
 {{define "extras"}}
 {{- if .Images}}
-<div class="sections extras">
-<details class="section">
-  <summary>{{.T.UIImages}} <span class="count">{{len .Images}}</span></summary>
-  <div class="section-body">
+<details class="fold extras">
+  <summary><h2>{{.T.UIImages}} <span class="count">{{len .Images}}</span></h2></summary>
+  <div class="fold-body">
   <ul class="gallery">
     {{- range .Images}}
     <li>
@@ -102,6 +101,5 @@
   </ul>
   </div>
 </details>
-</div>
 {{- end}}
 {{end}}

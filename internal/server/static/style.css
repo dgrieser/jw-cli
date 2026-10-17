@@ -845,7 +845,7 @@ details.section > summary > a.follow { user-select: none; }
 .follow-menu .follow-depths button { justify-content: center; min-width: 2.4rem; min-height: 2.4rem; padding: 0 0.6rem; border-radius: 999px; font-size: 0.95rem; }
 .follow-menu .follow-depths button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .follow-menu .follow-depths .remove { color: var(--danger); font-size: 1.15rem; }
-details.section .count {
+details.section .count, details.fold .count {
   flex: none;
   min-width: 1.35rem;
   padding: 0 0.35rem;
@@ -919,7 +919,7 @@ details.section.fresh { animation: pop 260ms ease-out; }
 .document a.b, .document a.fn, .document .item-text a.vl, .document .item-text a.cl { cursor: pointer; }
 @keyframes pop { from { opacity: 0; transform: translateY(3px) scale(0.98); } }
 
-.document > .sections.extras, .sections.extras { margin: 1.5rem 0; max-width: var(--measure); }
+details.fold.extras { max-width: var(--measure); }
 
 /* unfolding: an item has no button of its own — its links unfold it, and
    held offer how deep. The page bar's diamond unfolds them all. */
@@ -1101,7 +1101,7 @@ section.entry .note { margin: 0.6rem 0; line-height: 1.65; }
 section.entry ul { padding-left: 1.3rem; }
 section.entry li { margin-bottom: 0.4rem; }
 
-.sections.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
+details.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
 
 ul.gallery {
   list-style: none;
@@ -1516,7 +1516,7 @@ details.fold + details.fold { margin-top: 0; }
   transition: transform 140ms;
 }
 :is(details.fold, .document details:not(.section))[open] > summary::before { transform: none; }
-details.fold > summary > h2 { margin: 0; font-size: 1.15rem; }
+details.fold > summary > h2 { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.15rem; }
 :is(details.fold, .document details:not(.section)) > summary:hover { color: var(--accent); }
 :is(details.fold, .document details:not(.section))[open] { padding-bottom: 0.5rem; }
 /* in them, an entry and the publication it is from read as one */
@@ -1598,6 +1598,9 @@ tbody tr:hover { background: var(--surface); }
   white-space: nowrap;
 }
 .pb-up[hidden] { display: none; }
+/* tapped, the bar's links show no highlight of the phone's own, as its
+   buttons do not */
+.page-bar a { -webkit-tap-highlight-color: transparent; }
 /* drawn, as beside the picker's book: a glyph sits low on the baseline */
 .pb-up-chev { flex: none; margin-left: -0.3rem; }
 .pb-title {
@@ -2128,8 +2131,10 @@ button.hist-rm:hover { border-color: transparent; background: var(--danger-soft)
 .hist-steps .hist-step.next { flex-direction: row-reverse; }
 
 /* a document's printed pages, folded away above its text */
-details.section.print-edition { margin: 0.25rem 0 1rem; }
-details.section.print-edition .section-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
+/* a document's printed pages fold away under its heading, like a page's
+   details at its end */
+details.print-edition { margin: 0.5rem 0 1rem; }
+details.print-edition .fold-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
 
 /* suggestions under the bible's reference: books as a list, then chapters
    and verses as a grid of numbers */
