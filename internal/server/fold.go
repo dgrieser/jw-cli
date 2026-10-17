@@ -273,8 +273,8 @@ func foldPrintEditions(fragment string) string {
 		if body.Len() == 0 {
 			return
 		}
-		div.BeforeHtml(`<details class="section print-edition"><summary>` + nethtml.EscapeString(title) +
-			`</summary><div class="section-body">` + body.String() + `</div></details>`)
+		div.BeforeHtml(`<details class="fold print-edition"><summary><h2>` + nethtml.EscapeString(title) +
+			`</h2></summary><div class="fold-body">` + body.String() + `</div></details>`)
 		run.Remove()
 	})
 	out, err := doc.Find("body").Html()
