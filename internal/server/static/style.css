@@ -676,6 +676,9 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
   margin-right: 0.15em;
 }
 .document a.vl, .verse a.vl { margin-right: 0.25em; }
+/* the chapter's number before its first verse reads as a number, like the
+   verses' own, not as a link in the text */
+.document a.cl { text-decoration: none; }
 .document > a.b, .verse > a.b, .item-text > a.b { margin-left: 0.05em; }
 .document .pageNum { display: none; }
 .document .parNum { color: var(--muted); }
@@ -956,7 +959,7 @@ details.section.fresh { animation: pop 260ms ease-out; }
 }
 .unfold-item[data-state="loading"] { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
 /* a chapter's number unfolds the chapter, as a verse's number does the verse */
-.passage > h2 > a.chapter-num { color: var(--accent); text-underline-offset: 0.15em; }
+.passage > h2 > a.chapter-num { color: var(--accent); text-decoration: none; }
 
 .unfold-menu {
   position: absolute;
@@ -1665,7 +1668,7 @@ a.ps-item:hover { background: var(--field); color: var(--ink); }
 .pb-up, .pb-title, .pb-bible { margin-right: 0.4rem; }
 .page-bar .pb { position: relative; }
 /* the diamond that unfolds the whole page sits in the bar, not beside a line */
-.pb .pb-unfold { position: relative; top: auto; right: auto; flex: none; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; }
+.pb .pb-unfold { position: relative; top: auto; right: auto; flex: none; width: 1.9rem; height: 1.9rem; min-height: 1.9rem; color: var(--ink); }
 .pb .pb-unfold.on { color: var(--accent); background: var(--accent-soft); }
 .pb .pb-unfold.busy svg { animation: spin-pulse 1.2s ease-in-out infinite; }
 @keyframes spin-pulse { 50% { opacity: 0.35; } }
@@ -1804,7 +1807,17 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
    picker's book view, and as a strip of small links under the row */
 .bp-docs .book-docs { margin-top: 1rem; }
 /* the book's documents beside its name, scrolling sideways when narrow */
-.bp-row-docs { flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* the book's documents scroll sideways under a fade into the close button,
+   not cut off at its edge; the last one scrolls clear of the fade */
+.bp-row-docs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 1.75rem), transparent);
+}
+.bp-row-docs .book-docs.compact { padding-right: 1.75rem; }
 .bp-row-docs::-webkit-scrollbar { display: none; }
 .bp-row-docs .book-docs.compact { flex-wrap: nowrap; }
 .bp-row-docs .book-doc { white-space: nowrap; padding-inline: 0.6rem; }
