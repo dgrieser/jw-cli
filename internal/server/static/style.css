@@ -1674,6 +1674,9 @@ a.ps-item:hover { background: var(--field); color: var(--ink); }
 .pb-unfold-menu .glyph:disabled { opacity: 0.35; }
 /* with the diamond, the bar under the heading shows only a run's progress */
 .unfold-bar.has-pb-unfold:not(.busy) { margin: 0; }
+/* empty, it still keeps the margins either side of it from collapsing into
+   one: the document below takes none of its own, the space above is enough */
+.unfold-bar.has-pb-unfold:not(.busy) + .document { margin-top: 0; }
 .pb-btn {
   min-height: 2rem;
   min-width: 1.75rem;
