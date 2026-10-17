@@ -2960,7 +2960,26 @@
       var target = a && linkTarget(a);
       if (target && (target.kind === "article" || target.kind === "media")) {
         var title = make("span", "title");
-        while (a.firstChild) title.appendChild(a.firstChild);
+        // the citation ahead of the arrow ("w85 1. 2. 15 → …") and the
+        // publication after the title ("Oktober (es27 …)") say where it is
+        // from, set apart from what it is called; all of it is one title,
+        // which wraps as one
+        var label = a.textContent, cut = label.indexOf(" → ");
+        if (cut > 0) {
+          title.appendChild(make("span", "src", label.slice(0, cut + 3)));
+          title.appendChild(document.createTextNode(label.slice(cut + 3)));
+        } else {
+          while (a.firstChild) title.appendChild(a.firstChild);
+        }
+        var rest = "";
+        while (a.nextSibling) {
+          rest += a.nextSibling.textContent;
+          s.removeChild(a.nextSibling);
+        }
+        if (rest.trim()) {
+          title.appendChild(document.createTextNode(" "));
+          title.appendChild(make("span", "src", rest.trim()));
+        }
         s.replaceChild(title, a);
         a.className = "follow";
         // the whole document, not the passage the section already shows

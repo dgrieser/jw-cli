@@ -784,6 +784,9 @@ details.section[open] > summary {
 }
 details.section > summary :is(h1, h2, h3, h4, h5, h6, p) { display: inline; font-size: inherit; margin: 0; }
 details.section > summary a { color: inherit; }
+/* where a title's passage is from — the citation, the publication — reads
+   quieter than what it is called */
+details.section > summary .src { font-weight: 400; color: var(--muted); }
 /* the link of a section headed by a publication or a verse: an icon right
    after its title, where it stays whether the section is open or closed, so
    the rest of the title opens and closes the section */
@@ -867,12 +870,13 @@ details.section .count {
   border-radius: 0;
   background: transparent;
 }
+/* open, an entry's title keeps the room it had closed, so it wraps the same
+   and does not jump */
 .section-body details.section[open] > summary {
   position: static;
   background: transparent;
   border: 0;
   border-radius: 0;
-  padding: 0.2rem 0;
   color: var(--accent);
 }
 .section-body details.section[open] > .section-body {
