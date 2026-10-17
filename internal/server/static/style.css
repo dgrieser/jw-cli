@@ -1492,7 +1492,7 @@ details.fold + details.fold { margin-top: 0; }
    guide: "Allgemeines", "Familienmitglieder" …) look the same, one under
    the other */
 .document details:not(.section) { max-width: 60rem; margin: 0; border-top: 1px solid var(--line); }
-.document details:not(.section):last-of-type { border-bottom: 1px solid var(--line); }
+.document details:not(.section, .print-edition):last-of-type { border-bottom: 1px solid var(--line); }
 :is(details.fold, .document details:not(.section)) > summary {
   display: flex;
   align-items: center;
