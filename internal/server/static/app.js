@@ -2982,6 +2982,7 @@
           title.appendChild(make("span", "src", rest.trim()));
         }
         s.replaceChild(title, a);
+        srcLine(title);
         a.className = "follow";
         // the whole document, not the passage the section already shows
         try {
@@ -3008,6 +3009,46 @@
       labelFollow(go, T.followTab, s);
       s.appendChild(go);
     });
+  }
+
+  // srcLine starts the source of a title on a line of its own when the title
+  // itself takes one line and the source would not fit beside it: never
+  // split across them, and never put off to a third. A title running onto a
+  // second line, or one the row has room for with its source, stays as it is.
+  // It is measured again whenever the title's width changes — it is shown,
+  // the screen turns.
+  // A closed entry is as wide as its title, so a title set over two lines
+  // keeps its entry narrow however wide the list grows: the list is watched
+  // too, and its titles measured again when it changes.
+  var srcObserver = window.ResizeObserver && new ResizeObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.target.classList.contains("title")) fitSrc(e.target);
+      else e.target.querySelectorAll(".title > .src").forEach(function (src) { fitSrc(src.parentNode); });
+    });
+  });
+
+  function srcLine(title) {
+    if (srcObserver && title.querySelector(":scope > .src")) srcObserver.observe(title);
+  }
+
+  function fitSrc(title) {
+    var src = title.querySelector(":scope > .src");
+    if (!src) return;
+    var list = title.closest(".sections");
+    if (list) srcObserver.observe(list);
+    src.classList.remove("own-line");
+    var r = document.createRange();
+    r.setStart(title, 0);
+    r.setEndBefore(src);
+    var tops = [];
+    Array.prototype.forEach.call(r.getClientRects(), function (rect) {
+      if (rect.width && !tops.some(function (t) { return Math.abs(t - rect.top) < 2; })) tops.push(rect.top);
+    });
+    if (tops.length !== 1) return;
+    var spills = Array.prototype.some.call(src.getClientRects(), function (rect) {
+      return rect.top > tops[0] + 2;
+    });
+    if (spills) src.classList.add("own-line");
   }
 
   function labelFollow(a, what, summary) {
