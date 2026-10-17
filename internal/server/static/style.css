@@ -1752,7 +1752,9 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 .bp-close { margin-left: auto; min-height: 2rem; padding: 0 0.4rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
 /* the book before and after the one shown, either side of its name */
 .bp-step { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.3rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
-.bp-step:hover { background: var(--accent-soft); }
+/* only the arrow, in every state: no box when hovered, pressed or focused —
+   on a phone, hover stays on what was tapped */
+.bp-step:is(:hover, :active, :focus, :focus-visible) { background: transparent; border-color: transparent; outline: none; color: var(--accent); }
 .bp-step[hidden] { display: none; }
 .bp-step.bp-off { visibility: hidden; }
 .bp-chapters {
