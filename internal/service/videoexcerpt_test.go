@@ -166,7 +166,7 @@ func TestDateVideosWidensExcerpt(t *testing.T) {
 	}
 	out := s.dateVideos(context.Background(), model.Language{Symbol: "E"}, videos, []string{"James 5:19", "James 5:19"})
 	want := "<p>Before it.</p><p>Let us read <mark>James 5:19</mark>.</p><p>It says: “My brothers.”</p>"
-	if out[0].Excerpt != want || out[0].Context != "2026-09-25" {
+	if out[0].Excerpt != want || out[0].Context != "vi-a26" {
 		t.Errorf("widened = %q (%s)", out[0].Excerpt, out[0].Context)
 	}
 	if out[1].Excerpt != videos[1].Excerpt {
