@@ -291,6 +291,7 @@ type Messages struct {
 	UIPublished     string
 	UICategory      string
 	UIFiles         string
+	UIDetails       string
 	UIRendition     string
 	UISize          string
 	UIScrollBack    string

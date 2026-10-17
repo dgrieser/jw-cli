@@ -185,6 +185,7 @@ var en = Messages{
 	UIPublished:        "Published",
 	UICategory:         "Category",
 	UIFiles:            "Files",
+	UIDetails:          "Details",
 	UIRendition:        "Rendition",
 	UISize:             "Size",
 	UIScrollBack:       "Back",

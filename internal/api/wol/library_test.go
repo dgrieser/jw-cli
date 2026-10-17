@@ -4,7 +4,10 @@ import (
 	"context"
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 func libraryClient(t *testing.T) *Client {
@@ -112,5 +115,25 @@ func TestCardLink(t *testing.T) {
 		if got != want {
 			t.Errorf("cardLink(%q) = %+v, want %+v", href, got, want)
 		}
+	}
+}
+
+// A songbook lists its songs by number as a grid of bare links.
+func TestLibraryGrid(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><body><article id="article"><h1>Sing</h1>
+<ul class="directory pageList"><li class="viewPage selected"><a href="/de/wol/publication/r10/lp-x/sjj/0"><span class="title">NUMMER</span></a></li></ul>
+<ul class="directory  grid" role="directory">
+<li class="gridItem"><a href="/de/wol/d/r10/lp-x/1102016801"><span class="title">1</span></a></li><li class="gridItem"><a href="/de/wol/d/r10/lp-x/1102016802"><span class="title">2</span></a></li>
+</ul></article></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := parseLibrary(doc.Selection, "https://wol.jw.org")
+	if len(page.Groups) != 1 || !page.Groups[0].Grid {
+		t.Fatalf("groups = %+v", page.Groups)
+	}
+	cards := page.Groups[0].Cards
+	if len(cards) != 2 || cards[0].Title != "1" || cards[0].Kind != DocumentKind || cards[1].DocID != 1102016802 {
+		t.Errorf("cards = %+v", cards)
 	}
 }

@@ -1824,9 +1824,16 @@
     h1.parentNode.insertBefore(row, h1);
     row.appendChild(h1);
     row.appendChild(bar);
-    // a title too long for its row ends in an ellipsis (style.css); the whole
-    // of it is its tooltip
+    // a title too long for its row is set smaller, over up to two lines, and
+    // only then ends in an ellipsis (style.css); the whole of it is its tooltip
     h1.title = h1.textContent;
+    function fit() {
+      h1.classList.remove("long");
+      if (h1.scrollWidth > h1.clientWidth + 1) h1.classList.add("long");
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
   })();
 
   // --- the overall history: every page read, behind the bar's clock ---------

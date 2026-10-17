@@ -185,6 +185,7 @@ var de = Messages{
 	UIPublished:        "Veröffentlicht",
 	UICategory:         "Kategorie",
 	UIFiles:            "Dateien",
+	UIDetails:          "Details",
 	UIRendition:        "Fassung",
 	UISize:             "Größe",
 	UIScrollBack:       "Zurück",
