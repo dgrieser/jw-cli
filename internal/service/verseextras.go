@@ -64,6 +64,10 @@ func RefPath(href string) string {
 	return u.Path
 }
 
+// refSeparator joins a footnote's pointer to what it points at ("Glossary →
+// Soul"): an arrow, as it is a pointer from one thing to another.
+const refSeparator = " → "
+
 // footnotesHTML resolves footnote markers and returns one block per footnote,
 // marked with the path of the marker it answers, so a page can go to it. A
 // footnote that cannot be read is left out: the verse reads without it.

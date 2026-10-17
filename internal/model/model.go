@@ -475,6 +475,9 @@ type Tooltip struct {
 	URL              string `json:"url,omitempty"`
 	ImageURL         string `json:"imageUrl,omitempty"`
 	PublicationTitle string `json:"publicationTitle,omitempty"`
+	// Symbol is the publication's symbol in the language read ("w22", "wcg"):
+	// how a citation names it in short.
+	Symbol string `json:"symbol,omitempty"`
 	// DocID is the document the passage belongs to as the answer's classes
 	// name it — all a footnote, which has no URL, says of where it is from —
 	// and Bible says that document is bible text: a book of a bible.

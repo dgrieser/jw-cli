@@ -788,6 +788,7 @@ details.section > summary a { color: inherit; }
    quieter than what it is called */
 details.section > summary .src { font-weight: 400; color: var(--muted); }
 details.section > summary .src.own-line { display: block; }
+details.section > summary .src.short { white-space: nowrap; }
 /* the link of a section headed by a publication or a verse: an icon right
    after its title, where it stays whether the section is open or closed, so
    the rest of the title opens and closes the section */

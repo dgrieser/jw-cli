@@ -2960,27 +2960,21 @@
       var target = a && linkTarget(a);
       if (target && (target.kind === "article" || target.kind === "media")) {
         var title = make("span", "title");
-        // the citation ahead of the arrow ("w85 1. 2. 15 → …") and the
-        // publication after the title ("Oktober (es27 …)") say where it is
-        // from, set apart from what it is called; all of it is one title,
-        // which wraps as one. A citation goes after its title, in brackets,
-        // the way a quotation names its publication.
-        var label = a.textContent, cut = label.indexOf(" → ");
-        if (cut > 0) {
-          title.appendChild(document.createTextNode(label.slice(cut + 3) + " "));
-          // a citation is short, and reads as one: never split over lines
-          title.appendChild(make("span", "src", "(" + label.slice(0, cut).replace(/ /g, "\u00a0") + ")"));
-        } else {
-          while (a.firstChild) title.appendChild(a.firstChild);
-        }
+        // where the passage is from follows the link in brackets — "Oktober
+        // (es27)", "Das „Zeichen“ sehen und verstehen (w85 1. 2. 15)" — set
+        // apart from what it is called, and all of it one title, which wraps
+        // as one
+        while (a.firstChild) title.appendChild(a.firstChild);
         var rest = "";
         while (a.nextSibling) {
           rest += a.nextSibling.textContent;
           s.removeChild(a.nextSibling);
         }
-        if (rest.trim()) {
+        rest = rest.trim();
+        if (rest) {
+          // a citation is short, and reads as one: never split over lines
           title.appendChild(document.createTextNode(" "));
-          title.appendChild(make("span", "src", rest.trim()));
+          title.appendChild(make("span", rest.length <= 30 ? "src short" : "src", rest));
         }
         s.replaceChild(title, a);
         srcLine(title);

@@ -137,6 +137,8 @@ type Node struct {
 	// ("Insight on the Scriptures, Volume 2"): what a citation naming a page
 	// alone is a page of.
 	Publication string
+	// Symbol is that publication's symbol ("w22"), what a heading names it by.
+	Symbol string
 	// Notes, Links and Cited are the study material of a verse; StudyErr says
 	// the study pane could not be read, for the same reason Err is kept.
 	Notes []model.StudyNote
