@@ -2993,7 +2993,7 @@
     var label = (what || "↗") + ": " + (summary.textContent || "").replace(/\s+/g, " ").trim();
     a.setAttribute("aria-label", label);
     a.setAttribute("title", label);
-    a.textContent = "↗";
+    a.textContent = "";
   }
 
   // ownVerses is the first and last verse id a section shows itself — not in

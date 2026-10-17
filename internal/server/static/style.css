@@ -21,6 +21,7 @@
   --book-dark: #3e6aa3;
   --book-mid: #4b7cbf;
   --book-light: #6c97c8;
+  --external: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3'/%3E%3C/svg%3E");
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23676b74' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 
   --gutter: clamp(1rem, 3vw, 2.5rem);
@@ -783,25 +784,30 @@ details.section[open] > summary {
 }
 details.section > summary :is(h1, h2, h3, h4, h5, h6, p) { display: inline; font-size: inherit; margin: 0; }
 details.section > summary a { color: inherit; }
-/* the link of a section headed by a publication: a small button at its end,
-   so the rest of the title opens and closes the section */
+/* the link of a section headed by a publication or a verse: an icon right
+   after its title, where it stays whether the section is open or closed, so
+   the rest of the title opens and closes the section */
 details.section > summary > a.follow {
   flex: none;
-  margin-left: auto;
-  /* nearer the pill's rounded end, so its circle sits in it as in a socket */
-  margin-right: -0.5rem;
   display: inline-grid;
   place-items: center;
-  width: 1.7rem;
-  height: 1.7rem;
-  border: 1px solid var(--line);
-  border-radius: 50%;
+  /* a finger's target round a small icon, without widening the pill */
+  width: 1.6rem;
+  height: 1.6rem;
+  margin: -0.3rem -0.45rem -0.3rem -0.2rem;
+  border-radius: var(--r);
   color: var(--muted);
-  font-size: 0.8rem;
-  font-weight: 500;
   text-decoration: none;
 }
-details.section > summary > a.follow:hover { color: var(--accent); border-color: var(--accent); }
+details.section > summary > a.follow::before {
+  content: "";
+  width: 0.85rem;
+  height: 0.85rem;
+  background: currentColor;
+  -webkit-mask: var(--external) center / contain no-repeat;
+  mask: var(--external) center / contain no-repeat;
+}
+details.section > summary > a.follow:hover { color: var(--accent); background: var(--line); }
 /* held, a link is the page's menu, not one the phone offers to share */
 .js main a[href] { -webkit-touch-callout: none; }
 details.section > summary > a.follow { user-select: none; }
@@ -1465,8 +1471,10 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 /* what is there besides the page's content — its details, its files —
    folded away at its end */
-details.fold { max-width: 60rem; margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
-details.fold + details.fold { margin-top: 0; }
+/* the first follows the page without a rule of its own, which would double
+   the one its last row already draws; the rest are set off from the one before */
+details.fold { max-width: 60rem; margin: 1.5rem 0 0; }
+details.fold + details.fold { margin-top: 0; border-top: 1px solid var(--line); }
 details.fold > summary {
   display: flex;
   align-items: center;
