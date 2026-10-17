@@ -2963,11 +2963,12 @@
         // the citation ahead of the arrow ("w85 1. 2. 15 → …") and the
         // publication after the title ("Oktober (es27 …)") say where it is
         // from, set apart from what it is called; all of it is one title,
-        // which wraps as one
+        // which wraps as one. A citation goes after its title, in brackets,
+        // the way a quotation names its publication.
         var label = a.textContent, cut = label.indexOf(" → ");
         if (cut > 0) {
-          title.appendChild(make("span", "src", label.slice(0, cut + 3)));
-          title.appendChild(document.createTextNode(label.slice(cut + 3)));
+          title.appendChild(document.createTextNode(label.slice(cut + 3) + " "));
+          title.appendChild(make("span", "src", "(" + label.slice(0, cut) + ")"));
         } else {
           while (a.firstChild) title.appendChild(a.firstChild);
         }
