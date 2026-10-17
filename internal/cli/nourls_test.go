@@ -109,7 +109,7 @@ func TestNoURLsBibleCited(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
+		"mwb26 Juli S. 14-15",
 		// the passage read out of the document, links and all stripped
 		"lies dazu die Einsichten nach",
 	} {

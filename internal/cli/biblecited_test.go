@@ -94,12 +94,16 @@ func TestBibleCited(t *testing.T) {
 		// follows what is printed
 		"2 publications citing Jeremiah 31:15",
 		"31. August–6. September",
-		"mwb26 Juli S. 14-15 - Leben und Dienst: Arbeitsheft (2026)",
+		// a publication is named by its citation alone, not its title
+		"31. August–6. September — mwb26 Juli S. 14-15\n",
 		"Wie hat sich diese Prophezeiung",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "Leben und Dienst: Arbeitsheft") {
+		t.Errorf("output names the publication's title:\n%s", out)
 	}
 }
 
