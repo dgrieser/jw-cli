@@ -95,6 +95,34 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	return nav
 }
 
+// readingCrumbs is the trail above a reading: the bible, the book its
+// passages are all in, and the chapter of the one passage when it shows only
+// part of it.
+func readingCrumbs(res service.ReadResult, page *biblePage) []crumb {
+	trail := []crumb{page.bibleCrumb()}
+	if len(res.Passages) == 0 || res.Table == nil {
+		return trail
+	}
+	first := res.Passages[0]
+	if first.Book < 1 || first.Book > 66 {
+		return trail
+	}
+	for _, p := range res.Passages[1:] {
+		if p.Book != first.Book {
+			return trail
+		}
+	}
+	name := res.Table.Name(first.Book)
+	trail = append(trail, crumb{Label: name, Href: page.BookLink(first.Book)})
+	if len(res.Passages) == 1 && !first.Whole && first.Chapter > 0 {
+		trail = append(trail, crumb{
+			Label: fmt.Sprintf("%s %d", page.T.UIChapter, first.Chapter),
+			Href:  page.chapterHref(firstNonEmpty(first.Bible, page.Edition), name, first.Chapter),
+		})
+	}
+	return trail
+}
+
 // chapterStudyView is one part of what the library has on a chapter, as the
 // chapter's number in its heading unfolds it, section by section like a
 // verse's: the headings of the book's outline that cover the chapter, the

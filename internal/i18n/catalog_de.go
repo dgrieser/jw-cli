@@ -137,6 +137,7 @@ var de = Messages{
 	UILanguageHint:     "JW-Symbol (X), ISO-Code (de) oder BCP-47 (de-AT)",
 	UIGo:               "Los",
 	UIChapters:         "Kapitel",
+	UIChapter:          "Kapitel",
 	UIAllBooks:         "Alle Bücher",
 	UIShow:             "Anzeigen",
 	UIRead:             "Lesen",
