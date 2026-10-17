@@ -2968,7 +2968,8 @@
         var label = a.textContent, cut = label.indexOf(" → ");
         if (cut > 0) {
           title.appendChild(document.createTextNode(label.slice(cut + 3) + " "));
-          title.appendChild(make("span", "src", "(" + label.slice(0, cut) + ")"));
+          // a citation is short, and reads as one: never split over lines
+          title.appendChild(make("span", "src", "(" + label.slice(0, cut).replace(/ /g, "\u00a0") + ")"));
         } else {
           while (a.firstChild) title.appendChild(a.firstChild);
         }
