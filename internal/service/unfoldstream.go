@@ -259,13 +259,9 @@ func runSession(ctx context.Context, sess *unfold.Session, groups []unfold.Group
 	return res.Nodes, stoppedNote(res.Stopped, res.Pending, txt), nil
 }
 
-// marginalLabel heads a marginal reference inside the section naming the verse
-// it belongs to: the verse it points at is all there is left to say.
-func marginalLabel(n unfold.Node, txt *i18n.Messages) string {
-	return withSource(marginalParts(n, txt))
-}
-
-// marginalParts are the halves of marginalLabel, as headingParts gives them.
+// marginalParts head a marginal reference inside the section naming the
+// verse it belongs to — the verse it points at is all there is left to say —
+// as the halves headingParts gives.
 func marginalParts(n unfold.Node, txt *i18n.Messages) (string, string) {
 	if n.Ref.IsVerse() && n.Title != "" && isMarker(strings.TrimSpace(n.Ref.Text)) {
 		return n.Title, ""

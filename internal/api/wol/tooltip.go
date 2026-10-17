@@ -29,7 +29,7 @@ func DocIDOfClasses(classes string) int {
 // series it belongs to.
 func SymbolOfClasses(classes string) string {
 	sym := ""
-	for _, f := range strings.Fields(classes) {
+	for f := range strings.FieldsSeq(classes) {
 		if s, ok := strings.CutPrefix(f, "pub-"); ok && s != "" {
 			sym = s
 		}
