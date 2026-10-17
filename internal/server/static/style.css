@@ -658,8 +658,10 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .document a:hover { text-decoration-color: currentColor; }
 
 /* what wol ships along that is not reading matter: its image viewer's
-   buttons and the hidden fields of its page */
-.document :is(button, input, [class^="pswp"]):not([data-ui]) { display: none; }
+   buttons and the hidden fields of its page — not the page's own controls,
+   nor what is inside them, as the history beside a title moved into a
+   document is */
+.document :is(button, input, [class^="pswp"]):not([data-ui], [data-ui] *) { display: none; }
 
 /* what wol marks in a verse: the verse number, and the marker to its
    marginal references, as quiet superscripts */
