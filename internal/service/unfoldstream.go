@@ -259,13 +259,14 @@ func runSession(ctx context.Context, sess *unfold.Session, groups []unfold.Group
 	return res.Nodes, stoppedNote(res.Stopped, res.Pending, txt), nil
 }
 
-// marginalLabel heads a marginal reference inside the section naming the verse
-// it belongs to: the verse it points at is all there is left to say.
-func marginalLabel(n unfold.Node, txt *i18n.Messages) string {
+// marginalParts head a marginal reference inside the section naming the
+// verse it belongs to — the verse it points at is all there is left to say —
+// as the halves headingParts gives.
+func marginalParts(n unfold.Node, txt *i18n.Messages) (string, string) {
 	if n.Ref.IsVerse() && n.Title != "" && isMarker(strings.TrimSpace(n.Ref.Text)) {
-		return n.Title
+		return n.Title, ""
 	}
-	return unfoldHeading(n, "", txt)
+	return headingParts(n, "", txt)
 }
 
 // CitationRef is one citation a web page asks to be unfolded: the wol path
@@ -358,11 +359,11 @@ func (s *Service) StreamRefsUnfold(ctx context.Context, lng model.Language, refs
 		}
 		notes = appendNote(notes, note)
 		for _, n := range expanded[0] {
-			label := unfoldHeading(n, "", txt)
+			title, src := headingParts(n, "", txt)
 			var b strings.Builder
-			writeUnfoldNode(&b, n, SectionLevel, label, txt)
+			writeUnfoldNode(&b, n, SectionLevel, withSource(title, src), txt)
 			out.Section(UnfoldSection{
-				Title: nodeTitle(n, label), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
+				Title: nodeTitle(n, title, src), Body: b.String(), Order: i, Ref: RefPath(n.Ref.Path),
 				Doc: wol.DocIDFromURL(n.URL),
 			})
 		}

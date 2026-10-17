@@ -202,9 +202,9 @@ type datedVideo struct {
 }
 
 // dateVideos looks up when each video was first published: the search does
-// not say, the mediator's media item does. The day heads the video's line, in
-// the place a publication names its issue. Best effort: a video whose item
-// cannot be read stays undated.
+// not say, the mediator's media item does. Its code (MediaCode) heads the
+// video's line, in the place a publication names its issue. Best effort: a
+// video whose item cannot be read stays undated and unnamed.
 //
 // With refs, the reference each video was found by, its excerpt is widened
 // from the item's subtitles (see transcriptExcerpt). Best effort as well: a
@@ -226,16 +226,15 @@ func (s *Service) dateVideos(ctx context.Context, lng model.Language, videos []m
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			item, err := s.Mediator.MediaItem(ctx, lng.Symbol, v.LANK)
-			if err != nil {
+			facts, ok := s.mediaFacts(ctx, lng, v.LANK)
+			if !ok {
 				return
 			}
-			if t, err := time.Parse(time.RFC3339, item.FirstPublished); err == nil {
-				out[i].published = t
-				out[i].Context = t.Format(time.DateOnly)
-			}
+			out[i].published = facts.published()
+			// named like a publication: series and year ("vi-jwb23")
+			out[i].Context = facts.code(v.LANK)
 			if i < len(refs) {
-				if excerpt, ok := s.widenExcerpt(ctx, item, v.Snippet, refs[i]); ok {
+				if excerpt, ok := s.widenExcerpt(ctx, facts.Subtitles, v.Snippet, refs[i]); ok {
 					out[i].Excerpt = excerpt
 				}
 			}

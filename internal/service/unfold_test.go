@@ -23,7 +23,7 @@ func TestUnfoldHeading(t *testing.T) {
 		// a publication passage: the citation points, the title says what it is
 		{"publication citation and title",
 			unfold.Node{Ref: unfold.Ref{Text: "6 Abs. 15", Path: "/wol/pc/1/2"}, Title: "Vertraue dem Richter"},
-			"6 Abs. 15 → Vertraue dem Richter"},
+			"Vertraue dem Richter (6 Abs. 15)"},
 		// a verse: wol titles it with the same reference spelled out, so the
 		// title would only say it twice
 		{"verse title dropped",
@@ -68,7 +68,12 @@ func TestUnfoldHeadingCitationAlreadySaysIt(t *testing.T) {
 	}
 	// a title that says something else still completes the citation
 	other := unfold.Node{Ref: unfold.Ref{Text: "it-2 528", Path: "/wol/pc/1/2"}, Title: "Love"}
-	if got := unfoldHeading(other, "", i18n.EN.Text()); got != "it-2 528 → Love" {
+	if got := unfoldHeading(other, "", i18n.EN.Text()); got != "Love (it-2 528)" {
+		t.Errorf("got %q", got)
+	}
+	// with the publication's symbol known, the headline is followed by it alone
+	n.Symbol = "wp14"
+	if got := unfoldHeading(n, "", i18n.EN.Text()); got != "God So Loved the World (wp14)" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -329,7 +334,7 @@ func TestWriteCited(t *testing.T) {
 		"<h4>Quotations of Jeremiah 31:15</h4>",
 		// every publication heads the passage it quotes the verse in
 		`<h5><a href="https://wol.jw.org/en/wol/d/r1/lp-e/2014927">Questions From Readers</a>` +
-			` (w14 12/15 p. 21 - The Watchtower 2014)</h5>`,
+			` (w14 12/15 p. 21)</h5>`,
 		"Rachel&#39;s first son was Joseph.",
 		// the teaser stands in where no passage could be placed, and brings
 		// its own paragraph rather than being wrapped in a second one

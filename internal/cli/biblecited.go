@@ -8,6 +8,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -76,7 +77,15 @@ Examples:
 				if err != nil {
 					return results.ResultSet{}, "", err
 				}
-				return listingOf(out), a.Text().CitedResults(out.Total, label), nil
+				rs := listingOf(out)
+				// a quoting publication is named by its citation alone, as an
+				// unfolded verse heads it ("Oktober — es27"); the data keeps all
+				if format, err := a.Format(); err == nil && format != render.JSON {
+					for i := range rs.Items {
+						rs.Items[i].Context = service.CitationOf(rs.Items[i].Context)
+					}
+				}
+				return rs, a.Text().CitedResults(out.Total, label), nil
 			}
 			if interactive {
 				return runSearchTUI(ctx, a, lng, func(page int) (results.ResultSet, string, error) {

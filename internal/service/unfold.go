@@ -1197,14 +1197,11 @@ func demoteHeadings(fragment string, below int) string {
 	return out
 }
 
-// refSeparator joins the two halves of a reference heading. An arrow rather than
-// a colon: every one of these headings is a pointer from one thing to another,
-// and a colon reads as "label: value" instead.
-const refSeparator = " → "
-
-// unfoldHeading is the one-line label for an expanded reference: the citation as
-// the document wrote it, then what the passage turned out to be —
-// "6 Abs. 15 → Vertraue dem barmherzigen „Richter der ganzen Erde“".
+// unfoldHeading is the one-line label for an expanded reference: what the
+// passage turned out to be, then the citation as the document wrote it in
+// brackets — "Vertraue dem barmherzigen „Richter der ganzen Erde“ (6 Abs. 15)",
+// "Das „Zeichen“ sehen und verstehen (w85 1. 2. 15)" — the way a quotation
+// names the publication it is from.
 //
 // A verse is the exception. wol titles a verse citation with the same reference
 // spelled out, so "Apg. 24:15: Apostelgeschichte 24:15" says one thing twice and
@@ -1220,35 +1217,65 @@ const refSeparator = " → "
 // it ("4. Mo. 14:1-10, 20-38", "it-2 53, 760"), which says nothing on its own:
 // a verse is named by its own title, and a page that no citation before it
 // spells out (unfold.Continue) by the publication it is a page of.
+//
+// A citation that names the title itself — a research guide's entry names the
+// article by its headline — is followed by the publication's symbol instead:
+// "Mut in finsteren Zeiten (wcg)".
 func unfoldHeading(n unfold.Node, source string, txt *i18n.Messages) string {
+	title, src := headingParts(n, source, txt)
+	return withSource(title, src)
+}
+
+// headingParts are the two halves of unfoldHeading: what the passage is, and
+// where it is from, which may be empty.
+func headingParts(n unfold.Node, source string, txt *i18n.Messages) (title, src string) {
 	// citation text carries the punctuation that joined it to its sentence
 	// ("Joh. 5:29;")
 	ref := strings.TrimRight(n.Ref.Text, ",;. ")
 	if ref == "" || isMarker(ref) {
 		switch {
 		case n.Title == "":
-			return ref
+			return ref, ""
 		case !n.Ref.IsVerse():
-			return n.Title
+			return n.Title, ""
 		case source == "":
-			return txt.MarginalReference + " " + n.Title
+			return txt.MarginalReference + " " + n.Title, ""
 		}
-		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source)
+		return fmt.Sprintf(txt.MarginalReferenceWithSource, n.Title, source), ""
 	}
 	if n.Ref.IsVerse() && n.Title != "" && (n.Item > 0 || !hasLetter(ref)) {
 		// one of several verses the citation names, which names them all, or
 		// a citation naming verses alone ("20-38", continuing "4. Mo. 14:1-10"):
 		// the verse's own title says which they are
-		return strings.TrimRight(n.Title, ",;. ")
+		return strings.TrimRight(n.Title, ",;. "), ""
 	}
-	if !n.Ref.IsVerse() && !hasLetter(ref) && n.Publication != "" {
+	if !n.Ref.IsVerse() && !hasLetter(ref) {
 		// a page alone, with no citation before it to say of what
-		ref = n.Publication + ", " + ref
+		switch {
+		case n.Symbol != "":
+			ref = n.Symbol + " " + ref
+		case n.Publication != "":
+			ref = n.Publication + ", " + ref
+		}
 	}
-	if n.Ref.IsVerse() || n.Title == "" || saysIt(ref, n.Title) {
-		return ref
+	if n.Ref.IsVerse() || n.Title == "" {
+		return ref, ""
 	}
-	return ref + refSeparator + n.Title
+	if saysIt(ref, n.Title) {
+		if n.Symbol != "" {
+			return n.Title, n.Symbol
+		}
+		return ref, ""
+	}
+	return n.Title, ref
+}
+
+// withSource is a title with where it is from after it, in brackets.
+func withSource(title, src string) string {
+	if src == "" {
+		return title
+	}
+	return title + " (" + src + ")"
 }
 
 // hasLetter reports whether s names anything in words rather than numbers.
@@ -1257,11 +1284,17 @@ func hasLetter(s string) bool { return strings.IndexFunc(s, unicode.IsLetter) >=
 // nodeTitle is the heading of an expanded reference as HTML: a passage of a
 // publication links to the document it was taken from, which a page offers
 // to open in full; a verse, and what could not be read, are plain text.
-func nodeTitle(n unfold.Node, label string) string {
+func nodeTitle(n unfold.Node, title, src string) string {
 	if n.Ref.IsVerse() || n.Err != nil || n.URL == "" {
-		return html.EscapeString(label)
+		return html.EscapeString(withSource(title, src))
 	}
-	return fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(n.URL), html.EscapeString(label))
+	// the link is the title; where it is from follows it, as a quotation's
+	// publication does
+	head := fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(n.URL), html.EscapeString(title))
+	if src != "" {
+		head += " (" + html.EscapeString(src) + ")"
+	}
+	return head
 }
 
 // saysIt reports whether the citation already names what the passage turned out
@@ -1462,8 +1495,8 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 		// a video has no wol page; its jw.org one names it
 		label := fmt.Sprintf(`<a href="%s">%s</a>`,
 			html.EscapeString(firstNonEmptyString(item.WOLLink, item.JWLink)), html.EscapeString(collapseSpace(item.Title)))
-		if item.Context != "" {
-			label += " (" + html.EscapeString(item.Context) + ")"
+		if src := CitationOf(item.Context); src != "" {
+			label += " (" + html.EscapeString(src) + ")"
 		}
 		b.WriteString(headingHTML(level+1, label))
 		// the passage itself, as the document wrote it; its own headings are
@@ -1477,13 +1510,24 @@ func writeCitedItems(b *strings.Builder, items []model.Result, level int) {
 	}
 }
 
+// CitationOf is the citation alone of where a search found a passage, as a
+// heading names it: "w26 April S. 8-13" of "w26 April S. 8-13 - Der Wachtturm
+// (Studienausgabe) 2026", the publication's title left to its page.
+func CitationOf(context string) string {
+	if cite, _, ok := strings.Cut(context, " - "); ok && strings.TrimSpace(cite) != "" {
+		return strings.TrimSpace(cite)
+	}
+	return strings.TrimSpace(context)
+}
+
 // writeUnfoldNodes renders one tier of an expansion. source names the passage
 // these references were found in, so a bare marker can say where it came from;
 // it is empty for the references of the document itself.
 func writeUnfoldNodes(b *strings.Builder, nodes []unfold.Node, level int, source string, txt *i18n.Messages) {
 	for _, n := range nodes {
-		label := unfoldHeading(n, source, txt)
-		b.WriteString(headingHTML(level, nodeTitle(n, label)))
+		title, src := headingParts(n, source, txt)
+		label := withSource(title, src)
+		b.WriteString(headingHTML(level, nodeTitle(n, title, src)))
 		writeUnfoldNode(b, n, level, label, txt)
 	}
 }

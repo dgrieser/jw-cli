@@ -53,6 +53,7 @@ func CitationPath(path string) string {
 // the others for splitItems to make nodes of.
 func (n *Node) resolved(tip model.Tooltip) {
 	n.Title, n.HTML, n.URL, n.Publication, n.more = tip.Title, tip.ContentHTML, tip.URL, tip.PublicationTitle, tip.More
+	n.Symbol = tip.Symbol
 }
 
 // setCited records who quotes the verse a node resolved to.

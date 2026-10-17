@@ -40,6 +40,25 @@
     });
   }
 
+  // --- the chapters around a reading: the book's abbreviation where its ------
+  // name does not fit ("Offb. 2" for "Offenbarung 2"), and an ellipsis only
+  // where that does not fit either
+
+  (function () {
+    var labels = Array.prototype.slice.call(document.querySelectorAll(".chapter-nav .lbl[data-short]"));
+    if (!labels.length) return;
+    labels.forEach(function (l) { l.setAttribute("data-full", l.textContent); });
+    function fit() {
+      labels.forEach(function (l) { l.textContent = l.getAttribute("data-full"); });
+      labels.forEach(function (l) {
+        if (l.scrollWidth > l.clientWidth + 1) l.textContent = l.getAttribute("data-short");
+      });
+    }
+    fit();
+    window.addEventListener("resize", fit);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fit);
+  })();
+
   // --- text size -----------------------------------------------------------
 
   // the size is a percentage of the browser's own, kept in this browser; the
@@ -2960,8 +2979,24 @@
       var target = a && linkTarget(a);
       if (target && (target.kind === "article" || target.kind === "media")) {
         var title = make("span", "title");
+        // where the passage is from follows the link in brackets — "Oktober
+        // (es27)", "Das „Zeichen“ sehen und verstehen (w85 1. 2. 15)" — set
+        // apart from what it is called, and all of it one title, which wraps
+        // as one
         while (a.firstChild) title.appendChild(a.firstChild);
+        var rest = "";
+        while (a.nextSibling) {
+          rest += a.nextSibling.textContent;
+          s.removeChild(a.nextSibling);
+        }
+        rest = rest.trim();
+        if (rest) {
+          // a citation is short, and reads as one: never split over lines
+          title.appendChild(document.createTextNode(" "));
+          title.appendChild(make("span", rest.length <= 30 ? "src short" : "src", rest));
+        }
         s.replaceChild(title, a);
+        srcLine(title);
         a.className = "follow";
         // the whole document, not the passage the section already shows
         try {
@@ -2988,6 +3023,46 @@
       labelFollow(go, T.followTab, s);
       s.appendChild(go);
     });
+  }
+
+  // srcLine starts the source of a title on a line of its own when the title
+  // itself takes one line and the source would not fit beside it: never
+  // split across them, and never put off to a third. A title running onto a
+  // second line, or one the row has room for with its source, stays as it is.
+  // It is measured again whenever the title's width changes — it is shown,
+  // the screen turns.
+  // A closed entry is as wide as its title, so a title set over two lines
+  // keeps its entry narrow however wide the list grows: the list is watched
+  // too, and its titles measured again when it changes.
+  var srcObserver = window.ResizeObserver && new ResizeObserver(function (entries) {
+    entries.forEach(function (e) {
+      if (e.target.classList.contains("title")) fitSrc(e.target);
+      else e.target.querySelectorAll(".title > .src").forEach(function (src) { fitSrc(src.parentNode); });
+    });
+  });
+
+  function srcLine(title) {
+    if (srcObserver && title.querySelector(":scope > .src")) srcObserver.observe(title);
+  }
+
+  function fitSrc(title) {
+    var src = title.querySelector(":scope > .src");
+    if (!src) return;
+    var list = title.closest(".sections");
+    if (list) srcObserver.observe(list);
+    src.classList.remove("own-line");
+    var r = document.createRange();
+    r.setStart(title, 0);
+    r.setEndBefore(src);
+    var tops = [];
+    Array.prototype.forEach.call(r.getClientRects(), function (rect) {
+      if (rect.width && !tops.some(function (t) { return Math.abs(t - rect.top) < 2; })) tops.push(rect.top);
+    });
+    if (tops.length !== 1) return;
+    var spills = Array.prototype.some.call(src.getClientRects(), function (rect) {
+      return rect.top > tops[0] + 2;
+    });
+    if (spills) src.classList.add("own-line");
   }
 
   function labelFollow(a, what, summary) {

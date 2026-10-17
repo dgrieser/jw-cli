@@ -24,6 +24,19 @@ func DocIDOfClasses(classes string) int {
 	return 0
 }
 
+// SymbolOfClasses is the publication symbol a document's classes name: the
+// last pub-… class with one, the issue's own ("pub-w pub-w22") after the
+// series it belongs to.
+func SymbolOfClasses(classes string) string {
+	sym := ""
+	for f := range strings.FieldsSeq(classes) {
+		if s, ok := strings.CutPrefix(f, "pub-"); ok && s != "" {
+			sym = s
+		}
+	}
+	return sym
+}
+
 // tooltipItem is one passage of a citation endpoint's answer. A citation can
 // name several — a marginal reference points at every verse it lists, each an
 // item of its own — and every one of them belongs to the answer.
@@ -55,6 +68,7 @@ func (c *Client) tooltip(items []tooltipItem, locale string) model.Tooltip {
 			URL:              absURL(c.hc.Base.WOL, relocalizeURL(it.URL, locale)),
 			ImageURL:         absURL(c.hc.Base.WOL, relocalizeURL(it.ImageURL, locale)),
 			PublicationTitle: it.PublicationTitle,
+			Symbol:           SymbolOfClasses(it.ArticleClasses),
 			DocID:            DocIDOfClasses(it.ArticleClasses),
 			Bible:            slices.Contains(strings.Fields(it.ArticleClasses), "bible"),
 		}

@@ -106,14 +106,14 @@ func marginalSection(passage string, txt *i18n.Messages) UnfoldSection {
 // the passage in its heading, for a reader that does not see it nested under
 // the passage's own; empty leaves it to the nesting.
 func marginalEntry(n unfold.Node, source string, level int, txt *i18n.Messages) UnfoldSection {
-	label := marginalLabel(n, txt)
+	title, src := marginalParts(n, txt)
 	if source != "" {
-		label = unfoldHeading(n, source, txt)
+		title, src = headingParts(n, source, txt)
 	}
 	var b strings.Builder
-	writeUnfoldNode(&b, n, level, label, txt)
+	writeUnfoldNode(&b, n, level, withSource(title, src), txt)
 	return UnfoldSection{
-		Title: nodeTitle(n, label), Body: b.String(), In: marginalKey, Ref: RefPath(n.Ref.Path),
+		Title: nodeTitle(n, title, src), Body: b.String(), In: marginalKey, Ref: RefPath(n.Ref.Path),
 	}
 }
 
