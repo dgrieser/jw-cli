@@ -690,8 +690,8 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .cs-outline .bo-item { margin: 0.15rem 0; }
 .cs-gallery .gallery-grid { padding: 0; margin: 0 0 0.5rem; }
 .cs-gallery .gallery-grid li { margin: 0; }
-/* on from a reading: all of a chapter shown in part, the chapters around it */
-.chapter-nav .btn { min-height: 2.25rem; padding: 0.3rem 0.9rem; text-decoration: none; }
+/* on from a reading: all of a chapter shown in part, the chapters around it,
+   as small as the other buttons under a page's text */
 /* the chapter before, all of this one, and the one after: one row */
 .chapter-nav { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr); align-items: center; gap: 0.5rem; max-width: var(--measure); margin: -0.5rem 0 1.5rem; }
 .chapter-nav .prev { justify-self: start; }

@@ -37,7 +37,7 @@ func TestUIBibleAllTranslations(t *testing.T) {
 		t.Errorf("verse shown %d times, want 2", n)
 	}
 	// the chapter links read on in every translation
-	if !strings.Contains(body, `<a class="btn prev" href="/bible?all=1&amp;bible=nwtsty&amp;ref=John&#43;2&amp;lang=en"`) {
+	if !strings.Contains(body, `<a class="btn small prev" href="/bible?all=1&amp;bible=nwtsty&amp;ref=John&#43;2&amp;lang=en"`) {
 		t.Errorf("chapter links drop the translations:\n%s", body)
 	}
 }
