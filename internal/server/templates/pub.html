@@ -2,21 +2,6 @@
 {{- if .Crumbs}}{{template "crumbs" .}}{{end}}
 <h1>{{.Heading}}</h1>
 
-{{- if .Publication}}
-<div class="mediaitem pubitem">
-  {{- if .Cover}}
-  <p class="cover"><img src="{{.Cover}}" alt="" loading="lazy" referrerpolicy="no-referrer"></p>
-  {{- end}}
-  <div class="mediabody">
-    {{- if .Facts}}
-    <dl class="facts">
-      {{- range .Facts}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
-    </dl>
-    {{- end}}
-  </div>
-</div>
-{{- end}}
-
 {{- if .Categories}}
 <ul class="pubchips">
   {{- range .Categories}}
@@ -92,6 +77,23 @@
   </ol>
   {{- end}}
 </section>
+{{- end}}
+{{- if .Publication}}
+<details class="fold pubfacts">
+<summary><h2>{{.T.UIDetails}}</h2></summary>
+<div class="mediaitem pubitem">
+  {{- if .Cover}}
+  <p class="cover"><img src="{{.Cover}}" alt="" loading="lazy" referrerpolicy="no-referrer"></p>
+  {{- end}}
+  <div class="mediabody">
+    {{- if .Facts}}
+    <dl class="facts">
+      {{- range .Facts}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+    </dl>
+    {{- end}}
+  </div>
+</div>
+</details>
 {{- end}}
 {{- if .Files}}
 <details class="fold pubfiles">
