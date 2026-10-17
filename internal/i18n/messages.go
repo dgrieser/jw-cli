@@ -239,6 +239,7 @@ type Messages struct {
 	UILanguageHint    string
 	UIGo              string
 	UIChapters        string
+	UIChapter         string
 	UIAllBooks        string
 	UIShow            string
 	UIRead            string

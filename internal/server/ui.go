@@ -1165,6 +1165,9 @@ type biblePage struct {
 	// ChapterNav leads on from the reading: to the chapters before and after
 	// it, and to all of the chapter it shows part of.
 	ChapterNav *chapterNavView
+	// Crumbs lead up from what is shown: to the book grid, the book's
+	// chapters, the whole chapter.
+	Crumbs []crumb
 }
 
 // bibleSearchView is a text search of the bible as the page lists it: the
@@ -1195,6 +1198,11 @@ type bibleHitView struct {
 type bibleHitRef struct {
 	Label string
 	Href  string
+}
+
+// bibleCrumb leads to the book grid of the edition read.
+func (p biblePage) bibleCrumb() crumb {
+	return crumb{Label: p.T.UINavBible, Href: p.WithLang("/bible?bible=" + url.QueryEscape(p.Edition))}
 }
 
 // BookLink leads from the book grid to the chapter grid of one book.
@@ -1413,6 +1421,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	// what is not a reference is words to look for in the bible
 	if _, _, err := s.svc.ParseRefs(r.Context(), lng, page.Ref); err != nil {
 		s.bibleSearch(r, lng, &page)
+		page.Crumbs = []crumb{page.bibleCrumb()}
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -1433,6 +1442,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, &page, depth)
 	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
+	page.Crumbs = readingCrumbs(res, &page)
 	if res.Table != nil {
 		page.BookNames = map[int]string{}
 		for b := 1; b <= 66; b++ {
@@ -1516,9 +1526,13 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
+			page.Crumbs = []crumb{page.bibleCrumb()}
 			page.SiteURL = s.wolPage(r.Context(), lng, "binav", fmt.Sprintf("/%s/%d", url.PathEscape(page.Edition), book))
 			if view := r.FormValue("view"); view != "" {
 				s.bookDoc(r, lng, view, page)
+				if page.Doc != nil {
+					page.Crumbs = append(page.Crumbs, crumb{Label: page.BookName, Href: page.BookLink(book)})
+				}
 			}
 			return
 		}
@@ -1540,6 +1554,7 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 			return
 		}
 		page.BibleGallery = &g
+		page.Crumbs = []crumb{page.bibleCrumb()}
 		if g.URL != "" {
 			page.SiteURL = g.URL
 		}
