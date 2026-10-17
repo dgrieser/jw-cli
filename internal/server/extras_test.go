@@ -33,7 +33,7 @@ func TestUIDailyTextExtras(t *testing.T) {
 		t.Errorf("the cited verses are listed below the text:\n%s", body)
 	}
 	for _, want := range []string{
-		`<summary><h2>Images <span class="count">1</span></h2></summary>`,
+		`<summary><h2>Images</h2></summary>`,
 		`<p class="imagemeta">Alt text: Joshua at the Jordan</p>`,
 		`<p class="imagemeta">Size: 1200×600 px</p>`,
 	} {
