@@ -919,7 +919,7 @@ details.section.fresh { animation: pop 260ms ease-out; }
 .document a.b, .document a.fn, .document .item-text a.vl, .document .item-text a.cl { cursor: pointer; }
 @keyframes pop { from { opacity: 0; transform: translateY(3px) scale(0.98); } }
 
-.document > .sections.extras, .sections.extras { margin: 1.5rem 0; max-width: var(--measure); }
+details.fold.extras { max-width: var(--measure); }
 
 /* unfolding: an item has no button of its own — its links unfold it, and
    held offer how deep. The page bar's diamond unfolds them all. */
@@ -1101,7 +1101,7 @@ section.entry .note { margin: 0.6rem 0; line-height: 1.65; }
 section.entry ul { padding-left: 1.3rem; }
 section.entry li { margin-bottom: 0.4rem; }
 
-.sections.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
+details.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
 
 ul.gallery {
   list-style: none;
@@ -1492,7 +1492,7 @@ details.fold + details.fold { margin-top: 0; }
    guide: "Allgemeines", "Familienmitglieder" …) look the same, one under
    the other */
 .document details:not(.section) { max-width: 60rem; margin: 0; border-top: 1px solid var(--line); }
-.document details:not(.section):last-of-type { border-bottom: 1px solid var(--line); }
+.document details:not(.section, .print-edition):last-of-type { border-bottom: 1px solid var(--line); }
 :is(details.fold, .document details:not(.section)) > summary {
   display: flex;
   align-items: center;
@@ -1598,6 +1598,9 @@ tbody tr:hover { background: var(--surface); }
   white-space: nowrap;
 }
 .pb-up[hidden] { display: none; }
+/* tapped, the bar's links show no highlight of the phone's own, as its
+   buttons do not */
+.page-bar a { -webkit-tap-highlight-color: transparent; }
 /* drawn, as beside the picker's book: a glyph sits low on the baseline */
 .pb-up-chev { flex: none; margin-left: -0.3rem; }
 .pb-title {
@@ -1752,9 +1755,7 @@ dialog.bible-picker::backdrop { background: rgb(0 0 0 / 0.45); }
 .bp-close { margin-left: auto; min-height: 2rem; padding: 0 0.4rem; font-size: 1.2rem; background: transparent; border-color: transparent; }
 /* the book before and after the one shown, either side of its name */
 .bp-step { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 2.25rem; min-height: 2.5rem; padding: 0 0.3rem; line-height: 1; background: transparent; border-color: transparent; color: var(--accent); }
-/* only the arrow, in every state: no box when hovered, pressed or focused —
-   on a phone, hover stays on what was tapped */
-.bp-step:is(:hover, :active, :focus, :focus-visible) { background: transparent; border-color: transparent; outline: none; color: var(--accent); }
+
 .bp-step[hidden] { display: none; }
 .bp-step.bp-off { visibility: hidden; }
 .bp-chapters {
@@ -2002,6 +2003,23 @@ a.img-link > img { display: block; }
 .hist-step:hover { background: var(--field); color: var(--accent); }
 .hist-step[aria-disabled="true"] { color: var(--line-strong); }
 .hist-step[aria-disabled="true"]:hover { background: none; }
+
+/* an arrow that leads on — the bar's way back, the picker's books, the
+   history's steps beside a title — is the arrow alone, the same everywhere:
+   in the accent, with no box when hovered, pressed or focused (on a phone,
+   hover stays on what was tapped) and no highlight of the phone's own; one
+   that leads nowhere is greyed out */
+:is(.pb-up, .bp-step, .hist > .hist-step) {
+  color: var(--accent);
+  -webkit-tap-highlight-color: transparent;
+}
+:is(.pb-up, .bp-step, .hist > .hist-step):is(:hover, :active, :focus, :focus-visible) {
+  background: transparent;
+  border-color: transparent;
+  outline: none;
+  color: var(--accent);
+}
+.hist > .hist-step[aria-disabled="true"] { color: var(--line-strong); }
 button.hist-list {
   display: inline-flex;
   align-items: center;
@@ -2128,8 +2146,10 @@ button.hist-rm:hover { border-color: transparent; background: var(--danger-soft)
 .hist-steps .hist-step.next { flex-direction: row-reverse; }
 
 /* a document's printed pages, folded away above its text */
-details.section.print-edition { margin: 0.25rem 0 1rem; }
-details.section.print-edition .section-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
+/* a document's printed pages fold away under its heading, like a page's
+   details at its end */
+details.print-edition { margin: 0.5rem 0 1rem; }
+details.print-edition .fold-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
 
 /* suggestions under the bible's reference: books as a list, then chapters
    and verses as a grid of numbers */
