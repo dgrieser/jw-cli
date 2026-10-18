@@ -959,7 +959,11 @@ details.fold.extras { max-width: var(--measure); }
 }
 .unfold-item[data-state="loading"] { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
 /* a chapter's number unfolds the chapter, as a verse's number does the verse */
-.passage > h2 > a.chapter-num { color: var(--accent); text-decoration: none; }
+.passage > h2 > a.chapter-num, h1 > a.chapter-num { color: var(--accent); text-decoration: none; }
+/* a reading of one passage is headed by it: its own heading gives way */
+.reading.single .passage > h2 { display: none; }
+/* a book's chapters under its full name, which the heading shortens */
+.bible-nav-title { margin: 0 0 1rem; color: var(--muted); }
 
 .unfold-menu {
   position: absolute;
@@ -1612,12 +1616,29 @@ tbody tr:hover { background: var(--surface); }
   font-weight: 650;
 }
 /* the first of the controls on the right takes the room before it */
-.pb > :is(.pb-jump, .pb-unfold, .pb-history, .pb-settings):not(:is(.pb-jump, .pb-unfold, .pb-history, .pb-settings) ~ *) { margin-left: auto; }
+.pb > :is(.pb-jump, .pb-search, .pb-editions, .pb-unfold, .pb-history, .pb-settings):not(:is(.pb-jump, .pb-search, .pb-editions, .pb-unfold, .pb-history, .pb-settings) ~ *) { margin-left: auto; }
+/* the bible's translations, on a shelf in the bar */
+/* its panel hangs from the bar, as wide as the screen allows, not from the
+   button at the bar's end */
+.pb-editions { flex: none; display: inline-flex; }
+.pb .pb-editions-toggle, .pb .pb-search { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
+.pb .pb-editions-toggle[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
+.pb-editions-panel .ps-item.active { color: var(--accent); background: var(--accent-soft); }
+/* a passage to look up, typed into the bar, which gives way to it all but
+   the menu and the way back out */
+.pb-search-form[hidden], .pb-search .pb-search-close, .pb.searching .pb-search .pb-search-open { display: none; }
+.pb.searching .pb-search .pb-search-close { display: block; }
+.pb.searching > :not(.menu-toggle, .pb-search-form, .pb-search) { display: none !important; }
+.pb.searching .pb-search { margin-left: 0.25rem; }
+.pb-search-form { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 0.4rem; margin-left: 0.4rem; }
+.pb-search-form input[name="ref"] { flex: 1 1 auto; min-width: 0; min-height: 2.1rem; padding: 0.25rem 0.6rem; }
+.pb-search-form .ref-suggest { top: calc(100% + 0.35rem); }
+html:not(.js) :is(.pb-search, .pb-editions) { display: none; }
 /* the settings: the text size, the language and the reload, behind one button */
 .pb-settings { flex: none; display: inline-flex; position: relative; margin-right: -0.4rem; }
 .pb .pb-settings-toggle { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); }
 .pb .pb-settings-toggle[aria-expanded="true"] { color: var(--accent); background: var(--accent-soft); }
-.pb-settings-panel {
+.pb-settings-panel, .pb-editions-panel {
   position: absolute;
   top: calc(100% + 0.2rem);
   right: 0.4rem;
@@ -1636,7 +1657,8 @@ tbody tr:hover { background: var(--surface); }
   line-height: 1.2;
   animation: pop 140ms ease-out;
 }
-.pb-settings-panel[hidden] { display: none; }
+.pb-settings-panel[hidden], .pb-editions-panel[hidden] { display: none; }
+.pb-editions-panel { right: 0.4rem; max-height: 70vh; overflow-y: auto; }
 .ps-row {
   display: flex;
   align-items: center;

@@ -1223,14 +1223,18 @@ func binavMux(t *testing.T) *http.ServeMux {
 func TestUIBibleNav(t *testing.T) {
 	srv := newTestServer(t, binavMux(t))
 
-	// the page opens on the book grid, under the edition and the reference
+	// the page opens on the book grid, under the reference to look up; the
+	// translations are on the page bar's shelf
 	resp, body := get(t, srv, "/bible?lang=en")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
-	edition, query, grid := strings.Index(body, `class="edition"`), strings.Index(body, `name="ref"`), strings.Index(body, `class="bible-nav"`)
+	edition, query, grid := strings.Index(body, `class="pb-btn pb-editions-toggle"`), strings.Index(body, `name="ref"`), strings.Index(body, `class="bible-nav"`)
 	if edition < 0 || query < edition || grid < query {
-		t.Errorf("want edition, then reference, then the book grid:\n%s", body)
+		t.Errorf("want the shelf, then the reference, then the book grid:\n%s", body)
+	}
+	if strings.Contains(body, `<select name="bible"`) || strings.Contains(body, `pb-search-form`) {
+		t.Errorf("the start page asks for the edition in the bar, the reference under its heading:\n%s", body)
 	}
 	if !strings.Contains(body, `<li class="book gospels"><a href="/bible?bible=nwtsty&amp;book=40&amp;lang=en"`) {
 		t.Errorf("missing the Matthew tile:\n%s", body)
@@ -1256,7 +1260,7 @@ func TestUIBibleNav(t *testing.T) {
 
 	// the bible's gallery: its books, each leading to the book's own
 	resp, body = get(t, srv, "/bible?bible=nwtsty&view=gallery&lang=en")
-	if resp.StatusCode != 200 || !strings.Contains(body, `<h2>Mediengalerie</h2>`) ||
+	if resp.StatusCode != 200 || !strings.Contains(body, `<h1>Mediengalerie</h1>`) ||
 		!strings.Contains(body, `<a class="gallery-tile" href="/bible?bible=nwtsty&amp;book=40&amp;view=gallery&amp;lang=en">`) {
 		t.Errorf("bible gallery: status %d:\n%s", resp.StatusCode, body)
 	}
@@ -1336,11 +1340,15 @@ func TestUIBibleChapterNav(t *testing.T) {
 	if !strings.Contains(body, `<span class="lbl">John 2</span>`) {
 		t.Errorf("the chapter nav has no label to cut short:\n%s", body)
 	}
-	if !strings.Contains(body, `<nav class="crumbs" aria-label="Breadcrumb"><a href="/bible?bible=nwtsty&amp;lang=en">Bible</a><span class="sep" aria-hidden="true">›</span><a href="/bible?bible=nwtsty&amp;book=43&amp;lang=en">John</a><span class="sep" aria-hidden="true">›</span><a href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en">Chapter 3</a></nav>`) {
-		t.Errorf("no trail up to the bible, the book and the chapter:\n%s", body)
+	if !strings.Contains(body, `<nav class="crumbs" aria-label="Breadcrumb"><a href="/bible?bible=nwtsty&amp;lang=en">Bible</a><span class="sep" aria-hidden="true">›</span><a href="/bible?bible=nwtsty&amp;book=43&amp;lang=en">John</a><span class="sep" aria-hidden="true">›</span><a href="/bible?bible=nwtsty&amp;ref=John&#43;3&amp;lang=en">Chapter 3</a><span class="sep" aria-hidden="true">›</span><span class="here" aria-current="page">3:16</span></nav>`) {
+		t.Errorf("no trail up to the bible, the book, the chapter and the passage:\n%s", body)
 	}
-	if _, body := get(t, srv, "/bible?ref=John+3&lang=en"); strings.Contains(body, `>Chapter 3</a>`) {
-		t.Errorf("a whole chapter leads up to itself:\n%s", body)
+	// a reading is headed by its passage, asks for the next one from the bar
+	if !strings.Contains(body, `<h1>John <a class="chapter-num"`) || !strings.Contains(body, `class="pb-search-form"`) || strings.Contains(body, `class="form bible-form"`) {
+		t.Errorf("a reading's heading and look-up:\n%s", body)
+	}
+	if _, body := get(t, srv, "/bible?ref=John+3&lang=en"); strings.Contains(body, `>Chapter 3</a>`) || !strings.Contains(body, `<span class="here" aria-current="page">Chapter 3</span>`) {
+		t.Errorf("a whole chapter ends its trail, not leading up to itself:\n%s", body)
 	}
 	if resp, _ := get(t, srv, "/unfold/chapter?book=0&chapter=1&lang=en"); resp.StatusCode != 400 {
 		t.Errorf("a chapter's unfold without a book: status %d", resp.StatusCode)

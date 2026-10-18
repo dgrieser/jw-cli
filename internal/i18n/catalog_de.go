@@ -149,6 +149,8 @@ var de = Messages{
 	UIUnfoldHint:       "die Studienanmerkungen und den Text hinter jeder Referenz so viele Ebenen tief ausgeben",
 	UIUnfoldHintArt:    "den Text hinter jedem Zitat so viele Ebenen tief ausgeben",
 	UIEdition:          "Ausgabe",
+	UIBibleEditions:    "Bibelübersetzungen",
+	UIFindRef:          "Bibelstelle aufschlagen",
 	UIEngine:           "Suchen in",
 	UIType:             "Typ",
 	UISort:             "Sortieren nach",

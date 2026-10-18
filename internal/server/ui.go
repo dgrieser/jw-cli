@@ -1177,8 +1177,19 @@ type biblePage struct {
 	// it, and to all of the chapter it shows part of.
 	ChapterNav *chapterNavView
 	// Crumbs lead up from what is shown: to the book grid, the book's
-	// chapters, the whole chapter.
+	// chapters, the whole chapter — and name what is shown last.
 	Crumbs []crumb
+	// Heading is the page's own: the bible on its start page, else the book,
+	// or the passage read, its chapter's number unfolding the chapter as the
+	// passage's heading does (frame).
+	Heading template.HTML
+	// Query says the page asks for a reference itself, under its heading:
+	// the start page and a text search. Every other page asks for one from
+	// the page bar.
+	Query bool
+	// Single says the reading is one passage, which heads the page: its own
+	// heading gives way to the page's
+	Single bool
 }
 
 // bibleSearchView is a text search of the bible as the page lists it: the
@@ -1282,6 +1293,9 @@ func (p biblePage) BibleGalleryBookLink(tileURL string) string {
 type editionOption struct {
 	Symbol string
 	Label  string
+	// Href is this page in the edition: what the page bar's shelf offers
+	Href   string
+	Active bool
 }
 
 // editionOptions lists the bibles the library carries in the page's language,
@@ -1402,6 +1416,12 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	// the tab names the passage read, else the section
 	page.Title = firstNonEmpty(page.Ref, page.T.UINavBible)
 	page.Editions = s.editionOptions(r, page.Edition)
+	for i, e := range page.Editions {
+		q := r.URL.Query()
+		q.Set("bible", e.Symbol)
+		page.Editions[i].Href = "/bible?" + q.Encode()
+		page.Editions[i].Active = e.Symbol == page.Edition
+	}
 	// a chapter picked from the header's book picker reads like one typed
 	if book, _ := intParam(r, "book", 0); page.Ref == "" && book >= 1 && book <= 66 {
 		if chapter, _ := intParam(r, "chapter", 0); chapter > 0 {
@@ -1421,6 +1441,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	if page.Ref == "" {
 		s.bibleNav(r, &page)
+		page.frame(nil)
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -1432,7 +1453,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	// what is not a reference is words to look for in the bible
 	if _, _, err := s.svc.ParseRefs(r.Context(), lng, page.Ref); err != nil {
 		s.bibleSearch(r, lng, &page)
-		page.Crumbs = []crumb{page.bibleCrumb()}
+		page.frame(nil)
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -1453,7 +1474,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, &page, depth)
 	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
-	page.Crumbs = readingCrumbs(res, &page)
+	page.frame(&res)
 	if res.Table != nil {
 		page.BookNames = map[int]string{}
 		for b := 1; b <= 66; b++ {
@@ -1537,13 +1558,9 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
-			page.Crumbs = []crumb{page.bibleCrumb()}
 			page.SiteURL = s.wolPage(r.Context(), lng, "binav", fmt.Sprintf("/%s/%d", url.PathEscape(page.Edition), book))
 			if view := r.FormValue("view"); view != "" {
 				s.bookDoc(r, lng, view, page)
-				if page.Doc != nil {
-					page.Crumbs = append(page.Crumbs, crumb{Label: page.BookName, Href: page.BookLink(book)})
-				}
 			}
 			return
 		}
@@ -1565,7 +1582,6 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 			return
 		}
 		page.BibleGallery = &g
-		page.Crumbs = []crumb{page.bibleCrumb()}
 		if g.URL != "" {
 			page.SiteURL = g.URL
 		}
