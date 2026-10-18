@@ -195,6 +195,7 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		})
 	}
 	wg.Wait()
+	page.Crumbs = withHere(page.Crumbs, page.Heading)
 
 	if lib.Symbol != "" || kind == wol.PublicationKind {
 		page.Publication = true

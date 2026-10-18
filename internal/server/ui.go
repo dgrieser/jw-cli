@@ -666,6 +666,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	page.Heading = ownHeading(art.Title, page.Body)
+	page.Crumbs = withHere(page.Crumbs, art.Title)
 	page.URL = art.URL
 	page.SiteURL = art.URL
 	page.DocID = art.DocID
@@ -849,6 +850,16 @@ type crumb struct {
 	Label, Href string
 }
 
+// withHere ends a trail with the page it leads to, named and not a link: a
+// breadcrumb says where the reader is as well as how they got there. A page
+// at the top, with no trail above it, gets none, its heading saying it all.
+func withHere(trail []crumb, label string) []crumb {
+	if len(trail) == 0 || label == "" || trail[len(trail)-1].Href == "" {
+		return trail
+	}
+	return append(trail, crumb{Label: label})
+}
+
 // maxCrumbs bounds the walk up the category tree, which is a few levels deep.
 const maxCrumbs = 6
 
@@ -983,7 +994,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, cat.Name).withSite(videoLibraryPage(lng, cat.Key)),
 		Heading:  cat.Name,
 	}
-	page.Crumbs = s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage)
+	page.Crumbs = withHere(s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage), cat.Name)
 	// a subcategory that holds videos itself — the lowest level of the tree —
 	// comes with them, and shows as a carousel rather than as a link
 	var subs []model.Category
@@ -1101,7 +1112,7 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 			page.Paragraphs = subtitles.Paragraphs(text.Transcript)
 		}
 	})
-	page.Crumbs = s.mediaCrumbs(r.Context(), lng, primary, page.basePage)
+	page.Crumbs = withHere(s.mediaCrumbs(r.Context(), lng, primary, page.basePage), item.Title)
 	wg.Wait()
 	if f, err := download.PickVideo(item.Files, streamQuality); err == nil {
 		page.Stream = &f
