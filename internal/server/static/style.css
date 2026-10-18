@@ -1107,14 +1107,14 @@ section.entry li { margin-bottom: 0.4rem; }
 
 details.extras ul { margin: 0.25rem 0; padding-left: 1.3rem; }
 
-ul.gallery {
+ul.gallery, details.extras ul.gallery {
   list-style: none;
   padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
   gap: 1rem;
 }
-ul.gallery img { border-radius: var(--r-small); display: block; }
+ul.gallery img { border-radius: var(--r-small); display: block; width: 100%; height: auto; }
 ul.gallery p { margin: 0.35rem 0 0; font-size: 0.9rem; }
 ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 
