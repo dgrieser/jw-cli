@@ -67,6 +67,9 @@ type Client struct {
 	// newest seen of each; see Editions
 	editions Editions
 	newest   newestEditions
+	// bg runs what nobody waits on — revalidations, reading ahead — giving
+	// way to the readers; nil revalidates before use. See background.go
+	bg *background
 }
 
 type Option func(*Client)

@@ -52,6 +52,10 @@ type Server struct {
 	templates map[string]*htmlTemplate
 	// runs are the verses each unfold run of a page has shown.
 	runs runs
+	// warm keeps the pages readers start from ready (warm.go); routes is
+	// the route table it reads them through
+	warm   warmer
+	routes http.Handler
 }
 
 // New builds a Server. Template parse errors panic: they are programming
@@ -139,7 +143,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
-	return s.logged(s.auth.RequireAuth(s.remembersLanguage(private(refreshes(s.limitsAPI(mux))))))
+	s.routes = mux
+	return s.logged(s.auth.RequireAuth(s.busy(s.remembersLanguage(private(refreshes(s.limitsAPI(mux)))))))
 }
 
 // private marks what a page or the API answers as the reader's own: it

@@ -1146,6 +1146,62 @@
     startLoading(a);
   });
 
+  // --- reading ahead ----------------------------------------------------------
+
+  // a link the pointer rests on, or a finger touches, is most likely the next
+  // page: it is asked for at once, so the server has it ready — and the
+  // browser too, where it keeps what it was asked for ahead — by the time the
+  // click lands. Only the site's pages, in the language read: a link of a
+  // document opens in place, and one to another language would pick it.
+  (function () {
+    var PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?)?$/;
+    var conn = navigator.connection;
+    if (conn && (conn.saveData || /2g/.test(conn.effectiveType || ""))) return;
+    var link = document.createElement("link");
+    var hint = !!(link.relList && link.relList.supports && link.relList.supports("prefetch"));
+    var here = new URL(location.href);
+    var asked = {};
+    var left = 40;
+    var timer = null;
+
+    function ahead(a) {
+      if (!a || a.target || a.hasAttribute("download") || a.closest(".document")) return;
+      var u;
+      try {
+        u = new URL(a.href, location.href);
+      } catch (err) {
+        return;
+      }
+      if (u.origin !== location.origin || !PAGE.test(u.pathname)) return;
+      if (u.searchParams.has("refresh") || (u.searchParams.get("lang") || "") !== (here.searchParams.get("lang") || "")) return;
+      if (u.pathname === here.pathname && u.search === here.search) return;
+      var k = u.pathname + u.search;
+      if (asked[k] || left <= 0) return;
+      asked[k] = true;
+      left--;
+      if (hint) {
+        var l = document.createElement("link");
+        l.rel = "prefetch";
+        l.href = k;
+        document.head.appendChild(l);
+        return;
+      }
+      fetch(k, { credentials: "same-origin", headers: { "X-JW-Ahead": "1" } }).catch(function () {});
+    }
+
+    function linkOf(e) {
+      return e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    }
+    document.addEventListener("pointerover", function (e) {
+      if (e.pointerType === "touch") return;
+      var a = linkOf(e);
+      clearTimeout(timer);
+      if (a) timer = setTimeout(function () { ahead(a); }, 65);
+    }, { passive: true });
+    document.addEventListener("pointerout", function () { clearTimeout(timer); }, { passive: true });
+    document.addEventListener("pointerdown", function (e) { ahead(linkOf(e)); }, { passive: true });
+  })();
+
   // the page came back from the cache, or the reader stopped the navigation
   window.addEventListener("pageshow", stopLoading);
   window.addEventListener("pagehide", stopLoading);

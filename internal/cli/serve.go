@@ -86,6 +86,10 @@ Examples:
 			if !slices.Contains(server.PageCachePolicies, pageCache) {
 				return fmt.Errorf("invalid --page-cache %q: want one of %s", pageCache, strings.Join(server.PageCachePolicies, ", "))
 			}
+			// a server lives long enough to bring what it keeps up to date
+			// behind its readers' backs, and to read ahead what they ask
+			// for first
+			a.Background = true
 			srv := server.New(server.Config{
 				Auth:        auth,
 				PageCache:   pageCache,
@@ -115,6 +119,7 @@ Examples:
 			errc := make(chan error, 1)
 			go func() { errc <- hs.Serve(ln) }()
 			fmt.Fprintf(a.Stderr, "listening on http://%s\n", hostForURL(ln.Addr().String(), host))
+			go srv.Warm(ctx)
 
 			select {
 			case err := <-errc:

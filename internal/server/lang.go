@@ -33,7 +33,7 @@ func (s *Server) remembersLanguage(next http.Handler) http.Handler {
 // anything is written.
 func (s *Server) rememberLanguage(w http.ResponseWriter, r *http.Request) {
 	spec := r.URL.Query().Get("lang")
-	if spec == "" || !remembersOn(r.URL.Path) {
+	if spec == "" || !remembersOn(r.URL.Path) || readAhead(r) {
 		return
 	}
 	if _, err := s.resolveLanguage(r.Context(), spec); err != nil {
@@ -64,6 +64,14 @@ func remembersOn(path string) bool {
 // language list dropped — is passed over for the default rather than failing
 // every request that carries it.
 func (s *Server) language(r *http.Request) (model.Language, error) {
+	lng, err := s.requestLanguage(r)
+	if err == nil && !httpx.InBackground(r.Context()) {
+		s.warm.read(lng.Symbol)
+	}
+	return lng, err
+}
+
+func (s *Server) requestLanguage(r *http.Request) (model.Language, error) {
 	if spec := r.FormValue("lang"); spec != "" {
 		return s.resolveLanguage(r.Context(), spec)
 	}
@@ -103,4 +111,11 @@ func (s *Server) resolveLanguage(ctx context.Context, spec string) (model.Langua
 // document follows the document's own language where a catalog exists.
 func text(lng model.Language) *i18n.Messages {
 	return i18n.TextFor(lng.Locale)
+}
+
+// readAhead reports whether a request asks for a page ahead of the reader,
+// who has not picked it, nor its language, yet.
+func readAhead(r *http.Request) bool {
+	return strings.Contains(r.Header.Get("Sec-Purpose"), "prefetch") ||
+		r.Header.Get("Purpose") == "prefetch" || r.Header.Get("X-JW-Ahead") != ""
 }

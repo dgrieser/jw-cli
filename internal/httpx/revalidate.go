@@ -34,6 +34,9 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 		return &fetched{body: body}, nil
 	}
 	id := entryID(key)
+	if c.later(ctx) {
+		defer c.bg.enter()()
+	}
 	// a read past the cache shares no lookup with the reads that use it
 	flightKey, lookup := id, c.lookup
 	if refreshFirst(ctx, "GET "+id) {
@@ -43,6 +46,10 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 	// answers differently
 	if hasKept(ctx) {
 		flightKey += "\x00kept"
+	}
+	// and a reader none that gives way to readers
+	if InBackground(ctx) {
+		flightKey += "\x00bg"
 	}
 	ch := c.flight.DoChan(flightKey, func() (any, error) {
 		return lookup(context.WithoutCancel(ctx), id, rawURL, hdr)
@@ -90,6 +97,12 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 	}
 	if ok && e.fresh(c.responses.fresh) {
 		c.verbose("GET %s (cached)", rawURL)
+		return &fetched{body: body, id: id, e: e}, nil
+	}
+	// stale, and asked about upstream behind the reader's back
+	if ok && c.later(ctx) && e.fresh(maxStale) {
+		c.verbose("GET %s (cached, revalidating in the background)", rawURL)
+		c.revalidateLater(id, e)
 		return &fetched{body: body, id: id, e: e}, nil
 	}
 	if ok {
@@ -253,7 +266,13 @@ func (c *Client) confirm(id string, e entry, body []byte) *fetched {
 // decoded already, and is kept at once: nothing would read it otherwise, and
 // every later use would ask upstream again.
 func (c *Client) revalidate(ctx context.Context, id string, e entry, want string) (string, bool) {
-	v, err, _ := c.flight.Do(id, func() (any, error) {
+	// a reader is not kept waiting on a background request that gives way
+	// to it
+	flightKey := id
+	if InBackground(ctx) {
+		flightKey += "\x00bg"
+	}
+	v, err, _ := c.flight.Do(flightKey, func() (any, error) {
 		return c.lookup(ctx, id, e.URL, e.header())
 	})
 	if err != nil {
