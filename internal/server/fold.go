@@ -245,7 +245,8 @@ func attr(n *nethtml.Node, key string) string {
 // foldPrintEditions puts the pictures of a document's printed pages — wol's
 // "Printed edition" thumbnails, one block per spread, the later ones hidden
 // behind a click on wol — into one disclosure under their common title,
-// collapsed: they repeat what the text says, and push it far down the page.
+// collapsed, at the document's end: they repeat what the text says, and are
+// what is there besides it, like a page's details.
 func foldPrintEditions(fragment string) string {
 	if !strings.Contains(fragment, "alternatePresentation") {
 		return fragment
@@ -255,8 +256,9 @@ func foldPrintEditions(fragment string) string {
 		return fragment
 	}
 	doc.Find("div.alternatePresentation").Each(func(_ int, div *goquery.Selection) {
-		// a run of them is folded from its first
-		if prev := div.Prev(); prev.Length() > 0 && prev.HasClass("alternatePresentation") {
+		// a run of them is folded from its first, which takes the others
+		// out of the document with it
+		if prev := div.Prev(); div.Parent().Length() == 0 || prev.Length() > 0 && prev.HasClass("alternatePresentation") {
 			return
 		}
 		run := div
@@ -273,7 +275,7 @@ func foldPrintEditions(fragment string) string {
 		if body.Len() == 0 {
 			return
 		}
-		div.BeforeHtml(`<details class="fold print-edition"><summary><h2>` + nethtml.EscapeString(title) +
+		doc.Find("body").AppendHtml(`<details class="fold print-edition"><summary><h2>` + nethtml.EscapeString(title) +
 			`</h2></summary><div class="fold-body">` + body.String() + `</div></details>`)
 		run.Remove()
 	})

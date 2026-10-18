@@ -2145,10 +2145,8 @@ button.hist-rm:hover { border-color: transparent; background: var(--danger-soft)
 }
 .hist-steps .hist-step.next { flex-direction: row-reverse; }
 
-/* a document's printed pages, folded away above its text */
-/* a document's printed pages fold away under its heading, like a page's
-   details at its end */
-details.print-edition { margin: 0.5rem 0 1rem; }
+/* a document's printed pages fold away at its end, like a page's details */
+details.print-edition { margin: 1.5rem 0 0; }
 details.print-edition .fold-body img { display: block; width: 100%; height: auto; margin: 0 0 0.75rem; border-radius: var(--r); }
 
 /* suggestions under the bible's reference: books as a list, then chapters
