@@ -251,6 +251,8 @@ type Messages struct {
 	UIUnfoldHint      string
 	UIUnfoldHintArt   string
 	UIEdition         string
+	UIBibleEditions   string
+	UIFindRef         string
 	UIEngine          string
 	UIType            string
 	UISort            string

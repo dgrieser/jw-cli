@@ -102,32 +102,69 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 	return nav
 }
 
-// readingCrumbs is the trail above a reading: the bible, the book its
-// passages are all in, and the chapter of the one passage when it shows only
-// part of it.
-func readingCrumbs(res service.ReadResult, page *biblePage) []crumb {
+// frame gives the page its heading, its trail and its way of asking for a
+// reference, by what it shows: the bible's start page and a text search are
+// headed "Bibel" and ask under the heading; a book's chapters and its
+// documents are headed by the book; a reading by what it reads (res).
+func (p *biblePage) frame(res *service.ReadResult) {
+	bible := p.bibleCrumb()
+	switch {
+	case p.Search != nil:
+		p.Query = true
+		p.Heading = template.HTML(template.HTMLEscapeString(p.T.UINavBible))
+		p.Crumbs = withHere([]crumb{bible}, p.Ref)
+	case res != nil:
+		p.Heading, p.Crumbs = readingFrame(*res, p)
+	case p.BookNav != nil:
+		name := firstNonEmpty(p.BookName, p.BookNav.Title)
+		p.Heading = template.HTML(template.HTMLEscapeString(name))
+		p.Crumbs = withHere([]crumb{bible}, name)
+		if p.Doc != nil {
+			p.Crumbs = withHere([]crumb{bible, {Label: name, Href: p.BookLink(p.BookNav.Book)}}, p.Doc.Title)
+		}
+	case p.BibleGallery != nil:
+		p.Heading = template.HTML(template.HTMLEscapeString(firstNonEmpty(p.BibleGallery.Title, p.T.UINavBible)))
+		p.Crumbs = withHere([]crumb{bible}, p.BibleGallery.Title)
+	default:
+		p.Query = true
+		p.Heading = template.HTML(template.HTMLEscapeString(p.T.UINavBible))
+	}
+}
+
+// readingFrame is a reading's heading and trail. One passage is headed as
+// its own heading is, its chapter's number a link that unfolds the chapter
+// ("2. Mose 2:1-5"), and its trail runs through its book to its chapter,
+// which is where it ends for a whole chapter; several are headed by what was
+// asked for, through the book they share.
+func readingFrame(res service.ReadResult, page *biblePage) (template.HTML, []crumb) {
+	heading := template.HTML(template.HTMLEscapeString(page.Ref))
 	trail := []crumb{page.bibleCrumb()}
 	if len(res.Passages) == 0 || res.Table == nil {
-		return trail
+		return heading, withHere(trail, page.Ref)
 	}
 	first := res.Passages[0]
 	if first.Book < 1 || first.Book > 66 {
-		return trail
+		return heading, withHere(trail, page.Ref)
 	}
 	for _, p := range res.Passages[1:] {
 		if p.Book != first.Book {
-			return trail
+			return heading, withHere(trail, page.Ref)
 		}
 	}
 	name := res.Table.Name(first.Book)
 	trail = append(trail, crumb{Label: name, Href: page.BookLink(first.Book)})
-	if len(res.Passages) == 1 && !first.Whole && first.Chapter > 0 {
-		trail = append(trail, crumb{
-			Label: fmt.Sprintf("%s %d", page.T.UIChapter, first.Chapter),
-			Href:  page.chapterHref(firstNonEmpty(first.Bible, page.Edition), name, first.Chapter),
-		})
+	if len(res.Passages) > 1 || first.Chapter == 0 {
+		return heading, withHere(trail, page.Ref)
 	}
-	return trail
+	chapterHref := page.chapterHref(firstNonEmpty(first.Bible, page.Edition), name, first.Chapter)
+	heading = template.HTML(headingHTML(first.Heading(), first.Chapter, chapterHref))
+	page.Single = true
+	chapter := fmt.Sprintf("%s %d", page.T.UIChapter, first.Chapter)
+	if first.Whole {
+		return heading, append(trail, crumb{Label: chapter})
+	}
+	trail = append(trail, crumb{Label: chapter, Href: chapterHref})
+	return heading, withHere(trail, strings.TrimPrefix(first.Heading(), name+" "))
 }
 
 // chapterStudyView is one part of what the library has on a chapter, as the

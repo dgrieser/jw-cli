@@ -666,6 +666,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	page.Heading = ownHeading(art.Title, page.Body)
+	page.Crumbs = withHere(page.Crumbs, art.Title)
 	page.URL = art.URL
 	page.SiteURL = art.URL
 	page.DocID = art.DocID
@@ -849,6 +850,16 @@ type crumb struct {
 	Label, Href string
 }
 
+// withHere ends a trail with the page it leads to, named and not a link: a
+// breadcrumb says where the reader is as well as how they got there. A page
+// at the top, with no trail above it, gets none, its heading saying it all.
+func withHere(trail []crumb, label string) []crumb {
+	if len(trail) == 0 || label == "" || trail[len(trail)-1].Href == "" {
+		return trail
+	}
+	return append(trail, crumb{Label: label})
+}
+
 // maxCrumbs bounds the walk up the category tree, which is a few levels deep.
 const maxCrumbs = 6
 
@@ -983,7 +994,7 @@ func (s *Server) uiMediaCategory(w http.ResponseWriter, r *http.Request) {
 		basePage: s.base(r, cat.Name).withSite(videoLibraryPage(lng, cat.Key)),
 		Heading:  cat.Name,
 	}
-	page.Crumbs = s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage)
+	page.Crumbs = withHere(s.mediaCrumbs(r.Context(), lng, cat.Parent, page.basePage), cat.Name)
 	// a subcategory that holds videos itself — the lowest level of the tree —
 	// comes with them, and shows as a carousel rather than as a link
 	var subs []model.Category
@@ -1101,7 +1112,7 @@ func (s *Server) uiMediaItem(w http.ResponseWriter, r *http.Request) {
 			page.Paragraphs = subtitles.Paragraphs(text.Transcript)
 		}
 	})
-	page.Crumbs = s.mediaCrumbs(r.Context(), lng, primary, page.basePage)
+	page.Crumbs = withHere(s.mediaCrumbs(r.Context(), lng, primary, page.basePage), item.Title)
 	wg.Wait()
 	if f, err := download.PickVideo(item.Files, streamQuality); err == nil {
 		page.Stream = &f
@@ -1166,8 +1177,19 @@ type biblePage struct {
 	// it, and to all of the chapter it shows part of.
 	ChapterNav *chapterNavView
 	// Crumbs lead up from what is shown: to the book grid, the book's
-	// chapters, the whole chapter.
+	// chapters, the whole chapter — and name what is shown last.
 	Crumbs []crumb
+	// Heading is the page's own: the bible on its start page, else the book,
+	// or the passage read, its chapter's number unfolding the chapter as the
+	// passage's heading does (frame).
+	Heading template.HTML
+	// Query says the page asks for a reference itself, under its heading:
+	// the start page and a text search. Every other page asks for one from
+	// the page bar.
+	Query bool
+	// Single says the reading is one passage, which heads the page: its own
+	// heading gives way to the page's
+	Single bool
 }
 
 // bibleSearchView is a text search of the bible as the page lists it: the
@@ -1271,6 +1293,9 @@ func (p biblePage) BibleGalleryBookLink(tileURL string) string {
 type editionOption struct {
 	Symbol string
 	Label  string
+	// Href is this page in the edition: what the page bar's shelf offers
+	Href   string
+	Active bool
 }
 
 // editionOptions lists the bibles the library carries in the page's language,
@@ -1391,6 +1416,12 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	// the tab names the passage read, else the section
 	page.Title = firstNonEmpty(page.Ref, page.T.UINavBible)
 	page.Editions = s.editionOptions(r, page.Edition)
+	for i, e := range page.Editions {
+		q := r.URL.Query()
+		q.Set("bible", e.Symbol)
+		page.Editions[i].Href = "/bible?" + q.Encode()
+		page.Editions[i].Active = e.Symbol == page.Edition
+	}
 	// a chapter picked from the header's book picker reads like one typed
 	if book, _ := intParam(r, "book", 0); page.Ref == "" && book >= 1 && book <= 66 {
 		if chapter, _ := intParam(r, "chapter", 0); chapter > 0 {
@@ -1410,6 +1441,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	}
 	if page.Ref == "" {
 		s.bibleNav(r, &page)
+		page.frame(nil)
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -1421,7 +1453,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	// what is not a reference is words to look for in the bible
 	if _, _, err := s.svc.ParseRefs(r.Context(), lng, page.Ref); err != nil {
 		s.bibleSearch(r, lng, &page)
-		page.Crumbs = []crumb{page.bibleCrumb()}
+		page.frame(nil)
 		s.render(w, http.StatusOK, "bible", page)
 		return
 	}
@@ -1442,7 +1474,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, &page, depth)
 	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
-	page.Crumbs = readingCrumbs(res, &page)
+	page.frame(&res)
 	if res.Table != nil {
 		page.BookNames = map[int]string{}
 		for b := 1; b <= 66; b++ {
@@ -1526,13 +1558,9 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 		nav, err := s.svc.BookNav(r.Context(), lng, page.Edition, book)
 		if err == nil {
 			page.BookNav, page.BookName = &nav, s.svc.BookTable(r.Context(), lng).Name(book)
-			page.Crumbs = []crumb{page.bibleCrumb()}
 			page.SiteURL = s.wolPage(r.Context(), lng, "binav", fmt.Sprintf("/%s/%d", url.PathEscape(page.Edition), book))
 			if view := r.FormValue("view"); view != "" {
 				s.bookDoc(r, lng, view, page)
-				if page.Doc != nil {
-					page.Crumbs = append(page.Crumbs, crumb{Label: page.BookName, Href: page.BookLink(book)})
-				}
 			}
 			return
 		}
@@ -1554,7 +1582,6 @@ func (s *Server) bibleNav(r *http.Request, page *biblePage) {
 			return
 		}
 		page.BibleGallery = &g
-		page.Crumbs = []crumb{page.bibleCrumb()}
 		if g.URL != "" {
 			page.SiteURL = g.URL
 		}

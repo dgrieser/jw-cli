@@ -407,7 +407,10 @@ type ResearchItem struct {
 	// PublicationIndexItem. wol marks the group with a class of its own, which
 	// is the same in every language, while Source is the localized heading the
 	// group carries.
-	Kind        string `json:"kind,omitempty"`
+	Kind string `json:"kind,omitempty"`
+	// Citation is where a research guide's entry is, which the guide writes
+	// under its headline ("wcg Kap. 54"); the study pane has the headline only.
+	Citation    string `json:"citation,omitempty"`
 	PCPath      string `json:"pcPath,omitempty"` // wol /pc/ path for the excerpt
 	ExcerptHTML string `json:"excerptHtml,omitempty"`
 	ArticleURL  string `json:"articleUrl,omitempty"`

@@ -149,6 +149,8 @@ var en = Messages{
 	UIUnfoldHint:       "print the study notes and the text behind every reference, this many levels deep",
 	UIUnfoldHintArt:    "expand the text behind every citation, this many levels deep",
 	UIEdition:          "Edition",
+	UIBibleEditions:    "Bible translations",
+	UIFindRef:          "Look up a passage",
 	UIEngine:           "Search in",
 	UIType:             "Type",
 	UISort:             "Sort by",

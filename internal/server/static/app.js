@@ -1830,7 +1830,7 @@
     // a word's start and a dot ("Zusammenk.") when the row is too narrow
     var h1 = main.querySelector("h1");
     // a title of text alone moves; one holding a link or a control stays
-    if (!h1 || h1.querySelector("a, button, input, select, img")) {
+    if (!h1 || h1.querySelector("a:not(.chapter-num), button, input, select, img")) {
       // a row of its own, at its end — below the breadcrumb, which always
       // heads the page
       var crumbs = main.querySelector(":scope > .crumbs");
@@ -2545,15 +2545,6 @@
   var bibleForm = document.querySelector("form.bible-form");
   if (bibleForm) {
     var bibleRef = bibleForm.querySelector('input[name="ref"]');
-    // on the grid, another edition is another grid: show it at once
-    var autoEdition = bibleForm.querySelector("select.edition[data-autosubmit]");
-    if (autoEdition) {
-      autoEdition.addEventListener("change", function () {
-        if (bibleRef && bibleRef.value.trim() !== "") return;
-        if (bibleForm.requestSubmit) bibleForm.requestSubmit();
-        else bibleForm.submit();
-      });
-    }
     // a reference asked for replaces the grid: it goes as soon as it is sent,
     // and the book it was opened on does not ride along
     bibleForm.addEventListener("submit", function () {
@@ -2570,6 +2561,84 @@
     if (bibleRef) refSuggest(bibleForm, bibleRef);
   }
 
+  // --- the bible's page bar: its translations, and a passage to look up ----
+
+  // the shelf: the bible's translations, the one read marked; a panel open
+  // until a click elsewhere or Escape
+  (function () {
+    var btn = document.querySelector(".pb-editions-toggle");
+    var menu = document.getElementById("editions-menu");
+    if (!btn || !menu) return;
+    function setOpen(open) {
+      menu.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    btn.addEventListener("click", function () {
+      setOpen(menu.hidden);
+      if (!menu.hidden) {
+        var cur = menu.querySelector(".active") || menu.querySelector("a");
+        if (cur) cur.focus({ preventScroll: true });
+      }
+    });
+    document.addEventListener("click", function (e) {
+      if (!menu.hidden && !menu.contains(e.target) && !btn.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !menu.hidden) {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+  })();
+
+  // the magnifier: in a book, a chapter or a passage, the reference to go to
+  // next is typed into the bar itself, which gives way to it all but the
+  // menu; Escape, or the magnifier again, puts the bar back
+  (function () {
+    var btn = document.querySelector(".pb-search");
+    var form = document.querySelector(".pb-search-form");
+    var bar = btn && btn.closest(".pb");
+    if (!btn || !form || !bar) return;
+    var input = form.querySelector('input[name="ref"]');
+    var suggesting = false;
+    function setOpen(open) {
+      bar.classList.toggle("searching", open);
+      form.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        if (!suggesting) {
+          refSuggest(form, input);
+          suggesting = true;
+        }
+        input.focus();
+      }
+    }
+    btn.addEventListener("click", function () { setOpen(form.hidden); });
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        setOpen(false);
+        btn.focus();
+      }
+    });
+    form.addEventListener("submit", function (e) {
+      if (input.value.trim() === "") e.preventDefault();
+    });
+  })();
+
+  // a reading of one passage is headed by it, its chapter's number unfolding
+  // the chapter as the passage's own heading does — which the page's heading
+  // stands in for, so a press on the one is a press on the other
+  (function () {
+    var num = document.querySelector("main h1 a.chapter-num");
+    var own = document.querySelector(".reading .passage > h2 a.chapter-num");
+    if (!num || !own) return;
+    num.addEventListener("click", function (e) {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      own.click();
+    });
+  })();
+
   // --- suggesting a reference while it is typed --------------------------
   //
   // Suggestions come with every key from what the browser has: the books'
@@ -2580,7 +2649,7 @@
   // completes the text only; the reader still sends it.
 
   function refSuggest(form, input) {
-    var edition = form.querySelector("select.edition");
+    var edition = form.querySelector('[name="bible"]');
     var langInput = form.querySelector('input[name="lang"]');
     var lang = langInput ? langInput.value : new URLSearchParams(location.search).get("lang") || "";
     var books = null;

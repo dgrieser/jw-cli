@@ -2,6 +2,28 @@
 <button type="button" class="pb-bible" data-edition="{{.Edition}}"{{with .BookNav}} data-book="{{.Book}}"{{end}} aria-haspopup="dialog" title="{{.T.UIPickBook}}">
   <span class="pb-title">{{if .Search}}{{.Ref}}{{else if .Ref}}{{.Ref}}{{else if .BookNav}}{{or .BookName .BookNav.Title}}{{else}}{{.T.UINavBible}}{{end}}</span><span class="pb-caret" aria-hidden="true"></span>
 </button>
+{{- if not .Query}}
+<form class="pb-search-form" method="get" action="/bible" role="search" hidden>
+  {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
+  <input type="hidden" name="bible" value="{{.Edition}}">
+  <input type="text" name="ref" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" autocapitalize="off" enterkeyhint="go">
+  <button type="submit" class="primary small">{{.T.UIGo}}</button>
+</form>
+<button type="button" class="pb-btn pb-search" aria-expanded="false" title="{{.T.UIFindRef}}" aria-label="{{.T.UIFindRef}}">
+  <svg class="pb-search-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L20.5 20.5"/></svg>
+  <svg class="pb-search-close" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+</button>
+{{- end}}
+<span class="pb-editions">
+  <button type="button" class="pb-btn pb-editions-toggle" aria-haspopup="true" aria-expanded="false" aria-controls="editions-menu" title="{{.T.UIBibleEditions}}" aria-label="{{.T.UIBibleEditions}}">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M3 20.5h18"/><rect x="4" y="5" width="3.5" height="15.5" rx="0.6"/><rect x="8.5" y="3.5" width="3.5" height="17" rx="0.6"/><path d="M14.2 6.4l3.3-1 4 14.6-3.3 1z"/></svg>
+  </button>
+  <div class="pb-editions-panel" id="editions-menu" role="menu" aria-label="{{.T.UIBibleEditions}}" data-ui hidden>
+    {{- range .Editions}}
+    <a class="ps-row ps-item{{if .Active}} active{{end}}" role="menuitemradio" aria-checked="{{if .Active}}true{{else}}false{{end}}" href="{{$.WithLang .Href}}"><span class="ps-label">{{.Label}}</span></a>
+    {{- end}}
+  </div>
+</span>
 {{- if .BookNames}}<script type="application/json" id="bible-books">{{.BookNames}}</script>{{end}}
 {{end}}
 {{define "settings"}}
@@ -15,22 +37,19 @@
 {{end}}
 {{define "content"}}
 {{- if .Crumbs}}{{template "crumbs" .}}{{end}}
-<h1>{{.T.UINavBible}}</h1>
+<h1>{{.Heading}}</h1>
+{{- if .Query}}
 <form class="form bible-form" method="get" action="/bible">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
-  <select name="bible" class="edition" aria-label="{{.T.UIEdition}}"{{if not .Ref}} data-autosubmit{{end}}>
-    {{- range $e := .Editions}}
-    <option value="{{$e.Symbol}}" {{if eq $.Edition $e.Symbol}}selected{{end}}>{{$e.Label}}</option>
-    {{- end}}
-  </select>
+  <input type="hidden" name="bible" value="{{.Edition}}">
   <div class="query">
     <input type="text" name="ref" value="{{.Ref}}" placeholder="{{.T.UIRefHint}}" aria-label="{{.T.UINavBible}}" data-autofocus autocapitalize="off">
     <button type="submit" class="primary">{{.T.UIGo}}</button>
   </div>
   {{- if .AllBibles}}<input type="hidden" name="all" value="1">{{end}}
-  {{- if .BookNav}}<input type="hidden" name="book" value="{{.BookNav.Book}}" data-nav-only>{{end}}
   {{- if or .AutoUnfold .Unfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}
 </form>
+{{- end}}
 
 {{- if .Search}}
 <section class="bible-search">
@@ -58,7 +77,7 @@
 </section>
 {{- else if .Ref}}
 {{template "unfold" .}}
-<article class="document reading" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
+<article class="document reading{{if .Single}} single{{end}}" data-unfold="verse" data-level="{{.Unfold}}"{{if .AutoUnfold}} data-auto="{{.AutoUnfold}}"{{end}}>
 {{.Body}}
 </article>
 {{- with .ChapterNav}}
@@ -73,8 +92,7 @@
 {{template "bookdoc" .}}
 {{- else if .BookNav}}
 <nav class="bible-nav chapters-nav" aria-label="{{.T.UIChapters}}">
-  <p class="bible-nav-back"><a href="{{.BooksLink}}">‹ {{.T.UIAllBooks}}</a></p>
-  <h2>{{.BookNav.Title}}</h2>
+  <p class="bible-nav-title">{{.BookNav.Title}}</p>
   <h3 class="bible-nav-heading">{{.T.UIChapters}}</h3>
   <ul class="chapter-grid">
     {{- range $c := .BookNav.Chapters}}
@@ -91,8 +109,6 @@
 </nav>
 {{- else if .BibleGallery}}
 <article class="book-doc-page gallery">
-  <p class="bible-nav-back"><a href="{{.BooksLink}}">‹ {{or .Nav.Title .T.UIAllBooks}}</a></p>
-  <h2>{{.BibleGallery.Title}}</h2>
   {{- range .BibleGallery.Groups}}
   {{- if .Heading}}<h3 class="bible-nav-heading">{{.Heading}}</h3>{{end}}
   <ul class="gallery-grid">
