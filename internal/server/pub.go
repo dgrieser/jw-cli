@@ -337,12 +337,51 @@ func (s *Server) pubShelvesOf(ctx context.Context, lng model.Language, cat wol.L
 	if years := yearCards(lib); len(years) > 1 {
 		return s.periodicalShelves(ctx, lng, cat, years, page)
 	}
+	if shelves := s.kindShelves(ctx, lng, cat, lib, page); len(shelves) > 0 {
+		return shelves
+	}
 	sh := s.pubCovers(ctx, lng, cat, nil, pubShelfDepth, page)
 	if sh == nil {
 		return nil
 	}
 	sh.Heading = cat.Title
 	return []pubShelf{*sh}
+}
+
+// pubMaxKinds is the most kinds a category is shown a row of each of.
+const pubMaxKinds = 4
+
+// kindShelves are the rows of a category that is nothing but a few kinds of
+// one thing, each with covers of its own — the programs of the circuit
+// assembly with the circuit overseer, with the branch representative, of the
+// regional convention: a row for every kind, rather than for the first one
+// alone. None for a category with covers of its own, or with more kinds than
+// a row each would suit.
+func (s *Server) kindShelves(ctx context.Context, lng model.Language, cat wol.LibraryCard, lib wol.LibraryPage, page basePage) []pubShelf {
+	var kinds []wol.LibraryCard
+	for _, c := range lib.Cards() {
+		if c.Kind != wol.LibraryKind || c.Thumbnail != "" {
+			return nil
+		}
+		kinds = append(kinds, c)
+	}
+	if len(kinds) < 2 || len(kinds) > pubMaxKinds {
+		return nil
+	}
+	rows := make([]*pubShelf, len(kinds))
+	var wg sync.WaitGroup
+	for i, k := range kinds {
+		wg.Go(func() { rows[i] = s.pubCovers(ctx, lng, k, []string{k.Title}, 1, page) })
+	}
+	wg.Wait()
+	var out []pubShelf
+	for _, sh := range rows {
+		if sh != nil {
+			sh.Heading = cat.Title
+			out = append(out, *sh)
+		}
+	}
+	return out
 }
 
 // yearCards are the years of a periodical's page, newest first as wol lists
