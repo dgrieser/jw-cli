@@ -51,6 +51,10 @@ type App struct {
 	Flags  Flags
 	Stdout io.Writer
 	Stderr io.Writer
+	// Background, set before the service is first used, brings what is kept
+	// up to date behind the readers' backs rather than before they get it:
+	// for jw serve, which lives long enough to (see httpx.Background).
+	Background bool
 
 	once     sync.Once
 	http     *httpx.Client
@@ -106,6 +110,9 @@ func (a *App) init() {
 		// what upstream answered is kept on disk, so the next command — or
 		// jw serve after a restart — does not ask again until it changed
 		opts = append(opts, httpx.WithResponseCache(a.cache))
+		if a.Background {
+			opts = append(opts, httpx.WithBackgroundRevalidation())
+		}
 		a.http = httpx.New(opts...)
 		a.mediator = mediator.New(a.http)
 		a.pubmedia = pubmedia.New(a.http)

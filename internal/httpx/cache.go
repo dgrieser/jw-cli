@@ -45,6 +45,9 @@ type Cache struct {
 
 	memoFlight singleflight.Group
 
+	// hot keeps what was read from the files lately in memory
+	hot *hotCache
+
 	// size accounting: size is the bytes on disk as of the last sweep, by
 	// this process or another, with what other processes recorded since in
 	// the sweep marker; written is what this process added since, unrecorded
@@ -120,6 +123,7 @@ func Open(dir string, o CacheOptions) *Cache {
 		}
 	}
 	c.dir = dir
+	c.hot = newHot(hotMax)
 	// a cache without a sweep marker is new (or just migrated): there is
 	// nothing to sweep, and what this process writes is all there is
 	if _, err := os.Stat(c.markerPath()); errors.Is(err, fs.ErrNotExist) {
@@ -286,11 +290,23 @@ func (c *Cache) loadEntry(id string, headerOnly bool) (entry, []byte, bool) {
 	if !c.active() {
 		return e, nil, false
 	}
-	f, err := os.Open(c.entryPath(id))
+	p := c.entryPath(id)
+	if headerOnly {
+		if st, err := os.Stat(p); err == nil {
+			if v, ok := c.hot.get(p, st); ok {
+				return v.(entry), nil, true
+			}
+		}
+	}
+	f, err := os.Open(p)
 	if err != nil {
 		return e, nil, false
 	}
 	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return e, nil, false
+	}
 	r := bufio.NewReader(f)
 	line, err := r.ReadSlice('\n')
 	if err != nil || !bytes.HasPrefix(line, []byte(entryMagic)) {
@@ -299,16 +315,23 @@ func (c *Cache) loadEntry(id string, headerOnly bool) (entry, []byte, bool) {
 	if json.Unmarshal(line[len(entryMagic):], &e) != nil || e.Hash == "" {
 		return e, nil, false
 	}
+	if int64(len(line))+e.Size != st.Size() {
+		return e, nil, false // cut short
+	}
+	c.hot.put(p, st, e, int64(len(line))+hotItemCost)
 	if headerOnly {
 		return e, nil, true
 	}
-	body, err := io.ReadAll(r)
-	if err != nil || int64(len(body)) != e.Size {
+	body := make([]byte, e.Size)
+	if _, err := io.ReadFull(r, body); err != nil {
 		return e, nil, false
 	}
-	c.touch(c.entryPath(id))
+	c.touch(p, st)
 	return e, body, true
 }
+
+// hotItemCost is what keeping an item in memory costs beyond its data.
+const hotItemCost = 256
 
 // saveEntry writes a body aside and renames it into place, so a reader running
 // alongside — jw serve answers many requests at once, a second command may
@@ -361,11 +384,24 @@ func (c *Cache) loadMemo(key string) (memoRecord, bool) {
 		return m, false
 	}
 	p := c.memoPath(key)
-	b, err := os.ReadFile(p)
-	if err != nil || json.Unmarshal(b, &m) != nil || len(m.Value) == 0 {
+	st, err := os.Stat(p)
+	if err != nil {
 		return m, false
 	}
-	c.touch(p)
+	if v, ok := c.hot.get(p, st); ok {
+		m = v.(memoRecord)
+	} else {
+		b, err := os.ReadFile(p)
+		if err != nil || json.Unmarshal(b, &m) != nil || len(m.Value) == 0 {
+			return m, false
+		}
+		// the file read may be newer than st, and is then read again next
+		// time rather than taken for what st describes
+		if int64(len(b)) == st.Size() {
+			c.hot.put(p, st, m, int64(len(b))+hotItemCost)
+		}
+	}
+	c.touch(p, st)
 	return m, true
 }
 
@@ -409,11 +445,14 @@ func (c *Cache) Put(key string, v any) {
 // a hundred times an hour needs one stamp, not a hundred.
 const touchEvery = time.Hour
 
-func (c *Cache) touch(p string) {
-	st, err := os.Stat(p)
-	if err == nil && time.Since(st.ModTime()) > touchEvery {
+func (c *Cache) touch(p string, st os.FileInfo) {
+	if time.Since(st.ModTime()) > touchEvery {
 		now := time.Now()
-		_ = os.Chtimes(p, now, now)
+		if os.Chtimes(p, now, now) == nil {
+			if nst, err := os.Stat(p); err == nil {
+				c.hot.restamp(p, nst.ModTime())
+			}
+		}
 	}
 }
 
@@ -430,6 +469,7 @@ func (c *Cache) writeFile(p string, b []byte) {
 	if st, err := os.Stat(p); err == nil {
 		n -= st.Size()
 	}
+	c.hot.drop(p)
 	if werr != nil || cerr != nil || os.Rename(f.Name(), p) != nil {
 		_ = os.Remove(f.Name())
 		return
@@ -438,6 +478,7 @@ func (c *Cache) writeFile(p string, b []byte) {
 }
 
 func (c *Cache) removeFile(p string) {
+	c.hot.drop(p)
 	if st, err := os.Stat(p); err == nil && os.Remove(p) == nil {
 		c.wrote(-st.Size())
 	}

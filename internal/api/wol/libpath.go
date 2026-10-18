@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
 // The library names its pages in the words of each language
@@ -246,8 +248,20 @@ func rootSlug(root LibraryPage) string {
 // the English tree, or below the last page that tree carries, the key
 // segments of cfg's own pages — so an address is the same in every language.
 // A path that names no page of cfg's tree is ErrNoTranslation.
+//
+// What it finds is kept as a memo of its own, rebuilt when a page it walked
+// through changed: a page of the publications names a dozen shelves, and each
+// would otherwise walk the tree down from its top anew.
 func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
 	path = strings.Trim(path, "/")
+	key := "canonlib1-" + kind + "|" + cfg.Locale + "|" + cfg.Rsconf + "|" + cfg.Lp + "|" +
+		canon.Locale + "|" + canon.Rsconf + "|" + canon.Lp + "|" + path
+	return httpx.Memo(ctx, c.cache, key, func(ctx context.Context) (LibraryPage, error) {
+		return c.canonicalLibrary(ctx, cfg, canon, kind, path)
+	})
+}
+
+func (c *Client) canonicalLibrary(ctx context.Context, cfg, canon Config, kind, path string) (LibraryPage, error) {
 	if cfg == canon {
 		// wol answers a library path it does not know with a page above
 		// it rather than an error; walking the tree tells
@@ -283,7 +297,7 @@ func (c *Client) CanonicalLibrary(ctx context.Context, cfg, canon Config, kind, 
 	}
 	if localKind != LibraryKind {
 		// a shelf in English, one publication here
-		return c.CanonicalLibrary(ctx, cfg, canon, localKind, local)
+		return c.canonicalLibrary(ctx, cfg, canon, localKind, strings.Trim(local, "/"))
 	}
 	page, err := c.Library(ctx, cfg, LibraryKind, local)
 	if err != nil {

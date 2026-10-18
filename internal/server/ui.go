@@ -1474,6 +1474,10 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
 	page.Body = s.passagesHTML(res, &page, depth)
 	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
+	if page.ChapterNav != nil {
+		// where a reader goes on to, read before they ask
+		s.prefetch(r.Context(), lng, page.ChapterNav.Next.Href)
+	}
 	page.frame(&res)
 	if res.Table != nil {
 		page.BookNames = map[int]string{}

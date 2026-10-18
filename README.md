@@ -652,6 +652,18 @@ to fall back on asks twice more, after 1 and 3 seconds, when the server says
 it is busy (429, 502, 503, 504). `--cache-ttl 1h` changes the window,
 `--cache-ttl 0` checks on every use.
 
+`jw serve` does not keep a reader waiting on any of that: what it keeps past
+the window (up to 30 days) is used at once and asked about upstream in the
+background, so a page that changed shows its new version the next time it is
+read. The server also reads ahead: the start page, publications, media,
+bible, daily text and meetings when it starts and every hour after, in its
+default language and the last three its readers read; the chapter after the
+one on screen; and, in the browser, the page behind a link the pointer rests
+on or a finger touches. Background work gives way to the readers: before each
+request upstream it waits, up to 2 seconds, while a reader's request is under
+way. What the pages are built from is kept in memory too (up to 256 MB), as
+long as the files it was read from have not changed on disk.
+
 The cache is bounded at 4 GB by default; past that, what was used least
 recently is dropped. `--cache-max 500MB` or `JW_CACHE_MAX=2GB` changes the
 bound, `0` turns the cache off. Commands run one after another keep to it

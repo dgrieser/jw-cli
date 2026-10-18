@@ -5,8 +5,10 @@ package bibleref
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"golang.org/x/text/runes"
@@ -69,8 +71,18 @@ type Table struct {
 	shorts [67]string // the merged abbreviation, where shorter than names
 }
 
-// English returns the base table.
+// English returns the base table, a copy of its own for the caller to merge
+// into.
 func English() *Table {
+	base := english()
+	t := *base
+	t.byName = maps.Clone(base.byName)
+	return &t
+}
+
+// english is the base table, built once: normalizing every name a book goes
+// by is what reading a reference would otherwise begin with every time.
+var english = sync.OnceValue(func() *Table {
 	t := &Table{byName: map[string]int{}}
 	for num := 1; num <= 66; num++ {
 		for i, name := range bookNames[num] {
@@ -84,7 +96,7 @@ func English() *Table {
 		}
 	}
 	return t
-}
+})
 
 // Merge adds localized names (book number -> display name plus aliases).
 // Merged names win for display; lookups keep both.

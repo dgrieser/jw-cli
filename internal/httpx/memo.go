@@ -41,6 +41,9 @@ func Memo[T any](ctx context.Context, c *Cache, key string, build func(context.C
 	if hasKept(ctx) {
 		flightKey += "\x00kept"
 	}
+	if InBackground(ctx) {
+		flightKey += "\x00bg"
+	}
 	ch := c.memoFlight.DoChan(flightKey, func() (any, error) {
 		// shared by every caller waiting on key, so not cut short by the first
 		// one giving up
@@ -80,8 +83,19 @@ func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(cont
 	old, have := c.loadMemo(key)
 	// a rebuild that failed lately would most likely fail again, after
 	// waiting on the same unanswering server
-	if have && !anew && (time.Now().Unix() < old.Retry || c.memoCurrent(ctx, old)) {
+	if have && !anew && time.Now().Unix() < old.Retry {
 		return memoResult{old.Value, old.Deps}, nil
+	}
+	if have && !anew {
+		cl := c.client.Load()
+		current, stale := c.memoCurrent(ctx, old, cl.later(ctx))
+		if current && stale {
+			// as it was, while the background asks whether it still is
+			c.refreshMemoLater(cl, key, build)
+		}
+		if current {
+			return memoResult{old.Value, old.Deps}, nil
+		}
 	}
 	bctx := ctx
 	if have && !anew {
@@ -114,12 +128,22 @@ func (c *Cache) memo(ctx context.Context, key string, anew bool, build func(cont
 }
 
 // memoCurrent reports whether every source of a memo still has the body it
-// was built from, revalidating the stale ones.
-func (c *Cache) memoCurrent(ctx context.Context, m memoRecord) bool {
+// was built from, revalidating the stale ones — or, with later, taking them
+// as they are and reporting stale, for the background to revalidate.
+func (c *Cache) memoCurrent(ctx context.Context, m memoRecord, later bool) (current, stale bool) {
 	if len(m.Deps) == 0 {
-		return time.Since(time.Unix(m.At, 0)) < c.fresh
+		age := time.Since(time.Unix(m.At, 0))
+		if age < c.fresh {
+			return true, false
+		}
+		return later && age < maxStale, true
 	}
 	cl := c.client.Load()
+	current = c.depsCurrent(ctx, cl, m, later, &stale)
+	return current, stale
+}
+
+func (c *Cache) depsCurrent(ctx context.Context, cl *Client, m memoRecord, later bool, stale *bool) bool {
 	for id, want := range m.Deps {
 		e, _, ok := c.loadEntry(id, true)
 		if !ok {
@@ -140,7 +164,11 @@ func (c *Cache) memoCurrent(ctx context.Context, m memoRecord) bool {
 			}
 		}
 		got := e.Hash
-		if !e.fresh(c.fresh) && cl != nil {
+		switch {
+		case e.fresh(c.fresh) || cl == nil:
+		case later && e.fresh(maxStale):
+			*stale = true
+		default:
 			if got, ok = cl.revalidate(ctx, id, e, want); !ok {
 				return false
 			}
