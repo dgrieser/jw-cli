@@ -37,3 +37,19 @@ func TestWithoutPrintEditions(t *testing.T) {
 		t.Errorf("a document without printed pages lost images: %+v", got)
 	}
 }
+
+func TestDescribeFigures(t *testing.T) {
+	in := `<figure><img src="a.jpg" alt="Saul &amp; David"/><figcaption><p>Caption</p></figcaption></figure>` +
+		`<figure><img src="b.jpg" alt="Same"/><figcaption><p>Same</p></figcaption></figure>` +
+		`<figure><img src="c.jpg" alt="Bare"/></figure>`
+	got := describeFigures(in, "Alt text")
+	want := `<figure><img src="a.jpg" alt="Saul &amp; David"/><figcaption><p>Caption</p><p class="imagemeta">Alt text: Saul &amp; David</p></figcaption></figure>` +
+		`<figure><img src="b.jpg" alt="Same"/><figcaption><p>Same</p></figcaption></figure>` +
+		`<figure><img src="c.jpg" alt="Bare"/><figcaption><p class="imagemeta">Alt text: Bare</p></figcaption></figure>`
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+	if plain := "<p>Text</p>"; describeFigures(plain, "Alt text") != plain {
+		t.Error("a document without pictures changed")
+	}
+}

@@ -315,3 +315,43 @@ func withoutPrintEditions(images []model.MediaAsset, body string) []model.MediaA
 	}
 	return out
 }
+
+// describeFigures writes under each picture of a document what its alt text
+// says of it, labelled, as the images listed below the document do: the
+// description says what the picture shows, which its caption mostly does
+// not. A picture whose caption says the same is left as it is.
+func describeFigures(fragment, label string) string {
+	if !strings.Contains(fragment, "<figure") || !strings.Contains(fragment, "alt=") {
+		return fragment
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return fragment
+	}
+	changed := false
+	doc.Find("figure").Each(func(_ int, fig *goquery.Selection) {
+		alt := strings.Join(strings.Fields(fig.Find("img[alt]").First().AttrOr("alt", "")), " ")
+		if alt == "" {
+			return
+		}
+		capt := fig.ChildrenFiltered("figcaption").First()
+		if strings.Join(strings.Fields(capt.Text()), " ") == alt {
+			return
+		}
+		p := `<p class="imagemeta">` + nethtml.EscapeString(label) + `: ` + nethtml.EscapeString(alt) + `</p>`
+		if capt.Length() > 0 {
+			capt.AppendHtml(p)
+		} else {
+			fig.AppendHtml(`<figcaption>` + p + `</figcaption>`)
+		}
+		changed = true
+	})
+	if !changed {
+		return fragment
+	}
+	out, err := doc.Find("body").Html()
+	if err != nil {
+		return fragment
+	}
+	return out
+}

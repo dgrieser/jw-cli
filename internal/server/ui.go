@@ -343,7 +343,7 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 		}
 		art.HTML = body
 	}
-	out := s.sanitized(art.HTML, s.svc.ArticleBase(art))
+	out := template.HTML(describeFigures(string(s.sanitized(art.HTML, s.svc.ArticleBase(art))), text(lng).LabelAltText)) //nolint:gosec // sanitized
 	if depth > 0 {
 		fb := lazyFallback{text: text(lng).UILazyFallback, lang: r.URL.Query().Get("lang")}
 		out = template.HTML(foldSections(string(out), fb)) //nolint:gosec // sanitized above
