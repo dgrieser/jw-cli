@@ -141,13 +141,14 @@ func (e *eventStream) finishRun(r *http.Request, note string, requests int, err 
 
 // sectionEvent renders a streamed section into the disclosure the page shows:
 // the title as the summary, the body sanitized like every other fragment and
-// folded, so each reference inside it opens on its own. A section others are
+// folded, so each reference inside it opens on its own, its pictures
+// described as the document's are. A section others are
 // streamed into carries the empty list they go into.
 //
 // A section says what it holds (data-ref) so a link to it opens it rather than
 // leaving the page, and a lazy one where its body loads from (data-lazy) once
 // it is opened.
-func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
+func (s *Server) sectionEvent(sec service.UnfoldSection, txt *i18n.Messages) streamEvent {
 	base := firstNonEmpty(sec.Base, s.svc.HTTP.Base.WOL)
 	body, err := render.Render(sec.Body, render.HTML, render.Options{BaseURL: base})
 	if err != nil {
@@ -171,7 +172,7 @@ func (s *Server) sectionEvent(sec service.UnfoldSection) streamEvent {
 	b.WriteString(sec.Title)
 	b.WriteString(`</summary><div class="section-body">`)
 	// a stream is read by a script, which loads a lazy section itself
-	b.WriteString(foldFragment(foldPrintEditions(body), lazyFallback{}))
+	b.WriteString(foldFragment(foldPrintEditions(describeFigures(body, txt.LabelAltText)), lazyFallback{}))
 	if sec.Key != "" {
 		fmt.Fprintf(&b, `<div class="sections" data-key="%s"></div>`, html.EscapeString(sec.Key))
 	}
@@ -252,7 +253,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamPassageParts(r.Context(), lng, edition, ref, parts, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
@@ -330,7 +331,7 @@ func (s *Server) unfoldCited(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamCited(r.Context(), lng, refs, self, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -391,7 +392,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
@@ -437,7 +438,7 @@ func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamTranslations(r.Context(), lng, edition, ref, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -460,7 +461,7 @@ func (s *Server) unfoldFootnote(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamFootnote(r.Context(), lng, path, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -497,7 +498,7 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 	cfg.Progress = ev.progress
 	sec, err := s.svc.ArticleSection(r.Context(), lng, target, cfg, txt)
 	if err == nil {
-		ev.send(s.sectionEvent(sec))
+		ev.send(s.sectionEvent(sec, txt))
 	}
 	ev.finishRun(r, "", 1, err, txt, cfg.Verses)
 }
