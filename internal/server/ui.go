@@ -673,7 +673,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	if page.DocID == 0 {
 		page.DocID = wol.DocIDFromURL(art.URL)
 	}
-	page.Images = art.Images
+	page.Images = withoutPrintEditions(art.Images, string(page.Body))
 	s.render(w, http.StatusOK, "article", page)
 }
 
@@ -770,7 +770,7 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Images:       art.Images,
+		Images:       withoutPrintEditions(art.Images, string(body)),
 	})
 }
 
@@ -831,7 +831,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Images:       art.Images,
+		Images:       withoutPrintEditions(art.Images, string(body)),
 	})
 }
 

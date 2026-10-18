@@ -3,6 +3,8 @@ package server
 import (
 	"strings"
 	"testing"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 func TestFoldPrintEditions(t *testing.T) {
@@ -21,5 +23,17 @@ func TestFoldPrintEditions(t *testing.T) {
 	}
 	if strings.Count(got, "<details") != 1 {
 		t.Error("one disclosure for the run")
+	}
+}
+
+func TestWithoutPrintEditions(t *testing.T) {
+	body := foldPrintEditions(`<p>Text</p><div class="alternatePresentation"><div class="thumbnail"><img src="https://x/a.jpg"/></div><div class="title">Printed edition</div></div>`)
+	images := []model.MediaAsset{{URL: "https://x/a.jpg"}, {URL: "https://x/photo.jpg"}}
+	got := withoutPrintEditions(images, body)
+	if len(got) != 1 || got[0].URL != "https://x/photo.jpg" {
+		t.Errorf("got %+v, want only the photo", got)
+	}
+	if got := withoutPrintEditions(images, "<p>Text</p>"); len(got) != 2 {
+		t.Errorf("a document without printed pages lost images: %+v", got)
 	}
 }
