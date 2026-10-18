@@ -40,6 +40,9 @@ func TestUnfoldHeadingOfACitationNamingVersesOrAPage(t *testing.T) {
 			unfold.Node{Ref: unfold.Ref{Text: "Mut in finsteren Zeiten", Path: "/wol/pc/1/2"}, Title: "Mut in finsteren Zeiten",
 				Publication: "Geh mutig deinen Weg mit Gott", Symbol: "wcg"},
 			"Mut in finsteren Zeiten (wcg)"},
+		{"a citation naming the headline after its publication is kept whole",
+			unfold.Node{Ref: unfold.Ref{Text: "it-1 „Gleichnisse“ Abs. 91", Path: "/wol/pc/1/2"}, Title: "Gleichnisse", Symbol: "it-1"},
+			"Gleichnisse (it-1 „Gleichnisse“ Abs. 91)"},
 		{"a verse citation naming its book stays",
 			unfold.Node{Ref: unfold.Ref{Text: "4. Mo. 14:1-10,", Path: "/wol/bc/1/2"}, Title: "Numbers 14:1-10"}, "4. Mo. 14:1-10"},
 	} {

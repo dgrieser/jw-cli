@@ -321,8 +321,10 @@ shown, including a link to the full article.`,
 				var list []string
 				for _, it := range e.Items {
 					label := formatLink(format, it.Title, linkTarget(a, firstNonEmpty(it.ArticleURL, it.PCPath)))
-					if it.Source != "" {
-						label += " (" + formatLink(format, it.Source, "") + ")"
+					// where the entry is, as a heading names it, else the index
+					// that lists it
+					if src := firstNonEmpty(it.Citation, it.Source); src != "" {
+						label += " (" + formatLink(format, src, "") + ")"
 					}
 					var body string
 					if it.ExcerptHTML != "" {

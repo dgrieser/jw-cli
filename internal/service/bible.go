@@ -550,6 +550,7 @@ func (s *Service) Research(ctx context.Context, lng model.Language, input string
 	var entries []ResearchEntry
 	err := s.ForEachStudySection(ctx, lng, input, func(ref string, verse model.Verse, sec model.StudySection) {
 		if len(sec.Research) > 0 {
+			s.withGuideCitations(ctx, sec.Research)
 			entries = append(entries, ResearchEntry{Ref: ref, Verse: verse, Items: sec.Research})
 		}
 	})

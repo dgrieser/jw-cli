@@ -505,6 +505,7 @@ func (r *tooltipResolver) studyOf(ctx context.Context, ref bibleref.Ref) (unfold
 		}
 		out.Notes = append(out.Notes, sec.Notes...)
 		out.Media = append(out.Media, sec.Media...)
+		r.s.withGuideCitations(ctx, sec.Research)
 		for _, item := range researchItems(sec.Research) {
 			if item.PCPath == "" {
 				// a whole article rather than a passage: nothing to resolve
@@ -586,10 +587,33 @@ func researchItems(items []model.ResearchItem) []model.ResearchItem {
 // citation inside a document would say; the group it came from ("Research
 // Guide") only stands in when there is no such line.
 func researchLabel(item model.ResearchItem) string {
+	// a guide's entry is cited where it is, as an index's is; the passage
+	// read names its headline
+	if item.Citation != "" {
+		return item.Citation
+	}
 	if item.Title != "" {
 		return item.Title
 	}
 	return item.Source
+}
+
+// withGuideCitations fills in where each research guide entry among items is
+// (wol.GuideCitations): one read of the guide per book of the bible, kept
+// like any page. Best effort: an entry whose guide cannot be read keeps its
+// headline alone.
+func (s *Service) withGuideCitations(ctx context.Context, items []model.ResearchItem) {
+	for i := range items {
+		it := &items[i]
+		if it.Kind != model.ResearchGuideItem || it.PCPath == "" || it.Citation != "" {
+			continue
+		}
+		cites, err := s.WOL.GuideCitations(ctx, it.PCPath)
+		if err != nil {
+			continue
+		}
+		it.Citation = cites[wol.GuideKey(it.PCPath)]
+	}
 }
 
 // researchRank is which of two index entries for the same passage is kept when
@@ -1262,6 +1286,13 @@ func headingParts(n unfold.Node, source string, txt *i18n.Messages) (title, src 
 		return ref, ""
 	}
 	if saysIt(ref, n.Title) {
+		// a citation that opens with the headline names the article by it
+		// ("“God So Loved the World”, The Watchtower, 7/1/2014"): the symbol
+		// says the rest. One that names it after the publication
+		// ("it-1 „Gleichnisse“ Abs. 91") is a citation like any other.
+		if !strings.HasPrefix(unquote(ref), unquote(n.Title)) {
+			return n.Title, ref
+		}
 		if n.Symbol != "" {
 			return n.Title, n.Symbol
 		}
