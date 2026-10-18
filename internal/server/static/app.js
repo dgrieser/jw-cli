@@ -2394,43 +2394,62 @@
     return target && JW.test(target) ? target : "";
   }
 
+  // openInTab opens page in a new tab. The tab opens with the click itself,
+  // or the browser blocks it: a citation not resolved yet is resolved into
+  // the tab opened for it
+  function openInTab(page) {
+    var known = knownPage(page);
+    if (known) {
+      window.open(known, "_blank", "noopener");
+      return;
+    }
+    var tab = window.open("", "_blank");
+    if (!tab) return;
+    tab.opener = null;
+    resolvePage(page).then(function (href) { tab.location.replace(href); }, function () { tab.location.replace(page.href); });
+  }
+
+  // followHere follows a link as a reference, in place — a section's button
+  // too, which a click otherwise opens in a new tab
+  function followHere(a) {
+    held = null;
+    a._inPlace = true;
+    try {
+      a.click();
+    } finally {
+      a._inPlace = false;
+    }
+  }
+
   function openLinkMenu(a) {
     var page = pageOf(a);
     linkMenu.textContent = "";
     linkMenu.link = a;
-    var item = LM.itemOf(a);
-    if (item) {
-      depthRow(item);
-    } else if (LM.inPlace(a)) {
-      menuItem(T.followHere || "↳", function () {
-        held = null;
-        a.click();
+    var away = page && !samePage(page.href, location.href);
+    var toTab = page ? function () { menuItem(T.followTab || "↗", function () { openInTab(page); }); } : null;
+    var toPage = away ? function () {
+      // a citation goes where it was found to lead before, else is asked
+      // where, else the server is left to lead there itself (/open)
+      menuItem(T.followPage || "→", function () {
+        resolvePage(page).then(function (href) { leave(href); }, function () { leave(page.href); });
       });
-    }
-    if (page) {
-      if (!samePage(page.href, location.href)) {
-        // a citation goes where it was found to lead before, else is asked
-        // where, else the server is left to lead there itself (/open)
-        menuItem(T.followPage || "→", function () {
-          resolvePage(page).then(function (href) { leave(href); }, function () { leave(page.href); });
-        });
+    } : null;
+    var toSection = away && page.sec ? function () {
+      menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
+    } : null;
+    if (a.classList.contains("follow")) {
+      // a section's button opens in a new tab at a click: that first, then
+      // its page, its section, and as a reference last
+      [toTab, toPage, toSection].forEach(function (f) { if (f) f(); });
+      if (LM.inPlace(a)) menuItem(T.followHere || "↳", function () { followHere(a); });
+    } else {
+      var item = LM.itemOf(a);
+      if (item) {
+        depthRow(item);
+      } else if (LM.inPlace(a)) {
+        menuItem(T.followHere || "↳", function () { followHere(a); });
       }
-      // a new tab opens with the click itself, or the browser blocks it: a
-      // citation not resolved yet is resolved into the tab opened for it
-      menuItem(T.followTab || "↗", function () {
-        var known = knownPage(page);
-        if (known) {
-          window.open(known, "_blank", "noopener");
-          return;
-        }
-        var tab = window.open("", "_blank");
-        if (!tab) return;
-        tab.opener = null;
-        resolvePage(page).then(function (href) { tab.location.replace(href); }, function () { tab.location.replace(page.href); });
-      });
-      if (page.sec && !samePage(page.href, location.href)) {
-        menuItem(fmt(T.followSection, page.sec.name), function () { fileIn(page, linkTitle(a)); });
-      }
+      [toPage, toTab, toSection].forEach(function (f) { if (f) f(); });
     }
     // and where it is read on jw.org or wol.jw.org, in a new tab
     var site = siteOf(a);
@@ -3129,7 +3148,7 @@
           u.hash = "";
           a.setAttribute("href", u.href);
         } catch (err) {}
-        labelFollow(a, T.follow, s);
+        labelFollow(a, T.followTab, s);
         s.appendChild(a);
         return;
       }
@@ -4526,6 +4545,16 @@
     if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target.closest ? e.target.closest("a[href]") : null;
     if (!a || !doc.contains(a) || a.closest("[data-ui]") || a.target) return;
+    // a section's button opens what it leads to in a new tab, unless asked
+    // to open it here, as a reference
+    if (a.classList.contains("follow") && !a._inPlace) {
+      var page = pageOf(a);
+      if (page) {
+        e.preventDefault();
+        openInTab(page);
+        return;
+      }
+    }
     var num = numberItem(a);
     if (num) {
       e.preventDefault();
