@@ -343,7 +343,7 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 		}
 		art.HTML = body
 	}
-	out := s.sanitized(art.HTML, s.svc.ArticleBase(art))
+	out := template.HTML(describeFigures(string(s.sanitized(art.HTML, s.svc.ArticleBase(art))), text(lng).LabelAltText)) //nolint:gosec // sanitized
 	if depth > 0 {
 		fb := lazyFallback{text: text(lng).UILazyFallback, lang: r.URL.Query().Get("lang")}
 		out = template.HTML(foldSections(string(out), fb)) //nolint:gosec // sanitized above
@@ -673,7 +673,7 @@ func (s *Server) uiArticle(w http.ResponseWriter, r *http.Request) {
 	if page.DocID == 0 {
 		page.DocID = wol.DocIDFromURL(art.URL)
 	}
-	page.Images = art.Images
+	page.Images = withoutPrintEditions(art.Images, string(page.Body))
 	s.render(w, http.StatusOK, "article", page)
 }
 
@@ -770,7 +770,7 @@ func (s *Server) uiDailyText(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Images:       art.Images,
+		Images:       withoutPrintEditions(art.Images, string(body)),
 	})
 }
 
@@ -831,7 +831,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		AutoUnfold:   auto,
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
-		Images:       art.Images,
+		Images:       withoutPrintEditions(art.Images, string(body)),
 	})
 }
 
