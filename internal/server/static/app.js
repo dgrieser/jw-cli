@@ -391,14 +391,14 @@
   // chapter is picked — the picker, the book and chapter grids, the way on to
   // the next chapter — those of this week's reading carry a bookmark. The
   // server reads the workbooks a quarter of a year ahead; what it said is kept
-  // in this browser, so the mark is there at once, and asked again a day on.
+  // in this browser, so the mark is there at once, and asked again a week on.
   // A link marks the chapter it leads to with data-book and data-chapter, a
   // book with data-book alone.
 
   var weekReading = (function () {
     var KEY = "jw:reading";
     var AHEAD = 13;
-    var DAY = 864e5;
+    var WEEK = 7 * 864e5;
     var chapters = null;
     var books = null;
 
@@ -444,7 +444,7 @@
       }
       var known = kept && kept.weeks && kept.weeks[start];
       if (known) use(known);
-      if (known && Date.now() - (kept.at || 0) < DAY) return;
+      if (known && Date.now() - (kept.at || 0) < WEEK) return;
       var q = new URLSearchParams({ weeks: String(AHEAD), date: start });
       var lang = new URLSearchParams(location.search).get("lang");
       if (lang) q.set("lang", lang);

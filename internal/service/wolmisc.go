@@ -113,10 +113,41 @@ type ReadingChapter struct {
 	Chapter int `json:"chapter"`
 }
 
-// WeekReading reads the bible reading of the ISO week containing date off its
-// midweek workbook. A week whose material lists no workbook has no reading;
-// one whose material is not out yet is an error.
+// readingKeep is how long a week's reading is kept before the workbook is
+// read again: it is printed months ahead and hardly ever changes.
+const readingKeep = 7 * 24 * time.Hour
+
+// keptReading is a week's reading as the cache keeps it, with when it was read.
+type keptReading struct {
+	At      int64       `json:"at"`
+	Reading WeekReading `json:"reading"`
+}
+
+// WeekReading is the bible reading of the ISO week containing date, read off
+// its midweek workbook at most once a week. A week whose material lists no
+// workbook has no reading; one whose material is not out yet is an error.
 func (s *Service) WeekReading(ctx context.Context, lng model.Language, date time.Time) (WeekReading, error) {
+	year, week := date.ISOWeek()
+	key := fmt.Sprintf("reading1-%s-%d-%d", lng.Locale, year, week)
+	var kept keptReading
+	found := s.Cache.Get(key, &kept)
+	if found && time.Since(time.Unix(kept.At, 0)) < readingKeep {
+		return kept.Reading, nil
+	}
+	rd, err := s.weekReading(ctx, lng, date)
+	if err != nil {
+		if found {
+			// what was read before stands while the library cannot be read
+			return kept.Reading, nil
+		}
+		return rd, err
+	}
+	s.Cache.Put(key, keptReading{At: time.Now().Unix(), Reading: rd})
+	return rd, nil
+}
+
+// weekReading reads the week's reading off its workbook.
+func (s *Service) weekReading(ctx context.Context, lng model.Language, date time.Time) (WeekReading, error) {
 	year, week := date.ISOWeek()
 	monday := date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
 	out := WeekReading{Year: year, Week: week, Start: monday.Format(time.DateOnly), Chapters: []ReadingChapter{}}

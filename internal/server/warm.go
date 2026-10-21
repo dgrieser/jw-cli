@@ -29,9 +29,16 @@ import (
 // few milliseconds from the cache.
 const warmEvery = time.Hour
 
-// warmPages are the pages a reader starts from, and the weeks' bible reading
-// every bible picker marks, a quarter of a year ahead.
-var warmPages = []string{"/", "/pub", "/media", "/bible", "/dailytext", "/meetings", "/api/v1/bible/reading?weeks=13"}
+// warmPages are the pages a reader starts from.
+var warmPages = []string{"/", "/pub", "/media", "/bible", "/dailytext", "/meetings"}
+
+// The weeks' bible reading every bible picker marks is read ahead a quarter
+// of a year, once a week: the workbooks are out months ahead, and what the
+// service read of them it keeps for a week (service.WeekReading).
+const (
+	readingPage  = "/api/v1/bible/reading?weeks=13"
+	readingEvery = 7 * 24 * time.Hour
+)
 
 // warmLangs is how many of the languages readers read lately the start
 // pages are kept ready in, besides the server's default.
@@ -78,6 +85,8 @@ func (s *Server) Warm(ctx context.Context) {
 	}
 	t := time.NewTicker(warmEvery)
 	defer t.Stop()
+	// when the reading was last read ahead, by language
+	readAt := map[string]time.Time{}
 	for {
 		// the server's default language, and those readers read lately
 		def, _ := s.resolveLanguage(httpx.Background(ctx), s.defaultLang)
@@ -85,7 +94,12 @@ func (s *Server) Warm(ctx context.Context) {
 			if lang != "" && lang == def.Symbol {
 				continue
 			}
-			for _, p := range warmPages {
+			pages := warmPages
+			if time.Since(readAt[lang]) >= readingEvery {
+				readAt[lang] = time.Now()
+				pages = append(slices.Clip(pages), readingPage)
+			}
+			for _, p := range pages {
 				if lang != "" {
 					sep := "?"
 					if strings.Contains(p, "?") {
