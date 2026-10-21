@@ -775,8 +775,8 @@ settings in the bar; no page links out to the sites otherwise.
 Words a glossary explains — the study bible's glossary, *Insight on the
 Scriptures* and the *Research Guide* — carry a dotted line in the bible's
 text: the verses of the bible page, and the verses a reference shows wherever
-it is unfolded (another translation's included), the first time each comes up
-in the page and in each section; for now, not in articles, the daily text or
+it is unfolded (another translation's included), wherever each comes up; for
+now, not in articles, the daily text or
 the meeting parts themselves. A verse
 that unfolds — by its number, or a reference showing one verse with its
 sections — has a section for each word marked in it, after its other
