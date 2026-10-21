@@ -32,25 +32,39 @@ func glossaryMux(t *testing.T) *http.ServeMux {
 	tab := func(href, title string) string {
 		return fmt.Sprintf(`<li class="viewPage"><a href="%s"><span class="title">%s</span></a></li>`, href, title)
 	}
-	const lib, pub = "/en/wol/library/r1/lp-e", "/en/wol/publication/r1/lp-e"
-	mux.HandleFunc(lib, page("Publications", "", card(lib+"/all-publications/insight", "Insight")))
-	mux.HandleFunc(lib+"/all-publications/insight", page("Insight", "", card(lib+"/all-publications/insight/a", "A")))
-	mux.HandleFunc(lib+"/all-publications/insight/a", page("A", "",
-		card("/en/wol/d/r1/lp-e/1200000005", "Aaron"),
-		card("/en/wol/d/r1/lp-e/1200000007", "Abyss"),
-		card("/en/wol/d/r1/lp-e/1200000009", "Amos, Book of")))
-	tabs := tab(pub+"/nwtstg/0", "INTRODUCTION") + tab(pub+"/nwtstg/4", "A")
-	mux.HandleFunc(pub+"/nwtstg", page("Glossary", tabs, card("/en/wol/d/r1/lp-e/1001077000", "Introduction")))
-	mux.HandleFunc(pub+"/nwtstg/0", page("Glossary", tabs, card("/en/wol/d/r1/lp-e/1001077000", "Introduction")))
-	mux.HandleFunc(pub+"/nwtstg/4", page("Glossary", tabs,
-		card("/en/wol/d/r1/lp-e/1001077007", "Abyss"),
-		card("/en/wol/d/r1/lp-e/1001077021", "Aram; Aramaeans")))
+	// the same library in English and in German, its entries the same
+	// documents in both
+	for _, l := range []struct{ loc, r, lp, insight, glossary, intro, abyss, aram, night string }{
+		{"en", "r1", "lp-e", "Insight", "Glossary", "INTRODUCTION", "Abyss", "Aram; Aramaeans", "Night"},
+		{"de", "r10", "lp-x", "Einsichten", "Worterklärungen", "Einführung", "Abgrund", "Aram; Aramäer", "Nacht"},
+	} {
+		lib := "/" + l.loc + "/wol/library/" + l.r + "/" + l.lp
+		pub := "/" + l.loc + "/wol/publication/" + l.r + "/" + l.lp
+		doc := "/" + l.loc + "/wol/d/" + l.r + "/" + l.lp + "/"
+		mux.HandleFunc(lib, page("Publications", "", card(lib+"/all-publications/insight", l.insight)))
+		mux.HandleFunc(lib+"/all-publications/insight", page(l.insight, "", card(lib+"/all-publications/insight/a", "A")))
+		mux.HandleFunc(lib+"/all-publications/insight/a", page("A", "",
+			card(doc+"1200000005", "Aaron"),
+			card(doc+"1200000007", l.abyss),
+			card(doc+"1200000009", "Amos, Book of"),
+			card(doc+"1200003253", l.night)))
+		tabs := tab(pub+"/nwtstg/0", l.intro) + tab(pub+"/nwtstg/4", "A")
+		mux.HandleFunc(pub+"/nwtstg", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
+		mux.HandleFunc(pub+"/nwtstg/0", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
+		mux.HandleFunc(pub+"/nwtstg/4", page(l.glossary, tabs,
+			card(doc+"1001077007", l.abyss),
+			card(doc+"1001077021", l.aram)))
+	}
+	mux.HandleFunc("/de", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<a href="/de/wol/h/r10/lp-x">home</a>`))
+	})
 	return mux
 }
 
 // The glossaries' tables of contents are read into an index of the words
 // they explain, the study bible's glossary first; one that cannot be read is
-// left out, and the index said to be partial.
+// left out, and the index said to be partial. A word of every day is left out
+// too.
 func TestAPIGlossary(t *testing.T) {
 	srv := newTestServer(t, glossaryMux(t))
 	resp, body := get(t, srv, "/api/v1/glossary?lang=en")
@@ -78,6 +92,31 @@ func TestAPIGlossary(t *testing.T) {
 	}
 	if !reflect.DeepEqual(g.Terms, want) {
 		t.Errorf("terms = %+v\nwant %+v", g.Terms, want)
+	}
+	if !reflect.DeepEqual(g.Common, []int{1200003253}) {
+		t.Errorf("common = %v", g.Common)
+	}
+}
+
+// Another language leaves out the entries the English index names as words
+// of every day: the same documents ("Nacht" is the "Night" of English).
+func TestAPIGlossaryCommonInGerman(t *testing.T) {
+	srv := newTestServer(t, glossaryMux(t))
+	resp, body := get(t, srv, "/api/v1/glossary?lang=de")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	var g service.Glossary
+	if err := json.Unmarshal([]byte(body), &g); err != nil {
+		t.Fatal(err)
+	}
+	var terms []string
+	for _, t := range g.Terms {
+		terms = append(terms, t.Term)
+	}
+	want := []string{"Aaron", "Abgrund", "Abgrund", "Amos", "Aram", "Aramäer"}
+	if !g.CaseSensitive || !reflect.DeepEqual(terms, want) || !reflect.DeepEqual(g.Common, []int{1200003253}) {
+		t.Errorf("terms = %q, common = %v, want %q without Nacht", terms, g.Common, want)
 	}
 }
 

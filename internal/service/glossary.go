@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -57,6 +58,9 @@ type Glossary struct {
 	// Partial marks an index some of whose pages could not be read: it is
 	// kept for a while only, and read again after.
 	Partial bool `json:"partial,omitempty"`
+	// Common are the entries left out as words of every day (see
+	// glossaryCommon), by docid.
+	Common []int `json:"common,omitempty"`
 }
 
 // GlossaryTerm is one word a glossary explains, and the document explaining it.
@@ -95,7 +99,7 @@ type glossaryCall struct {
 // contents at most once a week. While they cannot be read, the index read
 // before stands.
 func (s *Service) Glossary(ctx context.Context, lng model.Language) (Glossary, error) {
-	key := "glossary1-" + lng.Locale
+	key := "glossary3-" + lng.Locale
 	var kept keptGlossary
 	found := s.Cache.Get(key, &kept)
 	keep := glossaryKeep
@@ -198,6 +202,9 @@ func (s *Service) glossary(ctx context.Context, lng model.Language) (Glossary, e
 	}
 	if len(out.Terms) == 0 && firstErr != nil {
 		return out, firstErr
+	}
+	if err := s.dropCommon(ctx, lng, &out); err != nil {
+		fail(err)
 	}
 	slices.SortStableFunc(out.Terms, func(a, b GlossaryTerm) int {
 		if c := strings.Compare(a.Term, b.Term); c != 0 {
@@ -312,4 +319,117 @@ func sharedPrefix(a, b string) int {
 		n++
 	}
 	return n
+}
+
+// glossaryCommon are words of every day that a glossary explains too — a
+// night, water, a mother — and that are not marked: they come up in every
+// paragraph, and their entries are rarely what a reader is after. They are
+// named in English, and the entries they title left out in every language:
+// an entry is the same document in all of them (wol's /dsync/ of Insight's
+// "Night", 1200003253, is "Nacht", 1200003253), so the English index names
+// the documents. Words a glossary gives a meaning of its own — love, faith,
+// soul, spirit, heart, world, word, earth, light of the bible's own sense
+// aside — are not among them, and neither are names, units or the topics
+// of the Research Guide.
+var glossaryCommon = strings.Fields(`
+	Time Times Day Night Week Weeks Month Year Hour Seasons Calendar Age Generation
+	Four Six Seven Ten Twelve Number
+	Mother Father Son Daughter Brother Sister Wife Husband Child Children Boy Kid
+	Woman Man Friend Uncle Lady Guest Neighbor Neighbors Family Stranger Name Names
+	Hand Head Face Eye Ear Mouth Nose Neck Hair Skin Foot Leg Arm Finger Thumb Toe
+	Knee Heel Lip Teeth Tongue Throat Shoulder Breast Belly Stomach Bones Liver
+	Kidneys Body Hips
+	Black White Red Blue Green Greens Brown Purple Colors
+	Water Light Fire Rain Snow Ice Wind Sun Moon Star Sky Cloud Smoke Dust Sand
+	Stone Rock Ground Grass Trees Forest River Sea Island Isle Mountain Hill Valley
+	Desert Field Garden Thunder Lightning Rainbow Shadow Spring Vegetation Weeds
+	City Town Village House Homes Road Roads Street Highway Gate Gateway Walls Tower
+	Castle Palace Window Building Park Pool Camp Inn Theater Marketplace Province
+	District South North East West
+	Book Paper Ink Pen Glass Bottle Cup Bowl Pot Basket Bag Bed Lamp Key Lock Ring
+	Belt Dress Clothing Cloth Fabric Needle Nail Hammer Knife Cord Wheel Wagon
+	Ladder Mirror Oven Seat Purse Luggage Jar Vessels Pipe Hook Bell Chains Cage
+	Necklace Bracelet Beads Perfume Cosmetics Toys Maps Instrument Signal Saw
+	Food Bread Milk Meat Cheese Butter Honey Cake Salt Oil Flour Garlic Onion Fish
+	Wheat Meal Cooking Spice Apple
+	Dog Horse Fox Wolf Lion Lions Bear Cow Pig Bull Goat Bee Ant Bat Frog Spider
+	Worm Eagle Camel Snake Birds Insects Animals Cricket Nest
+	Gold Silver Iron Copper Brass Bronze Tin Wool Cotton Silk Clay Brick Bricks
+	Marble Wax Coal Coals Tar Lime Metals Diamond Crystal Pearl Ruby Coral Sapphire
+	Emerald Jade Ivory Ebony
+	Work Business Music Song Singing Singers Dancing Reading Writing Teaching
+	Education School Language Speech Voice Hearing Sleep Dream Dreams Journey Kiss
+	Kissing Greeting Sewing Farming Fishing Agriculture Architecture Mining Boxing
+	Sports Games Money Debt Loan Purchase Wages Hire Taxes Taxation Interest Bank
+	Measure Load Labor Mind Pain Fever Mistakes Accident End Well Prison
+	Teacher Judge Leader Secretary Nurse Nurses Physician Doctors Merchant
+	Messenger Builder Baker Soldier Army Guard Police Governor Commander Deputy
+	Recorder Courier Runners Mason Translator Herald King Queen Prince Princes Duke
+	Lawyers
+	News Internet Television Technology Shopping Movies Gambling Soccer Lounge Yoga
+`)
+
+// commonEntry reports whether an entry of the English index is one of the
+// words of every day: titled by one of them alone, or with its other forms
+// ("Bank, Banker") or a numeral ("Pen, II"), but not with what makes it
+// another thing ("Thunder, Sons of") or a topic of its own ("Work
+// (Employment)").
+func commonEntry(title string, common map[string]bool) bool {
+	terms := GlossaryTerms(title)
+	// an ending in brackets is a form of the word ("Time(s)")
+	title = glossaryEnding.ReplaceAllString(title, "$1")
+	if strings.Contains(title, "(") {
+		return false
+	}
+	if len(terms) == 0 || !common[strings.ToLower(terms[0])] {
+		return false
+	}
+	for alt := range strings.SplitSeq(title, ";") {
+		for p := range strings.SplitSeq(alt, ",") {
+			p = strings.TrimSpace(p)
+			if !slices.Contains(terms, p) && !glossaryNumeral.MatchString(p) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var glossaryNumeral = regexp.MustCompile(`^[IVX]+$`)
+
+// dropCommon leaves the words of every day out of an index, the entries the
+// English index names; reading that index is what can fail.
+func (s *Service) dropCommon(ctx context.Context, lng model.Language, g *Glossary) error {
+	common := map[string]bool{}
+	for _, w := range glossaryCommon {
+		common[strings.ToLower(w)] = true
+	}
+	var ids []int
+	if base, _, _ := strings.Cut(lng.Locale, "-"); base == LibraryLocale {
+		for _, t := range g.Terms {
+			title := cmp.Or(t.Title, t.Term)
+			if commonEntry(title, common) && !slices.Contains(ids, t.DocID) {
+				ids = append(ids, t.DocID)
+			}
+		}
+	} else {
+		en, err := s.Language(ctx, LibraryLocale)
+		if err != nil {
+			return err
+		}
+		eg, err := s.Glossary(ctx, en)
+		if err != nil {
+			return err
+		}
+		ids = slices.Clone(eg.Common)
+		// what it misses is left out once it is read whole
+		g.Partial = g.Partial || eg.Partial
+	}
+	slices.Sort(ids)
+	g.Common = ids
+	g.Terms = slices.DeleteFunc(g.Terms, func(t GlossaryTerm) bool {
+		_, found := slices.BinarySearch(ids, t.DocID)
+		return found
+	})
+	return nil
 }

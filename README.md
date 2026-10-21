@@ -783,7 +783,14 @@ contents into an index once a week, like the week's bible reading, and the
 browser keeps it for a week, so the words are marked as soon as a page is
 drawn. A word is found as the language writes it: German nouns in their own
 case and with their endings (*Gottes*), English ones in any case and in the
-plural; the shortest ones (two letters) are left out. **Glossary words** in
+plural; the shortest ones (two letters) are left out, and so are some 360
+words of every day the glossaries explain too — *night*, *water*, *mother*,
+*hand*, *city*, *gold* —, while words they give a meaning of their own
+(*spirit*, *faith*, *world*, *heaven*) stay. That list is kept in English
+(`glossaryCommon` in `internal/service/glossary.go`) and holds for every
+language: an entry is the same document everywhere (wol's sync of Insight's
+*Night* is *Nacht*, docid 1200003253), so the English index names the entries
+to leave out, and `common` in the index lists them. **Glossary words** in
 the settings takes the lines off. `--glossary-langs` (`$JW_GLOSSARY_LANGS`)
 names the languages indexed: `E,X` (English and German) by default, `none`
 for none.
@@ -1008,7 +1015,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
 | `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
 | `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents; `404` for one wol does not have) |
-| `GET /api/v1/glossary` | — | — (the words the glossaries of the language explain: `books` (the study bible's glossary, Insight, the Research Guide, as the library titles them), `terms` (`t` the word, `b` its book, `d` the document explaining it, `n` the entry's title when it is more than the word), `docURL` (a document's address without its docid), and how words are matched (`caseSensitive`, `suffixes`). Read off the tables of contents once a week, like `/bible/reading`; `partial` when some of them could not be read. A language not in `--glossary-langs` has no terms) |
+| `GET /api/v1/glossary` | — | — (the words the glossaries of the language explain: `books` (the study bible's glossary, Insight, the Research Guide, as the library titles them), `terms` (`t` the word, `b` its book, `d` the document explaining it, `n` the entry's title when it is more than the word), `docURL` (a document's address without its docid), how words are matched (`caseSensitive`, `suffixes`), and `common`, the docids of the entries left out as words of every day. Read off the tables of contents once a week, like `/bible/reading`; `partial` when some of them could not be read. A language not in `--glossary-langs` has no terms) |
 | `GET /api/v1/dailytext` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw dailytext` |
 | `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw meetings ...` (also `mid`/`mw`, `we`/`wt`) |
 | `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` (with `subtitles=true` the redirect goes to the `.vtt` alone, `404` when there is none, where `jw download --subtitles` saves the video and its subtitles) |

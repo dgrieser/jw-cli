@@ -54,3 +54,23 @@ func TestLetterTab(t *testing.T) {
 		}
 	}
 }
+
+// An entry titled by a word of every day alone, or with its forms, is one;
+// one that the title makes another thing, or a topic of its own, is not.
+func TestCommonEntry(t *testing.T) {
+	common := map[string]bool{"night": true, "bank": true, "time": true, "pen": true, "thunder": true, "work": true}
+	for title, want := range map[string]bool{
+		"Night":            true,
+		"Bank, Banker":     true,
+		"Time(s)":          true,
+		"Pen, II":          true,
+		"Thunder, Sons of": false,
+		"Work (Effort)":    false,
+		"Abyss":            false,
+		"Leader, Noble":    false,
+	} {
+		if got := commonEntry(title, common); got != want {
+			t.Errorf("commonEntry(%q) = %v, want %v", title, got, want)
+		}
+	}
+}
