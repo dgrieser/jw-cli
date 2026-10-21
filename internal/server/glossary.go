@@ -26,6 +26,15 @@ func (s *Server) glossaryLang(ctx context.Context, lng model.Language) bool {
 	return false
 }
 
+// markGlossary marks the words the glossaries of lng explain in a fragment of
+// a page (service.MarkGlossary), when they are indexed.
+func (s *Server) markGlossary(ctx context.Context, lng model.Language, fragment string, own ...int) string {
+	if !s.glossaryLang(ctx, lng) {
+		return fragment
+	}
+	return s.svc.MarkGlossary(lng, fragment, own...)
+}
+
 // apiGlossary is the index of the words the glossaries of a language explain
 // (service.Glossary): GET /api/v1/glossary?lang=de. A language whose
 // glossaries are not indexed has no terms.

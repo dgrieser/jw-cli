@@ -81,6 +81,9 @@ const (
 	glossaryRetry = time.Hour
 )
 
+// glossaryKey is where the cache keeps the index of lng.
+func glossaryKey(lng model.Language) string { return "glossary3-" + lng.Locale }
+
 // keptGlossary is an index as the cache keeps it, with when it was read.
 type keptGlossary struct {
 	At       int64    `json:"at"`
@@ -99,7 +102,7 @@ type glossaryCall struct {
 // contents at most once a week. While they cannot be read, the index read
 // before stands.
 func (s *Service) Glossary(ctx context.Context, lng model.Language) (Glossary, error) {
-	key := "glossary3-" + lng.Locale
+	key := glossaryKey(lng)
 	var kept keptGlossary
 	found := s.Cache.Get(key, &kept)
 	keep := glossaryKeep

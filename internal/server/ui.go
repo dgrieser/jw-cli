@@ -350,7 +350,7 @@ func (s *Server) unfoldDocument(r *http.Request, lng model.Language, art model.A
 		fb := lazyFallback{text: text(lng).UILazyFallback, lang: r.URL.Query().Get("lang")}
 		out = template.HTML(foldSections(string(out), fb)) //nolint:gosec // sanitized above
 	}
-	return out, nil
+	return template.HTML(s.markGlossary(r.Context(), lng, string(out), art.DocID)), nil //nolint:gosec // sanitized above, links added
 }
 
 // unfoldRequest reads the level a page is asked to unfold to. With ?lazy=1 the
@@ -1474,7 +1474,7 @@ func (s *Server) uiBible(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.UnfoldLevels = unfoldLevels(r, max(depth, auto), 0)
-	page.Body = s.passagesHTML(res, &page, depth)
+	page.Body = template.HTML(s.markGlossary(r.Context(), lng, string(s.passagesHTML(res, &page, depth)))) //nolint:gosec // sanitized, links added
 	page.ChapterNav = s.chapterNav(r.Context(), lng, res, &page)
 	if page.ChapterNav != nil {
 		// where a reader goes on to, read before they ask

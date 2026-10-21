@@ -34,9 +34,9 @@ func glossaryMux(t *testing.T) *http.ServeMux {
 	}
 	// the same library in English and in German, its entries the same
 	// documents in both
-	for _, l := range []struct{ loc, r, lp, insight, glossary, intro, abyss, aram, night string }{
-		{"en", "r1", "lp-e", "Insight", "Glossary", "INTRODUCTION", "Abyss", "Aram; Aramaeans", "Night"},
-		{"de", "r10", "lp-x", "Einsichten", "Worterklärungen", "Einführung", "Abgrund", "Aram; Aramäer", "Nacht"},
+	for _, l := range []struct{ loc, r, lp, insight, glossary, intro, abyss, aram, night, jehovah string }{
+		{"en", "r1", "lp-e", "Insight", "Glossary", "INTRODUCTION", "Abyss", "Aram; Aramaeans", "Night", "Jehovah"},
+		{"de", "r10", "lp-x", "Einsichten", "Worterklärungen", "Einführung", "Abgrund", "Aram; Aramäer", "Nacht", "Jehova"},
 	} {
 		lib := "/" + l.loc + "/wol/library/" + l.r + "/" + l.lp
 		pub := "/" + l.loc + "/wol/publication/" + l.r + "/" + l.lp
@@ -47,7 +47,8 @@ func glossaryMux(t *testing.T) *http.ServeMux {
 			card(doc+"1200000005", "Aaron"),
 			card(doc+"1200000007", l.abyss),
 			card(doc+"1200000009", "Amos, Book of"),
-			card(doc+"1200003253", l.night)))
+			card(doc+"1200003253", l.night),
+			card(doc+"1200002300", l.jehovah)))
 		tabs := tab(pub+"/nwtstg/0", l.intro) + tab(pub+"/nwtstg/4", "A")
 		mux.HandleFunc(pub+"/nwtstg", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
 		mux.HandleFunc(pub+"/nwtstg/0", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
@@ -89,6 +90,7 @@ func TestAPIGlossary(t *testing.T) {
 		{Term: "Amos", Book: 1, DocID: 1200000009, Title: "Amos, Book of"},
 		{Term: "Aram", Book: 0, DocID: 1001077021, Title: "Aram; Aramaeans"},
 		{Term: "Aramaeans", Book: 0, DocID: 1001077021, Title: "Aram; Aramaeans"},
+		{Term: "Jehovah", Book: 1, DocID: 1200002300},
 	}
 	if !reflect.DeepEqual(g.Terms, want) {
 		t.Errorf("terms = %+v\nwant %+v", g.Terms, want)
@@ -114,7 +116,7 @@ func TestAPIGlossaryCommonInGerman(t *testing.T) {
 	for _, t := range g.Terms {
 		terms = append(terms, t.Term)
 	}
-	want := []string{"Aaron", "Abgrund", "Abgrund", "Amos", "Aram", "Aramäer"}
+	want := []string{"Aaron", "Abgrund", "Abgrund", "Amos", "Aram", "Aramäer", "Jehova"}
 	if !g.CaseSensitive || !reflect.DeepEqual(terms, want) || !reflect.DeepEqual(g.Common, []int{1200003253}) {
 		t.Errorf("terms = %q, common = %v, want %q without Nacht", terms, g.Common, want)
 	}
@@ -141,5 +143,24 @@ func TestAPIGlossaryOff(t *testing.T) {
 	}
 	if len(g.Terms) != 0 || len(g.Books) != 0 {
 		t.Errorf("a language not indexed: %+v", g)
+	}
+}
+
+// The server marks the words of the index in the pages it sends and in the
+// sections it streams: a link to the entry, naming its glossary.
+func TestGlossaryMarkedInPages(t *testing.T) {
+	srv := newTestServer(t, glossaryMux(t))
+	// the index is read first; a page asked for before it is read is sent
+	// unmarked, and reads it in the background
+	if resp, body := get(t, srv, "/api/v1/glossary?lang=en"); resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	_, body := get(t, srv, "/article?target=2024360&lang=en")
+	if !strings.Contains(body, `class="gloss"`) || !strings.Contains(body, `data-gloss-book="Insight" title="Insight">Jehovah</a>`) {
+		t.Errorf("the page does not mark Jehovah:\n%s", body)
+	}
+	_, body = get(t, srv, "/unfold/article?lang=en&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
+	if !strings.Contains(body, `title=\"Insight\"\u003eJehovah\u003c/a\u003e`) && !strings.Contains(body, `title=\"Insight\">Jehovah</a>`) {
+		t.Errorf("the streamed section does not mark Jehovah:\n%s", body)
 	}
 }

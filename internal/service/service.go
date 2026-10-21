@@ -38,6 +38,9 @@ type Service struct {
 	// glossaries are the glossary indexes being read, by cache key
 	// (Glossary).
 	glossaries sync.Map
+	// markers are the glossary indexes made ready for marking, by locale
+	// (MarkGlossary).
+	markers sync.Map
 }
 
 // New builds a Service and all its clients around one HTTP client and cache.

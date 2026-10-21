@@ -779,11 +779,18 @@ them: the first time each comes up in the page and in each section. Pressing
 one opens its entry under it as a reference, headed by the glossary it comes
 from; held, it offers the usual choices and the entries of the other
 glossaries that explain it too. The server reads the glossaries' tables of
-contents into an index once a week, like the week's bible reading, and the
-browser keeps it for a week, so the words are marked as soon as a page is
-drawn. A word is found as the language writes it: German nouns in their own
-case and with their endings (*Gottes*), English ones in any case and in the
-plural; the shortest ones (two letters) are left out, and so are some 360
+contents into an index once a week, like the week's bible reading, and marks
+the words in the HTML it sends — the page, and every section it streams — so
+the browser keeps nothing of it (a page asked for before the index is read
+comes unmarked). A word is found as the language writes it: German nouns in
+their own case and with their endings (*Gottes*), English ones in any case and
+in the plural. At the start of a sentence, where a capital says nothing, a word
+matched by its case — any German one, a short English one (*Will*, *Lot*) — is
+marked only as written, with no ending guessed (*Wundere* is no *Wunder*), and
+only when it was never seen in small letters, on that page or on any page the
+server marked before (*immer* makes *Immer* no priest's name); the server keeps
+those words per language. The shortest words (two letters) are left out, and
+so are some 360
 words of every day the glossaries explain too — *night*, *water*, *mother*,
 *hand*, *city*, *gold* —, while words they give a meaning of their own
 (*spirit*, *faith*, *world*, *heaven*) stay. That list is kept in English
