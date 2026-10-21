@@ -14,6 +14,7 @@ var de = Messages{
 	CitedResultsUnknown: "Publikationen, die %s zitieren",
 	ExcerptProgress:     "Textstellen werden gelesen: %d/%d",
 	CitedInHeading:      "Zitate von %s",
+	CitedShort:          "Zitate",
 	PageSuffix:          " (Seite %d, %d pro Seite)",
 	PageSuffixShort:     " — Seite %d",
 	SearchHeader:        "Suche: %s",
@@ -72,6 +73,7 @@ var de = Messages{
 
 	MarginalReference:           "Querverweis",
 	MarginalReferencesOf:        "Querverweise %s",
+	MarginalShort:               "Querverweise",
 	MarginalReferenceWithSource: "Querverweis %s von %s",
 
 	UnfoldHeading:  "Referenzen",
@@ -84,8 +86,9 @@ var de = Messages{
 	ResearchHeading:          "Forschungsverzeichnis",
 	ResearchGuideHeading:     "Leitfaden für Nachforschungen",
 	PublicationsIndexHeading: "Index der Publikationen",
+	IndexHeading:             "Index",
 	FootnotesHeading:         "Fußnoten",
-	TranslationsHeading:      "Andere Übersetzungen",
+	TranslationsHeading:      "Übersetzungen",
 	MediaHeading:             "Mediengalerie",
 	StudyFailed:              "Die Studienanmerkungen zu diesem Vers konnten nicht gelesen werden: %s",
 

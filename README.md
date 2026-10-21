@@ -450,9 +450,9 @@ reads the way it does in the study pane. `jw bible read` prints it in that
 order, and leaves out whatever the verse does not have:
 
 1. **Study notes**, under `Study notes`.
-2. **The study bible's indexes**, each under the name the page gives it —
-   `Study Guide`, then `Publications Index` — with no parent heading over the
-   two. Every entry an index lists is read, whether it has a passage to unfold
+2. **The study bible's indexes**, under one heading, `Index`, each inside it
+   under the name the page gives it — `Study Guide`, then `Publications Index`
+   — where the verse has both. Every entry an index lists is read, whether it has a passage to unfold
    or only names an article; an entry the first index already listed is left
    out of the second.
 3. **The marginal references**, under one heading naming the verse they belong
@@ -850,7 +850,9 @@ and its marginal references — and every bible verse any of them cites, as a
 verse at depth N−1. A verse at depth 0 is its text, with all of its sections as
 headings that load once opened; one that turns out to have nothing says so
 for a moment ("Nothing here") and then fades away; one that could not be
-loaded says why and offers to try again. Other translations and quotations load once opened at every
+loaded says why and offers to try again. A closed section is headed by what
+it holds alone ("Marginal references", "Quotations"); the verse it is of
+shows in its heading once it is open. Other translations and quotations load once opened at every
 depth. A passage of another publication is no step of its own: it brings the
 verses it cites one reference further down than the verse or document citing
 it, and nothing else it cites is followed. Depth 1 on a verse:
@@ -858,12 +860,12 @@ it, and nothing else it cites is followed. Depth 1 on a verse:
 ```
 Verse
 ├── Study notes ───────── at once, with every bible verse they cite
-├── Research Guide ────── at once, with every bible verse its passages cite
-├── Publications Index ── at once, with every bible verse its passages cite
+├── Index ─────────────── at once, Research Guide and Publications Index,
+│                         with every bible verse their passages cite
 ├── Marginal references ─ at once
-├── Other translations ── once opened
+├── Translations ──────── once opened
 └── Quotations ────────── once opened
-        └── each bible verse reached: its text, and the same six sections
+        └── each bible verse reached: its text, and the same five sections
             (and footnotes, where it has any), every one loaded once opened
 ```
 

@@ -38,7 +38,7 @@ func TestReadUnfoldSaysTheQuotationsFailed(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := res.Passages[0].Verses[0].Unfold
-	at := strings.Index(out, "Quotations of John 3:16")
+	at := strings.Index(out, `Quotations<span class="sec-of"> of John 3:16`)
 	if at < 0 || !strings.Contains(out[at:], citedFailed) {
 		t.Errorf("the failed search is not reported under the quotations:\n%s", out)
 	}
@@ -52,7 +52,7 @@ func TestUnfoldArticleSaysTheQuotationsFailed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	at := strings.Index(out, "Quotations of John 3:16")
+	at := strings.Index(out, `Quotations<span class="sec-of"> of John 3:16`)
 	if at < 0 || !strings.Contains(out[at:], citedFailed) {
 		t.Errorf("the failed search is not reported under the quotations:\n%s", out)
 	}

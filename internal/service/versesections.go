@@ -62,19 +62,38 @@ func footnotesSection(body string, txt *i18n.Messages) (UnfoldSection, bool) {
 	}, true
 }
 
-// indexSections are the study bible's indexes of a passage, one section each:
-// the whole articles they name, and the passages they point at, unfolded.
+// indexSections are the study bible's indexes of a passage, in one section:
+// the whole articles they name, and the passages they point at, unfolded —
+// each index under its own name where there are two.
 func indexSections(links []model.ResearchItem, research []unfold.Node, level int,
 	txt *i18n.Messages) []UnfoldSection {
-	var out []UnfoldSection
-	for i, g := range indexGroups(links, research, txt) {
-		var b strings.Builder
-		writeIndexGroup(&b, g, level, txt)
-		out = append(out, UnfoldSection{
-			Title: html.EscapeString(g.name), Body: b.String(), Order: orderIndexes + i, Ref: IndexRef(i),
-		})
+	groups := indexGroups(links, research, txt)
+	if len(groups) == 0 {
+		return nil
 	}
-	return out
+	var b strings.Builder
+	for _, g := range groups {
+		if len(groups) > 1 {
+			b.WriteString(headingHTML(level+1, html.EscapeString(g.name)))
+		}
+		writeIndexGroup(&b, g, level, txt)
+	}
+	return []UnfoldSection{{
+		Title: html.EscapeString(txt.IndexHeading), Body: b.String(), Order: orderIndexes, Ref: IndexRef(0),
+	}}
+}
+
+// ofTitle is a heading of what a passage has, format naming the passage
+// ("Querverweise Jeremia 46:2"): a closed section is headed by short alone,
+// and the rest shows once it is open (span.sec-of). A heading that does not
+// begin with short is shown whole.
+func ofTitle(format, short, passage string) string {
+	full := fmt.Sprintf(format, passage)
+	rest, ok := strings.CutPrefix(full, short)
+	if short == "" || !ok || strings.TrimSpace(rest) == "" {
+		return html.EscapeString(full)
+	}
+	return html.EscapeString(short) + `<span class="sec-of">` + html.EscapeString(rest) + `</span>`
 }
 
 // researchLinksSection lists the research guide's whole articles for a verse
@@ -97,7 +116,7 @@ const marginalKey = "marginal"
 // marginalEntry makes one by one.
 func marginalSection(passage string, txt *i18n.Messages) UnfoldSection {
 	return UnfoldSection{
-		Title: html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, passage)),
+		Title: ofTitle(txt.MarginalReferencesOf, txt.MarginalShort, passage),
 		Key:   marginalKey, Order: orderMarginal, Ref: MarginalRef,
 	}
 }
@@ -146,7 +165,7 @@ func citedSection(c unfold.Cited, level int, txt *i18n.Messages) (UnfoldSection,
 		return UnfoldSection{}, false
 	}
 	sec := UnfoldSection{
-		Title: html.EscapeString(fmt.Sprintf(txt.CitedInHeading, c.Ref)), Lazy: c.Lazy, Order: orderCited,
+		Title: ofTitle(txt.CitedInHeading, txt.CitedShort, c.Ref), Lazy: c.Lazy, Order: orderCited,
 		Ref: CitedRef,
 	}
 	switch {

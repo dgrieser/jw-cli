@@ -331,7 +331,7 @@ func TestWriteCited(t *testing.T) {
 	}, 4, i18n.EN.Text())
 	out := b.String()
 	for _, want := range []string{
-		"<h4>Quotations of Jeremiah 31:15</h4>",
+		`<h4>Quotations<span class="sec-of"> of Jeremiah 31:15</span></h4>`,
 		// every publication heads the passage it quotes the verse in
 		`<h5><a href="https://wol.jw.org/en/wol/d/r1/lp-e/2014927">Questions From Readers</a>` +
 			` (w14 12/15 p. 21)</h5>`,
@@ -579,9 +579,9 @@ func TestCitedRequests(t *testing.T) {
 	}
 }
 
-// Each index of the study bible is headed as the page names it, with no parent
-// heading over the two, and an entry the first index already listed is left out
-// of the second.
+// The study bible's indexes come in one section, Index, each headed inside it
+// as the page names it, and an entry the first index already listed is left
+// out of the second.
 func TestIndexSections(t *testing.T) {
 	var b strings.Builder
 	writeSections(&b, indexSections(
@@ -600,12 +600,13 @@ func TestIndexSections(t *testing.T) {
 				HTML: "<p>the guide passage</p>"},
 		}, 3, i18n.EN.Text()), 3)
 	out := b.String()
-	guide, index := strings.Index(out, "<h3>Research Guide</h3>"), strings.Index(out, "<h3>Publications Index</h3>")
-	if guide < 0 || index < 0 || guide >= index {
-		t.Fatalf("research guide %d, publications index %d:\n%s", guide, index, out)
+	head := strings.Index(out, "<h3>Index</h3>")
+	guide, index := strings.Index(out, "<h4>Research Guide</h4>"), strings.Index(out, "<h4>Publications Index</h4>")
+	if head < 0 || guide < head || index < 0 || guide >= index || strings.Count(out, "<h3>") != 1 {
+		t.Fatalf("index %d, research guide %d, publications index %d:\n%s", head, guide, index, out)
 	}
-	if strings.Contains(out, "Indexes") || strings.Contains(out, "Research guide</h3>") {
-		t.Errorf("a parent heading, or our own name for one of the indexes:\n%s", out)
+	if strings.Contains(out, "Research guide</h") {
+		t.Errorf("our own name for one of the indexes:\n%s", out)
 	}
 	// the article both indexes name is listed once, under the first of them
 	if n := strings.Count(out, "1102014204"); n != 1 {

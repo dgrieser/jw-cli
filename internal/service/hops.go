@@ -87,15 +87,11 @@ func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cit
 	}
 	return append(secs,
 		UnfoldSection{
-			Title: html.EscapeString(txt.ResearchGuideHeading), Order: orderIndexes,
-			Lazy: hopPartURL(ref, PartIndexes, KindGuide),
+			Title: html.EscapeString(txt.IndexHeading), Order: orderIndexes, Ref: IndexRef(0),
+			Lazy: hopPartURL(ref, PartIndexes, ""),
 		},
 		UnfoldSection{
-			Title: html.EscapeString(txt.PublicationsIndexHeading), Order: orderIndexes + 1,
-			Lazy: hopPartURL(ref, PartIndexes, KindPubIndex),
-		},
-		UnfoldSection{
-			Title: html.EscapeString(fmt.Sprintf(txt.MarginalReferencesOf, title)), Order: orderMarginal,
+			Title: ofTitle(txt.MarginalReferencesOf, txt.MarginalShort, title), Order: orderMarginal,
 			Lazy: hopPartURL(ref, PartMarginal, ""),
 		},
 		UnfoldSection{
@@ -103,7 +99,7 @@ func lazyVerseSections(refs []bibleref.Ref, title, text string, cited unfold.Cit
 			Lazy: translationsURL(ref, studyEdition),
 		},
 		UnfoldSection{
-			Title: html.EscapeString(fmt.Sprintf(txt.CitedInHeading, cited.Ref)), Order: orderCited,
+			Title: ofTitle(txt.CitedInHeading, txt.CitedShort, cited.Ref), Order: orderCited,
 			Lazy: cited.Lazy,
 		},
 	)
@@ -420,16 +416,11 @@ func (s *Service) streamPassageHops(ctx context.Context, lng model.Language, edi
 
 	if want(PartIndexes) && (len(indexRefs) > 0 || len(indexLinks) > 0) {
 		if lazy(PartIndexes) {
-			roots := make([]unfold.Node, len(indexRefs))
-			for i, ref := range indexRefs {
-				roots[i] = unfold.Node{Ref: ref}
-			}
-			for i, g := range indexGroups(indexLinks, roots, txt) {
-				out.Section(UnfoldSection{
-					Title: html.EscapeString(g.name), Order: orderIndexes + i, Ref: IndexRef(i),
-					Lazy: hopPartURL(ref, PartIndexes, indexKind(g.rank)),
-				})
-			}
+			// both indexes, under one heading, which loads them together
+			out.Section(UnfoldSection{
+				Title: html.EscapeString(txt.IndexHeading), Order: orderIndexes, Ref: IndexRef(0),
+				Lazy: hopPartURL(ref, PartIndexes, ""),
+			})
 		} else {
 			if parts.Kind == KindPubIndex {
 				// what the research guide lists already is not listed again

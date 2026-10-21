@@ -64,13 +64,14 @@ func TestUnfoldVerseHopsOneDeep(t *testing.T) {
 	}
 	for _, want := range []string{
 		`data-lazy="/unfold/verse?bible=nwtsty&amp;depth=1&amp;part=notes&amp;to=0&amp;vid=43001029"`,
-		`data-lazy="/unfold/verse?bible=nwtsty&amp;depth=1&amp;kind=guide&amp;part=indexes&amp;to=0&amp;vid=43001029"`,
-		`data-lazy="/unfold/verse?bible=nwtsty&amp;depth=1&amp;kind=pubindex&amp;part=indexes&amp;to=0&amp;vid=43001029"`,
+		`data-lazy="/unfold/verse?bible=nwtsty&amp;depth=1&amp;part=indexes&amp;to=0&amp;vid=43001029"`,
 		`data-lazy="/unfold/verse?bible=nwtsty&amp;depth=1&amp;part=marginal&amp;to=0&amp;vid=43001029"`,
 		`data-lazy="/unfold/translations?bible=nwtsty&amp;to=0&amp;vid=43001029"`,
 		`data-lazy="/unfold/cited?to=0&amp;vid=43001029"`,
-		"<summary>Research Guide</summary>", "<summary>Publications Index</summary>",
-		"<summary>Marginal references of John 1:29</summary>", "<summary>Quotations of John 1:29</summary>",
+		"<summary>Index</summary>",
+		`<summary>Marginal references<span class="sec-of"> of John 1:29</span></summary>`,
+		`<summary>Quotations<span class="sec-of"> of John 1:29</span></summary>`,
+		"<summary>Translations</summary>",
 	} {
 		if !strings.Contains(html, want) {
 			t.Errorf("missing %s in:\n%s", want, html)
@@ -106,7 +107,7 @@ func TestUnfoldVerseHopsNoteAfterVerse(t *testing.T) {
 	srv := newTestServer(t, hopsMux(t))
 	_, body := get(t, srv, "/unfold/verse?vid=43003016&depth=1&lang=en")
 	html, _ := sectionsHTML(t, body)
-	cited := strings.Index(html, `<summary>Quotations of John 1:29</summary><div class="section-body"></div>`)
+	cited := strings.Index(html, `<summary>Quotations<span class="sec-of"> of John 1:29</span></summary><div class="section-body"></div>`)
 	next := strings.Index(html, "everlasting life:")
 	if cited < 0 || next < cited {
 		t.Errorf("the next note should follow the verse's sections, outside them:\n%s", html)
