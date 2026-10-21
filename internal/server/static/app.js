@@ -3168,8 +3168,9 @@
     show();
   })();
 
-  // glossarySection is the section of a marked word, made when it is first
-  // pressed: headed by the word, it loads the entries once it is open
+  // glossarySection is the section of a marked word: headed by the word, it
+  // loads the entries once it is open. A verse that unfolds has one for each
+  // word marked in it, among its other sections (glossarySections).
   function glossarySection(a, target) {
     var q = new URLSearchParams();
     target.docs.forEach(function (d) { q.append("doc", d); });
@@ -3181,6 +3182,108 @@
     d.appendChild(make("summary", null, (a.textContent || "").replace(/\s+/g, " ").trim()));
     d.appendChild(make("div", "section-body"));
     return d;
+  }
+
+  // verseGloss are the marked words of a verse item's own text: the bible
+  // page's verse, or every part of a verse a passage shows (nestedVerse)
+  function verseGloss(item) {
+    var el = item.el;
+    if (el.matches(".item[data-vid]")) return Array.prototype.slice.call(el.querySelectorAll(":scope > .item-text a.gloss"));
+    if (!VERSE_ID.test(el.id || "")) return [];
+    var body = el.closest(".section-body") || el.parentElement;
+    var exp = el.closest(".expansion");
+    var out = [];
+    body.querySelectorAll('[id^="' + el.id.replace(/\d+$/, "") + '"]').forEach(function (part) {
+      if (part.closest(".expansion") !== exp || part.closest(".section-body") !== body) return;
+      part.querySelectorAll("a.gloss").forEach(function (g) { out.push(g); });
+    });
+    return out;
+  }
+
+  // glossarySections adds the sections of the words marked in a verse to the
+  // list its other sections came into, after them, as headings that load once
+  // opened; it says how many it added
+  function glossarySections(item, list) {
+    if (item.params.kind !== "verse") return 0;
+    var n = 0;
+    verseGloss(item).forEach(function (a) {
+      var t = linkTarget(a);
+      if (!t || t.kind !== "glossary" || findRef(list, t.key)) return;
+      var d = glossarySection(a, t);
+      d.setAttribute("data-order", String(90 + n));
+      list.appendChild(d);
+      n++;
+    });
+    return n;
+  }
+
+  // glossShown gives a verse that a passage shows with its sections already —
+  // a reference of one verse — the sections of its marked words too, among
+  // them; it is run on what every stream brought
+  function glossShown(root) {
+    root.querySelectorAll("details.section[data-lazy]").forEach(function (d) {
+      var q = lazyQuery(d);
+      var vid = parseInt(q.get("vid"), 10) || 0;
+      var to = parseInt(q.get("to"), 10) || 0;
+      var list = d.parentElement;
+      var body = list && list.closest(".section-body");
+      if (!vid || (to && to !== vid % 1000) || !body) return;
+      var exp = list.closest(".expansion");
+      var prefix = "v" + Math.floor(vid / 1e6) + "-" + Math.floor(vid / 1e3) % 1000 + "-" + vid % 1000 + "-";
+      var n = list.querySelectorAll(':scope > details.section[data-ref^="gloss:"]').length;
+      body.querySelectorAll('[id^="' + prefix + '"] a.gloss').forEach(function (a) {
+        if (a.closest(".expansion") !== exp) return;
+        var t = linkTarget(a);
+        if (!t || t.kind !== "glossary" || findRef(list, t.key)) return;
+        var g = glossarySection(a, t);
+        g.setAttribute("data-order", String(90 + n++));
+        list.appendChild(g);
+      });
+    });
+  }
+
+  // glossVerse is the verse item a marked word is in, when it is in one
+  function glossVerse(a) {
+    var page = a.closest(".item[data-vid]");
+    if (page && page._unfold && a.closest(".item-text")) return page._unfold;
+    var v = verseOf(a);
+    return v && v.span ? nestedVerse(a, v) : null;
+  }
+
+  // followGlossary opens a marked word's section among the sections of its
+  // verse, unfolding the verse first — its sections as headings, as its
+  // number does — when it is not yet; false for a word in no verse
+  function followGlossary(a, target) {
+    var item = glossVerse(a);
+    if (!item) return false;
+    dequeue(item);
+    var open = function () {
+      var found = item.exp && findRef(item.exp, target.key);
+      if (!found && item.exp && item.state !== "loading") {
+        // unfolded before it had the words' sections
+        var list = item.exp.querySelector(":scope > .sections") || item.exp.appendChild(make("div", "sections"));
+        found = list.appendChild(glossarySection(a, target));
+      }
+      if (found) {
+        reveal(found);
+        saveState(a);
+      }
+    };
+    if (item.exp || item.state === "loading") {
+      open();
+      return true;
+    }
+    var shown = shownSections(item);
+    if (shown) {
+      glossShown(shown.parentElement || shown);
+      var found = findRef(shown, target.key) || shown.appendChild(glossarySection(a, target));
+      reveal(found);
+      saveState(a);
+      return true;
+    }
+    unfold(item, 1, { lazy: true }).then(open);
+    if (item.exp && item.exp.isConnected) inView(item.exp);
+    return true;
   }
 
   // --- the items: a verse, or a block of a document citing something -----
@@ -3719,6 +3822,8 @@
           loader.replaceWith(note);
         }
         loader.remove();
+        // a verse shown with its sections has its words' sections too
+        glossShown(list);
         // empty groups that never got an entry say nothing
         Object.keys(groups).forEach(function (k) {
           if (!groups[k].list.children.length && onlyList(groups[k].section)) {
@@ -3841,6 +3946,8 @@
         return;
       }
       if (res.note) exp.appendChild(make("p", "note", res.note));
+      // the words marked in a verse have their sections too
+      if (!res.stopped) res.count += glossarySections(item, list);
       if (res.stopped) {
         // called off: what came stays, and the item can be unfolded again
         if (res.count <= 0) {
@@ -4601,6 +4708,7 @@
   };
 
   function follow(a, target) {
+    if (target.kind === "glossary" && followGlossary(a, target)) return true;
     var owner = ownerOf(a);
     if (!owner) return false;
     if (owner.details) owner.details.open = true;
