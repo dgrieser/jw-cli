@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/PuerkitoBio/goquery"
 
@@ -307,13 +308,13 @@ func (s *Service) StreamFootnote(ctx context.Context, lng model.Language, path s
 // link names when it names one ("#h=12:0-14:0"), the whole document otherwise.
 // What a page loads when a link to an article is followed.
 //
-// cfg.Depth is how deep the document unfolds, counted in bible references
-// (UnfoldConfig.Hops): the document is a passage reached at depth Depth, so
-// the verses it quotes come Depth-1 deep — at one, their text with their
-// sections loaded once opened — and nothing else it cites is followed. Zero
-// shows it as it is.
+// The document comes as it is: nothing it cites is unfolded with it, so no
+// paragraph of it brings its references before the reader asks — each one
+// that cites something unfolds on its own in the page. cfg.Depth above zero
+// reads a page of jw.org in its library copy, whose citations the page can
+// unfold, where the library has one.
 func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target string,
-	cfg UnfoldConfig, txt *i18n.Messages) (UnfoldSection, error) {
+	cfg UnfoldConfig) (UnfoldSection, error) {
 	page := target
 	if i := strings.IndexByte(page, '#'); i >= 0 {
 		page = page[:i]
@@ -330,15 +331,16 @@ func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target
 		if lib := s.citable(ctx, lng, art); lib.URL != art.URL {
 			art, body = lib, lib.HTML
 		}
-		// the document is what cites: the verses it quotes, one reference
-		// further down than the link it was reached through
-		cfg.Hops = true
-		r := hopResolver(s, lng, nil, art.DocID, wol.DocIDFromURL(art.URL), wol.DocIDFromURL(page))
-		unfolded, err := unfoldInlineHops(ctx, r, body, cfg, cfg.Depth-1, true, txt)
-		if err != nil {
-			return UnfoldSection{}, err
+	}
+	// an entry that only sends on to another ("Siehe SCHAF.") shows that one
+	// under the line, once
+	if href, ok := seeOnly(body); ok {
+		if !strings.HasPrefix(href, "http") {
+			href = s.HTTP.Base.WOL + href
 		}
-		body = unfolded
+		if to, err := s.Article(ctx, lng, href); err == nil && strings.TrimSpace(to.HTML) != "" {
+			body = dropFirstH1(body) + dropFirstH1(to.HTML)
+		}
 	}
 	return UnfoldSection{
 		Title: html.EscapeString(firstNonBlank(art.Title, target)),
@@ -349,6 +351,36 @@ func (s *Service) ArticleSection(ctx context.Context, lng model.Language, target
 		Open:  true,
 	}, nil
 }
+
+// seeOnly is where a document leads that says nothing but where to look
+// instead — an entry of Insight such as "LAMM: Siehe SCHAF." — as the one link
+// to a document it holds besides its title; ok is false for any document
+// that says more.
+func seeOnly(fragment string) (href string, ok bool) {
+	if len(fragment) > 4000 || !strings.Contains(fragment, "<a") {
+		return "", false
+	}
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(fragment))
+	if err != nil {
+		return "", false
+	}
+	body := doc.Find("body")
+	body.Find("h1, header, script, style, .pswp, input").Remove()
+	links := body.Find("a[href]")
+	if links.Length() != 1 {
+		return "", false
+	}
+	href = links.AttrOr("href", "")
+	if !strings.Contains(href, "/wol/tc/") && !strings.Contains(href, "/wol/d/") {
+		return "", false
+	}
+	text := strings.Join(strings.Fields(body.Text()), " ")
+	return href, utf8.RuneCountInString(text) <= seeOnlyMax
+}
+
+// seeOnlyMax is how long a document saying only where to look instead runs
+// at most: "Siehe GOTTES KÖNIGREICH." and its like.
+const seeOnlyMax = 60
 
 // dropFirstH1 takes a document's own title off its body: the section showing
 // it is already headed with it.

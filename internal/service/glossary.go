@@ -486,7 +486,7 @@ func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs [
 	var wg sync.WaitGroup
 	for i, e := range entries {
 		wg.Go(func() {
-			sec, err := s.ArticleSection(ctx, lng, g.DocURL+strconv.Itoa(e.DocID), UnfoldConfig{}, txt)
+			sec, err := s.ArticleSection(ctx, lng, g.DocURL+strconv.Itoa(e.DocID), UnfoldConfig{})
 			if err != nil {
 				errs[i] = err
 				return

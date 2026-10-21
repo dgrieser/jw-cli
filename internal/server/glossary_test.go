@@ -182,9 +182,18 @@ func TestUnfoldGlossary(t *testing.T) {
 				<div class="bodyTxt"><p>The entry %[2]s.</p></div></div></body></html>`, title, id)
 		})
 	}
+	// Amos only sends on to Abyss
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1200000009", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html><head><title>AMOS</title></head><body><div id="article"><header><h1>AMOS</h1></header>
+			<p class="sb">See <a class="it" href="/en/wol/d/r1/lp-e/1200000007">ABYSS</a>.</p></div></body></html>`)
+	})
 	srv := newTestServer(t, mux)
 	if resp, body := get(t, srv, "/api/v1/glossary?lang=en"); resp.StatusCode != 200 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	if _, body := get(t, srv, "/unfold/glossary?lang=en&doc=1200000009"); !strings.Contains(body, "See ") ||
+		!strings.Contains(body, "The entry 1200000007") {
+		t.Errorf("an entry sending on to another does not show it:\n%s", body)
 	}
 	resp, body := get(t, srv, "/unfold/glossary?lang=en&doc=1200000007&doc=1001077007")
 	if resp.StatusCode != 200 {
@@ -211,5 +220,16 @@ func TestUnfoldGlossary(t *testing.T) {
 	}
 	if resp, _ := get(t, srv, "/unfold/glossary?lang=en"); resp.StatusCode != 400 {
 		t.Errorf("no document: status %d", resp.StatusCode)
+	}
+}
+
+// An article opened in place comes as it is: none of its paragraphs brings
+// what it cites before the reader asks, at any depth.
+func TestUnfoldArticleUnfoldsNothing(t *testing.T) {
+	srv := newTestServer(t, wolMux(t))
+	_, body := get(t, srv, "/unfold/article?lang=en&depth=2&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
+	if !strings.Contains(body, "CALEB trusted in Jehovah") || !strings.Contains(body, "/wol/bc/r1/lp-e/2024360/0/0") ||
+		strings.Contains(body, "expansion") {
+		t.Errorf("the article is not as it is:\n%s", body)
 	}
 }

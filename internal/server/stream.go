@@ -545,7 +545,7 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	cfg.Progress = ev.progress
-	sec, err := s.svc.ArticleSection(r.Context(), lng, target, cfg, txt)
+	sec, err := s.svc.ArticleSection(r.Context(), lng, target, cfg)
 	if err == nil {
 		ev.send(s.sectionEvent(r.Context(), lng, sec, txt))
 	}
