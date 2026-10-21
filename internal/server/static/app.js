@@ -385,6 +385,91 @@
     window.addEventListener("load", function () { idle(picker.prefetch); }, { once: true });
   })();
 
+  // --- this week's bible reading: its books and chapters bookmarked --------
+  //
+  // The midweek meeting reads a few chapters each week. Wherever a book or a
+  // chapter is picked — the picker, the book and chapter grids, the way on to
+  // the next chapter — those of this week's reading carry a bookmark. The
+  // server reads the workbooks a quarter of a year ahead; what it said is kept
+  // in this browser, so the mark is there at once, and asked again a week on.
+  // A link marks the chapter it leads to with data-book and data-chapter, a
+  // book with data-book alone.
+
+  var weekReading = (function () {
+    var KEY = "jw:reading";
+    var AHEAD = 13;
+    var WEEK = 7 * 864e5;
+    var chapters = null;
+    var books = null;
+
+    // the Monday of the week a day is in, as the server names weeks
+    function monday(d) {
+      var m = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7);
+      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      return m.getFullYear() + "-" + pad(m.getMonth() + 1) + "-" + pad(m.getDate());
+    }
+
+    function mark(root) {
+      if (!chapters || !root || !root.querySelectorAll) return;
+      root.querySelectorAll("a[data-book]").forEach(function (a) {
+        var book = parseInt(a.getAttribute("data-book"), 10);
+        var chapter = parseInt(a.getAttribute("data-chapter") || "0", 10);
+        var on = chapter ? chapters.has(book * 1000 + chapter) : books.has(book);
+        a.classList.toggle("week-reading", on);
+        // the mark said in words, where the link says nothing else on hover
+        if (on && !a.title) {
+          a.title = T.weekReading || "";
+          a.setAttribute("data-reading-title", "");
+        } else if (!on && a.hasAttribute("data-reading-title")) {
+          a.removeAttribute("title");
+          a.removeAttribute("data-reading-title");
+        }
+      });
+    }
+
+    function use(ids) {
+      chapters = new Set(ids);
+      books = new Set(ids.map(function (id) { return Math.floor(id / 1000); }));
+      mark(document);
+    }
+
+    function load() {
+      if (!document.querySelector("a[data-book], .pb-bible, .pb-jump")) return;
+      var start = monday(new Date());
+      var kept = null;
+      try {
+        kept = JSON.parse(window.localStorage.getItem(KEY) || "null");
+      } catch (err) {
+        kept = null;
+      }
+      var known = kept && kept.weeks && kept.weeks[start];
+      if (known) use(known);
+      if (known && Date.now() - (kept.at || 0) < WEEK) return;
+      var q = new URLSearchParams({ weeks: String(AHEAD), date: start });
+      var lang = new URLSearchParams(location.search).get("lang");
+      if (lang) q.set("lang", lang);
+      fetch("/api/v1/bible/reading?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
+        if (!res.ok) throw new Error(res.status + " " + res.statusText);
+        return res.json();
+      }).then(function (j) {
+        var weeks = {};
+        (j.weeks || []).forEach(function (w) {
+          weeks[w.start] = (w.chapters || []).map(function (c) { return c.book * 1000 + c.chapter; });
+        });
+        try {
+          window.localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), weeks: weeks }));
+        } catch (err) {
+          // not kept: asked again on the next page
+        }
+        if (weeks[start]) use(weeks[start]);
+      }).catch(function () {
+        // no reading known: nothing is marked
+      });
+    }
+
+    return { load: load, mark: mark };
+  })();
+
   // --- the bible's picker: a book's chapters as one row, the books under it --
   //
   // Opened at the book being read, its chapters run in a row above the books.
@@ -551,6 +636,8 @@
           var a = document.createElement("a");
           a.href = chapterHref(book, c);
           a.textContent = String(c);
+          a.setAttribute("data-book", String(book));
+          a.setAttribute("data-chapter", String(c));
           if (c === cur.chapter) {
             a.className = "active";
             a.setAttribute("aria-current", "true");
@@ -558,6 +645,7 @@
           }
           row.appendChild(a);
         });
+        weekReading.mark(row);
         row.setAttribute("data-chapters", chapters.join(","));
         var target = chosen || row.firstElementChild;
         if (target) row.scrollLeft = Math.max(0, target.offsetLeft - row.clientWidth / 2 + target.offsetWidth / 2);
@@ -611,6 +699,8 @@
           var a = document.createElement("a");
           a.href = chapterHref(book, c);
           a.textContent = String(c);
+          a.setAttribute("data-book", String(book));
+          a.setAttribute("data-chapter", String(c));
           if (book === cur.book && c === cur.chapter) {
             a.className = "active";
             a.setAttribute("aria-current", "true");
@@ -618,6 +708,7 @@
           li.appendChild(a);
           list.appendChild(li);
         });
+        weekReading.mark(list);
         var docs = docLinks(book, nav, false);
         docsBox.textContent = "";
         if (docs) docsBox.appendChild(docs);
@@ -714,6 +805,7 @@
           });
           grid.appendChild(ul);
         });
+        weekReading.mark(grid);
         // the names are known now: the row's title can say the book
         if (!grid.hidden) showBooks();
       }, function (err) {
@@ -1243,6 +1335,9 @@
   } catch (err) {
     T = {};
   }
+
+  // with the page's words known, the mark of the week's reading can be named
+  weekReading.load();
 
   // fmt fills %d and %s in order, as the catalogs write them
   function fmt(s) {

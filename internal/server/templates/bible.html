@@ -82,10 +82,10 @@
 </article>
 {{- with .ChapterNav}}
 <nav class="chapter-nav" aria-label="{{$.T.UIChapters}}">
-  {{- if .Prev.Href}}<a class="btn small prev" href="{{.Prev.Href}}" rel="prev" title="{{.Prev.Label}}"><span aria-hidden="true">‹</span> <span class="lbl"{{with .Prev.Short}} data-short="{{.}}"{{end}}>{{.Prev.Label}}</span></a>{{else}}<span></span>{{end}}
+  {{- if .Prev.Href}}<a class="btn small prev" href="{{.Prev.Href}}" rel="prev" title="{{.Prev.Label}}" data-book="{{.Prev.Book}}" data-chapter="{{.Prev.Chapter}}"><span aria-hidden="true">‹</span> <span class="lbl"{{with .Prev.Short}} data-short="{{.}}"{{end}}>{{.Prev.Label}}</span></a>{{else}}<span></span>{{end}}
   {{- if not .Whole.Href}}<span></span>{{end}}
   {{- if .Whole.Href}}<a class="btn small whole" href="{{.Whole.Href}}" title="{{.Whole.Label}}"><span class="whole-lbl">{{.Whole.Label}}</span></a>{{end}}
-  {{- if .Next.Href}}<a class="btn small next" href="{{.Next.Href}}" rel="next" title="{{.Next.Label}}"><span class="lbl"{{with .Next.Short}} data-short="{{.}}"{{end}}>{{.Next.Label}}</span> <span aria-hidden="true">›</span></a>{{else}}<span></span>{{end}}
+  {{- if .Next.Href}}<a class="btn small next" href="{{.Next.Href}}" rel="next" title="{{.Next.Label}}" data-book="{{.Next.Book}}" data-chapter="{{.Next.Chapter}}"><span class="lbl"{{with .Next.Short}} data-short="{{.}}"{{end}}>{{.Next.Label}}</span> <span aria-hidden="true">›</span></a>{{else}}<span></span>{{end}}
 </nav>
 {{- end}}
 {{- else if .Doc}}
@@ -96,7 +96,7 @@
   <h3 class="bible-nav-heading">{{.T.UIChapters}}</h3>
   <ul class="chapter-grid">
     {{- range $c := .BookNav.Chapters}}
-    <li><a href="{{$.ChapterLink $c}}">{{$c}}</a></li>
+    <li><a data-book="{{$.BookNav.Book}}" data-chapter="{{$c}}" href="{{$.ChapterLink $c}}">{{$c}}</a></li>
     {{- end}}
   </ul>
   {{- with .DocLinks}}
@@ -134,7 +134,7 @@
   {{- if $sec.Heading}}<h2 class="bible-nav-heading">{{$sec.Heading}}</h2>{{end}}
   <ul class="book-grid {{$sec.Key}}">
     {{- range $b := $sec.Books}}
-    <li class="book {{$b.Group}}"><a href="{{$.BookLink $b.Number}}"{{if $b.Abbreviation}} title="{{$b.Name}}"{{end}}><span class="name">{{$b.Name}}</span>{{if $b.Abbreviation}}<span class="abbr">{{$b.Abbreviation}}</span>{{end}}</a></li>
+    <li class="book {{$b.Group}}"><a href="{{$.BookLink $b.Number}}" data-book="{{$b.Number}}"{{if $b.Abbreviation}} title="{{$b.Name}}"{{end}}><span class="name">{{$b.Name}}</span>{{if $b.Abbreviation}}<span class="abbr">{{$b.Abbreviation}}</span>{{end}}</a></li>
     {{- end}}
   </ul>
   {{- end}}

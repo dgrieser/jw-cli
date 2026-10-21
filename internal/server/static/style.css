@@ -21,6 +21,8 @@
   --book-dark: #3e6aa3;
   --book-mid: #4b7cbf;
   --book-light: #6c97c8;
+  /* the bookmark on this week's bible reading */
+  --week-reading: #e5484d;
   --external: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M9.5 2.5h4v4M13.5 2.5 7.5 8.5M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3'/%3E%3C/svg%3E");
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23676b74' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 
@@ -59,6 +61,7 @@
     --book-dark: #2f548a;
     --book-mid: #3a67a6;
     --book-light: #5079ad;
+    --week-reading: #ff6b6f;
     --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239b9fa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
   }
 }
@@ -80,6 +83,7 @@
   --book-dark: #2f548a;
   --book-mid: #3a67a6;
   --book-light: #5079ad;
+  --week-reading: #ff6b6f;
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%239b9fa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 }
 
@@ -486,6 +490,21 @@ dialog.search-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
   filter: brightness(1.12);
   color: #fff;
 }
+/* this week's bible reading: a red bookmark hanging from the top edge of
+   its books and chapters, wherever they are picked (app.js marks them) */
+a.week-reading { position: relative; }
+a.week-reading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0.4rem;
+  width: 0.6rem;
+  height: 0.9rem;
+  background: var(--week-reading);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 70%, 0 100%);
+  pointer-events: none;
+}
+.chapter-nav a.week-reading::after { top: -1px; right: 0.75rem; width: 0.5rem; height: 0.6rem; }
 .book-grid .name, .book-grid .abbr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .book-grid .abbr { display: none; }
 /* on a phone the tiles are narrow: a slightly smaller name, cut with "…" */

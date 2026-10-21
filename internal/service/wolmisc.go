@@ -93,3 +93,86 @@ func (s *Service) MeetingParts(ctx context.Context, lng model.Language, date tim
 	}
 	return s.WOL.MeetingParts(ctx, cfg, date)
 }
+
+// WeekReading is the bible reading of a week's midweek meeting: the chapters
+// the workbook heads the week with.
+type WeekReading struct {
+	Year  int    `json:"year"`
+	Week  int    `json:"week"`
+	Start string `json:"start"` // the week's Monday, YYYY-MM-DD
+	// Title is the passage as the library names it: "Jeremia 45:1-46:28".
+	Title string `json:"title,omitempty"`
+	// Chapters are the chapters read, in order; none when the week has no
+	// reading, as at an assembly or the Memorial.
+	Chapters []ReadingChapter `json:"chapters"`
+}
+
+// ReadingChapter is one chapter of a week's reading.
+type ReadingChapter struct {
+	Book    int `json:"book"`
+	Chapter int `json:"chapter"`
+}
+
+// readingKeep is how long a week's reading is kept before the workbook is
+// read again: it is printed months ahead and hardly ever changes.
+const readingKeep = 7 * 24 * time.Hour
+
+// keptReading is a week's reading as the cache keeps it, with when it was read.
+type keptReading struct {
+	At      int64       `json:"at"`
+	Reading WeekReading `json:"reading"`
+}
+
+// WeekReading is the bible reading of the ISO week containing date, read off
+// its midweek workbook at most once a week. A week whose material lists no
+// workbook has no reading; one whose material is not out yet is an error.
+func (s *Service) WeekReading(ctx context.Context, lng model.Language, date time.Time) (WeekReading, error) {
+	year, week := date.ISOWeek()
+	key := fmt.Sprintf("reading1-%s-%d-%d", lng.Locale, year, week)
+	var kept keptReading
+	found := s.Cache.Get(key, &kept)
+	if found && time.Since(time.Unix(kept.At, 0)) < readingKeep {
+		return kept.Reading, nil
+	}
+	rd, err := s.weekReading(ctx, lng, date)
+	if err != nil {
+		if found {
+			// what was read before stands while the library cannot be read
+			return kept.Reading, nil
+		}
+		return rd, err
+	}
+	s.Cache.Put(key, keptReading{At: time.Now().Unix(), Reading: rd})
+	return rd, nil
+}
+
+// weekReading reads the week's reading off its workbook.
+func (s *Service) weekReading(ctx context.Context, lng model.Language, date time.Time) (WeekReading, error) {
+	year, week := date.ISOWeek()
+	monday := date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
+	out := WeekReading{Year: year, Week: week, Start: monday.Format(time.DateOnly), Chapters: []ReadingChapter{}}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return out, err
+	}
+	parts, err := s.WOL.MeetingParts(ctx, cfg, date)
+	if err != nil {
+		return out, err
+	}
+	if parts.Midweek == "" {
+		return out, nil
+	}
+	cite, err := s.WOL.ReadingCitation(ctx, parts.Midweek)
+	if err != nil || cite == "" {
+		return out, err
+	}
+	tip, err := s.WOL.Tooltip(ctx, cite)
+	if err != nil {
+		return out, err
+	}
+	out.Title = tip.Title
+	for _, id := range wol.ReadingChapters(tip.URL) {
+		out.Chapters = append(out.Chapters, ReadingChapter{Book: id / 1000, Chapter: id % 1000})
+	}
+	return out, nil
+}

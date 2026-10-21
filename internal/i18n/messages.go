@@ -416,6 +416,9 @@ type Messages struct {
 	// its book grid.
 	UIPickBook string
 	UIBooks    string
+	// UIWeekReading names the mark on the books and chapters of this week's
+	// bible reading, the midweek meeting's.
+	UIWeekReading string
 	// UIPrevBook and UINextBook step the book picker to the book before or
 	// after the one it shows.
 	UIPrevBook string

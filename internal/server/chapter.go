@@ -44,6 +44,9 @@ type chapterLink struct {
 	// page shows instead when the label does not fit; empty when it has none.
 	Short string
 	Href  string
+	// Book and Chapter are the chapter it leads to, for the page to mark
+	// it as part of the week's reading.
+	Book, Chapter int
 }
 
 // chapterNav is the way on from a reading. Across a book's end it goes to the
@@ -62,8 +65,10 @@ func (s *Server) chapterNav(ctx context.Context, lng model.Language, res service
 		name := res.Table.Name(book)
 		edition := firstNonEmpty(p.Bible, page.Edition)
 		l := chapterLink{
-			Label: fmt.Sprintf("%s %d", name, chapter),
-			Href:  page.chapterHref(edition, name, chapter),
+			Label:   fmt.Sprintf("%s %d", name, chapter),
+			Href:    page.chapterHref(edition, name, chapter),
+			Book:    book,
+			Chapter: chapter,
 		}
 		if short := res.Table.Short(book); short != name {
 			l.Short = fmt.Sprintf("%s %d", short, chapter)
