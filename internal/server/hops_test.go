@@ -181,7 +181,7 @@ func TestBibleReadAPIHops(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"Study notes", "Look, the Lamb of God", "part=notes&amp;to=0&amp;vid=43001029",
-		"Research Guide", "/unfold/cited?to=0&amp;vid=43003016"} {
+		">Index<", "/unfold/cited?to=0&amp;vid=43003016"} {
 		if !strings.Contains(read.Body, want) {
 			t.Errorf("missing %q in:\n%s", want, read.Body)
 		}

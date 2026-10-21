@@ -450,9 +450,9 @@ reads the way it does in the study pane. `jw bible read` prints it in that
 order, and leaves out whatever the verse does not have:
 
 1. **Study notes**, under `Study notes`.
-2. **The study bible's indexes**, under one heading, `Index`, each inside it
-   under the name the page gives it — `Study Guide`, then `Publications Index`
-   — where the verse has both. Every entry an index lists is read, whether it has a passage to unfold
+2. **The study bible's indexes**, under one heading, `Index`: the Research
+   Guide's entries, then the Publications Index's, with no heading of their
+   own. Every entry an index lists is read, whether it has a passage to unfold
    or only names an article; an entry the first index already listed is left
    out of the second.
 3. **The marginal references**, under one heading naming the verse they belong

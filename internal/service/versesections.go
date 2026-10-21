@@ -64,7 +64,7 @@ func footnotesSection(body string, txt *i18n.Messages) (UnfoldSection, bool) {
 
 // indexSections are the study bible's indexes of a passage, in one section:
 // the whole articles they name, and the passages they point at, unfolded —
-// each index under its own name where there are two.
+// one index after the other, with no heading of their own.
 func indexSections(links []model.ResearchItem, research []unfold.Node, level int,
 	txt *i18n.Messages) []UnfoldSection {
 	groups := indexGroups(links, research, txt)
@@ -73,9 +73,6 @@ func indexSections(links []model.ResearchItem, research []unfold.Node, level int
 	}
 	var b strings.Builder
 	for _, g := range groups {
-		if len(groups) > 1 {
-			b.WriteString(headingHTML(level+1, html.EscapeString(g.name)))
-		}
 		writeIndexGroup(&b, g, level, txt)
 	}
 	return []UnfoldSection{{

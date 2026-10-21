@@ -175,10 +175,8 @@ func TestBibleReadUnfold(t *testing.T) {
 		"### Study notes",
 		"**loved:**",
 		"**everlasting life:**",
-		// the indexes are headed as the page names them, with no parent
-		// heading over the two
-		"### Research Guide",
-		"### Publications Index",
+		// the indexes come under one heading, with none of their own
+		"### Index",
 		"Insight, Volume 2, page 274",
 		"Jehovah loved the world of redeemable mankind",
 	} {
@@ -187,24 +185,19 @@ func TestBibleReadUnfold(t *testing.T) {
 		}
 	}
 	// a verse reads in the order its study pane does: what it says about
-	// itself, then what the indexes point at, and the passages of an index sit
-	// under that index rather than under a heading of their own
+	// itself, then what the indexes point at, under Index
 	notes := strings.Index(out, "### Study notes")
-	research := strings.Index(out, "### Research Guide")
+	research := strings.Index(out, "### Index")
 	passage := strings.Index(out, "Jehovah loved the world of redeemable mankind")
 	if notes < 0 || notes >= research || research >= passage {
-		t.Errorf("notes %d, research guide %d, its passage %d: out of order:\n%s",
+		t.Errorf("notes %d, index %d, its passage %d: out of order:\n%s",
 			notes, research, passage, out)
 	}
-	if strings.Contains(out, "### References") {
-		t.Errorf("references are headed by the index they came from, not lumped together:\n%s", out)
+	if strings.Contains(out, "### References") || strings.Contains(out, "### Research Guide") ||
+		strings.Contains(out, "### Publications Index") {
+		t.Errorf("the indexes come under Index alone:\n%s", out)
 	}
-	// the publications index comes after the research guide, and an entry
-	// under a heading does not repeat that heading's name beside itself
-	if index := strings.Index(out, "### Publications Index"); index < passage {
-		t.Errorf("the publications index at %d belongs after the research guide's passage at %d:\n%s",
-			index, passage, out)
-	}
+	// an entry does not repeat the name of its index beside itself
 	if strings.Contains(out, "page 274](") && strings.Contains(out, "274) (Research Guide)") {
 		t.Errorf("an entry repeated the name of the index heading it sits under:\n%s", out)
 	}

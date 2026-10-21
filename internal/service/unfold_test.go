@@ -579,9 +579,9 @@ func TestCitedRequests(t *testing.T) {
 	}
 }
 
-// The study bible's indexes come in one section, Index, each headed inside it
-// as the page names it, and an entry the first index already listed is left
-// out of the second.
+// The study bible's indexes come in one section, Index, one after the other
+// with no heading of their own, and an entry the first index already listed is
+// left out of the second.
 func TestIndexSections(t *testing.T) {
 	var b strings.Builder
 	writeSections(&b, indexSections(
@@ -601,8 +601,9 @@ func TestIndexSections(t *testing.T) {
 		}, 3, i18n.EN.Text()), 3)
 	out := b.String()
 	head := strings.Index(out, "<h3>Index</h3>")
-	guide, index := strings.Index(out, "<h4>Research Guide</h4>"), strings.Index(out, "<h4>Publications Index</h4>")
-	if head < 0 || guide < head || index < 0 || guide >= index || strings.Count(out, "<h3>") != 1 {
+	guide, index := strings.Index(out, "the guide passage"), strings.Index(out, "the index passage")
+	if head < 0 || guide < head || index < 0 || guide >= index || strings.Count(out, "<h3>") != 1 ||
+		strings.Contains(out, "Research Guide</h") || strings.Contains(out, "Publications Index</h") {
 		t.Fatalf("index %d, research guide %d, publications index %d:\n%s", head, guide, index, out)
 	}
 	if strings.Contains(out, "Research guide</h") {
