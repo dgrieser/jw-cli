@@ -772,6 +772,38 @@ Where a link is read on jw.org or wol.jw.org is offered there too, as **open on
 the website**, and the page's own document is opened on the website from the
 settings in the bar; no page links out to the sites otherwise.
 
+Words a glossary explains — the study bible's glossary, *Insight on the
+Scriptures* and the *Research Guide* — carry a dotted line in the bible's
+text: the verses of the bible page, and the verses a reference shows wherever
+it is unfolded (another translation's included), the first time each comes up
+in the page and in each section; for now, not in articles, the daily text or
+the meeting parts themselves. Pressing
+one opens its entry under it as a reference, headed by the glossary it comes
+from; held, it offers the usual choices and the entries of the other
+glossaries that explain it too. The server reads the glossaries' tables of
+contents into an index once a week, like the week's bible reading, and marks
+the words in the HTML it sends — the page, and every section it streams — so
+the browser keeps nothing of it (a page asked for before the index is read
+comes unmarked). A word is found as the language writes it: German nouns in
+their own case and with their endings (*Gottes*), English ones in any case and
+in the plural. At the start of a sentence, where a capital says nothing, a word
+matched by its case — any German one, a short English one (*Will*, *Lot*) — is
+marked only as written, with no ending guessed (*Wundere* is no *Wunder*), and
+only when it was never seen in small letters, on that page or on any page the
+server marked before (*immer* makes *Immer* no priest's name); the server keeps
+those words per language. The shortest words (two letters) are left out, and
+so are some 360
+words of every day the glossaries explain too — *night*, *water*, *mother*,
+*hand*, *city*, *gold* —, while words they give a meaning of their own
+(*spirit*, *faith*, *world*, *heaven*) stay. That list is kept in English
+(`glossaryCommon` in `internal/service/glossary.go`) and holds for every
+language: an entry is the same document everywhere (wol's sync of Insight's
+*Night* is *Nacht*, docid 1200003253), so the English index names the entries
+to leave out, and `common` in the index lists them. **Glossary words** in
+the settings takes the lines off. `--glossary-langs` (`$JW_GLOSSARY_LANGS`)
+names the languages indexed: `E,X` (English and German) by default, `none`
+for none.
+
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the
 browser (IndexedDB) — written before a link of the page is followed, so a
@@ -992,6 +1024,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/pub` | `pub` or `docid`*, `issue`, `booknum`, `track`, `fileformat`, `allLangs=true` | `jw pub` |
 | `GET /api/v1/pub/library[/{path}]` | — | — (wol `/library/`: the categories, or the category, year or issue at the English `path`) |
 | `GET /api/v1/pub/publication/{path}` | — | — (wol `/publication/`: a publication's table of contents; `404` for one wol does not have) |
+| `GET /api/v1/glossary` | — | — (the words the glossaries of the language explain: `books` (the study bible's glossary, Insight, the Research Guide, as the library titles them), `terms` (`t` the word, `b` its book, `d` the document explaining it, `n` the entry's title when it is more than the word), `docURL` (a document's address without its docid), how words are matched (`caseSensitive`, `suffixes`), and `common`, the docids of the entries left out as words of every day. Read off the tables of contents once a week, like `/bible/reading`; `partial` when some of them could not be read. A language not in `--glossary-langs` has no terms) |
 | `GET /api/v1/dailytext` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw dailytext` |
 | `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw meetings ...` (also `mid`/`mw`, `we`/`wt`) |
 | `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` (with `subtitles=true` the redirect goes to the `.vtt` alone, `404` when there is none, where `jw download --subtitles` saves the video and its subtitles) |

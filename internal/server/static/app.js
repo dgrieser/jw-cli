@@ -2408,7 +2408,7 @@
 
   // the document's part of it: whether a link opens in place, the item it
   // unfolds — held, how deep — and unfolding that
-  var LM = { inPlace: function () { return false; }, itemOf: function () { return null; } };
+  var LM = { inPlace: function () { return false; }, itemOf: function () { return null; }, extra: function () { return []; } };
 
   var linkMenu = document.createElement("div");
   linkMenu.className = "follow-menu";
@@ -2544,6 +2544,8 @@
       } else if (LM.inPlace(a)) {
         menuItem(T.followHere || "↳", function () { followHere(a); });
       }
+      // a word a glossary explains: its entries in the other glossaries
+      LM.extra(a).forEach(function (x) { menuItem(x.label, x.run); });
       [toPage, toTab, toSection].forEach(function (f) { if (f) f(); });
     }
     // and where it is read on jw.org or wol.jw.org, in a new tab
@@ -3116,6 +3118,93 @@
   var ICON = '<svg viewBox="0 0 16 16" width="17" height="17" aria-hidden="true" focusable="false">' +
     '<path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" ' +
     'd="M4.2 2.5h7.6L15 6.2 8 14 1 6.2zM1 6.2h14M5.9 2.5 5 6.2 8 14l3-7.8-.9-3.7M5 6.2 8 2.5l3 3.7"/></svg>';
+
+  // --- the words a glossary explains ----------------------------------------
+  //
+  // The server marks the words the study bible's glossary, Insight on the
+  // Scriptures and the Research Guide explain, in the bible's text: the
+  // verses of the bible page, and those a reference shows wherever it is
+  // unfolded — a link to the entry with a dotted line under it. Pressed, the entry opens under it as a reference, headed by the
+  // glossary it comes from (data-gloss-book); held, the menu of any link
+  // offers the rest, and the entries of the other glossaries explaining it
+  // (data-gloss-alt).
+
+  var glossary = (function () {
+    // the index an earlier version kept in this browser goes
+    try {
+      for (var i = window.localStorage.length - 1; i >= 0; i--) {
+        var k = window.localStorage.key(i);
+        if (k && k.indexOf("jw:glossary:") === 0) window.localStorage.removeItem(k);
+      }
+    } catch (err) {
+      // nothing kept, or nothing to take away
+    }
+
+    // label names the glossary an entry opened from a word comes from, in
+    // the heading of its section
+    function label(section, book) {
+      var s = section.querySelector(":scope > summary");
+      if (!book || !s || s.querySelector(".gloss-src")) return;
+      section.classList.add("gloss-entry");
+      s.appendChild(make("span", "gloss-src", book));
+    }
+
+    // others are the entries of the other glossaries explaining a marked
+    // word, for its menu: each opens under the word as a reference too
+    function others(a) {
+      if (!a.classList.contains("gloss")) return [];
+      var alts;
+      try {
+        alts = JSON.parse(a.getAttribute("data-gloss-alt") || "[]");
+      } catch (err) {
+        alts = [];
+      }
+      if (!Array.isArray(alts)) return [];
+      return alts.filter(function (x) { return x && x.d > 0; }).map(function (x) {
+        return {
+          label: fmt(T.glossaryIn || "%s", x.b || ""),
+          run: function () {
+            var href = a.getAttribute("href"), book = a.getAttribute("data-gloss-book");
+            a.setAttribute("href", href.replace(/\d+$/, String(x.d)));
+            a.setAttribute("data-gloss-book", (x.b || "").split(" – ")[0]);
+            try {
+              followHere(a);
+            } finally {
+              a.setAttribute("href", href);
+              a.setAttribute("data-gloss-book", book);
+            }
+          }
+        };
+      });
+    }
+
+    // the switch in the settings, on every page that reads the bible or
+    // opens it in references: the marks on, or plain text
+    (function () {
+      var sw = document.querySelector(".ps-glossary");
+      if (!sw) return;
+      sw.hidden = false;
+      function show() {
+        sw.setAttribute("aria-checked", root.getAttribute("data-glossary") === "off" ? "false" : "true");
+      }
+      sw.addEventListener("click", function () {
+        var off = root.getAttribute("data-glossary") !== "off";
+        if (off) root.setAttribute("data-glossary", "off");
+        else root.removeAttribute("data-glossary");
+        try {
+          if (off) window.localStorage.setItem("jw:glossary", "off");
+          else window.localStorage.removeItem("jw:glossary");
+        } catch (err) {
+          // not kept: the choice holds for this page only
+        }
+        show();
+      });
+      show();
+    })();
+
+    return { label: label, others: others };
+  })();
+  LM.extra = glossary.others;
 
   // --- the items: a verse, or a block of a document citing something -----
 
@@ -4523,7 +4612,8 @@
     if (!doc.contains(a)) return null;
     var num = numberItem(a);
     if (num) return num;
-    if (!LM.inPlace(a) || onThisPage(a)) return null;
+    // a word a glossary explains opens its entry, held as well
+    if (!LM.inPlace(a) || onThisPage(a) || a.classList.contains("gloss")) return null;
     var owner = ownerOf(a);
     return owner && owner.item || null;
   };
@@ -4536,6 +4626,8 @@
   function follow(a, target) {
     var owner = ownerOf(a);
     if (!owner) return false;
+    // the glossary a marked word's entry comes from, which its section names
+    var glossBook = a.classList.contains("gloss") ? a.getAttribute("data-gloss-book") : null;
     if (owner.details) owner.details.open = true;
     var found = findRef(scopeOf(owner), target.key);
     if (found) {
@@ -4554,6 +4646,7 @@
       if (res && res.stopped) return;
       if (owner.item) setState(owner.item, "done");
       var el = findRef(scopeOf(owner), target.key);
+      if (el && glossBook != null) glossary.label(el, glossBook);
       if (el) reveal(el, true);
       else hint(owner.item || { el: a.closest(BLOCKS) || a.parentElement }, T.nothing || "∅");
       saveState(a);

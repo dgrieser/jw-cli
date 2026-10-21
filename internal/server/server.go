@@ -32,6 +32,9 @@ type Config struct {
 	// PageCache is how the browser's copy of the pages is used (see
 	// PageCachePolicies); empty is PageCacheAuto.
 	PageCache string
+	// GlossaryLangs are the languages, as language specs, whose glossaries
+	// are indexed and marked in the pages; nil is DefaultGlossaryLangs.
+	GlossaryLangs []string
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -56,6 +59,10 @@ type Server struct {
 	// the route table it reads them through
 	warm   warmer
 	routes http.Handler
+	// glossaryLangs are the languages whose glossaries are indexed, and
+	// glossWarm when each was read ahead (glossary.go)
+	glossaryLangs []string
+	glossWarm     glossaryWarm
 }
 
 // New builds a Server. Template parse errors panic: they are programming
@@ -68,6 +75,10 @@ func New(cfg Config) *Server {
 		auth:        cfg.Auth,
 		pageCache:   cfg.PageCache,
 		apiTimeout:  apiTimeout,
+	}
+	s.glossaryLangs = cfg.GlossaryLangs
+	if s.glossaryLangs == nil {
+		s.glossaryLangs = DefaultGlossaryLangs
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}
@@ -106,6 +117,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/pub/library", s.apiPubLibrary)
 	mux.HandleFunc("GET /api/v1/pub/library/{path...}", s.apiPubLibrary)
 	mux.HandleFunc("GET /api/v1/pub/publication/{path...}", s.apiPubPublication)
+	mux.HandleFunc("GET /api/v1/glossary", s.apiGlossary)
 	mux.HandleFunc("GET /api/v1/dailytext", s.apiDailyText)
 	mux.HandleFunc("GET /api/v1/meetings", s.apiMeetings)
 	mux.HandleFunc("GET /api/v1/meetings/{part}", s.apiMeetingPart)

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/i18n"
+	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
 	"github.com/dgrieser/jw-cli/internal/unfold"
@@ -148,7 +150,7 @@ func (e *eventStream) finishRun(r *http.Request, note string, requests int, err 
 // A section says what it holds (data-ref) so a link to it opens it rather than
 // leaving the page, and a lazy one where its body loads from (data-lazy) once
 // it is opened.
-func (s *Server) sectionEvent(sec service.UnfoldSection, txt *i18n.Messages) streamEvent {
+func (s *Server) sectionEvent(ctx context.Context, lng model.Language, sec service.UnfoldSection, txt *i18n.Messages) streamEvent {
 	base := firstNonEmpty(sec.Base, s.svc.HTTP.Base.WOL)
 	body, err := render.Render(sec.Body, render.HTML, render.Options{BaseURL: base})
 	if err != nil {
@@ -177,7 +179,7 @@ func (s *Server) sectionEvent(sec service.UnfoldSection, txt *i18n.Messages) str
 		fmt.Fprintf(&b, `<div class="sections" data-key="%s"></div>`, html.EscapeString(sec.Key))
 	}
 	b.WriteString(`</div></details>`)
-	return streamEvent{Type: "section", HTML: b.String(), Key: sec.Key, In: sec.In, Order: sec.Order, Unwrap: sec.Unwrap}
+	return streamEvent{Type: "section", HTML: s.markGlossary(ctx, lng, b.String()), Key: sec.Key, In: sec.In, Order: sec.Order, Unwrap: sec.Unwrap}
 }
 
 // streamDepth reads ?depth= for a stream: at least one level, since a stream
@@ -253,7 +255,7 @@ func (s *Server) unfoldVerse(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamPassageParts(r.Context(), lng, edition, ref, parts, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
@@ -331,7 +333,7 @@ func (s *Server) unfoldCited(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamCited(r.Context(), lng, refs, self, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -392,7 +394,7 @@ func (s *Server) unfoldRefs(w http.ResponseWriter, r *http.Request) {
 	ev := startStream(w)
 	cfg.Progress = ev.progress
 	note, requests, err := s.svc.StreamRefsUnfold(r.Context(), lng, refs, cfg, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finishRun(r, note, requests, err, txt, cfg.Verses)
@@ -438,7 +440,7 @@ func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamTranslations(r.Context(), lng, edition, ref, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -461,7 +463,7 @@ func (s *Server) unfoldFootnote(w http.ResponseWriter, r *http.Request) {
 	txt := text(lng)
 	ev := startStream(w)
 	requests, err := s.svc.StreamFootnote(r.Context(), lng, path, txt, service.UnfoldStream{
-		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(sec, txt)) },
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
 	ev.finish(r, "", requests, err, txt)
@@ -498,7 +500,7 @@ func (s *Server) unfoldArticle(w http.ResponseWriter, r *http.Request) {
 	cfg.Progress = ev.progress
 	sec, err := s.svc.ArticleSection(r.Context(), lng, target, cfg, txt)
 	if err == nil {
-		ev.send(s.sectionEvent(sec, txt))
+		ev.send(s.sectionEvent(r.Context(), lng, sec, txt))
 	}
 	ev.finishRun(r, "", 1, err, txt, cfg.Verses)
 }

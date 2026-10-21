@@ -7,6 +7,7 @@ package service
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/jworg"
 	"github.com/dgrieser/jw-cli/internal/api/mediator"
@@ -34,6 +35,12 @@ type Service struct {
 	// mem is what an expansion read of the library, kept in memory for the
 	// next one: verses by the verses they hold, chapters of the study bible.
 	mem memo
+	// glossaries are the glossary indexes being read, by cache key
+	// (Glossary).
+	glossaries sync.Map
+	// markers are the glossary indexes made ready for marking, by locale
+	// (MarkGlossary).
+	markers sync.Map
 }
 
 // New builds a Service and all its clients around one HTTP client and cache.
