@@ -2408,7 +2408,7 @@
 
   // the document's part of it: whether a link opens in place, the item it
   // unfolds — held, how deep — and unfolding that
-  var LM = { inPlace: function () { return false; }, itemOf: function () { return null; } };
+  var LM = { inPlace: function () { return false; }, itemOf: function () { return null; }, extra: function () { return []; } };
 
   var linkMenu = document.createElement("div");
   linkMenu.className = "follow-menu";
@@ -2544,6 +2544,8 @@
       } else if (LM.inPlace(a)) {
         menuItem(T.followHere || "↳", function () { followHere(a); });
       }
+      // a word a glossary explains: its entries in the other glossaries
+      LM.extra(a).forEach(function (x) { menuItem(x.label, x.run); });
       [toPage, toTab, toSection].forEach(function (f) { if (f) f(); });
     }
     // and where it is read on jw.org or wol.jw.org, in a new tab
@@ -3117,6 +3119,314 @@
     '<path fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" ' +
     'd="M4.2 2.5h7.6L15 6.2 8 14 1 6.2zM1 6.2h14M5.9 2.5 5 6.2 8 14l3-7.8-.9-3.7M5 6.2 8 2.5l3 3.7"/></svg>';
 
+  // --- the words a glossary explains ----------------------------------------
+  //
+  // The study bible's glossary, Insight on the Scriptures and the Research
+  // Guide each explain one word per entry. The server reads their tables of
+  // contents once a week, like the week's bible reading, into an index of the
+  // words; it is kept in this browser for a week, so the words are marked as
+  // soon as a page is drawn. A word is marked the first time it comes up in
+  // the document and in each section unfolded into it — the verses, articles,
+  // notes that came — with a dotted line under it. Pressed, its entry opens
+  // under it as a reference, held the menu of any link offers the rest, and
+  // the entries of other glossaries explaining it too.
+
+  var glossary = (function () {
+    var KEY = "jw:glossary:" + readLang;
+    var WEEK = 7 * 864e5;
+    var HOUR = 36e5;
+    // the shortest word marked, and the longest one that is marked only in
+    // its own case ("Lot", not "lot") where case does not matter otherwise;
+    // a word as short as that takes only the longer endings ("Gottes", but
+    // no "Daran" for Dara)
+    var MIN = 3;
+    var EXACT = 4;
+    // what is never marked: links, headings, controls, and what the page
+    // says about itself
+    var SKIP = "a, summary, h1, h2, h3, h4, h5, h6, button, sup, script, style, textarea, select, input, " +
+      "[data-ui], .unfold-msg, .unfold-loader, .gloss-src, .bible-outline";
+    var WORD, LETTER;
+    try {
+      WORD = new RegExp("[\\p{L}\\p{M}\\p{N}]+(?:['’·-][\\p{L}\\p{M}\\p{N}]+)*", "gu");
+      LETTER = new RegExp("\\p{L}", "u");
+    } catch (err) {
+      WORD = null; // a browser without Unicode classes marks nothing
+    }
+    var idx = null;
+    // the entries marked so far, by the document or section they are in
+    var seen = new WeakMap();
+
+    // norm is a word as words are compared: without the marks of stress and
+    // syllables a bible or Insight writes some with ("Nikodẹmus",
+    // "Ni·co·deʹmus"), one apostrophe for all, and in small letters where
+    // case does not matter
+    function norm(s, exact) {
+      if (s.normalize) s = s.normalize("NFD").replace(/[\u0323\u02B9\u00B7]/g, "").normalize("NFC");
+      s = s.replace(/[’‘]/g, "'");
+      return exact || idx.cs ? s : s.toLowerCase();
+    }
+
+    // build reads the server's index into entries by the first word they
+    // begin with, the longest first: one per term, with the documents
+    // explaining it in the order of the glossaries
+    function build(g) {
+      if (!WORD || !g || !Array.isArray(g.terms) || !g.terms.length || !g.docURL) return null;
+      var out = { cs: !!g.caseSensitive, suffixes: (g.suffixes || []).map(function (s) { return s.replace(/[’‘]/g, "'"); }), books: g.books || [], docURL: g.docURL, byKey: new Map(), entries: [] };
+      idx = out;
+      var byTerm = new Map();
+      g.terms.forEach(function (t) {
+        if (!t || typeof t.t !== "string" || !(t.d > 0) || Array.from(t.t).length < MIN) return;
+        var e = byTerm.get(t.t);
+        if (!e) {
+          var exact = !out.cs && Array.from(t.t).length <= EXACT;
+          var words = t.t.match(WORD);
+          if (!words) return;
+          e = { term: t.t, exact: exact, words: words.map(function (w) { return norm(w, exact); }), docs: [], id: out.entries.length };
+          byTerm.set(t.t, e);
+          out.entries.push(e);
+          var key = norm(words[0], false).toLowerCase();
+          var list = out.byKey.get(key);
+          if (!list) out.byKey.set(key, (list = []));
+          list.push(e);
+        }
+        if (!e.docs.some(function (d) { return d.d === t.d; })) e.docs.push({ d: t.d, b: t.b, n: t.n || "" });
+      });
+      out.byKey.forEach(function (list) {
+        list.sort(function (a, b) { return b.words.length - a.words.length || b.term.length - a.term.length; });
+      });
+      return out;
+    }
+
+    // keys are the first words a word read can be the start of: itself, and
+    // itself without an ending the language inflects with
+    function keys(tok) {
+      var k = norm(tok, false).toLowerCase();
+      var out = [k];
+      idx.suffixes.forEach(function (s) {
+        s = s.toLowerCase();
+        if (k.length > s.length + 1 && k.slice(-s.length) === s && out.indexOf(k.slice(0, -s.length)) < 0) out.push(k.slice(0, -s.length));
+      });
+      return out;
+    }
+
+    function takes(w, s) {
+      var n = Array.from(w).length;
+      return n > EXACT || (n === EXACT && s.length > 1);
+    }
+
+    function sameWord(tok, w, exact, last) {
+      var t = norm(tok, exact);
+      if (t === w) return true;
+      if (!last) return false;
+      return idx.suffixes.some(function (s) { return takes(w, s) && t === w + norm(s, exact); });
+    }
+
+    // matchAt is the entry the words from toks[i] on spell, and how many of
+    // them it takes; words run on only across spaces
+    function matchAt(text, toks, i) {
+      var tried = [];
+      var ks = keys(toks[i][0]);
+      for (var k = 0; k < ks.length; k++) {
+        var list = idx.byKey.get(ks[k]);
+        if (!list) continue;
+        for (var j = 0; j < list.length; j++) {
+          var e = list[j];
+          if (tried.indexOf(e) >= 0) continue;
+          tried.push(e);
+          var n = e.words.length;
+          if (i + n > toks.length) continue;
+          var ok = true;
+          for (var w = 0; w < n && ok; w++) {
+            var tok = toks[i + w];
+            if (w > 0) {
+              var prev = toks[i + w - 1];
+              ok = /^\s+$/.test(text.slice(prev.index + prev[0].length, tok.index));
+            }
+            ok = ok && sameWord(tok[0], e.words[w], e.exact, w === n - 1);
+          }
+          if (ok) return { e: e, n: n };
+        }
+      }
+      return null;
+    }
+
+    // ownDocs are the documents a text is part of: an entry is not marked in
+    // its own text
+    function ownDocs(el) {
+      var ids = [];
+      for (var n = el; n && n !== document.body; n = n.parentElement) {
+        var m, re = /(?:^|\s)docId-(\d+)(?=\s|$)/g;
+        var cls = typeof n.className === "string" ? n.className : "";
+        while ((m = re.exec(cls))) ids.push(+m[1]);
+        if (n.getAttribute("data-doc")) ids.push(+n.getAttribute("data-doc"));
+      }
+      return ids;
+    }
+
+    function anchor(e, doc0, text) {
+      var a = document.createElement("a");
+      a.className = "gloss";
+      a.href = idx.docURL + doc0.d;
+      a.setAttribute("data-gloss", String(e.id));
+      a.setAttribute("data-gloss-src", String(doc0.b));
+      a.title = e.docs.map(function (d) { return (idx.books[d.b] || {}).title || ""; })
+        .filter(function (t, i, all) { return t && all.indexOf(t) === i; }).join(" · ");
+      a.textContent = text;
+      return a;
+    }
+
+    function markText(node) {
+      var text = node.nodeValue;
+      WORD.lastIndex = 0;
+      var toks = [], m;
+      while ((m = WORD.exec(text))) toks.push(m);
+      if (!toks.length) return;
+      var parent = node.parentElement;
+      var scope = parent.closest(".section-body") || doc;
+      var done = seen.get(scope);
+      if (!done) seen.set(scope, (done = new Set()));
+      var own = null;
+      var found = [];
+      for (var i = 0; i < toks.length; i++) {
+        var hit = matchAt(text, toks, i);
+        if (!hit || done.has(hit.e.id)) continue;
+        if (!own) own = ownDocs(parent);
+        var docs = hit.e.docs.filter(function (d) { return own.indexOf(d.d) < 0; });
+        if (!docs.length) continue;
+        var last = toks[i + hit.n - 1];
+        found.push({ from: toks[i].index, to: last.index + last[0].length, e: hit.e, doc: docs[0] });
+        done.add(hit.e.id);
+        i += hit.n - 1;
+      }
+      if (!found.length) return;
+      var frag = document.createDocumentFragment();
+      var at = 0;
+      found.forEach(function (f) {
+        if (f.from > at) frag.appendChild(document.createTextNode(text.slice(at, f.from)));
+        frag.appendChild(anchor(f.e, f.doc, text.slice(f.from, f.to)));
+        at = f.to;
+      });
+      if (at < text.length) frag.appendChild(document.createTextNode(text.slice(at)));
+      node.parentNode.replaceChild(frag, node);
+    }
+
+    // mark marks the words of root, in the order they read
+    function mark(root) {
+      if (!idx || !root || !doc.contains(root)) return;
+      var nodes = [];
+      var walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: function (n) {
+          var p = n.parentElement;
+          return p && LETTER.test(n.nodeValue) && !p.closest(SKIP) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        }
+      });
+      for (var n = walk.nextNode(); n; n = walk.nextNode()) nodes.push(n);
+      nodes.forEach(markText);
+    }
+
+    // unmark takes the marks off a copy of what was unfolded, as it is kept:
+    // they are marked anew when it comes back
+    function unmark(root) {
+      root.querySelectorAll("a.gloss").forEach(function (a) { a.replaceWith(document.createTextNode(a.textContent)); });
+      root.normalize();
+    }
+
+    function use(g) {
+      if (!build(g)) return;
+      mark(doc);
+      var sw = document.querySelector(".ps-glossary");
+      if (sw) sw.hidden = false;
+    }
+
+    function load() {
+      if (!readLang || !WORD) return;
+      var kept = null;
+      try {
+        kept = JSON.parse(window.localStorage.getItem(KEY) || "null");
+      } catch (err) {
+        kept = null;
+      }
+      if (kept && kept.g) use(kept.g);
+      if (kept && Date.now() - (kept.at || 0) < (kept.g && kept.g.partial ? HOUR : WEEK)) return;
+      fetch("/api/v1/glossary?" + new URLSearchParams({ lang: readLang }).toString(), { credentials: "same-origin" }).then(function (res) {
+        if (!res.ok) throw new Error(res.status + " " + res.statusText);
+        return res.json();
+      }).then(function (g) {
+        try {
+          window.localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), g: g }));
+        } catch (err) {
+          // not kept: asked again on the next page
+        }
+        if (!idx) use(g);
+      }).catch(function () {
+        // no index: nothing is marked
+      });
+    }
+
+    // label names the glossary an entry opened from a word comes from, in
+    // the heading of its section
+    function label(section, book) {
+      var b = idx && idx.books[+book];
+      var s = section.querySelector(":scope > summary");
+      if (!b || !b.title || !s || s.querySelector(".gloss-src")) return;
+      section.classList.add("gloss-entry");
+      s.appendChild(make("span", "gloss-src", b.title));
+    }
+
+    // others are the entries of the other glossaries explaining a marked
+    // word, for its menu: each opens under the word as a reference too
+    function others(a) {
+      var e = idx && a.classList.contains("gloss") ? idx.entries[+a.getAttribute("data-gloss")] : null;
+      if (!e) return [];
+      var here = a.getAttribute("href");
+      return e.docs.filter(function (d) { return idx.docURL + d.d !== here; }).map(function (d) {
+        var b = idx.books[d.b] || {};
+        // a glossary with several entries for the word names the entry too
+        var several = e.docs.filter(function (o) { return o.b === d.b; }).length > 1;
+        var name = b.title ? (several ? b.title + " – " + (d.n || e.term) : b.title) : d.n || e.term;
+        return {
+          label: fmt(T.glossaryIn || "%s", name),
+          run: function () {
+            var href = a.getAttribute("href"), src = a.getAttribute("data-gloss-src");
+            a.setAttribute("href", idx.docURL + d.d);
+            a.setAttribute("data-gloss-src", String(d.b));
+            try {
+              followHere(a);
+            } finally {
+              a.setAttribute("href", href);
+              a.setAttribute("data-gloss-src", src);
+            }
+          }
+        };
+      });
+    }
+
+    // the switch in the settings: the marks on, or plain text
+    (function () {
+      var sw = document.querySelector(".ps-glossary");
+      if (!sw) return;
+      function show() {
+        sw.setAttribute("aria-checked", root.getAttribute("data-glossary") === "off" ? "false" : "true");
+      }
+      sw.addEventListener("click", function () {
+        var off = root.getAttribute("data-glossary") !== "off";
+        if (off) root.setAttribute("data-glossary", "off");
+        else root.removeAttribute("data-glossary");
+        try {
+          if (off) window.localStorage.setItem("jw:glossary", "off");
+          else window.localStorage.removeItem("jw:glossary");
+        } catch (err) {
+          // not kept: the choice holds for this page only
+        }
+        show();
+      });
+      show();
+    })();
+
+    return { load: load, mark: mark, unmark: unmark, label: label, others: others };
+  })();
+  LM.extra = glossary.others;
+
   // --- the items: a verse, or a block of a document citing something -----
 
   var items = [];
@@ -3201,6 +3511,7 @@
   } else {
     citingBlocks(doc, false);
   }
+  glossary.load();
 
   // titleLinks makes a section headed by a link — a publication quoting a
   // verse, a passage of one — open and close on its whole title like any
@@ -3364,6 +3675,7 @@
       // right after it
       addItem(block, block.tagName === "LI" ? block : null, { kind: "refs", refs: refs }, nested);
     });
+    glossary.mark(root);
   }
 
   // what the server already unfolded can be unfolded further, too
@@ -3595,8 +3907,10 @@
             while (got && got.firstChild) frag.appendChild(got.firstChild);
             if (target.parentNode && target.parentNode.classList.contains("section-body")) {
               target.parentNode.insertBefore(frag, target);
+              glossary.mark(target.parentNode);
             } else {
               target.insertBefore(frag, loader.parentNode === target ? loader : null);
+              glossary.mark(target);
             }
             res.count++;
             break;
@@ -4523,7 +4837,8 @@
     if (!doc.contains(a)) return null;
     var num = numberItem(a);
     if (num) return num;
-    if (!LM.inPlace(a) || onThisPage(a)) return null;
+    // a word a glossary explains opens its entry, held as well
+    if (!LM.inPlace(a) || onThisPage(a) || a.classList.contains("gloss")) return null;
     var owner = ownerOf(a);
     return owner && owner.item || null;
   };
@@ -4536,6 +4851,8 @@
   function follow(a, target) {
     var owner = ownerOf(a);
     if (!owner) return false;
+    // the glossary a marked word's entry comes from, which its section names
+    var glossBook = a.classList.contains("gloss") ? a.getAttribute("data-gloss-src") : null;
     if (owner.details) owner.details.open = true;
     var found = findRef(scopeOf(owner), target.key);
     if (found) {
@@ -4554,6 +4871,7 @@
       if (res && res.stopped) return;
       if (owner.item) setState(owner.item, "done");
       var el = findRef(scopeOf(owner), target.key);
+      if (el && glossBook != null) glossary.label(el, glossBook);
       if (el) reveal(el, true);
       else hint(owner.item || { el: a.closest(BLOCKS) || a.parentElement }, T.nothing || "∅");
       saveState(a);
@@ -4688,6 +5006,7 @@
       el.removeAttribute("data-state");
     });
     copy.querySelectorAll(".fresh, .flash").forEach(function (el) { el.classList.remove("fresh", "flash"); });
+    glossary.unmark(copy);
     // a lazy section caught loading loads again when it comes back; one that
     // holds something is loaded, whether its answer came as sections or as
     // a body of its own ahead of them (a verse's media gallery)

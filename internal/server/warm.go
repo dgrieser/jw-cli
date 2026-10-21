@@ -34,7 +34,8 @@ var warmPages = []string{"/", "/pub", "/media", "/bible", "/dailytext", "/meetin
 
 // The weeks' bible reading every bible picker marks is read ahead a quarter
 // of a year, once a week: the workbooks are out months ahead, and what the
-// service read of them it keeps for a week (service.WeekReading).
+// service read of them it keeps for a week (service.WeekReading). The index
+// of the glossaries' words is read ahead as often (warmGlossaries).
 const (
 	readingPage  = "/api/v1/bible/reading?weeks=13"
 	readingEvery = 7 * 24 * time.Hour
@@ -110,6 +111,7 @@ func (s *Server) Warm(ctx context.Context) {
 				s.readAhead(p)
 			}
 		}
+		s.warmGlossaries(ctx)
 		select {
 		case <-ctx.Done():
 			return

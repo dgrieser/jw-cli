@@ -148,6 +148,7 @@ func (p basePage) UIText() map[string]string {
 		"aborted":        t.UIAborted,
 		"follow":         t.UIFollow,
 		"followHere":     t.UIFollowHere,
+		"glossaryIn":     t.UIGlossaryIn,
 		"followTab":      t.UIFollowTab,
 		"openOnSite":     t.UIOpenOnSite,
 		"followPage":     t.UIFollowPage,

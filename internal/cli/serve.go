@@ -27,6 +27,7 @@ func newServeCmd(a *app.App) *cobra.Command {
 		port      int
 		authFile  string
 		pageCache string
+		glossary  string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -55,6 +56,12 @@ come back at once and offline. --page-cache says how that copy is used:
 Behind an authenticating proxy that the requests do not show (one that
 checks a cookie and passes nothing on), set fallback, so a login revoked
 there is never bypassed by the copy.
+
+Words the glossaries of a language explain — the study bible's glossary,
+Insight on the Scriptures, the Research Guide — are marked in its articles,
+daily texts, meetings and bible chapters; pressing one opens its entry.
+--glossary-langs names the languages indexed (default E,X: English and
+German), "none" none.
 
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
@@ -91,10 +98,11 @@ Examples:
 			// for first
 			a.Background = true
 			srv := server.New(server.Config{
-				Auth:        auth,
-				PageCache:   pageCache,
-				Svc:         a.Service(),
-				DefaultLang: a.Flags.Lang,
+				Auth:          auth,
+				PageCache:     pageCache,
+				GlossaryLangs: glossaryLangs(glossary),
+				Svc:           a.Service(),
+				DefaultLang:   a.Flags.Lang,
 				Logf: func(format string, args ...any) {
 					fmt.Fprintf(a.Stderr, format+"\n", args...)
 				},
@@ -144,7 +152,20 @@ Examples:
 	fl.StringVar(&authFile, "auth-file", os.Getenv("JW_AUTH_FILE"), "basic auth users: an .htpasswd or .htaccess file, used when it exists ($JW_AUTH_FILE)")
 	fl.StringVar(&pageCache, "page-cache", cmp.Or(os.Getenv("JW_PAGE_CACHE"), server.PageCacheAuto),
 		"how the browser's copy of the pages is used: auto, first, fallback or off ($JW_PAGE_CACHE)")
+	fl.StringVar(&glossary, "glossary-langs", cmp.Or(os.Getenv("JW_GLOSSARY_LANGS"), strings.Join(server.DefaultGlossaryLangs, ",")),
+		`languages whose glossary words are marked in the pages, comma-separated, or "none" ($JW_GLOSSARY_LANGS)`)
 	return cmd
+}
+
+// glossaryLangs splits the --glossary-langs list; "none" is no language.
+func glossaryLangs(list string) []string {
+	out := []string{}
+	for spec := range strings.SplitSeq(list, ",") {
+		if spec = strings.TrimSpace(spec); spec != "" && !strings.EqualFold(spec, "none") {
+			out = append(out, spec)
+		}
+	}
+	return out
 }
 
 // loadAuth gathers the basic auth users: the file, when it exists, and

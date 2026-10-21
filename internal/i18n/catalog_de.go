@@ -281,6 +281,8 @@ var de = Messages{
 	UIThemeDark:            "Dunkel",
 	UIThemeSystem:          "System",
 	UIOutlines:             "Übersicht",
+	UIGlossary:             "Worterklärungen",
+	UIGlossaryIn:           "In „%s“ nachschlagen",
 	UITextSize:             "Schriftgröße",
 	UIRefresh:              "Neu laden",
 	UIBackToOverview:       "Übersicht",

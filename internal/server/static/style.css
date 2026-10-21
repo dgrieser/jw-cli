@@ -678,6 +678,19 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 }
 .document sup { font-size: 0.7em; line-height: 0; }
 .document a:hover { color: var(--accent-hover); }
+/* a word a glossary explains (app.js, glossary) reads as the text around it,
+   with a dotted line under it; the switch in the settings takes the line off
+   and leaves the word as plain text */
+.document a.gloss {
+  color: inherit;
+  text-decoration: underline dotted var(--muted);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.22em;
+}
+.document a.gloss:hover { color: inherit; text-decoration-color: var(--accent); }
+html[data-glossary="off"] .document a.gloss { text-decoration: none; pointer-events: none; cursor: text; }
+/* the glossary an entry opened from such a word comes from, after its title */
+.gloss-src { margin-left: 0.5em; color: var(--muted); font-size: 0.8em; font-weight: 400; }
 
 /* what wol ships along that is not reading matter: its image viewer's
    buttons and the hidden fields of its page — not the page's own controls,
