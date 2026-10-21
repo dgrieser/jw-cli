@@ -93,6 +93,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/bible/cited", s.apiBibleCited)
 	mux.HandleFunc("GET /api/v1/bible/books", s.apiBibleBooks)
 	mux.HandleFunc("GET /api/v1/bible/nav", s.apiBibleNav)
+	mux.HandleFunc("GET /api/v1/bible/reading", s.apiBibleReading)
 	mux.HandleFunc("GET /api/v1/bible/verses", s.apiBibleVerses)
 	mux.HandleFunc("GET /api/v1/bible/intro", s.apiBibleIntro)
 	mux.HandleFunc("GET /api/v1/bible/outline", s.apiBibleOutline)

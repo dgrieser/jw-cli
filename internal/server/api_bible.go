@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
@@ -165,6 +166,63 @@ func (s *Server) apiBibleNav(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		failJSON(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// readingWeeks is how many weeks /api/v1/bible/reading answers for at most:
+// half a year, more than the workbooks are out ahead.
+const readingWeeks = 26
+
+// apiBibleReading is the bible reading of the midweek meetings, week by week
+// from the one containing ?date= (today when not given) for ?weeks= weeks
+// (one when not given): GET /api/v1/bible/reading?weeks=13. A week whose
+// material cannot be read — not out yet, most often — is left out.
+func (s *Server) apiBibleReading(w http.ResponseWriter, r *http.Request) {
+	date, err := dateParam(r)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	weeks, err := intParam(r, "weeks", 1)
+	if err != nil || weeks < 1 || weeks > readingWeeks {
+		badRequest(w, "invalid weeks %q (want 1-%d)", r.FormValue("weeks"), readingWeeks)
+		return
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	found := make([]*service.WeekReading, weeks)
+	errs := make([]error, weeks)
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 4)
+	for i := range weeks {
+		wg.Go(func() {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			rd, err := s.svc.WeekReading(r.Context(), lng, date.AddDate(0, 0, 7*i))
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			found[i] = &rd
+		})
+	}
+	wg.Wait()
+	out := struct {
+		Weeks []service.WeekReading `json:"weeks"`
+	}{Weeks: []service.WeekReading{}}
+	for _, rd := range found {
+		if rd != nil {
+			out.Weeks = append(out.Weeks, *rd)
+		}
+	}
+	// nothing at all to say is the first week's failure
+	if len(out.Weeks) == 0 && errs[0] != nil {
+		failJSON(w, r, errs[0])
 		return
 	}
 	writeJSON(w, http.StatusOK, out)

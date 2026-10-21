@@ -29,8 +29,9 @@ import (
 // few milliseconds from the cache.
 const warmEvery = time.Hour
 
-// warmPages are the pages a reader starts from.
-var warmPages = []string{"/", "/pub", "/media", "/bible", "/dailytext", "/meetings"}
+// warmPages are the pages a reader starts from, and the weeks' bible reading
+// every bible picker marks, a quarter of a year ahead.
+var warmPages = []string{"/", "/pub", "/media", "/bible", "/dailytext", "/meetings", "/api/v1/bible/reading?weeks=13"}
 
 // warmLangs is how many of the languages readers read lately the start
 // pages are kept ready in, besides the server's default.
@@ -86,7 +87,11 @@ func (s *Server) Warm(ctx context.Context) {
 			}
 			for _, p := range warmPages {
 				if lang != "" {
-					p += "?" + url.Values{"lang": {lang}}.Encode()
+					sep := "?"
+					if strings.Contains(p, "?") {
+						sep = "&"
+					}
+					p += sep + url.Values{"lang": {lang}}.Encode()
 				}
 				s.readAhead(p)
 			}

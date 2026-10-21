@@ -140,6 +140,7 @@ func (p basePage) UIText() map[string]string {
 		"prevBook":       t.UIPrevBook,
 		"nextBook":       t.UINextBook,
 		"chapters":       t.UIChapters,
+		"weekReading":    t.UIWeekReading,
 		"abort":          t.UIAbort,
 		"language":       t.UILanguage,
 		"langQuick":      t.UILangQuick,

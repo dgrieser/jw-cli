@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -1271,7 +1272,7 @@ func TestUIBibleNav(t *testing.T) {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
 	if !strings.Contains(body, "Das Evangelium nach Matthäus") ||
-		!strings.Contains(body, `href="/bible?bible=nwtsty&amp;ref=Matthew&#43;28&amp;lang=en">28</a>`) {
+		!strings.Contains(body, `<a data-book="40" data-chapter="28" href="/bible?bible=nwtsty&amp;ref=Matthew&#43;28&amp;lang=en">28</a>`) {
 		t.Errorf("missing the chapter grid:\n%s", body)
 	}
 
@@ -1337,6 +1338,9 @@ func TestUIBibleChapterNav(t *testing.T) {
 		!strings.Contains(body, `ref=John&#43;2&amp;lang=en" rel="prev"`) {
 		t.Errorf("no chapter nav below the verses:\n%s", body)
 	}
+	if !strings.Contains(body, `rel="prev" title="John 2" data-book="43" data-chapter="2">`) {
+		t.Errorf("the chapter nav does not name the chapter it leads to, for the week's reading to be marked:\n%s", body)
+	}
 	if !strings.Contains(body, `<span class="lbl">John 2</span>`) {
 		t.Errorf("the chapter nav has no label to cut short:\n%s", body)
 	}
@@ -1393,5 +1397,53 @@ func TestUIMediaItemClip(t *testing.T) {
 	_, body = get(t, srv, "/media/item/pub-abc_1_VIDEO?lang=en")
 	if strings.Contains(body, "#t=") || strings.Contains(body, "clip-note") {
 		t.Errorf("the whole video is set to a clip:\n%.3000s", body)
+	}
+}
+
+// The week's bible reading is read off the midweek workbook, week by week: a
+// week without a workbook has no reading, one whose material is not out yet
+// is left out.
+func TestAPIBibleReading(t *testing.T) {
+	mux := wolMux(t)
+	card := func(class, doc string) string {
+		return fmt.Sprintf(`<a class="cardContainer %s" href="/en/wol/d/r1/lp-e/%s">x</a>`, class, doc)
+	}
+	// 2026-10-19 begins ISO week 43
+	mux.HandleFunc("/en/wol/meetings/r1/lp-e/2026/43", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, card("pub-mwb", "202026258")+card("pub-w", "2026522"))
+	})
+	mux.HandleFunc("/en/wol/meetings/r1/lp-e/2026/44", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, card("pub-w", "2026523"))
+	})
+	mux.HandleFunc("/en/wol/d/r1/lp-e/202026258", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<article id="article"><header><h1>OCTOBER 19-25</h1>
+			<h2><a href="/en/wol/bc/r1/lp-e/202026258/0/0" class="b"><strong>JEREMIAH 45-46</strong></a></h2></header></article>`)
+	})
+	mux.HandleFunc("/wol/bc/r1/lp-e/202026258/0/0", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"items": [{"title": "Jeremiah 45:1-46:28", "content": "<p>…</p>",
+			"url": "/wol/b/r1/lp-e/nwtsty/24/45#v=24:45:1-24:46:28"}]}`)
+	})
+	srv := newTestServer(t, mux)
+	resp, body := get(t, srv, "/api/v1/bible/reading?date=2026-10-21&weeks=3&lang=en")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	var got struct {
+		Weeks []service.WeekReading `json:"weeks"`
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := []service.WeekReading{
+		{Year: 2026, Week: 43, Start: "2026-10-19", Title: "Jeremiah 45:1-46:28",
+			Chapters: []service.ReadingChapter{{Book: 24, Chapter: 45}, {Book: 24, Chapter: 46}}},
+		{Year: 2026, Week: 44, Start: "2026-10-26", Chapters: []service.ReadingChapter{}},
+	}
+	if !reflect.DeepEqual(got.Weeks, want) {
+		t.Errorf("weeks = %+v, want %+v", got.Weeks, want)
+	}
+	if resp, _ := get(t, srv, "/api/v1/bible/reading?weeks=99"); resp.StatusCode != 400 {
+		t.Errorf("too many weeks: status %d", resp.StatusCode)
 	}
 }

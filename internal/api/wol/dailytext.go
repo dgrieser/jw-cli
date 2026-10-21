@@ -3,11 +3,15 @@ package wol
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
 
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/htmlx"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
@@ -133,4 +137,62 @@ func (c *Client) Meetings(ctx context.Context, cfg Config, date time.Time) (mode
 		return art, fmt.Errorf("no meeting content found at %s", u)
 	}
 	return art, nil
+}
+
+// ReadingCitation is the citation link the midweek workbook heads a week with:
+// the chapters of the week's bible reading ("JEREMIA 45-46"), linked like
+// any citation of the library. Empty when the week has no reading, as at an
+// assembly or the Memorial.
+func (c *Client) ReadingCitation(ctx context.Context, docURL string) (string, error) {
+	doc, err := c.documentPage(ctx, docURL)
+	if err != nil {
+		return "", err
+	}
+	href, _ := doc.Find("article header a.b[href]").First().Attr("href")
+	if !strings.Contains(href, "/wol/bc/") {
+		return "", nil
+	}
+	return href, nil
+}
+
+// readingSpan is a passage a bible link's fragment names, from the verse
+// before the dash to the one after it: "v=24:45:1-24:46:28".
+var readingSpan = regexp.MustCompile(`(\d+):(\d+):\d+(?:-(?:(\d+):)?(\d+):\d+)?`)
+
+// ReadingChapters are the chapters a bible link names in its fragment,
+// "/wol/b/r10/lp-x/nwtsty/24/45#v=24:45:1-24:46:28", as book·1000 + chapter,
+// in order. A span running past a book's end goes on into the next book.
+func ReadingChapters(link string) []int {
+	_, frag, _ := strings.Cut(link, "#")
+	var out []int
+	add := func(id int) {
+		if !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	for _, m := range readingSpan.FindAllStringSubmatch(frag, -1) {
+		book, _ := strconv.Atoi(m[1])
+		chapter, _ := strconv.Atoi(m[2])
+		if book < 1 || book > 66 || chapter < 1 {
+			continue
+		}
+		endBook, endChapter := book, chapter
+		if m[4] != "" {
+			if m[3] != "" {
+				endBook, _ = strconv.Atoi(m[3])
+			}
+			endChapter, _ = strconv.Atoi(m[4])
+		}
+		if endBook < book || endBook > 66 || (endBook == book && endChapter < chapter) {
+			endBook, endChapter = book, chapter
+		}
+		for b, c := book, chapter; b < endBook || (b == endBook && c <= endChapter); c++ {
+			if b < endBook && c > bibleref.Chapters(b) {
+				b, c = b+1, 0
+				continue
+			}
+			add(b*1000 + c)
+		}
+	}
+	return out
 }

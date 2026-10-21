@@ -93,3 +93,55 @@ func (s *Service) MeetingParts(ctx context.Context, lng model.Language, date tim
 	}
 	return s.WOL.MeetingParts(ctx, cfg, date)
 }
+
+// WeekReading is the bible reading of a week's midweek meeting: the chapters
+// the workbook heads the week with.
+type WeekReading struct {
+	Year  int    `json:"year"`
+	Week  int    `json:"week"`
+	Start string `json:"start"` // the week's Monday, YYYY-MM-DD
+	// Title is the passage as the library names it: "Jeremia 45:1-46:28".
+	Title string `json:"title,omitempty"`
+	// Chapters are the chapters read, in order; none when the week has no
+	// reading, as at an assembly or the Memorial.
+	Chapters []ReadingChapter `json:"chapters"`
+}
+
+// ReadingChapter is one chapter of a week's reading.
+type ReadingChapter struct {
+	Book    int `json:"book"`
+	Chapter int `json:"chapter"`
+}
+
+// WeekReading reads the bible reading of the ISO week containing date off its
+// midweek workbook. A week whose material lists no workbook has no reading;
+// one whose material is not out yet is an error.
+func (s *Service) WeekReading(ctx context.Context, lng model.Language, date time.Time) (WeekReading, error) {
+	year, week := date.ISOWeek()
+	monday := date.AddDate(0, 0, -((int(date.Weekday()) + 6) % 7))
+	out := WeekReading{Year: year, Week: week, Start: monday.Format(time.DateOnly), Chapters: []ReadingChapter{}}
+	cfg, err := s.WOLConfig(ctx, lng)
+	if err != nil {
+		return out, err
+	}
+	parts, err := s.WOL.MeetingParts(ctx, cfg, date)
+	if err != nil {
+		return out, err
+	}
+	if parts.Midweek == "" {
+		return out, nil
+	}
+	cite, err := s.WOL.ReadingCitation(ctx, parts.Midweek)
+	if err != nil || cite == "" {
+		return out, err
+	}
+	tip, err := s.WOL.Tooltip(ctx, cite)
+	if err != nil {
+		return out, err
+	}
+	out.Title = tip.Title
+	for _, id := range wol.ReadingChapters(tip.URL) {
+		out.Chapters = append(out.Chapters, ReadingChapter{Book: id / 1000, Chapter: id % 1000})
+	}
+	return out, nil
+}

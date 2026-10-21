@@ -145,3 +145,49 @@ func TestTooltipStripsLocale(t *testing.T) {
 		t.Errorf("url not absolutized: %q", tip.URL)
 	}
 }
+
+// The workbook heads a week with its bible reading, a citation link; the
+// rest of the week's material cites the bible the same way and is no reading.
+func TestReadingCitation(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/d/r10/lp-x/202026258", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html><body><article id="article"><header>
+			<h1>19.-25. OKTOBER</h1>
+			<h2><a href="/de/wol/bc/r10/lp-x/202026258/0/0" data-bid="1-1" class="b"><strong>JEREMIA 45-46</strong></a></h2>
+			</header><div class="bodyTxt"><p>(<a href="/de/wol/bc/r10/lp-x/202026258/1/0" class="b">Jer 45:3</a>)</p></div>
+			</article></body></html>`)
+	})
+	mux.HandleFunc("/de/wol/d/r10/lp-x/202026259", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<html><body><article id="article"><header><h1>KREISKONGRESS</h1></header>
+			<div class="bodyTxt"><p>(<a href="/de/wol/bc/r10/lp-x/202026259/1/0" class="b">Jer 45:3</a>)</p></div>
+			</article></body></html>`)
+	})
+	c := testClient(t, mux)
+	got, err := c.ReadingCitation(context.Background(), c.hc.Base.WOL+"/de/wol/d/r10/lp-x/202026258")
+	if err != nil || got != "/de/wol/bc/r10/lp-x/202026258/0/0" {
+		t.Errorf("reading = %q, %v", got, err)
+	}
+	got, err = c.ReadingCitation(context.Background(), c.hc.Base.WOL+"/de/wol/d/r10/lp-x/202026259")
+	if err != nil || got != "" {
+		t.Errorf("a week without a reading has one: %q, %v", got, err)
+	}
+}
+
+func TestReadingChapters(t *testing.T) {
+	for _, tc := range []struct {
+		link string
+		want []int
+	}{
+		{"/wol/b/r10/lp-x/nwtsty/24/45#v=24:45:1-24:46:28", []int{24045, 24046}},
+		{"/wol/b/r10/lp-x/nwtsty/25/3#v=25:3:1-25:5:22", []int{25003, 25004, 25005}},
+		{"/wol/b/r10/lp-x/nwtsty/19/119#v=19:119:1-88", []int{19119}},
+		{"/wol/b/r10/lp-x/nwtsty/31/1#v=31:1:1", []int{31001}},
+		// across a book's end: the rest of one book, the start of the next
+		{"/wol/b/r10/lp-x/nwtsty/40/28#v=40:28:1-41:1:13", []int{40028, 41001}},
+		{"/wol/b/r10/lp-x/nwtsty/24/45", nil},
+	} {
+		if got := ReadingChapters(tc.link); fmt.Sprint(got) != fmt.Sprint(tc.want) {
+			t.Errorf("ReadingChapters(%q) = %v, want %v", tc.link, got, tc.want)
+		}
+	}
+}

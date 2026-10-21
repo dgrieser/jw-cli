@@ -266,6 +266,7 @@ var de = Messages{
 	UIBibleSearchEditions:  "Durchsucht: %s",
 	UIBibleSearchTruncated: "Nur die ersten %d Ergebnisseiten wurden gelesen.",
 	UIPickBook:             "Buch wählen",
+	UIWeekReading:          "Bibellesung dieser Woche",
 	UIBooks:                "Bücher",
 	UIPrevBook:             "Vorheriges Buch",
 	UINextBook:             "Nächstes Buch",

@@ -985,6 +985,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/bible/gallery` | `book`*, `bible` | `jw bible gallery -o json` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/bible/verses` | `bible`, `book`, `chapter` | — (the chapter's page: how many verses it has) |
+| `GET /api/v1/bible/reading` | `date`, `weeks` (1-26, default 1) | — (the midweek meeting's bible reading, week by week from the one containing `date`: the chapters the workbook heads each week with; a week whose material is not out yet is left out. The pages bookmark this week's books and chapters with it, and the server reads 13 weeks ahead) |
 | `GET /api/v1/media/categories[/{key}]` | `limit`, `offset` | `jw media browse` |
 | `GET /api/v1/media/items/{lank}` | — | `jw media info` |
 | `GET /api/v1/media/items/{lank}/text` | — | `jw media text` (`404` for an item without words) |

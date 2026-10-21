@@ -266,6 +266,7 @@ var en = Messages{
 	UIBibleSearchEditions:  "Searched: %s",
 	UIBibleSearchTruncated: "Only the first %d pages of results were read.",
 	UIPickBook:             "Choose a book",
+	UIWeekReading:          "This week’s Bible reading",
 	UIBooks:                "Books",
 	UIPrevBook:             "Previous book",
 	UINextBook:             "Next book",
