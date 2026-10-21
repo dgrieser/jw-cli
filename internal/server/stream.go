@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -445,6 +446,52 @@ func (s *Server) unfoldTranslations(w http.ResponseWriter, r *http.Request) {
 	})
 	ev.finish(r, "", requests, err, txt)
 }
+
+// unfoldGlossary streams the entries of the glossaries explaining a marked
+// word, one section each (service.StreamGlossary): GET
+// /unfold/glossary?doc=…&doc=… — what a word's section loads once it is
+// opened. Only entries of the glossaries' index are read.
+func (s *Server) unfoldGlossary(w http.ResponseWriter, r *http.Request) {
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
+	var docs []int
+	for _, raw := range r.Form["doc"] {
+		if id, err := strconv.Atoi(raw); err == nil && id > 0 && !slices.Contains(docs, id) {
+			docs = append(docs, id)
+		}
+	}
+	if len(docs) == 0 || len(docs) > maxGlossaryDocs {
+		badRequest(w, "want 1-%d documents as %q parameters", maxGlossaryDocs, "doc")
+		return
+	}
+	if !s.glossaryLang(r.Context(), lng) {
+		failJSON(w, r, fmt.Errorf("%w: glossaries of %s are not indexed", service.ErrNotGlossary, lng.Symbol))
+		return
+	}
+	// what is no entry is refused before the stream begins
+	if _, _, err := s.svc.GlossaryEntries(r.Context(), lng, docs); err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	txt := text(lng)
+	ev := startStream(w)
+	requests, err := s.svc.StreamGlossary(r.Context(), lng, docs, txt, service.UnfoldStream{
+		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
+		Stage:   ev.stage,
+	})
+	ev.finish(r, "", requests, err, txt)
+}
+
+// maxGlossaryDocs bounds the entries one word's section reads: a word has
+// one in each glossary, the Research Guide now and then a few.
+const maxGlossaryDocs = 8
 
 // unfoldFootnote streams one footnote: GET /unfold/footnote?path=… What a page
 // loads when a "*" is followed before its verse was unfolded. Only a footnote

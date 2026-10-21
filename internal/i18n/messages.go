@@ -448,11 +448,8 @@ type Messages struct {
 	// of the bible reader on and off, in the settings.
 	UIOutlines string
 	// UIGlossary switches the marks on the words a glossary explains on and
-	// off, in the settings; UIGlossaryIn (%s: the glossary, as the library
-	// titles it) is what a long press on such a word offers for an entry of
-	// another glossary than the one it opens.
-	UIGlossary   string
-	UIGlossaryIn string
+	// off, in the settings.
+	UIGlossary string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 	// UILyrics, UIText and UITranscript head the words of a media item: a

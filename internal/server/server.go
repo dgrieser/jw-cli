@@ -133,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /unfold/chapter", s.unfoldChapter)
 	mux.HandleFunc("GET /unfold/refs", s.unfoldRefs)
 	mux.HandleFunc("GET /unfold/footnote", s.unfoldFootnote)
+	mux.HandleFunc("GET /unfold/glossary", s.unfoldGlossary)
 	mux.HandleFunc("GET /unfold/translations", s.unfoldTranslations)
 	mux.HandleFunc("GET /unfold/cited", s.unfoldCited)
 	mux.HandleFunc("GET /unfold/article", s.unfoldArticle)

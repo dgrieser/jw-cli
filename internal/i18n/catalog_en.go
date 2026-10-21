@@ -282,7 +282,6 @@ var en = Messages{
 	UIThemeSystem:          "System",
 	UIOutlines:             "Outline",
 	UIGlossary:             "Glossary words",
-	UIGlossaryIn:           "Look up in “%s”",
 	UITextSize:             "Text size",
 	UIRefresh:              "Reload",
 	UIBackToOverview:       "Overview",

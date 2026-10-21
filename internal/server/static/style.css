@@ -694,8 +694,6 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 }
 .document a.gloss:hover { color: inherit; --gloss-dot: var(--accent); }
 html[data-glossary="off"] .document a.gloss { background: none; pointer-events: none; cursor: text; }
-/* the glossary an entry opened from such a word comes from, after its title */
-.gloss-src { margin-left: 0.5em; color: var(--muted); font-size: 0.8em; font-weight: 400; }
 
 /* what wol ships along that is not reading matter: its image viewer's
    buttons and the hidden fields of its page — not the page's own controls,

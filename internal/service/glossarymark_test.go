@@ -86,10 +86,10 @@ func TestMarkGlossary(t *testing.T) {
 		}
 	}
 
-	// the other glossary's entry, and both named on hover
+	// every entry explaining the word, the glossaries named on hover
 	out := s.MarkGlossary(lng, `<div class="item-text">Sie sahen Wunder.</div>`)
-	for _, want := range []string{`href="https://wol.jw.org/de/wol/d/r10/lp-x/1001077200"`, `data-gloss-book="Worterklärungen"`,
-		`title="Worterklärungen · Einsichten"`, `data-gloss-alt="[{&#34;d&#34;:1200004900,&#34;b&#34;:&#34;Einsichten&#34;}]"`} {
+	for _, want := range []string{`href="https://wol.jw.org/de/wol/d/r10/lp-x/1001077200"`,
+		`data-gloss="1001077200 1200004900"`, `title="Worterklärungen · Einsichten"`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("no %s in %s", want, out)
 		}

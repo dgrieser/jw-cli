@@ -158,7 +158,7 @@ func TestGlossaryMarkedInVerses(t *testing.T) {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en")
-	if !strings.Contains(body, `/en/wol/d/r1/lp-e/1200001729" data-gloss-book="Insight" title="Insight">God</a>`) {
+	if !strings.Contains(body, `/en/wol/d/r1/lp-e/1200001729" data-gloss="1200001729" title="Insight">God</a>`) {
 		t.Errorf("the verse does not mark God:\n%s", body)
 	}
 	_, body = get(t, srv, "/article?target=2024360&lang=en")
@@ -168,5 +168,48 @@ func TestGlossaryMarkedInVerses(t *testing.T) {
 	_, body = get(t, srv, "/unfold/article?lang=en&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
 	if strings.Contains(body, `gloss`) {
 		t.Errorf("an article a reference brings is marked:\n%s", body)
+	}
+}
+
+// A word's section loads the entries of every glossary explaining it, the
+// study bible's glossary first and opened, the others as headings; a
+// document that is no entry is refused.
+func TestUnfoldGlossary(t *testing.T) {
+	mux := glossaryMux(t)
+	for id, title := range map[string]string{"1001077007": "Abyss", "1200000007": "ABYSS"} {
+		mux.HandleFunc("/en/wol/d/r1/lp-e/"+id, func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `<html><head><title>%[1]s</title></head><body><div id="article"><header><h1>%[1]s</h1></header>
+				<div class="bodyTxt"><p>The entry %[2]s.</p></div></div></body></html>`, title, id)
+		})
+	}
+	srv := newTestServer(t, mux)
+	if resp, body := get(t, srv, "/api/v1/glossary?lang=en"); resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	resp, body := get(t, srv, "/unfold/glossary?lang=en&doc=1200000007&doc=1001077007")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, body)
+	}
+	var sections []string
+	for line := range strings.SplitSeq(strings.TrimSpace(body), "\n") {
+		var ev struct{ Type, HTML string }
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev.Type == "section" {
+			sections = append(sections, ev.HTML)
+		}
+	}
+	if len(sections) != 2 ||
+		!strings.Contains(sections[0], `open=""><summary>Glossary</summary>`) || !strings.Contains(sections[0], "The entry 1001077007") ||
+		strings.Contains(sections[1], " open") || !strings.Contains(sections[1], "<summary>Insight</summary>") ||
+		!strings.Contains(sections[1], "The entry 1200000007") {
+		t.Errorf("sections:\n%s", strings.Join(sections, "\n"))
+	}
+	if resp, _ := get(t, srv, "/unfold/glossary?lang=en&doc=2024360"); resp.StatusCode != 404 {
+		t.Errorf("a document that is no entry: status %d", resp.StatusCode)
+	}
+	if resp, _ := get(t, srv, "/unfold/glossary?lang=en"); resp.StatusCode != 400 {
+		t.Errorf("no document: status %d", resp.StatusCode)
 	}
 }

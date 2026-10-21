@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"regexp"
 	"slices"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
@@ -435,4 +437,89 @@ func (s *Service) dropCommon(ctx context.Context, lng model.Language, g *Glossar
 		return found
 	})
 	return nil
+}
+
+// ErrNotGlossary: a document asked for as a glossary's entry is none of the
+// index.
+var ErrNotGlossary = errors.New("not an entry of the glossaries")
+
+// GlossaryEntries are the entries of lng's glossary index among docs, in the
+// order of the glossaries, and the index itself; none is ErrNotGlossary.
+func (s *Service) GlossaryEntries(ctx context.Context, lng model.Language, docs []int) (Glossary, []GlossaryTerm, error) {
+	g, err := s.Glossary(ctx, lng)
+	if err != nil {
+		return g, nil, err
+	}
+	var entries []GlossaryTerm
+	for _, t := range g.Terms {
+		if slices.Contains(docs, t.DocID) && !slices.ContainsFunc(entries, func(e GlossaryTerm) bool { return e.DocID == t.DocID }) {
+			entries = append(entries, t)
+		}
+	}
+	if len(entries) == 0 {
+		return g, nil, fmt.Errorf("%w: %v", ErrNotGlossary, docs)
+	}
+	slices.SortStableFunc(entries, func(a, b GlossaryTerm) int {
+		if a.Book != b.Book {
+			return a.Book - b.Book
+		}
+		return slices.Index(docs, a.DocID) - slices.Index(docs, b.DocID)
+	})
+	return g, entries, nil
+}
+
+// StreamGlossary streams the entries of the glossaries explaining a marked
+// word, one section each, in the order of the glossaries — the study bible's
+// glossary, Insight, the Research Guide — whichever of them explain it: docs
+// are the entries a link names. Each section is headed by its glossary, and
+// by the entry too where a glossary has several for the word; the first one
+// comes opened, the others as headings. An entry that cannot be read is left
+// out; none read at all is the first failure.
+func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs []int, txt *i18n.Messages,
+	out UnfoldStream) (int, error) {
+	g, entries, err := s.GlossaryEntries(ctx, lng, docs)
+	if err != nil {
+		return 0, err
+	}
+	sections := make([]*UnfoldSection, len(entries))
+	errs := make([]error, len(entries))
+	var wg sync.WaitGroup
+	for i, e := range entries {
+		wg.Go(func() {
+			sec, err := s.ArticleSection(ctx, lng, g.DocURL+strconv.Itoa(e.DocID), UnfoldConfig{}, txt)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			title := ""
+			if e.Book >= 0 && e.Book < len(g.Books) {
+				title = g.Books[e.Book].Title
+			}
+			several := 0
+			for _, o := range entries {
+				if o.Book == e.Book {
+					several++
+				}
+			}
+			if title == "" || several > 1 {
+				title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
+			}
+			sec.Title, sec.Order = html.EscapeString(title), i
+			sections[i] = &sec
+		})
+	}
+	wg.Wait()
+	sent := 0
+	for _, sec := range sections {
+		if sec == nil {
+			continue
+		}
+		sec.Open = sent == 0
+		out.Section(*sec)
+		sent++
+	}
+	if sent == 0 {
+		return len(entries), errors.Join(errs...)
+	}
+	return len(entries), nil
 }
