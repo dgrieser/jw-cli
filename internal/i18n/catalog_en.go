@@ -14,6 +14,7 @@ var en = Messages{
 	CitedResultsUnknown: "publications citing %s",
 	ExcerptProgress:     "reading excerpts: %d/%d",
 	CitedInHeading:      "Quotations of %s",
+	CitedShort:          "Quotations",
 	PageSuffix:          " (page %d, %d per page)",
 	PageSuffixShort:     " — page %d",
 	SearchHeader:        "Search: %s",
@@ -72,6 +73,7 @@ var en = Messages{
 
 	MarginalReference:           "Marginal reference",
 	MarginalReferencesOf:        "Marginal references of %s",
+	MarginalShort:               "Marginal references",
 	MarginalReferenceWithSource: "Marginal reference %s of %s",
 
 	UnfoldHeading:  "References",
@@ -84,8 +86,9 @@ var en = Messages{
 	ResearchHeading:          "Research guide",
 	ResearchGuideHeading:     "Research Guide",
 	PublicationsIndexHeading: "Publications Index",
+	IndexHeading:             "Index",
 	FootnotesHeading:         "Footnotes",
-	TranslationsHeading:      "Other translations",
+	TranslationsHeading:      "Translations",
 	MediaHeading:             "Media gallery",
 	StudyFailed:              "the study notes on this verse could not be read: %s",
 

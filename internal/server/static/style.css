@@ -805,6 +805,9 @@ details.section > summary {
   user-select: none;
 }
 details.section > summary::-webkit-details-marker { display: none; }
+/* a closed section is headed by what it holds alone ("Querverweise"); the
+   passage it is of shows once it is open ("Querverweise Jeremia 46:2") */
+details.section:not([open]) > summary .sec-of { display: none; }
 details.section > summary::before {
   content: "";
   flex: none;

@@ -1316,7 +1316,7 @@ func TestUnfoldVerseCitedIsLazy(t *testing.T) {
 func TestUIBibleUnfoldCitedIsLazy(t *testing.T) {
 	srv := newTestServer(t, studyMux(t))
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en&unfold=1")
-	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?to=0&amp;vid=43003016"><summary>Quotations of John 3:16</summary>`) ||
+	if !strings.Contains(body, `<details class="section" data-lazy="/unfold/cited?to=0&amp;vid=43003016"><summary>Quotations<span class="sec-of"> of John 3:16</span></summary>`) ||
 		strings.Contains(body, "cited-lazy") {
 		t.Errorf("want a lazy citations section:\n%s", body)
 	}

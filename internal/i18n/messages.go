@@ -33,6 +33,9 @@ type Messages struct {
 	// reference they quote, which is what tells it from the same heading under
 	// a reference of that verse.
 	CitedInHeading string
+	// CitedShort is CitedInHeading without the passage, as a closed section
+	// is headed: the passage shows once it is open.
+	CitedShort string
 	// ExcerptProgress takes the number of documents read and their total.
 	ExcerptProgress string
 	// PageSuffix takes the page number and the results per page.
@@ -156,6 +159,9 @@ type Messages struct {
 	// MarginalReferencesOf heads the cross references of a verse as a group; it
 	// takes the verse they belong to.
 	MarginalReferencesOf string
+	// MarginalShort is MarginalReferencesOf without the passage, as a closed
+	// section is headed: the passage shows once it is open.
+	MarginalShort string
 	// MarginalReferenceWithSource labels the same thing when the verse it
 	// belongs to is known: it takes the reference it points at, then that
 	// verse, so a reference reads as itself before it reads as somebody's.
@@ -185,6 +191,9 @@ type Messages struct {
 	// page has said what it calls them.
 	ResearchGuideHeading     string
 	PublicationsIndexHeading string
+	// IndexHeading heads both indexes of a verse together, each under its
+	// own name inside.
+	IndexHeading string
 	// StudyFailed takes the reason the study pane of a verse could not be read.
 	// The verse itself is still printed.
 	StudyFailed string

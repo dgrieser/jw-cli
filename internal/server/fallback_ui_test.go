@@ -21,7 +21,7 @@ func TestUILazySectionsFallBack(t *testing.T) {
 	}
 	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en&unfold=1")
 	for _, want := range []string{
-		`data-lazy="/unfold/cited?to=0&amp;vid=43003016"><summary>Quotations of John 3:16</summary><div class="section-body"><p class="lazy-fallback"><a href="/cited?lang=en&amp;to=0&amp;vid=43003016">Show on a page of its own</a></p>`,
+		`data-lazy="/unfold/cited?to=0&amp;vid=43003016"><summary>Quotations<span class="sec-of"> of John 3:16</span></summary><div class="section-body"><p class="lazy-fallback"><a href="/cited?lang=en&amp;to=0&amp;vid=43003016">Show on a page of its own</a></p>`,
 		`<a href="/bible?bible=nwtsty&amp;lang=en&amp;to=0&amp;unfold=1&amp;vid=43001029">`,
 		`<a href="/bible?all=1&amp;lang=en&amp;to=0&amp;vid=43001029">`,
 	} {
