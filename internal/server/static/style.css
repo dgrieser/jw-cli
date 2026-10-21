@@ -679,16 +679,21 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
 .document sup { font-size: 0.7em; line-height: 0; }
 .document a:hover { color: var(--accent-hover); }
 /* a word a glossary explains (app.js, glossary) reads as the text around it,
-   with a dotted line under it; the switch in the settings takes the line off
-   and leaves the word as plain text */
+   with a faint row of dots under it — drawn, since a dotted underline cannot
+   space its dots; the switch in the settings takes them off and leaves the
+   word as plain text */
 .document a.gloss {
+  --gloss-dot: color-mix(in srgb, var(--muted) 45%, transparent);
   color: inherit;
-  text-decoration: underline dotted var(--muted);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.22em;
+  text-decoration: none;
+  background-image: radial-gradient(circle, var(--gloss-dot) 0.75px, transparent 1px);
+  background-size: 7px 2px;
+  background-repeat: repeat-x;
+  background-position: 0 calc(100% - 0.05em);
+  padding-bottom: 0.18em;
 }
-.document a.gloss:hover { color: inherit; text-decoration-color: var(--accent); }
-html[data-glossary="off"] .document a.gloss { text-decoration: none; pointer-events: none; cursor: text; }
+.document a.gloss:hover { color: inherit; --gloss-dot: var(--accent); }
+html[data-glossary="off"] .document a.gloss { background: none; pointer-events: none; cursor: text; }
 /* the glossary an entry opened from such a word comes from, after its title */
 .gloss-src { margin-left: 0.5em; color: var(--muted); font-size: 0.8em; font-weight: 400; }
 
