@@ -72,7 +72,8 @@ func classify(ctx context.Context, err error) (status int, code string) {
 		return 0, ""
 	case errors.As(err, &te):
 		return http.StatusUnprocessableEntity, "too_expensive"
-	case errors.Is(err, pubmedia.ErrNotFound), errors.Is(err, wol.ErrNoTranslation), errors.Is(err, service.ErrNoBookDoc):
+	case errors.Is(err, pubmedia.ErrNotFound), errors.Is(err, wol.ErrNoTranslation), errors.Is(err, service.ErrNoBookDoc),
+		errors.Is(err, service.ErrNotGlossary):
 		return http.StatusNotFound, "not_found"
 	case errors.As(err, &se):
 		if se.StatusCode == http.StatusNotFound || se.StatusCode == http.StatusGone {

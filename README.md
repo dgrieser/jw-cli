@@ -778,9 +778,14 @@ text: the verses of the bible page, and the verses a reference shows wherever
 it is unfolded (another translation's included), the first time each comes up
 in the page and in each section; for now, not in articles, the daily text or
 the meeting parts themselves. Pressing
-one opens its entry under it as a reference, headed by the glossary it comes
-from; held, it offers the usual choices and the entries of the other
-glossaries that explain it too. The server reads the glossaries' tables of
+one adds a section headed by the word among the other sections of its verse
+or paragraph, which loads once it is open: the word's entry in each glossary
+that explains it — the study bible's glossary, Insight, the Research Guide,
+in that order — the first opened, the others as headings, none of them
+bringing the references of its paragraphs before they are asked for. An entry
+that only says where to look instead (*Lamm: Siehe SCHAF.*) shows that entry
+right under the line. Held, it offers
+the usual choices (its first entry's page, here or in a new tab). The server reads the glossaries' tables of
 contents into an index once a week, like the week's bible reading, and marks
 the words in the HTML it sends — the page, and every section it streams — so
 the browser keeps nothing of it (a page asked for before the index is read
@@ -985,10 +990,14 @@ of them alone, and with `lazy=1` loads it while the others come as headings),
 wol citation paths are followed), `GET /unfold/chapter?bible=…&book=…&chapter=…`
 (what the library has on a chapter: the outline's headings covering it, the
 book's introduction, the chapter's part of the gallery),
-`GET /unfold/footnote?path=…`, `GET /unfold/translations?vid=…&bible=…`,
+`GET /unfold/footnote?path=…`, `GET /unfold/glossary?doc=…&doc=…` (a marked word's entries, one section per glossary), `GET /unfold/translations?vid=…&bible=…`,
 `GET /unfold/cited?vid=…&self=…` (who quotes a passage, leaving the documents
 named by `self` out) and `GET /unfold/article?url=…&depth=…` (a library
-document or a jw.org page; only its path is kept and read from that site).
+document or a jw.org page, as it is — nothing it cites comes with it, and its
+paragraphs unfold on their own once asked; a depth reads a jw.org page in its
+library copy; only the link's path is kept and read from that site; an entry
+that only says where to look instead, such as Insight's "LAMM: See SHEEP.",
+comes with the entry it names).
 Everything one request unfolds shares one
 request budget and one set of passages already shown; the first level is
 priced and, if needed, asked about before anything is spent. `done` reports

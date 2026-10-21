@@ -74,3 +74,23 @@ func TestCommonEntry(t *testing.T) {
 		}
 	}
 }
+
+// An entry that says only where to look instead leads there; one that says
+// more, or leads to no document, does not.
+func TestSeeOnly(t *testing.T) {
+	for in, want := range map[string]string{
+		`<h1><strong>LAMM</strong></h1><p class="sb">Siehe <a class="it" href="/de/wol/tc/r10/lp-x/1200002671/0">SCHAF</a>.</p><p></p>`:          "/de/wol/tc/r10/lp-x/1200002671/0",
+		`<p>See <a href="https://wol.jw.org/en/wol/d/r1/lp-e/1200003981">SHEEP</a>.</p>`:                                                         "https://wol.jw.org/en/wol/d/r1/lp-e/1200003981",
+		`<p>Siehe <a href="/de/wol/bc/r10/lp-x/1/0/0">Ri 18:9</a>.</p>`:                                                                          "",
+		`<p>Siehe <a href="/de/wol/tc/r10/lp-x/1/0">SCHAF</a> und <a href="/de/wol/tc/r10/lp-x/1/1">ZIEGE</a>.</p>`:                              "",
+		`<p>Abneigung gegen Anstrengung oder Arbeit; Müßiggang, Arbeitsscheu, Trägheit. Siehe <a href="/de/wol/tc/r10/lp-x/1/0">FLEISS</a>.</p>`: "",
+	} {
+		href, ok := seeOnly(in)
+		if !ok {
+			href = ""
+		}
+		if href != want {
+			t.Errorf("seeOnly(%s) = %q, want %q", in, href, want)
+		}
+	}
+}

@@ -1,9 +1,7 @@
 package service
 
 import (
-	"cmp"
 	"context"
-	"encoding/json"
 	"regexp"
 	"slices"
 	"strconv"
@@ -365,7 +363,7 @@ var (
 		atom.Style: true, atom.Textarea: true, atom.Select: true, atom.Input: true,
 		atom.Rt: true, // an interlinear's word for word English
 	}
-	markSkipClass = []string{"unfold-msg", "unfold-loader", "gloss-src", "bible-outline"}
+	markSkipClass = []string{"unfold-msg", "unfold-loader", "bible-outline"}
 	// what begins a sentence anew; what a word is told from it by
 	markBlocks = map[atom.Atom]bool{
 		atom.P: true, atom.Li: true, atom.Div: true, atom.Blockquote: true, atom.Td: true, atom.Th: true,
@@ -577,56 +575,25 @@ func ownDocs(n *html.Node) []int {
 	return ids
 }
 
-// markAlt is another glossary's entry for a marked word, as its link offers
-// it: the document, and the glossary — with the entry's title when the
-// glossary has several for the word.
-type markAlt struct {
-	DocID int    `json:"d"`
-	Name  string `json:"b"`
-}
-
 // anchor is the link a marked word becomes: to the entry of the first
-// glossary explaining it, naming that glossary (data-gloss-book), the others
-// (data-gloss-alt), and all of them on hover.
+// glossary explaining it, naming every entry explaining it (data-gloss, in
+// the order of the glossaries), which its section loads, and the glossaries
+// on hover.
 func (mk *marking) anchor(docs []GlossaryTerm, text string) *html.Node {
 	m := mk.m
-	book := func(d GlossaryTerm) string {
-		if d.Book >= 0 && d.Book < len(m.books) {
-			return m.books[d.Book].Title
-		}
-		return ""
-	}
-	var titles []string
+	var titles, ids []string
 	for _, d := range docs {
-		if t := book(d); t != "" && !slices.Contains(titles, t) {
-			titles = append(titles, t)
+		ids = append(ids, strconv.Itoa(d.DocID))
+		if d.Book >= 0 && d.Book < len(m.books) && m.books[d.Book].Title != "" && !slices.Contains(titles, m.books[d.Book].Title) {
+			titles = append(titles, m.books[d.Book].Title)
 		}
 	}
 	a := &html.Node{Type: html.ElementNode, Data: "a", DataAtom: atom.A, Attr: []html.Attribute{
 		{Key: "class", Val: "gloss"},
-		{Key: "href", Val: m.docURL + strconv.Itoa(docs[0].DocID)},
-		{Key: "data-gloss-book", Val: book(docs[0])},
+		{Key: "href", Val: m.docURL + ids[0]},
+		{Key: "data-gloss", Val: strings.Join(ids, " ")},
 		{Key: "title", Val: strings.Join(titles, " · ")},
 	}}
-	if len(docs) > 1 {
-		var alts []markAlt
-		for _, d := range docs[1:] {
-			name := book(d)
-			several := 0
-			for _, o := range docs {
-				if o.Book == d.Book {
-					several++
-				}
-			}
-			if several > 1 || name == "" {
-				name = strings.TrimPrefix(name+" – "+cmp.Or(d.Title, d.Term), " – ")
-			}
-			alts = append(alts, markAlt{DocID: d.DocID, Name: name})
-		}
-		if b, err := json.Marshal(alts); err == nil {
-			a.Attr = append(a.Attr, html.Attribute{Key: "data-gloss-alt", Val: string(b)})
-		}
-	}
 	a.AppendChild(&html.Node{Type: html.TextNode, Data: text})
 	return a
 }
