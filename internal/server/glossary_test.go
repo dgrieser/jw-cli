@@ -34,9 +34,9 @@ func glossaryMux(t *testing.T) *http.ServeMux {
 	}
 	// the same library in English and in German, its entries the same
 	// documents in both
-	for _, l := range []struct{ loc, r, lp, insight, glossary, intro, abyss, aram, night, jehovah string }{
-		{"en", "r1", "lp-e", "Insight", "Glossary", "INTRODUCTION", "Abyss", "Aram; Aramaeans", "Night", "Jehovah"},
-		{"de", "r10", "lp-x", "Einsichten", "Worterklärungen", "Einführung", "Abgrund", "Aram; Aramäer", "Nacht", "Jehova"},
+	for _, l := range []struct{ loc, r, lp, insight, glossary, intro, abyss, aram, night, jehovah, god string }{
+		{"en", "r1", "lp-e", "Insight", "Glossary", "INTRODUCTION", "Abyss", "Aram; Aramaeans", "Night", "Jehovah", "God"},
+		{"de", "r10", "lp-x", "Einsichten", "Worterklärungen", "Einführung", "Abgrund", "Aram; Aramäer", "Nacht", "Jehova", "Gott"},
 	} {
 		lib := "/" + l.loc + "/wol/library/" + l.r + "/" + l.lp
 		pub := "/" + l.loc + "/wol/publication/" + l.r + "/" + l.lp
@@ -48,7 +48,8 @@ func glossaryMux(t *testing.T) *http.ServeMux {
 			card(doc+"1200000007", l.abyss),
 			card(doc+"1200000009", "Amos, Book of"),
 			card(doc+"1200003253", l.night),
-			card(doc+"1200002300", l.jehovah)))
+			card(doc+"1200002300", l.jehovah),
+			card(doc+"1200001729", l.god)))
 		tabs := tab(pub+"/nwtstg/0", l.intro) + tab(pub+"/nwtstg/4", "A")
 		mux.HandleFunc(pub+"/nwtstg", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
 		mux.HandleFunc(pub+"/nwtstg/0", page(l.glossary, tabs, card(doc+"1001077000", l.intro)))
@@ -90,6 +91,7 @@ func TestAPIGlossary(t *testing.T) {
 		{Term: "Amos", Book: 1, DocID: 1200000009, Title: "Amos, Book of"},
 		{Term: "Aram", Book: 0, DocID: 1001077021, Title: "Aram; Aramaeans"},
 		{Term: "Aramaeans", Book: 0, DocID: 1001077021, Title: "Aram; Aramaeans"},
+		{Term: "God", Book: 1, DocID: 1200001729},
 		{Term: "Jehovah", Book: 1, DocID: 1200002300},
 	}
 	if !reflect.DeepEqual(g.Terms, want) {
@@ -116,7 +118,7 @@ func TestAPIGlossaryCommonInGerman(t *testing.T) {
 	for _, t := range g.Terms {
 		terms = append(terms, t.Term)
 	}
-	want := []string{"Aaron", "Abgrund", "Abgrund", "Amos", "Aram", "Aramäer", "Jehova"}
+	want := []string{"Aaron", "Abgrund", "Abgrund", "Amos", "Aram", "Aramäer", "Gott", "Jehova"}
 	if !g.CaseSensitive || !reflect.DeepEqual(terms, want) || !reflect.DeepEqual(g.Common, []int{1200003253}) {
 		t.Errorf("terms = %q, common = %v, want %q without Nacht", terms, g.Common, want)
 	}
@@ -146,21 +148,25 @@ func TestAPIGlossaryOff(t *testing.T) {
 	}
 }
 
-// The server marks the words of the index in the pages it sends and in the
-// sections it streams: a link to the entry, naming its glossary.
-func TestGlossaryMarkedInPages(t *testing.T) {
+// The server marks the words of the index in the verses of the bible page,
+// and in no article's own text.
+func TestGlossaryMarkedInVerses(t *testing.T) {
 	srv := newTestServer(t, glossaryMux(t))
 	// the index is read first; a page asked for before it is read is sent
 	// unmarked, and reads it in the background
 	if resp, body := get(t, srv, "/api/v1/glossary?lang=en"); resp.StatusCode != 200 {
 		t.Fatalf("status %d: %s", resp.StatusCode, body)
 	}
-	_, body := get(t, srv, "/article?target=2024360&lang=en")
-	if !strings.Contains(body, `class="gloss"`) || !strings.Contains(body, `data-gloss-book="Insight" title="Insight">Jehovah</a>`) {
-		t.Errorf("the page does not mark Jehovah:\n%s", body)
+	_, body := get(t, srv, "/bible?ref=John+3:16&lang=en")
+	if !strings.Contains(body, `/en/wol/d/r1/lp-e/1200001729" data-gloss-book="Insight" title="Insight">God</a>`) {
+		t.Errorf("the verse does not mark God:\n%s", body)
+	}
+	_, body = get(t, srv, "/article?target=2024360&lang=en")
+	if strings.Contains(body, `class="gloss"`) {
+		t.Errorf("an article's text is marked:\n%s", body)
 	}
 	_, body = get(t, srv, "/unfold/article?lang=en&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
-	if !strings.Contains(body, `title=\"Insight\"\u003eJehovah\u003c/a\u003e`) && !strings.Contains(body, `title=\"Insight\">Jehovah</a>`) {
-		t.Errorf("the streamed section does not mark Jehovah:\n%s", body)
+	if strings.Contains(body, `gloss`) {
+		t.Errorf("an article a reference brings is marked:\n%s", body)
 	}
 }

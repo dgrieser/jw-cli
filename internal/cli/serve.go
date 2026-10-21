@@ -58,8 +58,8 @@ checks a cookie and passes nothing on), set fallback, so a login revoked
 there is never bypassed by the copy.
 
 Words the glossaries of a language explain — the study bible's glossary,
-Insight on the Scriptures, the Research Guide — are marked in its articles,
-daily texts, meetings and bible chapters; pressing one opens its entry.
+Insight on the Scriptures, the Research Guide — are marked in the bible's
+verses, on the bible pages and in references; pressing one opens its entry.
 --glossary-langs names the languages indexed (default E,X: English and
 German), "none" none.
 

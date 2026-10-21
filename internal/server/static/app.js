@@ -3122,9 +3122,9 @@
   // --- the words a glossary explains ----------------------------------------
   //
   // The server marks the words the study bible's glossary, Insight on the
-  // Scriptures and the Research Guide explain, in the document and in every
-  // section unfolded into it: a link to the entry with a dotted line under
-  // it. Pressed, the entry opens under it as a reference, headed by the
+  // Scriptures and the Research Guide explain, in the bible's text: the
+  // verses of the bible page, and those a reference shows wherever it is
+  // unfolded — a link to the entry with a dotted line under it. Pressed, the entry opens under it as a reference, headed by the
   // glossary it comes from (data-gloss-book); held, the menu of any link
   // offers the rest, and the entries of the other glossaries explaining it
   // (data-gloss-alt).
@@ -3178,11 +3178,11 @@
       });
     }
 
-    // the switch in the settings, where the page has marked words: the
-    // marks on, or plain text
+    // the switch in the settings, on every page that reads the bible or
+    // opens it in references: the marks on, or plain text
     (function () {
       var sw = document.querySelector(".ps-glossary");
-      if (!sw || !doc.querySelector("a.gloss")) return;
+      if (!sw) return;
       sw.hidden = false;
       function show() {
         sw.setAttribute("aria-checked", root.getAttribute("data-glossary") === "off" ? "false" : "true");

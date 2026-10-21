@@ -63,15 +63,31 @@ func TestMarkGlossary(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, lng := markService(t)
-			got := marked(s.MarkGlossary(lng, tc.in))
+			// the cases are verses of the bible page
+			got := marked(s.MarkGlossary(lng, `<div class="item-text">`+tc.in+`</div>`))
 			if strings.Join(got, "|") != strings.Join(tc.want, "|") {
 				t.Errorf("marked %q in %s, want %q", got, tc.in, tc.want)
 			}
 		})
 	}
 
+	// only the bible's text: a verse of a passage a reference shows, another
+	// translation of one — not an interlinear's word for word — and no
+	// article
+	for in, want := range map[string]string{
+		`<p>Jehova sieht.</p>`: "",
+		`<p><span id="v19-100-2-1" class="v">Dient Jehova.</span> Jehova sieht.</p>`:                                   "Jehova",
+		`<details data-ref="edition:int"><div class="section-body">Gott ist Jehova</div></details>`:                    "Jehova",
+		`<details data-ref="edition:int"><ruby><rb>θεὸς</rb><rt>Jehova</rt></ruby></details>`:                          "",
+		`<details data-ref="/de/wol/bc/r10/lp-x/1/0/0"><div class="section-body"><p>Jehova sieht.</p></div></details>`: "",
+	} {
+		if got := strings.Join(marked(s.MarkGlossary(lng, in)), "|"); got != want {
+			t.Errorf("marked %q in %s, want %q", got, in, want)
+		}
+	}
+
 	// the other glossary's entry, and both named on hover
-	out := s.MarkGlossary(lng, `<p>Sie sahen Wunder.</p>`)
+	out := s.MarkGlossary(lng, `<div class="item-text">Sie sahen Wunder.</div>`)
 	for _, want := range []string{`href="https://wol.jw.org/de/wol/d/r10/lp-x/1001077200"`, `data-gloss-book="Worterklärungen"`,
 		`title="Worterklärungen · Einsichten"`, `data-gloss-alt="[{&#34;d&#34;:1200004900,&#34;b&#34;:&#34;Einsichten&#34;}]"`} {
 		if !strings.Contains(out, want) {
@@ -84,15 +100,15 @@ func TestMarkGlossary(t *testing.T) {
 // after a restart.
 func TestMarkGlossaryLearnsSmallLetters(t *testing.T) {
 	s, lng := markService(t)
-	if got := marked(s.MarkGlossary(lng, `<p>Immer kam.</p>`)); len(got) != 1 {
+	if got := marked(s.MarkGlossary(lng, `<div class="item-text">Immer kam.</div>`)); len(got) != 1 {
 		t.Fatalf("a name at the start, nothing known: %q", got)
 	}
 	s.MarkGlossary(lng, `<p>Er betet immer.</p>`)
-	if got := marked(s.MarkGlossary(lng, `<p>Immer kam.</p>`)); len(got) != 0 {
+	if got := marked(s.MarkGlossary(lng, `<div class="item-text">Immer kam.</div>`)); len(got) != 0 {
 		t.Errorf("at the start, after immer was read: %q", got)
 	}
 	again := New(httpx.New(), s.Cache)
-	if got := marked(again.MarkGlossary(lng, `<p>Immer kam.</p>`)); len(got) != 0 {
+	if got := marked(again.MarkGlossary(lng, `<div class="item-text">Immer kam.</div>`)); len(got) != 0 {
 		t.Errorf("after a restart: %q", got)
 	}
 }

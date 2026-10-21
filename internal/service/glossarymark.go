@@ -20,8 +20,10 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
-// The pages mark the words of a glossary's index where they come up: the
-// first time each does in a document, and in every section unfolded into it.
+// The pages mark the words of a glossary's index where the bible's text comes
+// up — the verses of the bible page, and those a reference unfolded anywhere
+// shows, another translation's included — the first time each does in a
+// page, and in every section unfolded into it; for now, nowhere else.
 // The server marks them in the HTML it sends (MarkGlossary), so the browser
 // needs no index of its own: a marked word is a link to its entry, which the
 // page opens in place like any other.
@@ -254,9 +256,10 @@ func (m *glossaryMarker) match(toks []token, i int) (e *markEntry, n int, inflec
 	return nil, 0, false
 }
 
-// MarkGlossary marks the words of lng's glossaries in an HTML fragment of a
-// page: each the first time it comes up in the fragment, and in every
-// section body of it (div.section-body), and never in a document that is its
+// MarkGlossary marks the words of lng's glossaries in the verses of an HTML
+// fragment of a page (see verseText): each the first time it comes up in the
+// fragment, and in every section body of it (div.section-body), and never in
+// a document that is its
 // own entry — one the fragment marks with a docId class or data-doc, or
 // own. The fragment comes back as it was while lng has no index yet.
 func (s *Service) MarkGlossary(lng model.Language, fragment string, own ...int) string {
@@ -276,7 +279,7 @@ func (s *Service) MarkGlossary(lng model.Language, fragment string, own ...int) 
 	st := s.markerState(lng)
 	learned := s.learnLower(st, m, root)
 	mk := &marking{m: m, lower: learned, seen: map[*html.Node]map[*markEntry]bool{}, own: own, start: true}
-	mk.walk(root, root, false)
+	mk.walk(root, root, false, false)
 	var b strings.Builder
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
 		if err := html.Render(&b, c); err != nil {
@@ -360,6 +363,7 @@ var (
 		atom.A: true, atom.Summary: true, atom.H1: true, atom.H2: true, atom.H3: true, atom.H4: true,
 		atom.H5: true, atom.H6: true, atom.Button: true, atom.Sup: true, atom.Script: true,
 		atom.Style: true, atom.Textarea: true, atom.Select: true, atom.Input: true,
+		atom.Rt: true, // an interlinear's word for word English
 	}
 	markSkipClass = []string{"unfold-msg", "unfold-loader", "gloss-src", "bible-outline"}
 	// what begins a sentence anew; what a word is told from it by
@@ -398,14 +402,14 @@ func hasAttr(n *html.Node, key string) bool {
 // walk marks the texts under n in document order; scope is where the first
 // occurrence of a word is counted, skip that n is in an element whose words
 // are not marked, though they still begin and end sentences.
-func (mk *marking) walk(n, scope *html.Node, skip bool) {
+func (mk *marking) walk(n, scope *html.Node, skip, verse bool) {
 	for c := n.FirstChild; c != nil; {
 		next := c.NextSibling
 		switch c.Type {
 		case html.TextNode:
-			if skip {
-				// a verse's number, a link, a footnote's mark: the words of
-				// a link end a sentence as well as any
+			if skip || !verse {
+				// a link, a footnote's mark, what is no verse: their words
+				// end a sentence as well as any
 				if c.Parent == nil || c.Parent.DataAtom != atom.Sup {
 					mk.read(c.Data)
 				}
@@ -424,13 +428,24 @@ func (mk *marking) walk(n, scope *html.Node, skip bool) {
 			if c.DataAtom == atom.A && strings.TrimFunc(textOf(c), markerRune) == "" {
 				break
 			}
-			mk.walk(c, inner, skip || skipped(c))
+			mk.walk(c, inner, skip || skipped(c), verse || verseText(c))
 			if markBlocks[c.DataAtom] {
 				mk.start = true
 			}
 		}
 		c = next
 	}
+}
+
+// verseID is the id wol gives a verse's text, a part of it each: v43-3-16-1.
+var verseID = regexp.MustCompile(`^v\d+-\d+-\d+-\d+$`)
+
+// verseText reports whether n holds the bible's text: a verse of the bible
+// page (div.item-text), a verse of a passage a reference shows (its id), or
+// another translation of a verse (a section of an edition, which has none).
+func verseText(n *html.Node) bool {
+	return hasClass(n, "item-text") || verseID.MatchString(attr(n, "id")) ||
+		(n.DataAtom == atom.Details && strings.HasPrefix(attr(n, "data-ref"), "edition:"))
 }
 
 // markerRune is what a verse's number or a reference's mark is written with.

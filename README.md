@@ -773,9 +773,11 @@ the website**, and the page's own document is opened on the website from the
 settings in the bar; no page links out to the sites otherwise.
 
 Words a glossary explains — the study bible's glossary, *Insight on the
-Scriptures* and the *Research Guide* — carry a dotted line in articles, the
-daily text, the meeting parts, bible chapters and everything unfolded into
-them: the first time each comes up in the page and in each section. Pressing
+Scriptures* and the *Research Guide* — carry a dotted line in the bible's
+text: the verses of the bible page, and the verses a reference shows wherever
+it is unfolded (another translation's included), the first time each comes up
+in the page and in each section; for now, not in articles, the daily text or
+the meeting parts themselves. Pressing
 one opens its entry under it as a reference, headed by the glossary it comes
 from; held, it offers the usual choices and the entries of the other
 glossaries that explain it too. The server reads the glossaries' tables of
