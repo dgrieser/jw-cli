@@ -49,7 +49,7 @@ func TestMarkGlossary(t *testing.T) {
 		name, in string
 		want     []string
 	}{
-		{"first occurrence only", `<p>Jehova sieht. Und Jehova hört.</p>`, []string{"Jehova"}},
+		{"every occurrence", `<p>Jehova sieht. Und Jehova hört.</p>`, []string{"Jehova", "Jehova"}},
 		{"a phrase, the longest first", `<p>Sie predigen Gottes Königreich.</p>`, []string{"Gottes Königreich"}},
 		{"an ending mid-sentence", `<p>Sie sahen viele Wundern zu.</p>`, []string{"Wundern"}},
 		{"a guessed ending at the start of a sentence", `<p>Ja. Wundere dich nicht.</p>`, nil},
@@ -58,7 +58,7 @@ func TestMarkGlossary(t *testing.T) {
 		{"a name mid-sentence", `<p>Der Priester Immer kam.</p>`, []string{"Immer"}},
 		{"a name at the start, no small letters", `<p>„Immer kam.“</p>`, []string{"Immer"}},
 		{"not in links and headings", `<h2>Jehova</h2><p><a href="/x">Jehova</a></p>`, nil},
-		{"each section on its own", `<p>Jehova.</p><div class="section-body"><p>Jehova.</p></div>`, []string{"Jehova", "Jehova"}},
+		{"in a section as well", `<p>Jehova.</p><div class="section-body"><p>Jehova.</p></div>`, []string{"Jehova", "Jehova"}},
 		{"not in its own entry", `<div class="docId-1200002300"><p>Jehova ist Gott.</p></div>`, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

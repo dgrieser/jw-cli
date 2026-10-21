@@ -775,17 +775,20 @@ settings in the bar; no page links out to the sites otherwise.
 Words a glossary explains — the study bible's glossary, *Insight on the
 Scriptures* and the *Research Guide* — carry a dotted line in the bible's
 text: the verses of the bible page, and the verses a reference shows wherever
-it is unfolded (another translation's included), the first time each comes up
-in the page and in each section; for now, not in articles, the daily text or
-the meeting parts themselves. Pressing
-one adds a section headed by the word among the other sections of its verse
-or paragraph, which loads once it is open: the word's entry in each glossary
+it is unfolded (another translation's included), wherever each comes up; for
+now, not in articles, the daily text or
+the meeting parts themselves. A verse
+that unfolds — by its number, or a reference showing one verse with its
+sections — has a section for each word marked in it, after its other
+sections and like them a heading that loads once opened; pressing a marked
+word unfolds its verse that way when it is not yet, and opens the word's
+section. The section holds the word's entry in each glossary
 that explains it — the study bible's glossary, Insight, the Research Guide,
 in that order — the first opened, the others as headings, none of them
 bringing the references of its paragraphs before they are asked for. An entry
 that only says where to look instead (*Lamm: Siehe SCHAF.*) shows that entry
-right under the line. Held, it offers
-the usual choices (its first entry's page, here or in a new tab). The server reads the glossaries' tables of
+right under the line. A marked word held offers the usual choices (its first
+entry's page, here or in a new tab). The server reads the glossaries' tables of
 contents into an index once a week, like the week's bible reading, and marks
 the words in the HTML it sends — the page, and every section it streams — so
 the browser keeps nothing of it (a page asked for before the index is read

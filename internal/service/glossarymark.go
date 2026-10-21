@@ -20,8 +20,8 @@ import (
 
 // The pages mark the words of a glossary's index where the bible's text comes
 // up — the verses of the bible page, and those a reference unfolded anywhere
-// shows, another translation's included — the first time each does in a
-// page, and in every section unfolded into it; for now, nowhere else.
+// shows, another translation's included — wherever each comes up; for now,
+// nowhere else.
 // The server marks them in the HTML it sends (MarkGlossary), so the browser
 // needs no index of its own: a marked word is a link to its entry, which the
 // page opens in place like any other.
@@ -255,11 +255,9 @@ func (m *glossaryMarker) match(toks []token, i int) (e *markEntry, n int, inflec
 }
 
 // MarkGlossary marks the words of lng's glossaries in the verses of an HTML
-// fragment of a page (see verseText): each the first time it comes up in the
-// fragment, and in every section body of it (div.section-body), and never in
-// a document that is its
-// own entry — one the fragment marks with a docId class or data-doc, or
-// own. The fragment comes back as it was while lng has no index yet.
+// fragment of a page (see verseText): each wherever it comes up, but never
+// in a document that is its own entry — one the fragment marks with a docId
+// class or data-doc, or own. The fragment comes back as it was while lng has no index yet.
 func (s *Service) MarkGlossary(lng model.Language, fragment string, own ...int) string {
 	m := s.glossaryMarker(lng)
 	if m == nil || len(m.byKey) == 0 || !strings.ContainsAny(fragment, "abcdefghijklmnopqrstuvwxyz") {
@@ -276,8 +274,8 @@ func (s *Service) MarkGlossary(lng model.Language, fragment string, own ...int) 
 	}
 	st := s.markerState(lng)
 	learned := s.learnLower(st, m, root)
-	mk := &marking{m: m, lower: learned, seen: map[*html.Node]map[*markEntry]bool{}, own: own, start: true}
-	mk.walk(root, root, false, false)
+	mk := &marking{m: m, lower: learned, own: own, start: true}
+	mk.walk(root, false, false)
 	var b strings.Builder
 	for c := root.FirstChild; c != nil; c = c.NextSibling {
 		if err := html.Render(&b, c); err != nil {
@@ -347,7 +345,6 @@ func (s *Service) learnLower(st *markerState, m *glossaryMarker, root *html.Node
 type marking struct {
 	m     *glossaryMarker
 	lower map[string]bool
-	seen  map[*html.Node]map[*markEntry]bool // by scope
 	own   []int
 	// start says the text read so far ends a sentence, or none began yet
 	start bool
@@ -397,10 +394,10 @@ func hasAttr(n *html.Node, key string) bool {
 	return slices.ContainsFunc(n.Attr, func(a html.Attribute) bool { return a.Key == key })
 }
 
-// walk marks the texts under n in document order; scope is where the first
-// occurrence of a word is counted, skip that n is in an element whose words
-// are not marked, though they still begin and end sentences.
-func (mk *marking) walk(n, scope *html.Node, skip, verse bool) {
+// walk marks the texts under n in document order; skip says n is in an
+// element whose words are not marked, though they still begin and end
+// sentences, verse that it is in the bible's text.
+func (mk *marking) walk(n *html.Node, skip, verse bool) {
 	for c := n.FirstChild; c != nil; {
 		next := c.NextSibling
 		switch c.Type {
@@ -412,21 +409,17 @@ func (mk *marking) walk(n, scope *html.Node, skip, verse bool) {
 					mk.read(c.Data)
 				}
 			} else {
-				mk.text(c, scope)
+				mk.text(c)
 			}
 		case html.ElementNode:
 			if markBlocks[c.DataAtom] {
 				mk.start = true
 			}
-			inner := scope
-			if hasClass(c, "section-body") {
-				inner = c
-			}
 			// a link of digits, a verse's number, says nothing of sentences
 			if c.DataAtom == atom.A && strings.TrimFunc(textOf(c), markerRune) == "" {
 				break
 			}
-			mk.walk(c, inner, skip || skipped(c), verse || verseText(c))
+			mk.walk(c, skip || skipped(c), verse || verseText(c))
 			if markBlocks[c.DataAtom] {
 				mk.start = true
 			}
@@ -486,7 +479,7 @@ func (mk *marking) see(r rune) {
 }
 
 // text marks the words of one text node.
-func (mk *marking) text(node *html.Node, scope *html.Node) {
+func (mk *marking) text(node *html.Node) {
 	text := node.Data
 	idx := markWord.FindAllStringIndex(text, -1)
 	if len(idx) == 0 {
@@ -506,11 +499,6 @@ func (mk *marking) text(node *html.Node, scope *html.Node) {
 	}
 	mk.read(text[at:])
 
-	done := mk.seen[scope]
-	if done == nil {
-		done = map[*markEntry]bool{}
-		mk.seen[scope] = done
-	}
 	var own []int
 	type hit struct {
 		from, to int
@@ -520,7 +508,7 @@ func (mk *marking) text(node *html.Node, scope *html.Node) {
 	var hits []hit
 	for i := 0; i < len(toks); i++ {
 		e, n, inflected := mk.m.match(toks, i)
-		if e == nil || done[e] {
+		if e == nil {
 			continue
 		}
 		if starts[i] && mk.m.cased(e) && (inflected || mk.lower[strings.ToLower(e.words[0])]) {
@@ -535,7 +523,6 @@ func (mk *marking) text(node *html.Node, scope *html.Node) {
 			continue
 		}
 		hits = append(hits, hit{toks[i].from, toks[i+n-1].to, e, docs})
-		done[e] = true
 		i += n - 1
 	}
 	if len(hits) == 0 {
