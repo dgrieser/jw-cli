@@ -683,7 +683,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
    space its dots; the switch in the settings takes them off and leaves the
    word as plain text */
 .document a.gloss {
-  --gloss-dot: color-mix(in srgb, var(--muted) 45%, transparent);
+  --gloss-dot: color-mix(in srgb, var(--muted) 40%, transparent);
   color: inherit;
   text-decoration: none;
   background-image: radial-gradient(circle, var(--gloss-dot) 0.75px, transparent 1px);
