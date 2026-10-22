@@ -34,6 +34,17 @@ type GlossaryBook struct {
 	Title string `json:"title"`
 }
 
+// shortTitle is how a page names the glossary in lng: the study bible's by
+// the shorter name of the catalog ("Worterklärungen" for "Worterklärungen zur
+// Bibel") where lng has a catalog of its own, any other by its library title.
+func (b GlossaryBook) shortTitle(lng model.Language) string {
+	base, _, _ := strings.Cut(strings.ReplaceAll(lng.Locale, "_", "-"), "-")
+	if l := i18n.Match(lng.Locale); b.ID == "nwtstg" && l.String() == base && l.Text().GlossaryShort != "" {
+		return l.Text().GlossaryShort
+	}
+	return b.Title
+}
+
 // GlossaryBooks are the glossaries indexed, in the order a word explained in
 // several is looked up in: the short entry before the long one.
 var GlossaryBooks = []GlossaryBook{
@@ -471,12 +482,11 @@ func (s *Service) GlossaryEntries(ctx context.Context, lng model.Language, docs 
 // StreamGlossary streams the entries of the glossaries explaining a marked
 // word, one section each, in the order of the glossaries — the study bible's
 // glossary, Insight, the Research Guide — whichever of them explain it: docs
-// are the entries a link names. Each section is headed by its glossary, and
-// by the entry too where a glossary has several for the word; the first one
-// comes opened, the others as headings. An entry that cannot be read is left
+// are the entries a link names. Each section is headed by its glossary and
+// the entry ("Einsichten – Pharao"); the first one comes opened, the others
+// as headings. An entry that cannot be read is left
 // out; none read at all is the first failure.
-func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs []int, txt *i18n.Messages,
-	out UnfoldStream) (int, error) {
+func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs []int, out UnfoldStream) (int, error) {
 	g, entries, err := s.GlossaryEntries(ctx, lng, docs)
 	if err != nil {
 		return 0, err
@@ -493,17 +503,9 @@ func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs [
 			}
 			title := ""
 			if e.Book >= 0 && e.Book < len(g.Books) {
-				title = g.Books[e.Book].Title
+				title = g.Books[e.Book].shortTitle(lng)
 			}
-			several := 0
-			for _, o := range entries {
-				if o.Book == e.Book {
-					several++
-				}
-			}
-			if title == "" || several > 1 {
-				title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
-			}
+			title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
 			sec.Title, sec.Order = html.EscapeString(title), i
 			sections[i] = &sec
 		})

@@ -482,7 +482,7 @@ func (s *Server) unfoldGlossary(w http.ResponseWriter, r *http.Request) {
 	}
 	txt := text(lng)
 	ev := startStream(w)
-	requests, err := s.svc.StreamGlossary(r.Context(), lng, docs, txt, service.UnfoldStream{
+	requests, err := s.svc.StreamGlossary(r.Context(), lng, docs, service.UnfoldStream{
 		Section: func(sec service.UnfoldSection) { ev.send(s.sectionEvent(r.Context(), lng, sec, txt)) },
 		Stage:   ev.stage,
 	})
