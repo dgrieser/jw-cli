@@ -57,6 +57,9 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		if c.bg != nil && InBackground(ctx) {
 			c.bg.yield(ctx)
 		}
+		if err := pace(ctx); err != nil {
+			return nil, err
+		}
 		resp, err := c.attempt(ctx, method, rawURL, hdr, kept || method == http.MethodHead)
 		switch {
 		case err != nil:

@@ -818,6 +818,18 @@ the settings takes the lines off. `--glossary-langs` (`$JW_GLOSSARY_LANGS`)
 names the languages indexed: `E,X` (English and German) by default, `none`
 for none.
 
+Once a week, at night, the server studies the week's Bible reading ahead for
+the cache: every chapter of it is unfolded a level deep, as `jw bible read
+--unfold 1` does — the study notes, footnotes, indexes and marginal references
+of each verse with the verses they cite, who quotes the verse, the other
+translations and the glossary entries of its words. That reads thousands of
+pages, so it asks upstream one page every 3 seconds, gives way to readers, and
+runs only between 1 and 6 o'clock, the server's local time (`TZ`); a night that
+does not see it through has the next one go on, what was read already coming
+from the cache. A week once studied is not studied again; a week without a
+reading has nothing to study. `--study-langs` (`$JW_STUDY_LANGS`) names the
+languages: `E,X` (English and German) by default, `none` for none.
+
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the
 browser (IndexedDB) — written before a link of the page is followed, so a

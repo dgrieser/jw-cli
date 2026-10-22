@@ -24,7 +24,8 @@ type Config struct {
 	// DefaultLang is the language a request without ?lang= resolves; empty
 	// falls back to the system locale, as the CLI does.
 	DefaultLang string
-	// Logf, when set, receives one line per request.
+	// Logf, when set, receives one line per request, and what the study of
+	// the week's reading did (study.go).
 	Logf func(format string, args ...any)
 	// Auth, when it holds users, puts every route behind HTTP basic
 	// authentication.
@@ -35,6 +36,10 @@ type Config struct {
 	// GlossaryLangs are the languages, as language specs, whose glossaries
 	// are indexed and marked in the pages; nil is DefaultGlossaryLangs.
 	GlossaryLangs []string
+	// StudyLangs are the languages, as language specs, the week's bible
+	// reading is studied ahead in at night; nil is DefaultStudyLangs, empty
+	// none.
+	StudyLangs []string
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -63,6 +68,9 @@ type Server struct {
 	// glossWarm when each was read ahead (glossary.go)
 	glossaryLangs []string
 	glossWarm     glossaryWarm
+	// studyLangs are the languages the week's reading is studied ahead in
+	// (study.go)
+	studyLangs []string
 }
 
 // New builds a Server. Template parse errors panic: they are programming
@@ -79,6 +87,10 @@ func New(cfg Config) *Server {
 	s.glossaryLangs = cfg.GlossaryLangs
 	if s.glossaryLangs == nil {
 		s.glossaryLangs = DefaultGlossaryLangs
+	}
+	s.studyLangs = cfg.StudyLangs
+	if s.studyLangs == nil {
+		s.studyLangs = DefaultStudyLangs
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+
+	"golang.org/x/time/rate"
 )
 
 // A reader waiting on upstream is what makes a page slow, and most of that
@@ -76,6 +78,25 @@ func Background(ctx context.Context) context.Context {
 func InBackground(ctx context.Context) bool {
 	bg, _ := ctx.Value(backgroundKey{}).(bool)
 	return bg
+}
+
+type pacedKey struct{}
+
+// Paced has every request upstream made under ctx — a revalidation, a
+// request asked again — wait until every has passed since the one before
+// it, however many of them are under way at once: for work nobody waits on
+// that reads a great deal, and is to read it slowly. What the cache answers
+// waits on nothing.
+func Paced(ctx context.Context, every time.Duration) context.Context {
+	return context.WithValue(ctx, pacedKey{}, rate.NewLimiter(rate.Every(every), 1))
+}
+
+// pace waits for the turn of a request made under ctx (Paced).
+func pace(ctx context.Context) error {
+	if lim, ok := ctx.Value(pacedKey{}).(*rate.Limiter); ok {
+		return lim.Wait(ctx)
+	}
+	return nil
 }
 
 // WithBackgroundRevalidation uses a stale body or memo at once and brings it

@@ -192,3 +192,44 @@ func TestHotCacheSeesOtherWriters(t *testing.T) {
 		t.Error("a removed memo is still read")
 	}
 }
+
+// Requests made under a paced context wait their turn, however many are made
+// at once; others do not.
+func TestPacedRequestsWaitTheirTurn(t *testing.T) {
+	var gets atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gets.Add(1)
+		w.Write([]byte(r.URL.Path))
+	}))
+	defer srv.Close()
+	c := New()
+	ctx := Paced(context.Background(), 100*time.Millisecond)
+	start := time.Now()
+	done := make(chan struct{})
+	for i := range 3 {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			if _, err := c.GetText(ctx, srv.URL+"/"+string(rune('a'+i)), nil); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	for range 3 {
+		<-done
+	}
+	if took := time.Since(start); took < 180*time.Millisecond {
+		t.Errorf("three paced requests took %s, want two turns waited", took)
+	}
+	start = time.Now()
+	for range 3 {
+		if _, err := c.GetText(context.Background(), srv.URL+"/x", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if took := time.Since(start); took > 90*time.Millisecond {
+		t.Errorf("three unpaced requests took %s", took)
+	}
+	if gets.Load() != 6 {
+		t.Errorf("%d requests, want 6", gets.Load())
+	}
+}

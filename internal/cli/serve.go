@@ -28,6 +28,7 @@ func newServeCmd(a *app.App) *cobra.Command {
 		authFile  string
 		pageCache string
 		glossary  string
+		study     string
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -62,6 +63,14 @@ Insight on the Scriptures, the Research Guide — are marked in the bible's
 verses, on the bible pages and in references; pressing one opens its entry.
 --glossary-langs names the languages indexed (default E,X: English and
 German), "none" none.
+
+Once a week, at night (1 to 6 o'clock, the server's local time), the week's
+Bible reading is studied ahead: every chapter of it is unfolded a level deep,
+as jw bible read --unfold 1 does — the study material, who quotes each verse,
+the other translations and the glossary entries — for the cache to hold it
+when it is read. It asks wol.jw.org one page every few seconds; a night that
+does not see it through has the next one go on. --study-langs names the
+languages (default E,X), "none" none.
 
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
@@ -101,6 +110,7 @@ Examples:
 				Auth:          auth,
 				PageCache:     pageCache,
 				GlossaryLangs: glossaryLangs(glossary),
+				StudyLangs:    glossaryLangs(study),
 				Svc:           a.Service(),
 				DefaultLang:   a.Flags.Lang,
 				Logf: func(format string, args ...any) {
@@ -128,6 +138,7 @@ Examples:
 			go func() { errc <- hs.Serve(ln) }()
 			fmt.Fprintf(a.Stderr, "listening on http://%s\n", hostForURL(ln.Addr().String(), host))
 			go srv.Warm(ctx)
+			go srv.Study(ctx)
 
 			select {
 			case err := <-errc:
@@ -154,10 +165,13 @@ Examples:
 		"how the browser's copy of the pages is used: auto, first, fallback or off ($JW_PAGE_CACHE)")
 	fl.StringVar(&glossary, "glossary-langs", cmp.Or(os.Getenv("JW_GLOSSARY_LANGS"), strings.Join(server.DefaultGlossaryLangs, ",")),
 		`languages whose glossary words are marked in the pages, comma-separated, or "none" ($JW_GLOSSARY_LANGS)`)
+	fl.StringVar(&study, "study-langs", cmp.Or(os.Getenv("JW_STUDY_LANGS"), strings.Join(server.DefaultStudyLangs, ",")),
+		`languages the week's Bible reading is unfolded in at night, for the cache, comma-separated, or "none" ($JW_STUDY_LANGS)`)
 	return cmd
 }
 
-// glossaryLangs splits the --glossary-langs list; "none" is no language.
+// glossaryLangs splits a list of languages, --glossary-langs or
+// --study-langs; "none" is no language.
 func glossaryLangs(list string) []string {
 	out := []string{}
 	for spec := range strings.SplitSeq(list, ",") {
