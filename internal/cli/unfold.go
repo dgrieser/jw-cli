@@ -18,7 +18,8 @@ import (
 // line on stderr while a level is spent.
 func unfoldConfig(a *app.App, depth int, assumeYes bool) service.UnfoldConfig {
 	return service.UnfoldConfig{
-		Depth: depth,
+		Depth:    depth,
+		Glossary: depth > 0,
 		// every expansion also asks who quotes the verses it expands; the
 		// traffic that costs is in the count Confirm is asked about
 		Cited:    depth > 0,

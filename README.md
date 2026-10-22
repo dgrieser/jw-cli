@@ -773,7 +773,12 @@ the website**, and the page's own document is opened on the website from the
 settings in the bar; no page links out to the sites otherwise.
 
 Words a glossary explains — the study bible's glossary, *Insight on the
-Scriptures* and the *Research Guide* — carry a dotted line in the bible's
+Scriptures* and the *Research Guide* — are included in CLI output with
+`--unfold 1` and deeper, both for bible readings and verses reached through
+references. Each word brings its glossary entries; their own references stay
+as links. `jw serve` keeps these entries lazy, loading them when opened.
+
+In `jw serve`, those words carry a dotted line in the bible's
 text: the verses of the bible page, and the verses a reference shows wherever
 it is unfolded (another translation's included), wherever each comes up; for
 now, not in articles, the daily text or
