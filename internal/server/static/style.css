@@ -1566,6 +1566,24 @@ details.fold > summary > h2 { margin: 0; font-size: 1.15rem; }
 .document details:not(.section) p { margin: 0.15rem 0; }
 .document details:not(.section) .du-color--textSubdued { color: var(--muted); font-size: 0.875rem; margin-bottom: 0.6rem; }
 details.fold > dl.facts { margin-bottom: 0.75rem; }
+/* unfolded in a reference, a document's own folded sections are headed as
+   the reference's other entries are ("Studienleitfaden – Necho"), not as
+   the headings of a page */
+.section-body details:not(.section) > summary {
+  gap: 0.4rem;
+  min-height: 1.9rem;
+  padding: 0.15rem 0;
+  font-size: 0.875rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+.section-body details:not(.section) > summary :is(h1, h2, h3, h4, h5, h6, p, span, strong, b) {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+}
+.section-body details:not(.section) > summary::before { width: 0.9rem; height: 0.9rem; background-size: 0.9rem; }
+.section-body details:not(.section)[open] > summary { color: var(--accent); }
 
 dl.facts {
   display: grid;
