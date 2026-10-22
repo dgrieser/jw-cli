@@ -471,9 +471,9 @@ func (s *Service) GlossaryEntries(ctx context.Context, lng model.Language, docs 
 // StreamGlossary streams the entries of the glossaries explaining a marked
 // word, one section each, in the order of the glossaries — the study bible's
 // glossary, Insight, the Research Guide — whichever of them explain it: docs
-// are the entries a link names. Each section is headed by its glossary, and
-// by the entry too where a glossary has several for the word; the first one
-// comes opened, the others as headings. An entry that cannot be read is left
+// are the entries a link names. Each section is headed by its glossary and
+// the entry ("Einsichten – Pharao"); the first one comes opened, the others
+// as headings. An entry that cannot be read is left
 // out; none read at all is the first failure.
 func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs []int, txt *i18n.Messages,
 	out UnfoldStream) (int, error) {
@@ -494,16 +494,11 @@ func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs [
 			title := ""
 			if e.Book >= 0 && e.Book < len(g.Books) {
 				title = g.Books[e.Book].Title
-			}
-			several := 0
-			for _, o := range entries {
-				if o.Book == e.Book {
-					several++
+				if g.Books[e.Book].ID == "nwtstg" && txt.GlossaryShort != "" {
+					title = txt.GlossaryShort
 				}
 			}
-			if title == "" || several > 1 {
-				title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
-			}
+			title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
 			sec.Title, sec.Order = html.EscapeString(title), i
 			sections[i] = &sec
 		})

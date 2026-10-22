@@ -459,6 +459,10 @@ type Messages struct {
 	// UIGlossary switches the marks on the words a glossary explains on and
 	// off, in the settings.
 	UIGlossary string
+	// GlossaryShort names the study bible's glossary in the heading of an
+	// entry of it, shorter than the library's title ("Worterklärungen zur
+	// Bibel").
+	GlossaryShort string
 	// UIBackToOverview leads from a page's header to the page above it.
 	UIBackToOverview string
 	// UILyrics, UIText and UITranscript head the words of a media item: a

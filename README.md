@@ -784,7 +784,8 @@ sections and like them a heading that loads once opened; pressing a marked
 word unfolds its verse that way when it is not yet, and opens the word's
 section. The section holds the word's entry in each glossary
 that explains it — the study bible's glossary, Insight, the Research Guide,
-in that order — the first opened, the others as headings, none of them
+in that order, each headed by its glossary and the entry (*Worterklärungen –
+Pharao*, *Einsichten – Juda (Wildnis)*) — the first opened, the others as headings, none of them
 bringing the references of its paragraphs before they are asked for. An entry
 that only says where to look instead (*Lamm: Siehe SCHAF.*) shows that entry
 right under the line. A marked word held offers the usual choices (its first

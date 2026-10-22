@@ -285,6 +285,7 @@ var en = Messages{
 	UIThemeSystem:          "System",
 	UIOutlines:             "Outline",
 	UIGlossary:             "Glossary words",
+	GlossaryShort:          "Glossary",
 	UITextSize:             "Text size",
 	UIRefresh:              "Reload",
 	UIBackToOverview:       "Overview",

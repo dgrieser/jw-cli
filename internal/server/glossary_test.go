@@ -172,7 +172,8 @@ func TestGlossaryMarkedInVerses(t *testing.T) {
 }
 
 // A word's section loads the entries of every glossary explaining it, the
-// study bible's glossary first and opened, the others as headings; a
+// study bible's glossary first and opened, the others as headings, each
+// headed by its glossary and the entry; a
 // document that is no entry is refused.
 func TestUnfoldGlossary(t *testing.T) {
 	mux := glossaryMux(t)
@@ -210,8 +211,8 @@ func TestUnfoldGlossary(t *testing.T) {
 		}
 	}
 	if len(sections) != 2 ||
-		!strings.Contains(sections[0], `open=""><summary>Glossary</summary>`) || !strings.Contains(sections[0], "The entry 1001077007") ||
-		strings.Contains(sections[1], " open") || !strings.Contains(sections[1], "<summary>Insight</summary>") ||
+		!strings.Contains(sections[0], `open=""><summary>Glossary – Abyss</summary>`) || !strings.Contains(sections[0], "The entry 1001077007") ||
+		strings.Contains(sections[1], " open") || !strings.Contains(sections[1], "<summary>Insight – Abyss</summary>") ||
 		!strings.Contains(sections[1], "The entry 1200000007") {
 		t.Errorf("sections:\n%s", strings.Join(sections, "\n"))
 	}
