@@ -484,7 +484,7 @@ func (s *Service) GlossaryEntries(ctx context.Context, lng model.Language, docs 
 // glossary, Insight, the Research Guide — whichever of them explain it: docs
 // are the entries a link names. Each section is headed by its glossary and
 // the entry ("Einsichten – Pharao"); the first one comes opened, the others
-// as headings. An entry that cannot be read is left
+// as headings, each title a link to its entry. An entry that cannot be read is left
 // out; none read at all is the first failure.
 func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs []int, out UnfoldStream) (int, error) {
 	g, entries, err := s.GlossaryEntries(ctx, lng, docs)
@@ -496,7 +496,8 @@ func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs [
 	var wg sync.WaitGroup
 	for i, e := range entries {
 		wg.Go(func() {
-			sec, err := s.ArticleSection(ctx, lng, g.DocURL+strconv.Itoa(e.DocID), UnfoldConfig{})
+			url := g.DocURL + strconv.Itoa(e.DocID)
+			sec, err := s.ArticleSection(ctx, lng, url, UnfoldConfig{})
 			if err != nil {
 				errs[i] = err
 				return
@@ -506,7 +507,10 @@ func (s *Service) StreamGlossary(ctx context.Context, lng model.Language, docs [
 				title = g.Books[e.Book].shortTitle(lng)
 			}
 			title = strings.TrimPrefix(title+" – "+cmp.Or(e.Title, e.Term), " – ")
-			sec.Title, sec.Order = html.EscapeString(title), i
+			// headed by a link to the entry, as a publication's passage is,
+			// so the page offers to open it on a page of its own
+			sec.Title = fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(url), html.EscapeString(title))
+			sec.Order = i
 			sections[i] = &sec
 		})
 	}

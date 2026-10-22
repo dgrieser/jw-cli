@@ -229,8 +229,8 @@ func TestUnfoldGlossary(t *testing.T) {
 		}
 	}
 	if len(sections) != 2 ||
-		!strings.Contains(sections[0], `open=""><summary>Glossary – Abyss</summary>`) || !strings.Contains(sections[0], "The entry 1001077007") ||
-		strings.Contains(sections[1], " open") || !strings.Contains(sections[1], "<summary>Insight – Abyss</summary>") ||
+		!strings.Contains(sections[0], `open=""><summary><a href="http://`) || !strings.Contains(sections[0], `/en/wol/d/r1/lp-e/1001077007">Glossary – Abyss</a></summary>`) || !strings.Contains(sections[0], "The entry 1001077007") ||
+		strings.Contains(sections[1], " open") || !strings.Contains(sections[1], `/en/wol/d/r1/lp-e/1200000007">Insight – Abyss</a></summary>`) ||
 		!strings.Contains(sections[1], "The entry 1200000007") {
 		t.Errorf("sections:\n%s", strings.Join(sections, "\n"))
 	}
