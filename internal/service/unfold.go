@@ -32,6 +32,9 @@ const UnfoldThreshold = 2000
 // consulted while it runs. A zero Depth expands nothing.
 type UnfoldConfig struct {
 	Depth int
+	// Glossary loads the entries explaining words in unfolded bible text.
+	// The CLI enables it; web pages load these sections when opened.
+	Glossary bool
 	// Cited also lists who quotes the bible references an expansion touches.
 	// Off leaves it to the study bible's own material, which is where a
 	// request nobody can be asked to confirm — a web request — has to stay.
@@ -913,6 +916,7 @@ func unfoldBlocks(ctx context.Context, r unfold.Resolver, fragment string,
 	if err != nil {
 		return "", err
 	}
+	loadUnfoldGlossary(ctx, r, res.Nodes, cfg, txt)
 	for i, b := range blocks {
 		part := unfoldNodesHTML(res.Nodes[i], txt, b.level)
 		if part == "" {
@@ -1088,6 +1092,9 @@ func unfoldBibleVerses(ctx context.Context, r *tooltipResolver, ref bibleref.Ref
 		}
 		secs.add(translationsSection(translations[verses[i].ID%1000], "", level, txt))
 		secs.add(citedSection(cited[i], level, txt))
+		if cfg.Glossary && !cfg.Hops {
+			secs = append(secs, r.s.glossarySections(ctx, r.lng, verses[i].HTML, level, txt)...)
+		}
 		var b strings.Builder
 		writeSections(&b, secs, level)
 		if b.Len() > 0 && i < len(verses)-1 {
@@ -1109,6 +1116,7 @@ func unfoldGroupNodes(ctx context.Context, r unfold.Resolver, groups []unfold.Gr
 	if err != nil {
 		return nil, "", err
 	}
+	loadUnfoldGlossary(ctx, r, res.Nodes, cfg, txt)
 	return res.Nodes, stoppedNote(res.Stopped, res.Pending, txt), nil
 }
 
@@ -1592,6 +1600,7 @@ func writeUnfoldNode(b *strings.Builder, n unfold.Node, level int, label string,
 	}
 	writeStudy(b, n, level+1, txt)
 	writeUnfoldNodes(b, rest, level+1, unfoldSource(n, label), txt)
+	b.WriteString(demoteHeadings(n.Glossary, level))
 }
 
 // wrapped reports whether the expansions inlined into a passage are verses

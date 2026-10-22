@@ -63,6 +63,8 @@ they name begins; a passage opened in the middle of one is headed by it too.
 With --unfold the study material of every verse is printed under that verse:
 its study notes, and the text behind every reference it carries — the marginal
 references and the research-guide passages — followed that many levels deep.
+Glossary entries explaining words in the verses are included too, starting at
+--unfold 1; their own references are left as links.
 
 With --bible-all the passage is read in every bible the library carries in the
 selected language, one after the other, so translations can be compared. Which

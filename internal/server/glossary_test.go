@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -151,7 +152,13 @@ func TestAPIGlossaryOff(t *testing.T) {
 // The server marks the words of the index in the verses of the bible page,
 // and in no article's own text.
 func TestGlossaryMarkedInVerses(t *testing.T) {
-	srv := newTestServer(t, glossaryMux(t))
+	mux := glossaryMux(t)
+	var entries atomic.Int32
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1200001729", func(w http.ResponseWriter, r *http.Request) {
+		entries.Add(1)
+		fmt.Fprint(w, `<div id="article"><h1>God</h1><div class="bodyTxt"><p>Glossary entry.</p></div></div>`)
+	})
+	srv := newTestServer(t, mux)
 	// the index is read first; a page asked for before it is read is sent
 	// unmarked, and reads it in the background
 	if resp, body := get(t, srv, "/api/v1/glossary?lang=en"); resp.StatusCode != 200 {
@@ -168,6 +175,17 @@ func TestGlossaryMarkedInVerses(t *testing.T) {
 	_, body = get(t, srv, "/unfold/article?lang=en&url=https%3A%2F%2Fwol.jw.org%2Fen%2Fwol%2Fd%2Fr1%2Flp-e%2F2024360")
 	if strings.Contains(body, `gloss`) {
 		t.Errorf("an article a reference brings is marked:\n%s", body)
+	}
+	for _, path := range []string{
+		"/unfold/verse?vid=43003016&depth=1&lang=en",
+		"/api/v1/bible/read?ref=John+3:16&lang=en&unfold=1",
+	} {
+		if resp, body := get(t, srv, path); resp.StatusCode != 200 {
+			t.Fatalf("%s: status %d: %s", path, resp.StatusCode, body)
+		}
+	}
+	if entries.Load() != 0 {
+		t.Fatal("server unfold eagerly fetched glossary entries")
 	}
 }
 

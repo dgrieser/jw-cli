@@ -128,6 +128,9 @@ type Node struct {
 	// gap in the output is never silent.
 	Title string
 	HTML  string
+	// Glossary holds word entries added by the caller after expansion, with
+	// headings starting at h1. Their citations do not consume unfold levels.
+	Glossary string
 	// URL is the document the passage was lifted out of, with an anchor naming
 	// the extent that was taken. It is what tells two references pointing at one
 	// passage apart from two references pointing at different ones.
