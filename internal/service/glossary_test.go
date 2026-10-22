@@ -3,6 +3,8 @@ package service
 import (
 	"reflect"
 	"testing"
+
+	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 // An entry's title names its word, its other forms, and what places it; only
@@ -91,6 +93,28 @@ func TestSeeOnly(t *testing.T) {
 		}
 		if href != want {
 			t.Errorf("seeOnly(%s) = %q, want %q", in, href, want)
+		}
+	}
+}
+
+// The study bible's glossary is named shorter where the page's language has a
+// catalog of its own; elsewhere, and any other glossary, as the library titles
+// it.
+func TestGlossaryShortTitle(t *testing.T) {
+	nwtstg := GlossaryBook{ID: "nwtstg", Title: "Worterklärungen zur Bibel"}
+	insight := GlossaryBook{ID: "it", Title: "Einsichten"}
+	for _, tc := range []struct {
+		book   GlossaryBook
+		locale string
+		want   string
+	}{
+		{nwtstg, "de", "Worterklärungen"},
+		{GlossaryBook{ID: "nwtstg", Title: "Glossary"}, "en", "Glossary"},
+		{GlossaryBook{ID: "nwtstg", Title: "Glossaire"}, "fr", "Glossaire"},
+		{insight, "de", "Einsichten"},
+	} {
+		if got := tc.book.shortTitle(model.Language{Locale: tc.locale}); got != tc.want {
+			t.Errorf("%s in %s = %q, want %q", tc.book.Title, tc.locale, got, tc.want)
 		}
 	}
 }

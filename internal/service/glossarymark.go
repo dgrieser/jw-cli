@@ -111,7 +111,7 @@ func (s *Service) glossaryMarker(lng model.Language) *glossaryMarker {
 		s.HTTP.Go("glossary "+lng.Locale, func(ctx context.Context) { _, _ = s.Glossary(ctx, lng) })
 	}
 	if m == nil || m.at != kept.At {
-		m = newGlossaryMarker(kept.Glossary)
+		m = newGlossaryMarker(kept.Glossary, lng)
 		m.at = kept.At
 	}
 	m.checked = time.Now()
@@ -121,10 +121,15 @@ func (s *Service) glossaryMarker(lng model.Language) *glossaryMarker {
 	return m
 }
 
-// newGlossaryMarker groups an index by term and its terms by first word,
-// the longest first.
-func newGlossaryMarker(g Glossary) *glossaryMarker {
-	m := &glossaryMarker{cs: g.CaseSensitive, docURL: g.DocURL, books: g.Books, byKey: map[string][]*markEntry{}}
+// newGlossaryMarker groups an index of lng by term and its terms by first
+// word, the longest first.
+func newGlossaryMarker(g Glossary, lng model.Language) *glossaryMarker {
+	m := &glossaryMarker{cs: g.CaseSensitive, docURL: g.DocURL, byKey: map[string][]*markEntry{}}
+	// the glossaries named as a page names them, on hover
+	for _, b := range g.Books {
+		b.Title = b.shortTitle(lng)
+		m.books = append(m.books, b)
+	}
 	for _, s := range g.Suffixes {
 		m.suffixes = append(m.suffixes, markStress.Replace(s))
 	}
