@@ -930,13 +930,27 @@ func mediaRowLimit(key string) int {
 const mediaLatestCategory = "LatestVideos"
 
 // withRecent is jw.org's pick of the latest media with the recent media it
-// does not have, newest first.
+// does not have, newest first. A recording comes once: the video of a talk
+// or a song is listed again as audio, and a song in each album it is on,
+// under the same key or title; the pick's comes first, then a video.
 func withRecent(pick, recent []model.MediaItem) []model.MediaItem {
-	media := slices.Clone(pick)
+	var videos, others []model.MediaItem
 	for _, m := range recent {
-		if !slices.ContainsFunc(pick, func(p model.MediaItem) bool { return p.LANK == m.LANK }) {
-			media = append(media, m)
+		if m.Type == "video" {
+			videos = append(videos, m)
+		} else {
+			others = append(others, m)
 		}
+	}
+	var media []model.MediaItem
+	stems, titles := map[string]bool{}, map[string]bool{}
+	for _, m := range slices.Concat(pick, videos, others) {
+		stem, title := service.MediaStem(m.LANK), strings.ToLower(strings.TrimSpace(m.Title))
+		if stems[stem] || title != "" && titles[title] {
+			continue
+		}
+		stems[stem], titles[title] = true, true
+		media = append(media, m)
 	}
 	service.NewestFirst(media)
 	return media

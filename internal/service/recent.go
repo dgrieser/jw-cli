@@ -6,6 +6,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -105,4 +106,16 @@ func NewestFirst(media []model.MediaItem) {
 	slices.SortStableFunc(media, func(a, b model.MediaItem) int {
 		return Published(b).Compare(Published(a))
 	})
+}
+
+// MediaStem is a media item's natural key without saying whether it is the
+// video or the recording: the video of a talk and its audio share it
+// (pub-jwb-142_1_VIDEO, pub-jwb-142_1_AUDIO).
+func MediaStem(lank string) string {
+	for _, suffix := range []string{"_VIDEO", "_AUDIO"} {
+		if stem, ok := strings.CutSuffix(lank, suffix); ok {
+			return stem
+		}
+	}
+	return lank
 }
