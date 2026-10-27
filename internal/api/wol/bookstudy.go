@@ -478,7 +478,8 @@ func parseInsightBox(blocks []studyBlock, u string, book int, books []int) []mod
 var itemLabel = regexp.MustCompile(`^([^—.]{1,80}?)\s*(?:—|\.(?:\s|$))\s*(.*)$`)
 
 // verseItem reads a paragraph that opens with a link to the verses it is on
-// as an item of its section: the verses, and its question or its lesson.
+// as an item of its section: the verses, its question and the answer, or its
+// lesson.
 func verseItem(b studyBlock, book int) (model.StudyPart, bool) {
 	a := b.sel.Find("a.b").First()
 	lead := studyText(a.Text())
@@ -489,24 +490,38 @@ func verseItem(b studyBlock, book int) (model.StudyPart, bool) {
 	if m == nil {
 		return model.StudyPart{}, false
 	}
-	return model.StudyPart{Title: firstSentence(m[2]), Label: m[1], Chapters: refChapters(m[1], book)}, true
+	title, text := splitSentence(m[2])
+	return model.StudyPart{Title: title, Text: text, Label: m[1], Chapters: refChapters(m[1], book)}, true
 }
 
-// firstSentence is the question a paragraph asks or the sentence it opens
-// with, cut short past a length a line can show. A full stop after a word of
-// one or two letters is an abbreviation's ("B.C.E.", "v. u. Z.").
-func firstSentence(s string) string {
+// splitSentence parts a paragraph into the question it asks or the sentence
+// it opens with, and what it goes on to say: the answer, the rest of the
+// lesson. A first sentence too long for a line is cut short, and what is cut
+// off goes on in the rest. A full stop after a word of one or two letters is
+// an abbreviation's ("B.C.E.", "v. u. Z.").
+func splitSentence(s string) (first, rest string) {
 	const most = 220
+	end := func(i int) (string, string) {
+		// a quote the sentence closes with stays with it
+		for i < len(s) {
+			r, n := utf8.DecodeRuneInString(s[i:])
+			if !strings.ContainsRune("”“\"’‘»«", r) {
+				break
+			}
+			i += n
+		}
+		return s[:i], strings.TrimSpace(s[i:])
+	}
 	word, prev := 0, ' '
 	for i, r := range s {
 		switch {
 		case r == '?' || r == '!':
-			return s[:i+1]
+			return end(i + 1)
 		case r == '.' && (i+1 == len(s) || s[i+1] == ' '):
 			// after a word, a closing parenthesis or quote; not an
 			// ellipsis (". . .")
 			if word > 2 || !unicode.IsLetter(prev) && strings.ContainsRune(")]”“\"’»«", prev) {
-				return s[:i+1]
+				return end(i + 1)
 			}
 		}
 		if unicode.IsLetter(r) {
@@ -516,10 +531,10 @@ func firstSentence(s string) string {
 		}
 		prev = r
 		if utf8.RuneCountInString(s[:i]) >= most {
-			return strings.TrimSpace(s[:i]) + "…"
+			return strings.TrimSpace(s[:i]) + "…", "…" + s[i:]
 		}
 	}
-	return s
+	return s, ""
 }
 
 // normDashes writes the dashes of a reference as hyphens.

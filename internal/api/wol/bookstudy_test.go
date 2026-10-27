@@ -102,6 +102,16 @@ func TestBookStudyHighlights(t *testing.T) {
 		"  Scriptural Questions Answered:| What is “the day of Jehovah”? [1:15; 2:1, 11, 31; 3:14] [1 2 3] h=10:0-10:0\n",
 		"  Lessons for Us:| Genuine repentance and acknowledgment of Jehovah as the true God are essential for salvation. [1:13, 14] [1] h=15:0-15:0\n",
 	)
+	// a question comes with its answer
+	var answer string
+	for _, it := range joel[0].Parts[0].Items {
+		if it.Label == "2:32" {
+			answer = it.Text
+		}
+	}
+	if want := "To call on God’s name means to know that name, to respect it deeply, and to rely upon and trust in the bearer of that name.—Romans 10:13, 14."; answer != want {
+		t.Errorf("answer to 2:32: %q, want %q", answer, want)
+	}
 	amos := readStudies(t, model.StudyHighlights, 30)
 	if len(amos) != 1 || len(amos[0].Parts) != 1 || !strings.HasPrefix(amos[0].Parts[0].Title, "“GET READY TO MEET YOUR GOD”") {
 		t.Fatalf("Amos: %+v", amos)
@@ -170,18 +180,22 @@ func TestRefChapters(t *testing.T) {
 	}
 }
 
-func TestFirstSentence(t *testing.T) {
-	for in, want := range map[string]string{
-		"How could God create light? The Hebrew word ...":                        "How could God create light?",
-		"Jehovah was pleased with Abel (Hebrews 11:4). Cain, though, ...":        "Jehovah was pleased with Abel (Hebrews 11:4).",
-		"Peleg lived from 2269 to 2030 B.C.E. and in his days ...":               "Peleg lived from 2269 to 2030 B.C.E. and in his days ...",
-		"Satan has “the means . . . to cause death.” Does that mean he can ...?": "Satan has “the means . . . to cause death.” Does that mean he can ...?",
+func TestSplitSentence(t *testing.T) {
+	for in, want := range map[string][2]string{
+		"How could God create light? The Hebrew word ...":                        {"How could God create light?", "The Hebrew word ..."},
+		"Jehovah was pleased with Abel (Hebrews 11:4). Cain, though, ...":        {"Jehovah was pleased with Abel (Hebrews 11:4).", "Cain, though, ..."},
+		"Peleg lived from 2269 to 2030 B.C.E. and in his days ...":               {"Peleg lived from 2269 to 2030 B.C.E. and in his days ...", ""},
+		"Satan has “the means . . . to cause death.” Does that mean he can ...?": {"Satan has “the means . . . to cause death.” Does that mean he can ...?", ""},
+		"What is meant by “the day of Jehovah?” It is the time ...":              {"What is meant by “the day of Jehovah?”", "It is the time ..."},
 	} {
-		if got := firstSentence(in); got != want {
-			t.Errorf("firstSentence(%q) = %q, want %q", in, got, want)
+		if first, rest := splitSentence(in); first != want[0] || rest != want[1] {
+			t.Errorf("splitSentence(%q) = %q, %q, want %q, %q", in, first, rest, want[0], want[1])
 		}
 	}
-	if got := firstSentence(strings.Repeat("word ", 100)); !strings.HasSuffix(got, "…") || len([]rune(got)) > 222 {
-		t.Errorf("a long sentence is not cut short: %q", got)
+	long := strings.Repeat("word ", 100)
+	first, rest := splitSentence(long)
+	words := len(strings.Fields(strings.TrimSuffix(first, "…") + " " + strings.TrimPrefix(rest, "…")))
+	if !strings.HasSuffix(first, "…") || len([]rune(first)) > 222 || !strings.HasPrefix(rest, "…") || words != 100 {
+		t.Errorf("a long sentence is not cut short, the rest going on: %q / %q", first, rest)
 	}
 }

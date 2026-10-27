@@ -298,8 +298,8 @@ book say about a book or, with a chapter, about that chapter:
   - the "Inspired" book ("All Scripture Is Inspired of God and Beneficial"):
     the parts of its summary of the book that cover the chapter
   - the Watchtower's "Jehovah's Word Is Alive" highlights: the section on the
-    chapter, with the questions it answers and the lessons it draws on the
-    chapter's verses
+    chapter, with the questions it answers on the chapter's verses and their
+    answers, and the lessons it draws on them
   - the Bible handbook ("God's Word Is Truth"), for the books it has come
     out with so far: the parts of its summary that cover the chapter
   - Insight on the Scriptures: the lines of its box of the book's highlights
@@ -359,7 +359,8 @@ Examples:
 
 // contentHTML lays out what the publications say about a chapter as one
 // document: each publication under its name, its document linked, then its
-// parts with their items under their subheadings.
+// parts with their items under their subheadings, each question with its
+// answer.
 func contentHTML(studies []model.BookStudy, name string, txt *i18n.Messages) string {
 	esc := htmlpkg.EscapeString
 	link := func(href, text string) string {
@@ -396,6 +397,9 @@ func contentHTML(studies []model.BookStudy, name string, txt *i18n.Messages) str
 					b.WriteString(link(it.URL, it.Label) + " — " + esc(it.Title))
 				} else {
 					b.WriteString(link(it.URL, it.Title))
+				}
+				if it.Text != "" {
+					b.WriteString("<br>" + esc(it.Text))
 				}
 				b.WriteString("</li>")
 			}

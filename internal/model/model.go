@@ -352,6 +352,9 @@ type BookStudy struct {
 type StudyPart struct {
 	Title string `json:"title"`
 	Label string `json:"label,omitempty"` // the verses as the publication writes them: "1:1–2:25", "3:18, 19; 5:5"
+	// Text is what the part says past its title: the answer to the question
+	// it asks, the rest of the lesson it draws.
+	Text string `json:"text,omitempty"`
 	// Group is the subheading the part stands under: "Lessons for Us:".
 	Group string `json:"group,omitempty"`
 	// Chapters are the chapters the part is about; a part that names no

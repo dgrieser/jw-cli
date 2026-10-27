@@ -276,6 +276,9 @@
   <p class="study-group ol-d1">{{.Group}}</p>
   {{- end}}
   <p class="bo-item ol-d1"><a href="{{.URL}}">{{if .Label}}<span class="ol-ref">{{.Label}}</span> {{end}}<span class="ol-title">{{.Title}}</span></a></p>
+  {{- if .Text}}
+  <p class="study-text ol-d1">{{.Text}}</p>
+  {{- end}}
   {{- end}}
   {{- end}}
   {{- end}}

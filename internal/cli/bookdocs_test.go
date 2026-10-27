@@ -179,7 +179,7 @@ func TestBibleContent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	for _, want := range []string{"Scriptural Questions Answered:", "2:32 — What does it mean to ‘call on the name of Jehovah’?"} {
+	for _, want := range []string{"Scriptural Questions Answered:", "2:32 — What does it mean to ‘call on the name of Jehovah’?", "To call on God’s name means to know that name"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}

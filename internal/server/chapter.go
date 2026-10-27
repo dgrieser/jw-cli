@@ -215,10 +215,11 @@ type studyView struct {
 }
 
 // studyPartView is one part of a studyView, or an item of one. Group is the
-// subheading an item stands under, set on the first item under it only.
+// subheading an item stands under, set on the first item under it only; Text
+// is what an item says past its title, the answer to its question.
 type studyPartView struct {
-	Title, Label, URL, Group string
-	Items                    []studyPartView
+	Title, Label, URL, Group, Text string
+	Items                          []studyPartView
 }
 
 // studyViews lays out what the publications say about a chapter.
@@ -230,7 +231,7 @@ func studyViews(studies []model.BookStudy, txt *i18n.Messages) []studyView {
 			pv := studyPartView{Title: p.Title, Label: p.Label, URL: p.URL}
 			group := ""
 			for _, it := range p.Items {
-				iv := studyPartView{Title: it.Title, Label: it.Label, URL: it.URL}
+				iv := studyPartView{Title: it.Title, Label: it.Label, URL: it.URL, Text: it.Text}
 				if it.Group != group {
 					iv.Group, group = it.Group, it.Group
 				}

@@ -730,8 +730,9 @@ bible book part by part say about it, each under its name:
 - the "Inspired" book (*All Scripture Is Inspired of God and Beneficial*,
   si): the parts of its summary of the book that cover the chapter;
 - the Watchtower's *Jehovah's Word Is Alive* highlights (2004–2009): the
-  section that covers the chapter, with the questions it answers and the
-  lessons it draws on the chapter's verses, under their subheadings;
+  section that covers the chapter, with the questions it answers on the
+  chapter's verses — each with its answer — and the lessons it draws on them,
+  under their subheadings;
 - the Bible handbook (*God's Word Is Truth*, gwt), for the books it has come
   out with so far: the parts of its summary that cover the chapter;
 - *Insight on the Scriptures*: the lines of its box of the book's highlights

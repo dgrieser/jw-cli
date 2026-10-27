@@ -79,6 +79,7 @@ func TestUnfoldChapterContent(t *testing.T) {
 		`Highlights (“Jehovah’s Word Is Alive”)`,
 		`/en/wol/d/r1/lp-e/2007722#h=11:0-11:0`,
 		`How has the prophecy about the invasion by insects been fulfilled?`,
+		`To call on God’s name means to know that name`,
 		`Lessons for Us:`,
 	} {
 		if !strings.Contains(body, want) {
