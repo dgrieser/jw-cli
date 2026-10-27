@@ -66,7 +66,8 @@ type Messages struct {
 	NotInEditions string
 	// ContentOf heads what the publications that go through every bible book
 	// say about a chapter, part by part; it takes the chapter ("Genesis 3"),
-	// or the book for all of it. Study* name those publications, and
+	// or the book for all of it. Study* name those publications in short, as
+	// a glossary's is named heading its entry ("Einsichten – Zion"), and
 	// NoContent says none of them has anything on it.
 	ContentOf       string
 	StudyInspired   string

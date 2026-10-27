@@ -69,17 +69,21 @@ func contentMux(t *testing.T) *http.ServeMux {
 }
 
 // A chapter's heading unfolds, next to its outline and the same way, what
-// the publications that go through every book say about the chapter: the
-// parts about it, each linked to its paragraphs, each question with its
-// answer, and nothing about the other book an article is on.
+// the publications that go through every book say about the chapter, as a
+// glossary's entries are laid out: a section each, headed by the publication
+// and the chapter as a link to its document, the first opened, holding the
+// publication's own paragraphs on the chapter — each question with its
+// answer, the verses it cites to unfold — and nothing about the other book
+// an article is on.
 func TestUnfoldChapterContent(t *testing.T) {
 	srv := newTestServer(t, contentMux(t))
 	_, body := get(t, srv, "/unfold/chapter?book=29&chapter=2&lang=en")
 	for _, want := range []string{
 		`\u003csummary\u003eContent 2\u003c/summary\u003e`,
 		`"order":2`,
-		`Highlights (“Jehovah’s Word Is Alive”)`,
-		`/en/wol/d/r1/lp-e/2007722#h=11:0-11:0`,
+		`/en/wol/d/r1/lp-e/2007722\"\u003eHighlights – Joel 2\u003c/a\u003e\u003c/summary\u003e`,
+		`data-doc=\"2007722\" open`,
+		`/en/wol/bc/r1/lp-e/2007722/12/0`,
 		`How has the prophecy about the invasion by insects been fulfilled?`,
 		`To call on God’s name means to know that name`,
 		`Lessons for Us:`,

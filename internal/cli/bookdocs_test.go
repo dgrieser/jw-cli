@@ -165,21 +165,21 @@ func TestBibleContent(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Content of Genesis 3",
-		"“Inspired” book",
+		"Inspired – Genesis 3",
 		"Sin and death enter the world; “seed” foretold as deliverer (3:1–5:5)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
 	}
-	if strings.Contains(out, "Deluge") {
+	if strings.Contains(out, "preparation of the earth for human habitation") {
 		t.Errorf("a part not about chapter 3:\n%s", out)
 	}
 	out, err = runCmd(t, mux, "bible", "content", "-l", "en", "-o", "text", "Joel", "2")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	for _, want := range []string{"Scriptural Questions Answered:", "2:32 — What does it mean to ‘call on the name of Jehovah’?", "To call on God’s name means to know that name"} {
+	for _, want := range []string{"Scriptural Questions Answered:", "Highlights – Joel 2", "What does it mean to ‘call on the name of Jehovah’?", "To call on God’s name means to know that name"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}

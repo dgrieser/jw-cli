@@ -725,27 +725,33 @@ cover it, the chapter's **content**, the book's introduction (its video as a
 link to the introduction's page) and the chapter's part of the gallery.
 
 The **content** of a chapter is what the publications that go through every
-bible book part by part say about it, each under its name:
+bible book part by part say about it, laid out as a word's glossary entries
+are: a section for each publication, headed by its short name and the chapter
+with the same dash ("Höhepunkte – Klagelieder 1") as a link to its document,
+the first opened, holding the publication's own paragraphs on the chapter,
+the verses they cite unfolding like any other:
 
-- the "Inspired" book (*All Scripture Is Inspired of God and Beneficial*,
-  si): the parts of its summary of the book that cover the chapter;
-- the Watchtower's *Jehovah's Word Is Alive* highlights (2004–2009): the
-  section that covers the chapter, with the questions it answers on the
-  chapter's verses — each with its answer — and the lessons it draws on them,
-  under their subheadings;
-- the Bible handbook (*God's Word Is Truth*, gwt), for the books it has come
-  out with so far: the parts of its summary that cover the chapter;
-- *Insight on the Scriptures*: the lines of its box of the book's highlights
-  that are about the chapter.
+- **Höhepunkte** (Highlights): the section of the Watchtower's *Jehovah's
+  Word Is Alive* highlights (2004–2009) that covers the chapter, with the
+  questions it answers on the chapter's verses and their answers, and the
+  lessons it draws on them, under their subheadings;
+- **Einsichten** (Insight): the lines of *Insight on the Scriptures'* box of
+  the book's highlights that are about the chapter;
+- **Inspiriert** (Inspired): the paragraphs of the "Inspired" book's (*All
+  Scripture Is Inspired of God and Beneficial*, si) summary of the book that
+  cover the chapter — for a book whose summary names no verses but has a
+  paragraph for each chapter, as Lamentations', that paragraph;
+- **Handbuch** (Handbook): the paragraphs of the Bible handbook's (*God's
+  Word Is Truth*, gwt) summary that cover the chapter, for the books it has
+  come out with so far.
 
 It comes with the rest of what the chapter's heading unfolds, as the outline
-does, and is read ahead at night for the week's Bible reading (below). Each
-part links to its paragraphs, which open
-in place under it like any other link to a document. The publications are read by their documents' ids,
-which are the same in every language, so a language that has them gets them;
-a book the handbook has not come out with yet in a language is simply left
-out, and appears once it has. `jw bible content <book> [chapter]` prints the
-same (`-o json` for the data, the whole book without a chapter).
+does, and is read ahead at night for the week's Bible reading (below). The
+publications are read by their documents' ids, which are the same in every
+language, so a language that has them gets them; a book the handbook has not
+come out with yet in a language is simply left out, and appears once it has.
+`jw bible content <book> [chapter]` prints the same (`-o json` for the data,
+the whole book without a chapter).
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend

@@ -156,6 +156,40 @@ func TestBookStudyInsightNewLayout(t *testing.T) {
 	}
 }
 
+// A part comes with its paragraphs as the document has them: a section's
+// heading with its verses, a question with its answer.
+func TestBookStudyKeepsParagraphs(t *testing.T) {
+	joel := readStudies(t, model.StudyHighlights, 29)[0].Parts[0]
+	if !strings.Contains(joel.HTML, `class="ss"`) || !strings.Contains(joel.HTML, "Joel 1:1–3:21") {
+		t.Errorf("section heading: %s", joel.HTML)
+	}
+	if it := joel.Items[0]; !strings.HasPrefix(it.HTML, `<p class="sb" data-pid="10"`) || !strings.Contains(it.HTML, "Babylon the Great") {
+		t.Errorf("question and answer: %s", it.HTML)
+	}
+	si := readStudies(t, model.StudyInspired, 1)[0].Parts[1]
+	if strings.Count(si.HTML, "<p ") != 2 || !strings.Contains(si.HTML, "The ravages of sin continue outside Eden") {
+		t.Errorf("a part of the summary and the paragraph after it: %s", si.HTML)
+	}
+}
+
+// A summary that names no verses but has a paragraph for each chapter — the
+// "Inspired" book's on Lamentations — goes through the chapters in turn.
+func TestBookStudyChapterByChapter(t *testing.T) {
+	var b strings.Builder
+	b.WriteString(`<article id="article"><p class="sb" data-pid="1">Introduction, quoting (2:3).</p><p class="ss" data-pid="2">CONTENTS</p>`)
+	for i := 1; i <= 5; i++ {
+		fmt.Fprintf(&b, `<p class="sb" data-pid="%d">%d Poem %d laments. More.</p>`, 10+i, 7+i, i)
+	}
+	b.WriteString(`<p class="ss" data-pid="20">WHY BENEFICIAL</p><p class="sb" data-pid="21">It helps.</p></article>`)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1101990086", func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, b.String()) })
+	studies, err := testClient(t, mux).BookStudies(context.Background(), cfgEN, model.StudyInspired, 25)
+	if err != nil || len(studies) != 1 {
+		t.Fatalf("%v %+v", err, studies)
+	}
+	wantLines(t, studyLines(studies[0].Parts), "Poem 1 laments. [] [1] h=11:0-11:0\n", "Poem 5 laments. [] [5] h=15:0-15:0\n")
+}
+
 func TestRefChapters(t *testing.T) {
 	for _, tc := range []struct {
 		ref  string
