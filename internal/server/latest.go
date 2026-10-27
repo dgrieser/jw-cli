@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 	_ "time/tzdata" // the updates of the latest media keep Berlin time wherever the server runs
@@ -54,10 +55,9 @@ func latestUpdates(t time.Time) []time.Time {
 // lastUpdate is the time of the latest update at or before now.
 func lastUpdate(now time.Time) time.Time {
 	for _, day := range []time.Time{now, now.In(latestZone).AddDate(0, 0, -1)} {
-		at := latestUpdates(day)
-		for i := len(at) - 1; i >= 0; i-- {
-			if !at[i].After(now) {
-				return at[i]
+		for _, at := range slices.Backward(latestUpdates(day)) {
+			if !at.After(now) {
+				return at
 			}
 		}
 	}
@@ -100,7 +100,7 @@ func (s *Server) latest(ctx context.Context, lang string) []model.MediaItem {
 			return l.media
 		}
 		if s.svc.HTTP.Go("latest "+lang, func(ctx context.Context) {
-			s.findLatest(httpx.WithRefresh(ctx), lang)
+			_, _ = s.findLatest(httpx.WithRefresh(ctx), lang) // logged
 		}) {
 			return l.media
 		}
@@ -121,7 +121,7 @@ func (s *Server) findLatest(ctx context.Context, lang string) ([]model.MediaItem
 		// jw.org's rows, for the cache to have them as current as the rest
 		var wg sync.WaitGroup
 		for _, key := range mediaRowCategories() {
-			wg.Go(func() { s.svc.Mediator.Category(ctx, lang, key, mediaRowLimit(key), 0) })
+			wg.Go(func() { _, _ = s.svc.Mediator.Category(ctx, lang, key, mediaRowLimit(key), 0) })
 		}
 		defer wg.Wait()
 		media, err := s.svc.RecentMedia(ctx, lang, time.Now().AddDate(0, 0, -latestDays))
@@ -200,7 +200,7 @@ func (s *Server) Latest(ctx context.Context) {
 		}
 		for _, lang := range s.latestMedia.readSince(prev) {
 			s.svc.HTTP.Go("latest "+lang, func(ctx context.Context) {
-				s.findLatest(httpx.WithRefresh(ctx), lang)
+				_, _ = s.findLatest(httpx.WithRefresh(ctx), lang) // logged
 			})
 		}
 	}

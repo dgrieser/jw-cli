@@ -91,7 +91,7 @@ func TestUIMediaLatestFromEveryCategory(t *testing.T) {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
 	talk, pick, song := strings.Index(body, ">Newest Talk<"), strings.Index(body, ">Picked Video<"), strings.Index(body, ">New Song<")
-	if talk < 0 || pick < 0 || song < 0 || !(talk < pick && pick < song) {
+	if talk < 0 || pick < 0 || song < 0 || talk > pick || pick > song {
 		t.Errorf("want the talk, the pick and the song, newest first (%d %d %d):\n%s", talk, pick, song, body)
 	}
 	for _, title := range []string{">Newest Talk<", ">Picked Video<"} {
