@@ -71,6 +71,8 @@ type Server struct {
 	// studyLangs are the languages the week's reading is studied ahead in
 	// (study.go)
 	studyLangs []string
+	// latestMedia is what the media library published lately (latest.go)
+	latestMedia latestMedia
 }
 
 // New builds a Server. Template parse errors panic: they are programming

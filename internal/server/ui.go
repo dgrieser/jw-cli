@@ -909,12 +909,43 @@ const (
 	mediaShelfLimit   = 24
 )
 
-var mediaShelfCategories = []string{"FeaturedLibraryLanding", "LatestVideos"}
+var mediaShelfCategories = []string{"FeaturedLibraryLanding", mediaLatestCategory}
+
+// mediaRowCategories are the categories the media start page shows as a
+// featured video and as carousels, in order.
+func mediaRowCategories() []string {
+	return append([]string{mediaHeroCategory}, mediaShelfCategories...)
+}
+
+// mediaRowLimit is how many of a category's media the start page reads.
+func mediaRowLimit(key string) int {
+	if key == mediaHeroCategory {
+		return 1
+	}
+	return mediaShelfLimit
+}
+
+// mediaLatestCategory is jw.org's pick of the latest videos, which the media
+// start page completes with everything else published lately (latest.go).
+const mediaLatestCategory = "LatestVideos"
+
+// withRecent is jw.org's pick of the latest media with the recent media it
+// does not have, newest first.
+func withRecent(pick, recent []model.MediaItem) []model.MediaItem {
+	media := slices.Clone(pick)
+	for _, m := range recent {
+		if !slices.ContainsFunc(pick, func(p model.MediaItem) bool { return p.LANK == m.LANK }) {
+			media = append(media, m)
+		}
+	}
+	service.NewestFirst(media)
+	return media
+}
 
 // featuredCategory reports whether a root category is one of the curated
 // rows (and their variants) rather than a library to browse.
 func featuredCategory(key string) bool {
-	return strings.HasPrefix(key, "Featured") || key == "LatestVideos"
+	return strings.HasPrefix(key, "Featured") || key == mediaLatestCategory
 }
 
 func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
@@ -925,20 +956,18 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	// the featured rows come along with the category tree; one that fails
 	// leaves its row out rather than the whole page
-	keys := append([]string{mediaHeroCategory}, mediaShelfCategories...)
+	keys := mediaRowCategories()
 	featured := make([]model.Category, len(keys))
 	var wg sync.WaitGroup
 	for i, key := range keys {
-		limit := mediaShelfLimit
-		if key == mediaHeroCategory {
-			limit = 1
-		}
 		wg.Go(func() {
-			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, limit, 0); err == nil {
+			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, mediaRowLimit(key), 0); err == nil {
 				featured[i] = cat
 			}
 		})
 	}
+	var recent []model.MediaItem
+	wg.Go(func() { recent = s.latest(r.Context(), lng.Symbol) })
 	cats, err := s.svc.Mediator.RootCategories(r.Context(), lng.Symbol)
 	wg.Wait()
 	if err != nil {
@@ -957,7 +986,11 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		if len(cat.Media) == 0 {
 			continue
 		}
-		row := s.resultViews(service.MediaToResults(cat.Media), page.Lang)
+		media := cat.Media
+		if cat.Key == mediaLatestCategory {
+			media = withRecent(media, recent)
+		}
+		row := s.resultViews(service.MediaToResults(media), page.Lang)
 		// a row named like the section before it carries that section on
 		if n := len(page.Sections); n > 0 && page.Sections[n-1].Heading == cat.Name {
 			page.Sections[n-1].Rows = append(page.Sections[n-1].Rows, row)

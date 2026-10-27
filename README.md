@@ -830,6 +830,18 @@ from the cache. A week once studied is not studied again; a week without a
 reading has nothing to study. `--study-langs` (`$JW_STUDY_LANGS`) names the
 languages: `E,X` (English and German) by default, `none` for none.
 
+The **latest videos** on the media page are jw.org's pick, followed by every
+other video and audio recording the media library published in the last 30
+days, found by walking all its categories (the copies with audio descriptions
+left out), each once and newest first. That walk reads a few megabytes per
+language, so its result is kept and found anew every three hours during the
+day — at 6, 9, 12, 15, 18 and 21 o'clock, Berlin time — and not at night, in
+the languages read since the update before; another language's is found
+anew when it is next read. An update runs on the server: it reads jw.org's
+own rows of the page anew too, past the cache, and keeps what it found in the
+cache and the list. It reads only what the media library says of its media —
+titles, dates, where the files are — and downloads none of the media.
+
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the
 browser (IndexedDB) — written before a link of the page is followed, so a
