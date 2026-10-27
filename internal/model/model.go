@@ -359,9 +359,12 @@ type StudyPart struct {
 	Group string `json:"group,omitempty"`
 	// Chapters are the chapters the part is about; a part that names no
 	// verses of its own is about those of the part it stands under.
-	Chapters []int       `json:"chapters,omitempty"`
-	URL      string      `json:"url,omitempty"` // the paragraphs in the document: ...#h=15:0-17:0
-	Items    []StudyPart `json:"items,omitempty"`
+	Chapters []int  `json:"chapters,omitempty"`
+	URL      string `json:"url,omitempty"` // the paragraphs in the document: ...#h=15:0-17:0
+	// HTML is the part's paragraphs as the document has them: a section's
+	// heading, a question with its answer, the summary's paragraphs.
+	HTML  string      `json:"html,omitempty"`
+	Items []StudyPart `json:"items,omitempty"`
 }
 
 // About reports whether the part is about chapter, by its own verses or,

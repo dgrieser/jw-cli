@@ -186,10 +186,15 @@ func TestLocalizedBookNames(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/de/wol/binav/r10/lp-x", func(w http.ResponseWriter, r *http.Request) {
 		var b strings.Builder
-		b.WriteString("<html><body>")
+		// the tabs above the grid come first, and end in numbers too
+		b.WriteString(`<html><body><ul class="tabs"><li><a href="/de/wol/publication/r10/lp-x/nwtsty/0">EINFÜHRUNG</a></li>` +
+			`<li><a href="/de/wol/publication/r10/lp-x/nwtsty/26">BÜCHER</a></li></ul>`)
 		for i := 1; i <= 66; i++ {
 			name, abbr, official := fmt.Sprintf("Buch%d", i), fmt.Sprintf("Bu%d.", i), fmt.Sprintf("B%d", i)
-			if i == 43 {
+			switch i {
+			case 26:
+				name, abbr, official = "Hesekiel", "Hes.", "Hes"
+			case 43:
 				name, abbr, official = "Johannes", "Joh.", "Joh"
 			}
 			fmt.Fprintf(&b, `<a class="bookLink" href="/de/wol/binav/r10/lp-x/nwtsty/%d">`+
@@ -209,6 +214,10 @@ func TestLocalizedBookNames(t *testing.T) {
 	want := []string{"Johannes", "Joh.", "Joh"}
 	if !slices.Equal(names[43], want) {
 		t.Errorf("names[43] = %q, want %q", names[43], want)
+	}
+	// not the "BÜCHER" tab, whose link ends in 26 as well
+	if want := []string{"Hesekiel", "Hes.", "Hes"}; !slices.Equal(names[26], want) {
+		t.Errorf("names[26] = %q, want %q", names[26], want)
 	}
 }
 

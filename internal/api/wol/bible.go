@@ -428,10 +428,14 @@ func (c *Client) Tooltip(ctx context.Context, tcURL string) (model.Tooltip, erro
 }
 
 // LocalizedBookNames extracts the localized bible book names from the bible
-// navigation page (best effort; kept until the page changes upstream).
+// navigation page (best effort; kept until the page changes upstream). Only
+// the book grid's links name books: those to a book's chapters
+// (/wol/binav/…/26). The tabs above the grid end in a number too — the study
+// bible's "BÜCHER" tab is its table of contents' page 26
+// (/wol/publication/…/nwtsty/26) — and name no book.
 func (c *Client) LocalizedBookNames(ctx context.Context, cfg Config) (map[int][]string, error) {
 	u := c.url(cfg, "binav", "")
-	return httpx.Memo(ctx, c.cache, "books3-"+u, func(ctx context.Context) (map[int][]string, error) {
+	return httpx.Memo(ctx, c.cache, "books4-"+u, func(ctx context.Context) (map[int][]string, error) {
 		return c.localizedBookNames(ctx, cfg, u)
 	})
 }
@@ -445,7 +449,7 @@ func (c *Client) localizedBookNames(ctx context.Context, cfg Config, u string) (
 	bookHref := regexp.MustCompile(`/(\d{1,2})$`)
 	doc.Find("a").Each(func(_ int, a *goquery.Selection) {
 		href, _ := a.Attr("href")
-		if !strings.Contains(href, "/wol/") {
+		if !strings.Contains(href, "/wol/binav/") {
 			return
 		}
 		m := bookHref.FindStringSubmatch(href)

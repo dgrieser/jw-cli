@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -187,7 +188,7 @@ type chapterStudyView struct {
 	Outline      []outlineRow
 
 	ContentTitle string
-	Content      []studyView
+	Content      template.HTML
 
 	Intro      *model.BookIntro
 	IntroHref  string
@@ -207,41 +208,26 @@ const (
 	orderGallery
 )
 
-// studyView is what one publication says about a chapter: the document, under
-// the publication's name, and its parts about the chapter.
-type studyView struct {
-	Name, Title, URL string
-	Parts            []studyPartView
-}
-
-// studyPartView is one part of a studyView, or an item of one. Group is the
-// subheading an item stands under, set on the first item under it only; Text
-// is what an item says past its title, the answer to its question.
-type studyPartView struct {
-	Title, Label, URL, Group, Text string
-	Items                          []studyPartView
-}
-
-// studyViews lays out what the publications say about a chapter.
-func studyViews(studies []model.BookStudy, txt *i18n.Messages) []studyView {
-	out := make([]studyView, 0, len(studies))
-	for _, st := range studies {
-		v := studyView{Name: txt.StudyName(st.Pub), Title: st.Title, URL: st.URL}
-		for _, p := range st.Parts {
-			pv := studyPartView{Title: p.Title, Label: p.Label, URL: p.URL}
-			group := ""
-			for _, it := range p.Items {
-				iv := studyPartView{Title: it.Title, Label: it.Label, URL: it.URL, Text: it.Text}
-				if it.Group != group {
-					iv.Group, group = it.Group, it.Group
-				}
-				pv.Items = append(pv.Items, iv)
-			}
-			v.Parts = append(v.Parts, pv)
-		}
-		out = append(out, v)
+// studySections are what the publications say about a chapter, one section
+// each in the order they come in, headed by the publication and the chapter
+// ("Höhepunkte – Klagelieder 1") as a link to its document, and laid out as a
+// glossary's entries are: the publication's own paragraphs, what they cite
+// unfolding on its own; the first comes opened, the others as headings.
+func (s *Server) studySections(ctx context.Context, lng model.Language, studies []model.BookStudy,
+	bookName string, chapter int, txt *i18n.Messages) template.HTML {
+	var b strings.Builder
+	for i, st := range studies {
+		title := service.StudyTitle(txt, st, bookName, chapter)
+		ev := s.sectionEvent(ctx, lng, service.UnfoldSection{
+			Title: fmt.Sprintf(`<a href="%s">%s</a>`, html.EscapeString(st.URL), html.EscapeString(title)),
+			Body:  service.StudyHTML(st),
+			Doc:   wol.DocIDFromURL(st.URL),
+			Base:  s.svc.HTTP.Base.WOL,
+			Open:  i == 0,
+		}, txt)
+		b.WriteString(ev.HTML)
 	}
-	return out
+	return template.HTML(b.String()) //nolint:gosec // each section sanitized by sectionEvent
 }
 
 // unfoldChapter streams what the library has on a chapter, the way
@@ -328,7 +314,7 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(studies) > 0 {
 			send("chaptercontent", orderContent, chapterStudyView{biblePage: page,
-				ContentTitle: chapterTitle(txt.UIContent, chapter), Content: studyViews(studies, txt)})
+				ContentTitle: chapterTitle(txt.UIContent, chapter), Content: s.studySections(ctx, lng, studies, page.BookName, chapter, txt)})
 		}
 	})
 	if has(wol.BookIntroduction) {

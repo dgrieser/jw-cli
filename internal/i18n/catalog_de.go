@@ -32,10 +32,10 @@ var de = Messages{
 	// NotInEditions nimmt die Bibelstelle und die Ausgaben.
 	NotInEditions:   "%s ist nicht enthalten in: %s",
 	ContentOf:       "Inhalt von %s",
-	StudyInspired:   "„Inspiriert“-Buch",
-	StudyHighlights: "Höhepunkte („Das Wort Jehovas ist lebendig“)",
-	StudyHandbook:   "Handbuch zur Bibel",
-	StudyInsight:    "Einsichten über die Heilige Schrift",
+	StudyInspired:   "Inspiriert",
+	StudyHighlights: "Höhepunkte",
+	StudyHandbook:   "Handbuch",
+	StudyInsight:    "Einsichten",
 	NoContent:       "Keine der Publikationen hat etwas dazu.",
 
 	LabelAltText:       "Bildbeschreibung",

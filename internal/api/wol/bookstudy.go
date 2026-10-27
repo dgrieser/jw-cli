@@ -106,7 +106,7 @@ func studyDocs(pub string, book int) []studyDoc {
 
 // StudyPubs are the publications BookStudies reads, in the order a chapter
 // lists them.
-var StudyPubs = []string{model.StudyInspired, model.StudyHighlights, model.StudyHandbook, model.StudyInsight}
+var StudyPubs = []string{model.StudyHandbook, model.StudyHighlights, model.StudyInsight, model.StudyInspired}
 
 // BookStudies reads what one of the publications that go through every bible
 // book (StudyPubs) says about book, part by part: one study for each of its
@@ -121,7 +121,7 @@ func (c *Client) BookStudies(ctx context.Context, cfg Config, pub string, book i
 	var out []model.BookStudy
 	for _, d := range docs {
 		u := c.url(cfg, "d", fmt.Sprintf("/%d", d.doc))
-		st, err := httpx.Memo(ctx, c.cache, fmt.Sprintf("study1-%s-%d-%s", pub, book, u), func(ctx context.Context) (model.BookStudy, error) {
+		st, err := httpx.Memo(ctx, c.cache, fmt.Sprintf("study2-%s-%d-%s", pub, book, u), func(ctx context.Context) (model.BookStudy, error) {
 			return c.bookStudy(ctx, u, pub, book, d.books)
 		})
 		if err != nil {
@@ -169,6 +169,7 @@ type studyBlock struct {
 	class   string
 	heading bool // h1-h3, which close a section of a document as p.ss does
 	text    string
+	html    string // as the document has it
 	sel     *goquery.Selection
 	// box is the box the block is in, as the library lays boxes out now,
 	// and lead says the block opens with words in bold: a heading of it.
@@ -195,6 +196,7 @@ func studyBlocks(content *goquery.Selection) []studyBlock {
 			text:    studyText(s.Text()),
 			sel:     s,
 		}
+		b.html, _ = goquery.OuterHtml(s)
 		if box := s.Closest(selBox); box.Length() > 0 {
 			b.box = box.Get(0)
 		}
@@ -259,6 +261,7 @@ func parseSummary(blocks []studyBlock, u string, book int) []model.StudyPart {
 		model.StudyPart
 		from, to int
 		section  int
+		html     []string
 	}
 	var parts []part
 	section, open := 0, false
@@ -275,7 +278,7 @@ func parseSummary(blocks []studyBlock, u string, book int) []model.StudyPart {
 		if m := summaryPart.FindStringSubmatch(t); m != nil && isSummarySpan(m[1], m[2]) {
 			parts = append(parts, part{
 				StudyPart: model.StudyPart{Title: strings.TrimSpace(m[1]), Label: m[2], Chapters: refChapters(m[2], book)},
-				from:      b.pid, to: b.pid, section: section,
+				from:      b.pid, to: b.pid, section: section, html: []string{b.html},
 			})
 			open = true
 			continue
@@ -283,6 +286,7 @@ func parseSummary(blocks []studyBlock, u string, book int) []model.StudyPart {
 		// a summary's paragraphs are body text; a box's lines close a part
 		if open && (b.class == "" || b.is("sb")) {
 			parts[len(parts)-1].to = b.pid
+			parts[len(parts)-1].html = append(parts[len(parts)-1].html, b.html)
 		} else {
 			open = false
 		}
@@ -319,12 +323,48 @@ func parseSummary(blocks []studyBlock, u string, book int) []model.StudyPart {
 			best = run
 		}
 	}
+	if len(best) == 0 {
+		return chapterByChapter(blocks, u, book)
+	}
 	out := make([]model.StudyPart, 0, len(best))
 	for _, p := range best {
 		p.URL = passageURL(u, p.from, p.to)
+		p.HTML = strings.Join(p.html, "")
 		out = append(out, p.StudyPart)
 	}
 	return out
+}
+
+// chapterByChapter reads a summary that names no verses but goes through
+// the book a paragraph a chapter — the "Inspired" book's on Lamentations, a
+// paragraph for each of its five poems: the first section of the document
+// with as many paragraphs as the book has chapters, each the part about its
+// chapter, titled by its first sentence.
+func chapterByChapter(blocks []studyBlock, u string, book int) []model.StudyPart {
+	n := bibleref.Chapters(book)
+	var sections [][]studyBlock
+	var cur []studyBlock
+	for _, b := range blocks {
+		switch {
+		case b.heading || b.is("ss"):
+			sections, cur = append(sections, cur), nil
+		case b.pid != 0 && b.is("sb"):
+			cur = append(cur, b)
+		}
+	}
+	sections = append(sections, cur)
+	for _, sec := range sections[1:] { // not the introduction before the first heading
+		if len(sec) != n || n < 2 {
+			continue
+		}
+		out := make([]model.StudyPart, 0, n)
+		for i, b := range sec {
+			title, _ := splitSentence(paragraphNumber.ReplaceAllString(b.text, ""))
+			out = append(out, model.StudyPart{Title: title, Chapters: []int{i + 1}, URL: passageURL(u, b.pid, b.pid), HTML: b.html})
+		}
+		return out
+	}
+	return nil
 }
 
 // parseHighlights reads a "Jehovah's Word Is Alive" article: each section
@@ -337,6 +377,7 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 	var out []model.StudyPart
 	var cur *model.StudyPart
 	title, titlePid, from, to := "", 0, 0, 0
+	titleHTML := ""
 	group := ""
 	at, lastStart := 0, 0
 	closeSection := func() {
@@ -355,12 +396,12 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 			m := titledRef.FindStringSubmatch(b.text)
 			if m == nil || !strings.Contains(m[2], ":") && !refSpan.MatchString(normDashes(m[2])) {
 				// the next section's title, or a subheading of this one
-				title, titlePid, group = b.text, b.pid, b.text
+				title, titlePid, group, titleHTML = b.text, b.pid, b.text, b.html
 				continue
 			}
 			closeSection()
 			if m[1] != "" {
-				title, titlePid = m[1], b.pid
+				title, titlePid, titleHTML = m[1], b.pid, ""
 			}
 			start := firstChapter(m[2])
 			if lastStart > 0 && start <= lastStart && at < len(books)-1 {
@@ -371,7 +412,7 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 			if books[at] != book {
 				continue
 			}
-			cur = &model.StudyPart{Title: title, Label: m[2], Chapters: refChapters(m[2], book)}
+			cur = &model.StudyPart{Title: title, Label: m[2], Chapters: refChapters(m[2], book), HTML: titleHTML + b.html}
 			from, to = firstNonZero(titlePid, b.pid), b.pid
 		case cur == nil:
 		case b.is("sn"):
@@ -381,6 +422,7 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 			if item, ok := verseItem(b, book); ok {
 				item.Group = group
 				item.URL = passageURL(u, b.pid, b.pid)
+				item.HTML = b.html
 				cur.Items = append(cur.Items, item)
 			}
 		}
@@ -411,7 +453,7 @@ func parseInsightBox(blocks []studyBlock, u string, book int, books []int) []mod
 		box, from, inBox = nil, nil, false
 	}
 	titled := func(b studyBlock) model.StudyPart {
-		p := model.StudyPart{Title: b.text, URL: passageURL(u, b.pid, b.pid)}
+		p := model.StudyPart{Title: b.text, URL: passageURL(u, b.pid, b.pid), HTML: b.html}
 		if m := titledRef.FindStringSubmatch(b.text); m != nil && m[1] != "" {
 			p.Title, p.Label, p.Chapters = m[1], m[2], refChapters(m[2], book)
 		}

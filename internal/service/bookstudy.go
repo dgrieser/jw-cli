@@ -4,19 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
+	"strings"
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/bibleref"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
 // BookContent is what the publications that go through every bible book part
-// by part say about a book (chapter 0) or one chapter of it: the "Inspired"
-// book's study, the Watchtower's highlights, the Bible handbook's summary and
-// Insight's box of highlights, in that order, each with the parts about the
-// chapter. A publication that has nothing on it is left out; what could be
-// read comes back with the error of what could not.
+// by part say about a book (chapter 0) or one chapter of it: the Bible
+// handbook's summary, the Watchtower's highlights, Insight's box of
+// highlights and the "Inspired" book's study, in that order, each with the
+// parts about the chapter. A publication that has nothing on it is left out;
+// what could be read comes back with the error of what could not.
 func (s *Service) BookContent(ctx context.Context, lng model.Language, book, chapter int) ([]model.BookStudy, error) {
 	if book < 1 || book > 66 {
 		return nil, fmt.Errorf("invalid book %d (want 1-66)", book)
@@ -69,4 +72,51 @@ func ChapterParts(parts []model.StudyPart, chapter int) []model.StudyPart {
 		}
 	}
 	return out
+}
+
+// StudyHTML lays out what a study says as one document: each part's
+// paragraphs as the publication has them, then its items, each under its
+// subheading where it starts one. A part or item kept from before the
+// paragraphs were kept with it is written from its title and verses.
+func StudyHTML(st model.BookStudy) string {
+	esc := html.EscapeString
+	written := func(p model.StudyPart) string {
+		if p.HTML != "" {
+			return p.HTML
+		}
+		s := "<p><strong>" + esc(p.Title) + "</strong>"
+		if p.Label != "" {
+			s += " (" + esc(p.Label) + ")"
+		}
+		if p.Text != "" {
+			s += " " + esc(p.Text)
+		}
+		return s + "</p>"
+	}
+	var b strings.Builder
+	for _, p := range st.Parts {
+		b.WriteString(written(p))
+		group := ""
+		for _, it := range p.Items {
+			if it.Group != group {
+				group = it.Group
+				if group != "" {
+					b.WriteString("<p><strong>" + esc(group) + "</strong></p>")
+				}
+			}
+			b.WriteString(written(it))
+		}
+	}
+	return b.String()
+}
+
+// StudyTitle heads a study of a chapter, or of a whole book (chapter 0), by
+// the publication's short name and what it is about: "Highlights – Lamentations
+// 1", with the dash a glossary's entry is headed with.
+func StudyTitle(txt *i18n.Messages, st model.BookStudy, bookName string, chapter int) string {
+	about := bookName
+	if chapter > 0 {
+		about = fmt.Sprintf("%s %d", bookName, chapter)
+	}
+	return strings.TrimPrefix(txt.StudyName(st.Pub)+" – "+about, " – ")
 }
