@@ -911,6 +911,20 @@ const (
 
 var mediaShelfCategories = []string{"FeaturedLibraryLanding", mediaLatestCategory}
 
+// mediaRowCategories are the categories the media start page shows as a
+// featured video and as carousels, in order.
+func mediaRowCategories() []string {
+	return append([]string{mediaHeroCategory}, mediaShelfCategories...)
+}
+
+// mediaRowLimit is how many of a category's media the start page reads.
+func mediaRowLimit(key string) int {
+	if key == mediaHeroCategory {
+		return 1
+	}
+	return mediaShelfLimit
+}
+
 // mediaLatestCategory is jw.org's pick of the latest videos, which the media
 // start page completes with everything else published lately (latest.go).
 const mediaLatestCategory = "LatestVideos"
@@ -942,16 +956,12 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 	}
 	// the featured rows come along with the category tree; one that fails
 	// leaves its row out rather than the whole page
-	keys := append([]string{mediaHeroCategory}, mediaShelfCategories...)
+	keys := mediaRowCategories()
 	featured := make([]model.Category, len(keys))
 	var wg sync.WaitGroup
 	for i, key := range keys {
-		limit := mediaShelfLimit
-		if key == mediaHeroCategory {
-			limit = 1
-		}
 		wg.Go(func() {
-			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, limit, 0); err == nil {
+			if cat, err := s.svc.Mediator.Category(r.Context(), lng.Symbol, key, mediaRowLimit(key), 0); err == nil {
 				featured[i] = cat
 			}
 		})

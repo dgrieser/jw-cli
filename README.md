@@ -837,7 +837,10 @@ left out), each once and newest first. That walk reads a few megabytes per
 language, so its result is kept and found anew every three hours during the
 day — at 6, 9, 12, 15, 18 and 21 o'clock, Berlin time — and not at night, in
 the languages read since the update before; another language's is found
-anew when it is next read.
+anew when it is next read. An update runs on the server: it reads jw.org's
+own rows of the page anew too, past the cache, and keeps what it found in the
+cache and the list. It reads only what the media library says of its media —
+titles, dates, where the files are — and downloads none of the media.
 
 Every page is kept as it was left, for the language it was read in. What was
 unfolded, what was open and how far down the page was scrolled are kept in the

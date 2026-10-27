@@ -2,10 +2,10 @@ package server_test
 
 import (
 	"fmt"
-	"time"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The root of the media categories pages with limit and offset as a category

@@ -75,7 +75,8 @@ languages (default E,X), "none" none.
 The latest videos on the media page are jw.org's pick, followed by every
 other video and audio recording the media library published in the last 30
 days, found across all its categories. That list is found anew every three
-hours during the day (6 to 21 o'clock, Berlin time), not at night.
+hours during the day (6 to 21 o'clock, Berlin time), not at night, on the
+server: it fills the cache and the list, and downloads none of the media.
 
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.

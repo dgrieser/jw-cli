@@ -19,7 +19,11 @@ import (
 // so what was found is kept, and found anew every latestEvery during the day,
 // from latestFrom to latestUntil, Berlin time: at 6, 9, 12, 15, 18 and 21
 // o'clock, and not at night. In each language readers read it in since the
-// update before; another one's is found anew when a reader next asks.
+// update before; another one's is found anew when a reader next asks. An
+// update reads jw.org's own rows of the page anew as well, past the cache,
+// which would keep them for a day. It reads what the mediator says of the
+// media — titles, dates, where the files and pictures are — and none of the
+// files.
 
 const (
 	latestDays  = 30
@@ -114,6 +118,12 @@ func (s *Server) latest(ctx context.Context, lang string) []model.MediaItem {
 func (s *Server) findLatest(ctx context.Context, lang string) ([]model.MediaItem, error) {
 	ch := s.latestMedia.flight.DoChan(lang, func() (any, error) {
 		ctx := context.WithoutCancel(ctx)
+		// jw.org's rows, for the cache to have them as current as the rest
+		var wg sync.WaitGroup
+		for _, key := range mediaRowCategories() {
+			wg.Go(func() { s.svc.Mediator.Category(ctx, lang, key, mediaRowLimit(key), 0) })
+		}
+		defer wg.Wait()
 		media, err := s.svc.RecentMedia(ctx, lang, time.Now().AddDate(0, 0, -latestDays))
 		if err != nil {
 			s.logf("latest media: %s: %v", lang, err)
