@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -250,6 +251,46 @@ func (s *Server) apiBibleGallery(w http.ResponseWriter, r *http.Request) {
 	s.bookDocument(w, r, func(r *http.Request, lng model.Language, edition string, book int) (any, error) {
 		return s.svc.BookGallery(r.Context(), lng, edition, book)
 	})
+}
+
+// apiBibleContent is what the publications that go through every bible book
+// say about a book or one chapter of it, as jw bible content -o json prints
+// it: GET /api/v1/bible/content?book=Ge&chapter=3. What could be read is
+// answered even when a publication could not be.
+func (s *Server) apiBibleContent(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.FormValue("book"))
+	if name == "" {
+		badRequest(w, "%s", errMissing("book"))
+		return
+	}
+	chapter, err := intParam(r, "chapter", 0)
+	if err != nil {
+		badRequest(w, "%v", err)
+		return
+	}
+	lng, err := s.language(r)
+	if err != nil {
+		failJSON(w, r, err)
+		return
+	}
+	book, err := s.svc.ParseBook(r.Context(), lng, name)
+	if err != nil {
+		badRequest(w, "%s", err)
+		return
+	}
+	if n := bibleref.Chapters(book); chapter < 0 || chapter > n {
+		badRequest(w, "chapter %d out of range (1-%d)", chapter, n)
+		return
+	}
+	studies, err := s.svc.BookContent(r.Context(), lng, book, chapter)
+	if err != nil && len(studies) == 0 {
+		failJSON(w, r, err)
+		return
+	}
+	if studies == nil {
+		studies = []model.BookStudy{}
+	}
+	writeJSON(w, http.StatusOK, studies)
 }
 
 // bookDocument is the shared shape of the book document endpoints: a book

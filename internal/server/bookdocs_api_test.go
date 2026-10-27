@@ -53,3 +53,66 @@ func TestAPIBookDocuments(t *testing.T) {
 		}
 	}
 }
+
+// contentMux serves Joel's chapter grid and the article of highlights on Joel
+// and Amos; the other publications have nothing on Joel here.
+func contentMux(t *testing.T) *http.ServeMux {
+	mux := wolMux(t)
+	mux.HandleFunc("/en/wol/binav/r1/lp-e/nwtsty/29", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<h1 class="navBook">Joel</h1><ul class="chapters">
+			<li class="chapter"><a href="/en/wol/b/r1/lp-e/nwtsty/29/1">1</a></li>
+			<li class="chapter"><a href="/en/wol/b/r1/lp-e/nwtsty/29/2">2</a></li>
+			<li class="chapter"><a href="/en/wol/b/r1/lp-e/nwtsty/29/3">3</a></li></ul>`))
+	})
+	mux.HandleFunc("/en/wol/d/r1/lp-e/2007722", wolFixture(t, "study_w_joel.html"))
+	return mux
+}
+
+// A chapter's heading unfolds what the publications that go through every
+// book say about the chapter, next to its outline: the parts about it, each
+// linked to its paragraphs, and nothing about the other book an article is on.
+func TestUnfoldChapterContent(t *testing.T) {
+	srv := newTestServer(t, contentMux(t))
+	_, body := get(t, srv, "/unfold/chapter?book=29&chapter=2&lang=en")
+	for _, want := range []string{
+		`Content of Joel 2`,
+		`Highlights (“Jehovah’s Word Is Alive”)`,
+		`/en/wol/d/r1/lp-e/2007722#h=11:0-11:0`,
+		`How has the prophecy about the invasion by insects been fulfilled?`,
+		`Lessons for Us:`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s in %.3000s", want, body)
+		}
+	}
+	for _, unwanted := range []string{"cows of Bashan", "essential for salvation"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("%q is not about Joel 2: %.3000s", unwanted, body)
+		}
+	}
+}
+
+// The same comes from the API, for a chapter or the whole book.
+func TestAPIBibleContent(t *testing.T) {
+	srv := newTestServer(t, contentMux(t))
+	resp, body := get(t, srv, "/api/v1/bible/content?book=Joel&chapter=1&lang=en")
+	var studies []map[string]any
+	if resp.StatusCode != 200 || json.Unmarshal([]byte(body), &studies) != nil || len(studies) != 1 || studies[0]["pub"] != "w" {
+		t.Fatalf("status %d: %.600s", resp.StatusCode, body)
+	}
+	if strings.Contains(body, "How has the prophecy about the invasion") {
+		t.Errorf("a question on chapter 2 in chapter 1: %.600s", body)
+	}
+	if _, body := get(t, srv, "/api/v1/bible/content?book=29&lang=en"); !strings.Contains(body, "How has the prophecy about the invasion") {
+		t.Errorf("the whole book lacks chapter 2: %.600s", body)
+	}
+	for _, path := range []string{
+		"/api/v1/bible/content?lang=en",
+		"/api/v1/bible/content?book=29&chapter=4&lang=en",
+		"/api/v1/bible/content?book=29&chapter=x&lang=en",
+	} {
+		if resp, body := get(t, srv, path); resp.StatusCode != 400 {
+			t.Errorf("%s: status %d: %s", path, resp.StatusCode, body)
+		}
+	}
+}

@@ -282,6 +282,7 @@ jw bible intro Genesis                       # facts, noteworthy facts or transc
 jw bible intro Mt --download -q 480p         # the introduction's video
 jw bible outline Genesis                     # outline of contents (overview for Mt-Acts)
 jw bible gallery Matthew                     # media gallery by chapter; --download pictures
+jw bible content Genesis 3                   # what si, the highlights, the handbook, Insight say on it
 jw bible cited "Jer 31:15"                   # publications citing that verse
 jw bible cited "Mt 24:14" --include w,g      # only Watchtower and Awake!
 jw bible cited "Jer 31:15; Mt 2:18"          # either verse, every page
@@ -720,8 +721,28 @@ pictures and videos chapter by chapter, each with its caption and description.
 the command line (`-o json` for the data). In the reader, the chapter's number in its
 heading unfolds the same for that chapter, as a verse's number unfolds
 what the verse references: the outline's headings that
-cover it, the book's introduction (its video as a link to the introduction's
-page) and the chapter's part of the gallery.
+cover it, the chapter's **content**, the book's introduction (its video as a
+link to the introduction's page) and the chapter's part of the gallery.
+
+The **content** of a chapter is what the publications that go through every
+bible book part by part say about it, each under its name:
+
+- the "Inspired" book (*All Scripture Is Inspired of God and Beneficial*,
+  si): the parts of its summary of the book that cover the chapter;
+- the Watchtower's *Jehovah's Word Is Alive* highlights (2004–2009): the
+  section that covers the chapter, with the questions it answers and the
+  lessons it draws on the chapter's verses, under their subheadings;
+- the Bible handbook (*God's Word Is Truth*, gwt), for the books it has come
+  out with so far: the parts of its summary that cover the chapter;
+- *Insight on the Scriptures*: the lines of its box of the book's highlights
+  that are about the chapter.
+
+Each part links to its paragraphs, which open in place under it like any
+other link to a document. The publications are read by their documents' ids,
+which are the same in every language, so a language that has them gets them;
+a book the handbook has not come out with yet in a language is simply left
+out, and appears once it has. `jw bible content <book> [chapter]` prints the
+same (`-o json` for the data, the whole book without a chapter).
 
 In the web UI, every reading page — an article or publication document, the
 bible reader, the daily text, and the meeting overview, midweek and weekend
@@ -1059,6 +1080,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/bible/intro` | `book`* (name or number), `bible` | `jw bible intro -o json` |
 | `GET /api/v1/bible/outline` | `book`*, `bible` | `jw bible outline -o json` |
 | `GET /api/v1/bible/gallery` | `book`*, `bible` | `jw bible gallery -o json` |
+| `GET /api/v1/bible/content` | `book`*, `chapter` | `jw bible content -o json` |
 | `GET /api/v1/bible/nav` | `bible`, `book` | — (wol `/binav/`: the book grid, with `book` its chapter grid) |
 | `GET /api/v1/bible/verses` | `bible`, `book`, `chapter` | — (the chapter's page: how many verses it has) |
 | `GET /api/v1/bible/reading` | `date`, `weeks` (1-26, default 1) | — (the midweek meeting's bible reading, week by week from the one containing `date`: the chapters the workbook heads each week with; a week whose material is not out yet is left out. The pages bookmark this week's books and chapters with it, and the server reads 13 weeks ahead, once a week, keeping each week's reading for a week) |

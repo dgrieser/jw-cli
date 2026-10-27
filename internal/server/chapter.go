@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/dgrieser/jw-cli/internal/api/wol"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/service"
 	"github.com/dgrieser/jw-cli/internal/subtitles"
@@ -174,7 +175,8 @@ func readingFrame(res service.ReadResult, page *biblePage) (template.HTML, []cru
 
 // chapterStudyView is one part of what the library has on a chapter, as the
 // chapter's number in its heading unfolds it, section by section like a
-// verse's: the headings of the book's outline that cover the chapter, the
+// verse's: the headings of the book's outline that cover the chapter, what
+// the publications that go through every book say about the chapter, the
 // book's introduction — its facts, and the text under its video or what the
 // video says, the video itself a link — or the chapter's part of the book's
 // media gallery. A part the library does not have for the book is left out.
@@ -183,6 +185,9 @@ type chapterStudyView struct {
 
 	OutlineTitle string
 	Outline      []outlineRow
+
+	ContentTitle string
+	Content      []studyView
 
 	Intro      *model.BookIntro
 	IntroHref  string
@@ -197,9 +202,46 @@ type chapterStudyView struct {
 // The order the chapter's sections read in, whichever is ready first.
 const (
 	orderOutline = iota + 1
+	orderContent
 	orderIntro
 	orderGallery
 )
+
+// studyView is what one publication says about a chapter: the document, under
+// the publication's name, and its parts about the chapter.
+type studyView struct {
+	Name, Title, URL string
+	Parts            []studyPartView
+}
+
+// studyPartView is one part of a studyView, or an item of one. Group is the
+// subheading an item stands under, set on the first item under it only.
+type studyPartView struct {
+	Title, Label, URL, Group string
+	Items                    []studyPartView
+}
+
+// studyViews lays out what the publications say about a chapter.
+func studyViews(studies []model.BookStudy, txt *i18n.Messages) []studyView {
+	out := make([]studyView, 0, len(studies))
+	for _, st := range studies {
+		v := studyView{Name: txt.StudyName(st.Pub), Title: st.Title, URL: st.URL}
+		for _, p := range st.Parts {
+			pv := studyPartView{Title: p.Title, Label: p.Label, URL: p.URL}
+			group := ""
+			for _, it := range p.Items {
+				iv := studyPartView{Title: it.Title, Label: it.Label, URL: it.URL}
+				if it.Group != group {
+					iv.Group, group = it.Group, it.Group
+				}
+				pv.Items = append(pv.Items, iv)
+			}
+			v.Parts = append(v.Parts, pv)
+		}
+		out = append(out, v)
+	}
+	return out
+}
 
 // unfoldChapter streams what the library has on a chapter, the way
 // /unfold/verse streams a verse: GET /unfold/chapter?bible=…&book=…&chapter=….
@@ -278,6 +320,16 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	}
+	wg.Go(func() {
+		studies, err := s.svc.BookContent(ctx, lng, book, chapter)
+		if err != nil {
+			fail(err)
+		}
+		if len(studies) > 0 {
+			title := fmt.Sprintf(txt.ContentOf, fmt.Sprintf("%s %d", page.BookName, chapter))
+			send("chaptercontent", orderContent, chapterStudyView{biblePage: page, ContentTitle: title, Content: studyViews(studies, txt)})
+		}
+	})
 	if has(wol.BookIntroduction) {
 		wg.Go(func() {
 			intro, err := s.svc.BookIntro(ctx, lng, edition, book)

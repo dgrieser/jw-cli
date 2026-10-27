@@ -723,12 +723,22 @@ html[data-glossary="off"] .document a.gloss { background: none; pointer-events: 
 /* a reading: one verse per row, so each can be unfolded on its own */
 .reading .passage { margin-bottom: 2rem; }
 .reading .passage > h2 { margin-top: 0.5rem; }
-/* what a chapter's heading unfolds: its outline, the book's introduction,
-   its media, as sections like a verse's */
+/* what a chapter's heading unfolds: its outline, what the publications that
+   go through every book say on it, the book's introduction, its media, as
+   sections like a verse's */
 .cs-intro h3 { font-size: 1rem; margin: 1rem 0 0.4rem; }
 .cs-intro .book-facts { margin-bottom: 0.75rem; }
 .cs-outline.book-outline { max-width: none; }
 .cs-outline .bo-item { margin: 0.15rem 0; }
+/* the publications one after the other, each under its name; an item's
+   subheading ("Lessons for us") muted above the items it heads */
+.cs-content.book-outline { max-width: none; }
+.cs-content .study-pub { font-size: 1rem; margin: 1rem 0 0.4rem; }
+.cs-content .study-pub:first-child { margin-top: 0.2rem; }
+.cs-content .study-name { display: block; color: var(--muted); font-size: 0.8rem; font-weight: 500; }
+.cs-content .study-pub a { color: var(--ink); text-decoration: none; }
+.cs-content .study-pub a:hover { color: var(--accent); }
+.cs-content .study-group { margin: 0.4rem 0 0.1rem; color: var(--muted); font-size: 0.85em; font-style: italic; }
 .cs-gallery .gallery-grid { padding: 0; margin: 0 0 0.5rem; }
 .cs-gallery .gallery-grid li { margin: 0; }
 /* on from a reading: all of a chapter shown in part, the chapters around it,

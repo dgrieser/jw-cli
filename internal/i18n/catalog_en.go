@@ -30,7 +30,13 @@ var en = Messages{
 	NoCrossRefs:  "No marginal references found.",
 	NoResearch:   "No research guide entries found.",
 	// NotInEditions takes the reference and the editions.
-	NotInEditions: "%s is not available in: %s",
+	NotInEditions:   "%s is not available in: %s",
+	ContentOf:       "Content of %s",
+	StudyInspired:   "“Inspired” book",
+	StudyHighlights: "Highlights (“Jehovah’s Word Is Alive”)",
+	StudyHandbook:   "Bible handbook",
+	StudyInsight:    "Insight on the Scriptures",
+	NoContent:       "None of the publications has anything on it.",
 
 	LabelAltText:       "Alt text",
 	LabelCredit:        "Credit",

@@ -64,6 +64,16 @@ type Messages struct {
 	// NotInEditions takes a bible reference and the bible editions that do not
 	// carry it, which --bible-all passes over instead of failing on.
 	NotInEditions string
+	// ContentOf heads what the publications that go through every bible book
+	// say about a chapter, part by part; it takes the chapter ("Genesis 3"),
+	// or the book for all of it. Study* name those publications, and
+	// NoContent says none of them has anything on it.
+	ContentOf       string
+	StudyInspired   string
+	StudyHighlights string
+	StudyHandbook   string
+	StudyInsight    string
+	NoContent       string
 
 	// --- image metadata ---------------------------------------------------
 	// The words an image carries in the page that references it. Printed with
@@ -525,4 +535,21 @@ func (m *Messages) plural(n int, one, many string) string {
 		return one
 	}
 	return many
+}
+
+// StudyName names one of the publications that go through every bible book,
+// by the key a study carries for it (model.BookStudy.Pub); empty for any
+// other.
+func (m *Messages) StudyName(pub string) string {
+	switch pub {
+	case "si":
+		return m.StudyInspired
+	case "w":
+		return m.StudyHighlights
+	case "gwt":
+		return m.StudyHandbook
+	case "it":
+		return m.StudyInsight
+	}
+	return ""
 }
