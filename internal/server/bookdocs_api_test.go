@@ -68,25 +68,16 @@ func contentMux(t *testing.T) *http.ServeMux {
 	return mux
 }
 
-// A chapter's heading unfolds, next to its outline, a heading for what the
-// publications that go through every book say about the chapter, which loads
-// once opened: the parts about the chapter, each linked to its paragraphs,
-// each question with its answer, and nothing about the other book an article
-// is on.
+// A chapter's heading unfolds, next to its outline and the same way, what
+// the publications that go through every book say about the chapter: the
+// parts about it, each linked to its paragraphs, each question with its
+// answer, and nothing about the other book an article is on.
 func TestUnfoldChapterContent(t *testing.T) {
 	srv := newTestServer(t, contentMux(t))
 	_, body := get(t, srv, "/unfold/chapter?book=29&chapter=2&lang=en")
-	lazy := `data-lazy=\"/unfold/chapter?bible=nwtsty\u0026amp;book=29\u0026amp;chapter=2\u0026amp;part=content\"\u003e\u003csummary\u003eContent of Joel 2\u003c/summary\u003e`
-	if !strings.Contains(body, lazy) {
-		t.Errorf("no heading to load the content from: %.3000s", body)
-	}
-	if strings.Contains(body, "invasion by insects") {
-		t.Errorf("the content came with the chapter: %.3000s", body)
-	}
-
-	_, body = get(t, srv, "/unfold/chapter?bible=nwtsty&book=29&chapter=2&part=content&lang=en")
 	for _, want := range []string{
-		`"unwrap":true`,
+		`\u003csummary\u003eContent 2\u003c/summary\u003e`,
+		`"order":2`,
 		`Highlights (“Jehovah’s Word Is Alive”)`,
 		`/en/wol/d/r1/lp-e/2007722#h=11:0-11:0`,
 		`How has the prophecy about the invasion by insects been fulfilled?`,
@@ -97,9 +88,9 @@ func TestUnfoldChapterContent(t *testing.T) {
 			t.Errorf("missing %s in %.3000s", want, body)
 		}
 	}
-	for _, unwanted := range []string{"cows of Bashan", "essential for salvation", "Introduction"} {
+	for _, unwanted := range []string{"cows of Bashan", "essential for salvation", "data-lazy"} {
 		if strings.Contains(body, unwanted) {
-			t.Errorf("%q is not the content of Joel 2: %.3000s", unwanted, body)
+			t.Errorf("%q in the content of Joel 2: %.3000s", unwanted, body)
 		}
 	}
 }

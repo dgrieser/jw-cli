@@ -281,6 +281,7 @@ var de = Messages{
 	UINextBook:             "Nächstes Buch",
 	UIWholeChapter:         "Ganzes Kapitel",
 	UIWatchVideo:           "Video ansehen",
+	UIContent:              "Inhalt",
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
 	UIFontReset:            "Normale Schriftgröße",

@@ -738,9 +738,9 @@ bible book part by part say about it, each under its name:
 - *Insight on the Scriptures*: the lines of its box of the book's highlights
   that are about the chapter.
 
-The chapter's heading shows the content as a closed heading of its own; what
-is under it is read only once it is opened — or ahead at night, for the
-week's Bible reading (below). Each part links to its paragraphs, which open
+It comes with the rest of what the chapter's heading unfolds, as the outline
+does, and is read ahead at night for the week's Bible reading (below). Each
+part links to its paragraphs, which open
 in place under it like any other link to a document. The publications are read by their documents' ids,
 which are the same in every language, so a language that has them gets them;
 a book the handbook has not come out with yet in a language is simply left
@@ -847,7 +847,7 @@ the cache: every chapter of it is unfolded a level deep, as `jw bible read
 --unfold 1` does — the study notes, footnotes, indexes and marginal references
 of each verse with the verses they cite, who quotes the verse, the other
 translations and the glossary entries of its words — and the content its
-heading opens, read first, being a few documents only. That reads thousands of
+heading unfolds, read first, being a few documents only. That reads thousands of
 pages, so it asks upstream one page every 3 seconds, gives way to readers, and
 runs only between 1 and 6 o'clock, the server's local time (`TZ`); a night that
 does not see it through has the next one go on, what was read already coming

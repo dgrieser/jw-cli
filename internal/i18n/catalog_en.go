@@ -281,6 +281,7 @@ var en = Messages{
 	UINextBook:             "Next book",
 	UIWholeChapter:         "Whole chapter",
 	UIWatchVideo:           "Watch the video",
+	UIContent:              "Content",
 	UIFontSmaller:          "Smaller text",
 	UIFontLarger:           "Larger text",
 	UIFontReset:            "Default text size",

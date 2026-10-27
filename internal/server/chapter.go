@@ -187,7 +187,6 @@ type chapterStudyView struct {
 	Outline      []outlineRow
 
 	ContentTitle string
-	ContentLazy  string // where the content loads from once its heading is opened
 	Content      []studyView
 
 	Intro      *model.BookIntro
@@ -275,11 +274,6 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page.BookNav, page.BookName = &nav, s.svc.BookTable(ctx, lng).Name(book)
-	contentTitle := fmt.Sprintf(txt.ContentOf, fmt.Sprintf("%s %d", page.BookName, chapter))
-	if r.FormValue("part") == partContent {
-		s.unfoldChapterContent(r, ev, lng, page, book, chapter, contentTitle, txt)
-		return
-	}
 
 	var mu sync.Mutex
 	var failed []string
@@ -327,10 +321,16 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 			}
 		})
 	}
-	// the content reads a few documents of four publications: a heading
-	// that loads them once opened
-	send("chaptercontentlazy", orderContent, chapterStudyView{biblePage: page, ContentTitle: contentTitle,
-		ContentLazy: contentLazy(edition, book, chapter)})
+	wg.Go(func() {
+		studies, err := s.svc.BookContent(ctx, lng, book, chapter)
+		if err != nil {
+			fail(err)
+		}
+		if len(studies) > 0 {
+			send("chaptercontent", orderContent, chapterStudyView{biblePage: page,
+				ContentTitle: chapterTitle(txt.UIContent, chapter), Content: studyViews(studies, txt)})
+		}
+	})
 	if has(wol.BookIntroduction) {
 		wg.Go(func() {
 			intro, err := s.svc.BookIntro(ctx, lng, edition, book)
@@ -378,42 +378,6 @@ func (s *Server) unfoldChapter(w http.ResponseWriter, r *http.Request) {
 	ev.finish(r, note, 0, nil, txt)
 }
 
-// partContent asks /unfold/chapter for the chapter's content alone: what its
-// heading, opened, loads.
-const partContent = "content"
-
-// contentLazy is where a chapter's content loads from, without the language,
-// which the page adds.
-func contentLazy(edition string, book, chapter int) string {
-	return "/unfold/chapter?" + url.Values{
-		"bible": {edition}, "book": {strconv.Itoa(book)}, "chapter": {strconv.Itoa(chapter)}, "part": {partContent},
-	}.Encode()
-}
-
-// unfoldChapterContent streams a chapter's content into the heading the
-// page shows for it. A chapter none of the publications has anything on is
-// no section, and the heading goes; what could not be read is a note under
-// what could, or the failure when nothing could.
-func (s *Server) unfoldChapterContent(r *http.Request, ev *eventStream, lng model.Language, page biblePage, book, chapter int, title string, txt *i18n.Messages) {
-	studies, err := s.svc.BookContent(r.Context(), lng, book, chapter)
-	if len(studies) == 0 {
-		ev.finish(r, "", 0, err, txt)
-		return
-	}
-	var buf bytes.Buffer
-	v := chapterStudyView{biblePage: page, ContentTitle: title, Content: studyViews(studies, txt)}
-	if err := s.templates["bible"].ExecuteTemplate(&buf, "chaptercontent", v); err != nil {
-		ev.finish(r, "", 0, err, txt)
-		return
-	}
-	ev.send(streamEvent{Type: "section", HTML: buf.String(), Order: orderContent, Unwrap: true})
-	note := ""
-	if err != nil {
-		note = readable(err, txt)
-	}
-	ev.finish(r, note, 0, nil, txt)
-}
-
 // headingChapter is the chapter a gallery's heading names last: "Matthew 2".
 func headingChapter(h string) int {
 	f := strings.Fields(h)
@@ -424,8 +388,9 @@ func headingChapter(h string) int {
 	return n
 }
 
-// chapterTitle is the title of a book's outline or gallery as the part of it
-// one chapter shows: "Overview of Matthew" becomes "Overview of Matthew 19".
+// chapterTitle is the title of a book's outline or gallery, or of the
+// content, as the part of it one chapter shows: "Overview of Matthew" becomes
+// "Overview of Matthew 19", "Content" "Content 19".
 // The book's introduction stays the book's.
 func chapterTitle(title string, chapter int) string {
 	title = strings.TrimSpace(title)

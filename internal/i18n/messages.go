@@ -447,6 +447,10 @@ type Messages struct {
 	// book introduction's video.
 	UIWholeChapter string
 	UIWatchVideo   string
+	// UIContent heads, with the chapter's number after it, what the
+	// publications that go through every bible book say about a chapter, as
+	// its heading unfolds it next to the outline.
+	UIContent string
 	// UIFont* are the text size controls of every page.
 	UIFontSmaller string
 	UIFontLarger  string
