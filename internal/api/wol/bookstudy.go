@@ -106,7 +106,7 @@ func studyDocs(pub string, book int) []studyDoc {
 
 // StudyPubs are the publications BookStudies reads, in the order a chapter
 // lists them.
-var StudyPubs = []string{model.StudyHighlights, model.StudyInsight, model.StudyInspired, model.StudyHandbook}
+var StudyPubs = []string{model.StudyHandbook, model.StudyHighlights, model.StudyInsight, model.StudyInspired}
 
 // BookStudies reads what one of the publications that go through every bible
 // book (StudyPubs) says about book, part by part: one study for each of its

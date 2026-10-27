@@ -296,6 +296,8 @@ func newBibleContentCmd(a *app.App) *cobra.Command {
 book say about a book or, with a chapter, about that chapter, in their own
 words, each headed by its name and the chapter ("Highlights – Genesis 3"):
 
+  - Handbook: the parts of the Bible handbook's ("God's Word Is Truth")
+    summary that cover the chapter, for the books it has come out with so far
   - Highlights: the Watchtower's "Jehovah's Word Is Alive" section on the
     chapter, with the questions it answers on the chapter's verses and their
     answers, and the lessons it draws on them
@@ -303,8 +305,6 @@ words, each headed by its name and the chapter ("Highlights – Genesis 3"):
     highlights that are about the chapter
   - Inspired: the parts of the "Inspired" book's ("All Scripture Is Inspired
     of God and Beneficial") summary of the book that cover the chapter
-  - Handbook: the parts of the Bible handbook's ("God's Word Is Truth")
-    summary that cover the chapter, for the books it has come out with so far
 
 Each heading links to its document in the library. The web server shows the
 same as the "Content" section a chapter's heading unfolds.

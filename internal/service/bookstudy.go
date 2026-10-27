@@ -15,11 +15,11 @@ import (
 )
 
 // BookContent is what the publications that go through every bible book part
-// by part say about a book (chapter 0) or one chapter of it: the Watchtower's
-// highlights, Insight's box of highlights, the "Inspired" book's study and the
-// Bible handbook's summary, in that order, each with the parts about the
-// chapter. A publication that has nothing on it is left out; what could be
-// read comes back with the error of what could not.
+// by part say about a book (chapter 0) or one chapter of it: the Bible
+// handbook's summary, the Watchtower's highlights, Insight's box of
+// highlights and the "Inspired" book's study, in that order, each with the
+// parts about the chapter. A publication that has nothing on it is left out;
+// what could be read comes back with the error of what could not.
 func (s *Service) BookContent(ctx context.Context, lng model.Language, book, chapter int) ([]model.BookStudy, error) {
 	if book < 1 || book > 66 {
 		return nil, fmt.Errorf("invalid book %d (want 1-66)", book)
