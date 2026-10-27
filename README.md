@@ -735,9 +735,10 @@ the verses they cite unfolding like any other:
   Word Is Truth*, gwt) summary that cover the chapter, for the books it has
   come out with so far;
 - **Höhepunkte** (Highlights): the section of the Watchtower's *Jehovah's
-  Word Is Alive* highlights (2004–2009) that covers the chapter, with the
-  questions it answers on the chapter's verses and their answers, and the
-  lessons it draws on them, under their subheadings;
+  Word Is Alive* highlights (2004–2009) that covers the chapter: its heading
+  and its overview of what it goes through, then the questions it answers on
+  the chapter's verses with their answers, and the lessons it draws on them,
+  under their subheadings;
 - **Einsichten** (Insight): the lines of *Insight on the Scriptures'* box of
   the book's highlights that are about the chapter;
 - **Inspiriert** (Inspired): the paragraphs of the "Inspired" book's (*All

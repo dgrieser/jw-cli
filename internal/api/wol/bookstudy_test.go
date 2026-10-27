@@ -157,11 +157,16 @@ func TestBookStudyInsightNewLayout(t *testing.T) {
 }
 
 // A part comes with its paragraphs as the document has them: a section's
-// heading with its verses, a question with its answer.
+// heading with its verses and its overview, a question with its answer.
 func TestBookStudyKeepsParagraphs(t *testing.T) {
 	joel := readStudies(t, model.StudyHighlights, 29)[0].Parts[0]
 	if !strings.Contains(joel.HTML, `class="ss"`) || !strings.Contains(joel.HTML, "Joel 1:1–3:21") {
 		t.Errorf("section heading: %s", joel.HTML)
+	}
+	// with its overview, but not its questions twice
+	if !strings.Contains(joel.HTML, "Invasion by the caterpillar") || strings.Contains(joel.HTML, "Scriptural Questions") ||
+		strings.Contains(joel.HTML, `data-pid="10"`) {
+		t.Errorf("section overview: %s", joel.HTML)
 	}
 	if it := joel.Items[0]; !strings.HasPrefix(it.HTML, `<p class="sb" data-pid="10"`) || !strings.Contains(it.HTML, "Babylon the Great") {
 		t.Errorf("question and answer: %s", it.HTML)
