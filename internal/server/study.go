@@ -7,6 +7,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/bibleref"
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -20,6 +21,9 @@ import (
 // slowly (studyPace), and only at night (studyFrom to studyUntil, the
 // server's local time): a night that does not see it through has the next
 // one go on where it stopped, what was read already coming from the cache.
+// The content of each chapter — what the "Inspired" book, the highlights,
+// the Bible handbook and Insight say on it, which its heading loads once
+// opened — is read first, being a few documents only.
 
 // DefaultStudyLangs are the languages the week's reading is studied in when
 // Config names none: English and German.
@@ -86,6 +90,31 @@ func sleepUntil(ctx context.Context, t time.Time) bool {
 	}
 }
 
+// studyContent reads the content of each chapter of a week's reading ahead,
+// once a week and language; it reports false when the night ended first.
+func (s *Server) studyContent(ctx context.Context, lng model.Language, rd service.WeekReading) bool {
+	key := fmt.Sprintf("studiedcontent1-%s-%d-%d", lng.Locale, rd.Year, rd.Week)
+	var done bool
+	if s.svc.Cache.Get(key, &done) && done {
+		return true
+	}
+	read := true
+	for _, ch := range rd.Chapters {
+		_, err := s.svc.BookContent(ctx, lng, ch.Book, ch.Chapter)
+		if ctx.Err() != nil {
+			return false
+		}
+		if err != nil {
+			s.logf("study: %s content of %d:%d: %v", lng.Symbol, ch.Book, ch.Chapter, err)
+			read = false
+		}
+	}
+	if read {
+		s.svc.Cache.Put(key, true)
+	}
+	return true
+}
+
 // studyWeek unfolds the chapters of the reading of the week containing date
 // in every language configured that has not had them unfolded yet. A week
 // whose reading is not out, or that has none, has nothing to study.
@@ -99,6 +128,9 @@ func (s *Server) studyWeek(ctx context.Context, date time.Time) {
 		rd, err := s.svc.WeekReading(ctx, lng, date)
 		if err != nil {
 			continue
+		}
+		if !s.studyContent(ctx, lng, rd) {
+			return
 		}
 		key := fmt.Sprintf("studied1-%s-%d-%d", lng.Locale, rd.Year, rd.Week)
 		var done bool

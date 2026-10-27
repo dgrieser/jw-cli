@@ -266,6 +266,23 @@
   <p class="bo-item ol-d{{.Depth}}"><a href="{{.Href}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
   {{- end}}
 </div></details>{{end}}
+{{define "chaptercontent"}}<details class="section"><summary>{{.ContentTitle}}</summary><div class="section-body cs-content book-outline">
+  {{- range .Content}}
+  <h3 class="study-pub"><span class="study-name">{{.Name}}</span> <a href="{{.URL}}">{{.Title}}</a></h3>
+  {{- range .Parts}}
+  <p class="bo-item ol-d0"><a href="{{.URL}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
+  {{- range .Items}}
+  {{- if .Group}}
+  <p class="study-group ol-d1">{{.Group}}</p>
+  {{- end}}
+  <p class="bo-item ol-d1"><a href="{{.URL}}">{{if .Label}}<span class="ol-ref">{{.Label}}</span> {{end}}<span class="ol-title">{{.Title}}</span></a></p>
+  {{- if .Text}}
+  <p class="study-text ol-d1">{{.Text}}</p>
+  {{- end}}
+  {{- end}}
+  {{- end}}
+  {{- end}}
+</div></details>{{end}}
 {{define "chapterintro"}}{{with .Intro}}<details class="section"><summary>{{.Title}}</summary><div class="section-body cs-intro">
   {{- if $.HasVideo}}<p><a class="btn" href="{{$.IntroHref}}">▶ {{$.T.UIWatchVideo}}</a></p>{{end}}
   {{- if .Facts}}

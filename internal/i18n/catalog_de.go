@@ -30,7 +30,13 @@ var de = Messages{
 	NoCrossRefs:  "Keine Querverweise gefunden.",
 	NoResearch:   "Keine Einträge im Forschungsverzeichnis gefunden.",
 	// NotInEditions nimmt die Bibelstelle und die Ausgaben.
-	NotInEditions: "%s ist nicht enthalten in: %s",
+	NotInEditions:   "%s ist nicht enthalten in: %s",
+	ContentOf:       "Inhalt von %s",
+	StudyInspired:   "„Inspiriert“-Buch",
+	StudyHighlights: "Höhepunkte („Das Wort Jehovas ist lebendig“)",
+	StudyHandbook:   "Handbuch zur Bibel",
+	StudyInsight:    "Einsichten über die Heilige Schrift",
+	NoContent:       "Keine der Publikationen hat etwas dazu.",
 
 	LabelAltText:       "Bildbeschreibung",
 	LabelCredit:        "Bildnachweis",
@@ -275,6 +281,7 @@ var de = Messages{
 	UINextBook:             "Nächstes Buch",
 	UIWholeChapter:         "Ganzes Kapitel",
 	UIWatchVideo:           "Video ansehen",
+	UIContent:              "Inhalt",
 	UIFontSmaller:          "Kleinere Schrift",
 	UIFontLarger:           "Größere Schrift",
 	UIFontReset:            "Normale Schriftgröße",

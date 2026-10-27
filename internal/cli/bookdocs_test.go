@@ -151,3 +151,40 @@ func TestBibleGallery(t *testing.T) {
 		}
 	}
 }
+
+// What the publications say about a chapter: each one under its name, the
+// parts about the chapter with their items under their subheadings. A book
+// named over several words still takes the chapter after it.
+func TestBibleContent(t *testing.T) {
+	mux := bibleMux(t)
+	mux.HandleFunc("/en/wol/d/r1/lp-e/1101990062", wolFixture(t, "study_si_gen.html"))
+	mux.HandleFunc("/en/wol/d/r1/lp-e/2007722", wolFixture(t, "study_w_joel.html"))
+	out, err := runCmd(t, mux, "bible", "content", "-l", "en", "-o", "text", "Genesis", "3")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{
+		"Content of Genesis 3",
+		"“Inspired” book",
+		"Sin and death enter the world; “seed” foretold as deliverer (3:1–5:5)",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Deluge") {
+		t.Errorf("a part not about chapter 3:\n%s", out)
+	}
+	out, err = runCmd(t, mux, "bible", "content", "-l", "en", "-o", "text", "Joel", "2")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{"Scriptural Questions Answered:", "2:32 — What does it mean to ‘call on the name of Jehovah’?", "To call on God’s name means to know that name"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if _, err := runCmd(t, mux, "bible", "content", "-l", "en", "Joel", "9"); err == nil {
+		t.Error("Joel has no chapter 9")
+	}
+}

@@ -2,6 +2,8 @@
 // consumed by the CLI/TUI layers. It must not depend on any api package.
 package model
 
+import "slices"
+
 // Language describes one content language, bridging the two code systems the
 // sites use: JW/MEPS symbols ("E", "X") in API parameters and BCP-47 locales
 // ("en", "de") in URL paths.
@@ -324,6 +326,51 @@ type OutlineItem struct {
 	Label string `json:"label,omitempty"` // the verses as the outline names them: "3-31", "1:18–3:17"
 	Start int    `json:"start"`           // first verse covered, BBCCCVVV
 	End   int    `json:"end"`             // last verse covered, BBCCCVVV
+}
+
+// The publications that go through every bible book part by part, as
+// BookStudy.Pub names them.
+const (
+	StudyInspired   = "si"  // "All Scripture Is Inspired of God and Beneficial": the book's contents
+	StudyHighlights = "w"   // The Watchtower's "Jehovah's Word Is Alive" highlights
+	StudyHandbook   = "gwt" // the Bible handbook's summary, book by book as it comes out
+	StudyInsight    = "it"  // Insight's box of the book's highlights
+)
+
+// BookStudy is what one publication says about a bible book, part by part —
+// or about one chapter of it, the parts that are about that chapter.
+type BookStudy struct {
+	Pub   string      `json:"pub"`   // StudyInspired, StudyHighlights, StudyHandbook or StudyInsight
+	Book  int         `json:"book"`  // 1-66
+	Title string      `json:"title"` // the document's own: "Highlights From the Book of Genesis—I"
+	URL   string      `json:"url"`
+	Parts []StudyPart `json:"parts"`
+}
+
+// StudyPart is one part of a BookStudy: a section of a summary, a heading of
+// Insight's box, a question answered on a verse or a lesson drawn from it.
+type StudyPart struct {
+	Title string `json:"title"`
+	Label string `json:"label,omitempty"` // the verses as the publication writes them: "1:1–2:25", "3:18, 19; 5:5"
+	// Text is what the part says past its title: the answer to the question
+	// it asks, the rest of the lesson it draws.
+	Text string `json:"text,omitempty"`
+	// Group is the subheading the part stands under: "Lessons for Us:".
+	Group string `json:"group,omitempty"`
+	// Chapters are the chapters the part is about; a part that names no
+	// verses of its own is about those of the part it stands under.
+	Chapters []int       `json:"chapters,omitempty"`
+	URL      string      `json:"url,omitempty"` // the paragraphs in the document: ...#h=15:0-17:0
+	Items    []StudyPart `json:"items,omitempty"`
+}
+
+// About reports whether the part is about chapter, by its own verses or,
+// naming none, by those of the part it stands under (in).
+func (p StudyPart) About(chapter int, in []int) bool {
+	if len(p.Chapters) == 0 {
+		return slices.Contains(in, chapter)
+	}
+	return slices.Contains(p.Chapters, chapter)
 }
 
 // StudyNote is one study note attached to a verse (nwtsty).

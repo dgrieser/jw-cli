@@ -4,6 +4,7 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/download"
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
@@ -284,4 +286,127 @@ func galleryResults(g model.BookGallery) []model.Result {
 		}
 	}
 	return out
+}
+
+func newBibleContentCmd(a *app.App) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "content <book> [chapter]",
+		Short: "Show what the publications that go through every bible book say about a chapter",
+		Long: `Show, part by part, what the publications that go through every bible
+book say about a book or, with a chapter, about that chapter:
+
+  - the "Inspired" book ("All Scripture Is Inspired of God and Beneficial"):
+    the parts of its summary of the book that cover the chapter
+  - the Watchtower's "Jehovah's Word Is Alive" highlights: the section on the
+    chapter, with the questions it answers on the chapter's verses and their
+    answers, and the lessons it draws on them
+  - the Bible handbook ("God's Word Is Truth"), for the books it has come
+    out with so far: the parts of its summary that cover the chapter
+  - Insight on the Scriptures: the lines of its box of the book's highlights
+    that are about the chapter
+
+Each part links to its paragraphs in the library. The web server shows the
+same as the "Content" section a chapter's heading unfolds.
+
+Examples:
+  jw bible content Genesis 3
+  jw bible content -l de "1. Mose" 3
+  jw bible content Ezekiel 37 -o json
+  jw bible content Jude`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			format, err := a.Format()
+			if err != nil {
+				return err
+			}
+			chapter := 0
+			if len(args) > 1 {
+				if n, err := strconv.Atoi(args[len(args)-1]); err == nil {
+					chapter, args = n, args[:len(args)-1]
+				}
+			}
+			lng, book, err := bookArg(cmd, a, args)
+			if err != nil {
+				return err
+			}
+			studies, err := a.Service().BookContent(ctx, lng, book, chapter)
+			if err != nil && len(studies) == 0 {
+				return err
+			}
+			if err != nil {
+				fmt.Fprintln(a.Stderr, "warning:", err)
+			}
+			if format == render.JSON {
+				if studies == nil {
+					studies = []model.BookStudy{}
+				}
+				return a.WriteJSON(studies)
+			}
+			name := a.Service().BookTable(ctx, lng).Name(book)
+			if chapter > 0 {
+				name = fmt.Sprintf("%s %d", name, chapter)
+			}
+			body, err := render.Render(contentHTML(studies, name, a.Text()), format, a.RenderOptions(a.HTTP().Base.WOL))
+			if err != nil {
+				return err
+			}
+			return a.WriteMarkdown(body)
+		},
+	}
+	return cmd
+}
+
+// contentHTML lays out what the publications say about a chapter as one
+// document: each publication under its name, its document linked, then its
+// parts with their items under their subheadings, each question with its
+// answer.
+func contentHTML(studies []model.BookStudy, name string, txt *i18n.Messages) string {
+	esc := htmlpkg.EscapeString
+	link := func(href, text string) string {
+		return `<a href="` + esc(href) + `">` + esc(text) + `</a>`
+	}
+	var b strings.Builder
+	b.WriteString("<h1>" + esc(fmt.Sprintf(txt.ContentOf, name)) + "</h1>")
+	if len(studies) == 0 {
+		b.WriteString("<p>" + esc(txt.NoContent) + "</p>")
+	}
+	for _, st := range studies {
+		b.WriteString("<h2>" + esc(txt.StudyName(st.Pub)) + "</h2>")
+		b.WriteString("<p>" + link(st.URL, st.Title) + "</p>")
+		for _, p := range st.Parts {
+			b.WriteString("<h3>" + link(p.URL, p.Title))
+			if p.Label != "" {
+				b.WriteString(" (" + esc(p.Label) + ")")
+			}
+			b.WriteString("</h3>")
+			group, open := "", false
+			for _, it := range p.Items {
+				if it.Group != group || !open {
+					if open {
+						b.WriteString("</ul>")
+					}
+					if it.Group != "" {
+						b.WriteString("<p><em>" + esc(it.Group) + "</em></p>")
+					}
+					b.WriteString("<ul>")
+					group, open = it.Group, true
+				}
+				b.WriteString("<li>")
+				if it.Label != "" {
+					b.WriteString(link(it.URL, it.Label) + " — " + esc(it.Title))
+				} else {
+					b.WriteString(link(it.URL, it.Title))
+				}
+				if it.Text != "" {
+					b.WriteString("<br>" + esc(it.Text))
+				}
+				b.WriteString("</li>")
+			}
+			if open {
+				b.WriteString("</ul>")
+			}
+		}
+	}
+	return b.String()
 }
