@@ -72,6 +72,11 @@ when it is read. It asks wol.jw.org one page every few seconds; a night that
 does not see it through has the next one go on. --study-langs names the
 languages (default E,X), "none" none.
 
+The latest videos on the media page are jw.org's pick, followed by every
+other video and audio recording the media library published in the last 30
+days, found across all its categories. That list is found anew every three
+hours during the day (6 to 21 o'clock, Berlin time), not at night.
+
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
 
@@ -139,6 +144,7 @@ Examples:
 			fmt.Fprintf(a.Stderr, "listening on http://%s\n", hostForURL(ln.Addr().String(), host))
 			go srv.Warm(ctx)
 			go srv.Study(ctx)
+			go srv.Latest(ctx)
 
 			select {
 			case err := <-errc:
