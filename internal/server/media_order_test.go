@@ -51,8 +51,9 @@ func TestUIMediaCategorySubcategoriesFirst(t *testing.T) {
 }
 
 // The latest videos are jw.org's pick and, after it, what every category
-// published in the last 30 days, each once, newest first — the videos with
-// audio descriptions left out, as they are the library's videos again.
+// published in the last 30 days, each recording once, newest first — the
+// videos with audio descriptions left out, as they are the library's videos
+// again.
 func TestUIMediaLatestFromEveryCategory(t *testing.T) {
 	day := func(n int) string { return time.Now().AddDate(0, 0, -n).UTC().Format(time.RFC3339) }
 	item := func(lank, title string, days int) string {
@@ -82,7 +83,11 @@ func TestUIMediaLatestFromEveryCategory(t *testing.T) {
 	]}}`)
 	cat("/Audio", `{"category": {"key": "Audio", "name": "Audio", "type": "container", "subcategories": [
 		{"key": "AudioOriginalSongs", "name": "Songs", "type": "ondemand", "media": [
-			{"languageAgnosticNaturalKey": "pub-song_1_AUDIO", "type": "audio", "title": "New Song", "firstPublished": "`+day(5)+`", "files": []}
+			{"languageAgnosticNaturalKey": "pub-song_1_AUDIO", "type": "audio", "title": "New Song", "firstPublished": "`+day(5)+`", "files": []},
+			{"languageAgnosticNaturalKey": "pub-pick_1_AUDIO", "type": "audio", "title": "Picked Video", "firstPublished": "`+day(2)+`", "files": []}
+		]},
+		{"key": "SJJChorus", "name": "Chorus", "type": "ondemand", "media": [
+			{"languageAgnosticNaturalKey": "pub-chorus_1_AUDIO", "type": "audio", "title": "New Song", "firstPublished": "`+day(5)+`", "files": []}
 		]}
 	]}}`)
 	srv := newTestServer(t, mux)
@@ -94,7 +99,8 @@ func TestUIMediaLatestFromEveryCategory(t *testing.T) {
 	if talk < 0 || pick < 0 || song < 0 || talk > pick || pick > song {
 		t.Errorf("want the talk, the pick and the song, newest first (%d %d %d):\n%s", talk, pick, song, body)
 	}
-	for _, title := range []string{">Newest Talk<", ">Picked Video<"} {
+	// the recording of a video, and a song in another album, come once
+	for _, title := range []string{">Newest Talk<", ">Picked Video<", ">New Song<"} {
 		if n := strings.Count(body, title); n != 1 {
 			t.Errorf("%s %d times", title, n)
 		}
