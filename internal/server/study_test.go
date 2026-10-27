@@ -16,7 +16,7 @@ import (
 )
 
 // The week's reading is studied once: its chapters are read with what they
-// cite, and a second night of the same week asks nothing.
+// cite and their content, and a second night of the same week asks nothing.
 func TestStudyReadsTheWeeksChaptersOnce(t *testing.T) {
 	mux := wolMux(t)
 	mux.HandleFunc("/en/wol/meetings/r1/lp-e/2026/43", func(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +52,11 @@ func TestStudyReadsTheWeeksChaptersOnce(t *testing.T) {
 	mu.Unlock()
 	if !strings.Contains(read, "/en/wol/b/r1/lp-e/nwtsty/43/3") {
 		t.Errorf("the week's chapter was not read:\n%s", read)
+	}
+	// and what the publications say on it, which its heading loads: the
+	// "Inspired" book's study of John among them
+	if !strings.Contains(read, "/en/wol/d/r1/lp-e/1101990104") {
+		t.Errorf("the chapter's content was not read:\n%s", read)
 	}
 
 	srv.StudyWeek(context.Background(), date)

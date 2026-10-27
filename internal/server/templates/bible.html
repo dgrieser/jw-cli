@@ -266,6 +266,7 @@
   <p class="bo-item ol-d{{.Depth}}"><a href="{{.Href}}"><span class="ol-title">{{.Title}}</span>{{if .Label}} <span class="ol-ref">({{.Label}})</span>{{end}}</a></p>
   {{- end}}
 </div></details>{{end}}
+{{define "chaptercontentlazy"}}<details class="section" data-lazy="{{.ContentLazy}}"><summary>{{.ContentTitle}}</summary><div class="section-body cs-content book-outline"></div></details>{{end}}
 {{define "chaptercontent"}}<details class="section"><summary>{{.ContentTitle}}</summary><div class="section-body cs-content book-outline">
   {{- range .Content}}
   <h3 class="study-pub"><span class="study-name">{{.Name}}</span> <a href="{{.URL}}">{{.Title}}</a></h3>
