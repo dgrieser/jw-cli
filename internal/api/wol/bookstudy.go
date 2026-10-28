@@ -121,7 +121,7 @@ func (c *Client) BookStudies(ctx context.Context, cfg Config, pub string, book i
 	var out []model.BookStudy
 	for _, d := range docs {
 		u := c.url(cfg, "d", fmt.Sprintf("/%d", d.doc))
-		st, err := httpx.Memo(ctx, c.cache, fmt.Sprintf("study2-%s-%d-%s", pub, book, u), func(ctx context.Context) (model.BookStudy, error) {
+		st, err := httpx.Memo(ctx, c.cache, fmt.Sprintf("study3-%s-%d-%s", pub, book, u), func(ctx context.Context) (model.BookStudy, error) {
 			return c.bookStudy(ctx, u, pub, book, d.books)
 		})
 		if err != nil {
@@ -370,7 +370,9 @@ func chapterByChapter(blocks []studyBlock, u string, book int) []model.StudyPart
 // parseHighlights reads a "Jehovah's Word Is Alive" article: each section
 // headed by the verses it goes through, "(Genesis 1:1–7:24)", with the
 // questions answered and the lessons drawn on its verses as its items, under
-// their subheadings. An article on several books goes through them in turn,
+// their subheadings; the section's overview of what it goes through ("Chapters
+// 46 to 51 contain Jeremiah's pronouncements against the nations") comes with
+// its heading, about every chapter it covers. An article on several books goes through them in turn,
 // each section of the next book starting over at its beginning; only those
 // of book are kept.
 func parseHighlights(blocks []studyBlock, u string, book int, books []int) []model.StudyPart {
@@ -378,6 +380,9 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 	var cur *model.StudyPart
 	title, titlePid, from, to := "", 0, 0, 0
 	titleHTML := ""
+	// overview says the paragraphs read are the section's overview of what
+	// it goes through, which comes before its questions and lessons
+	overview := false
 	group := ""
 	at, lastStart := 0, 0
 	closeSection := func() {
@@ -397,6 +402,7 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 			if m == nil || !strings.Contains(m[2], ":") && !refSpan.MatchString(normDashes(m[2])) {
 				// the next section's title, or a subheading of this one
 				title, titlePid, group, titleHTML = b.text, b.pid, b.text, b.html
+				overview = false
 				continue
 			}
 			closeSection()
@@ -414,9 +420,10 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 			}
 			cur = &model.StudyPart{Title: title, Label: m[2], Chapters: refChapters(m[2], book), HTML: titleHTML + b.html}
 			from, to = firstNonZero(titlePid, b.pid), b.pid
+			overview = true
 		case cur == nil:
 		case b.is("sn"):
-			group, to = b.text, b.pid
+			group, to, overview = b.text, b.pid, false
 		default:
 			to = b.pid
 			if item, ok := verseItem(b, book); ok {
@@ -424,6 +431,9 @@ func parseHighlights(blocks []studyBlock, u string, book int, books []int) []mod
 				item.URL = passageURL(u, b.pid, b.pid)
 				item.HTML = b.html
 				cur.Items = append(cur.Items, item)
+				overview = false
+			} else if overview {
+				cur.HTML += b.html
 			}
 		}
 	}
