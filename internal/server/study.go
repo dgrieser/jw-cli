@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"time"
 
 	"github.com/dgrieser/jw-cli/internal/bibleref"
@@ -53,6 +54,9 @@ func (s *Server) Study(ctx context.Context) {
 	}
 	for {
 		from, until := nightOf(time.Now())
+		// Each night's start lands at a different point in the first part
+		// of the study window, instead of every server starting at 1:00.
+		from = from.Add(time.Duration(rand.Int64N(int64(scheduledWindow))))
 		if !sleepUntil(ctx, from) {
 			return
 		}

@@ -64,7 +64,8 @@ verses, on the bible pages and in references; pressing one opens its entry.
 --glossary-langs names the languages indexed (default E,X: English and
 German), "none" none.
 
-Once a week, at night (1 to 6 o'clock, the server's local time), the week's
+Once a week, at night (starting within 15 minutes after 1 o'clock, ending at
+6 o'clock, the server's local time), the week's
 Bible reading is studied ahead: every chapter of it is unfolded a level deep,
 as jw bible read --unfold 1 does — the study material, who quotes each verse,
 the other translations and the glossary entries — for the cache to hold it
@@ -75,7 +76,8 @@ languages (default E,X), "none" none.
 The latest videos on the media page are jw.org's pick, followed by every
 other video and audio recording the media library published in the last 30
 days, found across all its categories. That list is found anew every three
-hours during the day (6 to 21 o'clock, Berlin time), not at night, on the
+hours during the day (6 to 21 o'clock, Berlin time), with languages spread
+over the following 15 minutes, not at night, on the
 server: it fills the cache and the list, and downloads none of the media.
 
 The global flags apply: --lang sets the default content language (overridable

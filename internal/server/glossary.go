@@ -69,29 +69,27 @@ type glossaryWarm struct {
 	at map[string]time.Time // when each language's index was read whole
 }
 
-// warmGlossaries reads ahead the index of every language configured whose
-// index was not read whole within readingEvery.
-func (s *Server) warmGlossaries(ctx context.Context) {
-	for _, spec := range s.glossaryLangs {
-		lng, err := s.resolveLanguage(httpx.Background(ctx), spec)
-		if err != nil {
-			continue
-		}
-		s.glossWarm.mu.Lock()
-		due := time.Since(s.glossWarm.at[lng.Symbol]) >= readingEvery
-		s.glossWarm.mu.Unlock()
-		if !due {
-			continue
-		}
-		s.svc.HTTP.Go("glossary "+lng.Symbol, func(ctx context.Context) {
-			if g, err := s.svc.Glossary(ctx, lng); err == nil && !g.Partial {
-				s.glossWarm.mu.Lock()
-				defer s.glossWarm.mu.Unlock()
-				if s.glossWarm.at == nil {
-					s.glossWarm.at = map[string]time.Time{}
-				}
-				s.glossWarm.at[lng.Symbol] = time.Now()
-			}
-		})
+// warmGlossary reads ahead one language's index when it was not read whole
+// within readingEvery.
+func (s *Server) warmGlossary(ctx context.Context, spec string) {
+	lng, err := s.resolveLanguage(httpx.Background(ctx), spec)
+	if err != nil {
+		return
 	}
+	s.glossWarm.mu.Lock()
+	due := time.Since(s.glossWarm.at[lng.Symbol]) >= readingEvery
+	s.glossWarm.mu.Unlock()
+	if !due {
+		return
+	}
+	s.svc.HTTP.Go("glossary "+lng.Symbol, func(ctx context.Context) {
+		if g, err := s.svc.Glossary(ctx, lng); err == nil && !g.Partial {
+			s.glossWarm.mu.Lock()
+			defer s.glossWarm.mu.Unlock()
+			if s.glossWarm.at == nil {
+				s.glossWarm.at = map[string]time.Time{}
+			}
+			s.glossWarm.at[lng.Symbol] = time.Now()
+		}
+	})
 }

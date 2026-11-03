@@ -75,8 +75,9 @@ func (w *warmer) recent() []string {
 	return slices.Clone(w.langs)
 }
 
-// Warm reads the start pages ahead now and every warmEvery after, until ctx
-// is done. It returns at once without background revalidation.
+// Warm reads the first start page ahead now and spreads the rest over
+// scheduledWindow, then repeats every warmEvery, until ctx is done. It
+// returns at once without background revalidation.
 func (s *Server) Warm(ctx context.Context) {
 	if !s.svc.HTTP.Backgrounds() {
 		return
@@ -89,6 +90,7 @@ func (s *Server) Warm(ctx context.Context) {
 	// when the reading was last read ahead, by language
 	readAt := map[string]time.Time{}
 	for {
+		var jobs []func()
 		// the server's default language, and those readers read lately
 		def, _ := s.resolveLanguage(httpx.Background(ctx), s.defaultLang)
 		for _, lang := range append([]string{""}, s.warm.recent()...) {
@@ -108,10 +110,15 @@ func (s *Server) Warm(ctx context.Context) {
 					}
 					p += sep + url.Values{"lang": {lang}}.Encode()
 				}
-				s.readAhead(p)
+				jobs = append(jobs, func() { s.readAhead(p) })
 			}
 		}
-		s.warmGlossaries(ctx)
+		for _, spec := range s.glossaryLangs {
+			jobs = append(jobs, func() { s.warmGlossary(ctx, spec) })
+		}
+		if !spreadBackground(ctx, jobs, true) {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return

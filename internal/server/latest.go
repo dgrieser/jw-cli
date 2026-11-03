@@ -18,8 +18,9 @@ import (
 // last latestDays (service.RecentMedia). Finding that walks the whole
 // category tree — a few dozen requests and some megabytes in each language —
 // so what was found is kept, and found anew every latestEvery during the day,
-// from latestFrom to latestUntil, Berlin time: at 6, 9, 12, 15, 18 and 21
-// o'clock, and not at night. In each language readers read it in since the
+// from latestFrom to latestUntil, Berlin time: starting at 6, 9, 12, 15, 18
+// and 21 o'clock and spread by language over scheduledWindow, not at night.
+// In each language readers read it in since the
 // update before; another one's is found anew when a reader next asks. An
 // update reads jw.org's own rows of the page anew as well, past the cache,
 // which would keep them for a day. It reads what the mediator says of the
@@ -198,10 +199,16 @@ func (s *Server) Latest(ctx context.Context) {
 		if !sleepUntil(ctx, nextUpdate(time.Now())) {
 			return
 		}
+		var jobs []func()
 		for _, lang := range s.latestMedia.readSince(prev) {
-			s.svc.HTTP.Go("latest "+lang, func(ctx context.Context) {
-				_, _ = s.findLatest(httpx.WithRefresh(ctx), lang) // logged
+			jobs = append(jobs, func() {
+				s.svc.HTTP.Go("latest "+lang, func(ctx context.Context) {
+					_, _ = s.findLatest(httpx.WithRefresh(ctx), lang) // logged
+				})
 			})
+		}
+		if !spreadBackground(ctx, jobs, false) {
+			return
 		}
 	}
 }

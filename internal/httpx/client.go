@@ -39,7 +39,7 @@ func DefaultBaseURLs() BaseURLs {
 
 // A realistic browser UA: wol.jw.org sits behind Akamai bot management and
 // rejects obvious non-browser clients.
-const defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+const defaultUserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
 
 type Client struct {
 	hc        *http.Client
@@ -146,19 +146,22 @@ func hostOf(raw string) string {
 
 // Do applies browser headers and rate limiting, then executes the request.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
-	browserSite := req.URL.Host == hostOf(c.Base.WOL) || req.URL.Host == hostOf(c.Base.JWOrg)
+	wol := req.URL.Host == hostOf(c.Base.WOL)
+	browserSite := wol || req.URL.Host == hostOf(c.Base.JWOrg)
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
 	if req.Header.Get("Accept-Language") == "" {
 		language := "en"
-		if browserSite {
+		if wol {
+			language = "en,en-US;q=0.9,de-DE;q=0.8,de;q=0.7"
+		} else if browserSite {
 			language = "en-US,en;q=0.9"
 		}
 		req.Header.Set("Accept-Language", language)
 	}
 	if browserSite {
-		browserHeaders(req)
+		browserHeaders(req, wol)
 	}
 	if lim, ok := c.limiters[req.URL.Host]; ok {
 		if err := lim.Wait(req.Context()); err != nil {
@@ -172,15 +175,31 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 // browserHeaders describes the request as a Chrome page navigation or an
 // in-page fetch. Keep headers supplied by callers, especially the Accept and
 // X-Requested-With values that select wol's JSON response.
-func browserHeaders(req *http.Request) {
+func browserHeaders(req *http.Request, wol bool) {
 	setDefault := func(name, value string) {
 		if req.Header.Get(name) == "" {
 			req.Header.Set(name, value)
 		}
 	}
-	setDefault("Sec-CH-UA", `"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"`)
+	setDefault("Sec-CH-UA", `"Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"`)
 	setDefault("Sec-CH-UA-Mobile", "?0")
 	setDefault("Sec-CH-UA-Platform", `"Linux"`)
+	if wol {
+		setDefault("Cache-Control", "no-cache")
+		setDefault("Pragma", "no-cache")
+		for _, cookie := range []struct{ name, value string }{
+			{"cookieConsent-STRICTLY_NECESSARY", "true"},
+			{"cookieConsent-FUNCTIONAL", "true"},
+			{"cookieConsent-DIAGNOSTIC", "true"},
+			{"cookieConsent-USAGE", "true"},
+			{"fontScale", "1"},
+			{"binavview", "grid"},
+		} {
+			if _, err := req.Cookie(cookie.name); err == http.ErrNoCookie {
+				req.AddCookie(&http.Cookie{Name: cookie.name, Value: cookie.value})
+			}
+		}
+	}
 
 	if req.Header.Get("X-Requested-With") != "" || strings.Contains(req.Header.Get("Accept"), "application/json") {
 		setDefault("Accept", "application/json, text/javascript, */*; q=0.01")
@@ -189,7 +208,12 @@ func browserHeaders(req *http.Request) {
 		setDefault("Sec-Fetch-Site", "same-origin")
 		return
 	}
-	setDefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	accept := "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+	if wol {
+		accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+		setDefault("Priority", "u=0, i")
+	}
+	setDefault("Accept", accept)
 	setDefault("Sec-Fetch-Dest", "document")
 	setDefault("Sec-Fetch-Mode", "navigate")
 	setDefault("Sec-Fetch-Site", "none")
