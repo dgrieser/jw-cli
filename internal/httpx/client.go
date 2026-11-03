@@ -144,13 +144,21 @@ func hostOf(raw string) string {
 	return u.Host
 }
 
-// Do applies User-Agent and rate limiting, then executes the request.
+// Do applies browser headers and rate limiting, then executes the request.
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
+	browserSite := req.URL.Host == hostOf(c.Base.WOL) || req.URL.Host == hostOf(c.Base.JWOrg)
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	}
 	if req.Header.Get("Accept-Language") == "" {
-		req.Header.Set("Accept-Language", "en")
+		language := "en"
+		if browserSite {
+			language = "en-US,en;q=0.9"
+		}
+		req.Header.Set("Accept-Language", language)
+	}
+	if browserSite {
+		browserHeaders(req)
 	}
 	if lim, ok := c.limiters[req.URL.Host]; ok {
 		if err := lim.Wait(req.Context()); err != nil {
@@ -159,6 +167,36 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	c.verbose("%s %s", req.Method, req.URL)
 	return c.hc.Do(req)
+}
+
+// browserHeaders describes the request as a Chrome page navigation or an
+// in-page fetch. Keep headers supplied by callers, especially the Accept and
+// X-Requested-With values that select wol's JSON response.
+func browserHeaders(req *http.Request) {
+	setDefault := func(name, value string) {
+		if req.Header.Get(name) == "" {
+			req.Header.Set(name, value)
+		}
+	}
+	setDefault("Sec-CH-UA", `"Chromium";v="126", "Google Chrome";v="126", "Not.A/Brand";v="24"`)
+	setDefault("Sec-CH-UA-Mobile", "?0")
+	setDefault("Sec-CH-UA-Platform", `"Linux"`)
+
+	if req.Header.Get("X-Requested-With") != "" || strings.Contains(req.Header.Get("Accept"), "application/json") {
+		setDefault("Accept", "application/json, text/javascript, */*; q=0.01")
+		setDefault("Sec-Fetch-Dest", "empty")
+		setDefault("Sec-Fetch-Mode", "cors")
+		setDefault("Sec-Fetch-Site", "same-origin")
+		return
+	}
+	setDefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+	setDefault("Sec-Fetch-Dest", "document")
+	setDefault("Sec-Fetch-Mode", "navigate")
+	setDefault("Sec-Fetch-Site", "none")
+	setDefault("Upgrade-Insecure-Requests", "1")
+	if req.Method == http.MethodGet {
+		setDefault("Sec-Fetch-User", "?1")
+	}
 }
 
 // Get issues a GET and returns the response if the status is 2xx.
