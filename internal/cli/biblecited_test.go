@@ -65,7 +65,7 @@ func citedMuxDocs(t *testing.T, queries *[]string, docs *atomic.Int64) *http.Ser
 
 func TestBibleCited(t *testing.T) {
 	var queries []string
-	out, err := runCmd(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15", "-l", "en")
+	out, err := runCmdHere(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15", "-l", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestBibleCited(t *testing.T) {
 // page sequence.
 func TestBibleCitedMultipleRefs(t *testing.T) {
 	var queries []string
-	_, err := runCmd(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15; Matthew 2:18", "-l", "en")
+	_, err := runCmdHere(t, citedMux(t, &queries), "bible", "cited", "Jeremiah 31:15; Matthew 2:18", "-l", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestBibleCitedUnknownCategoryRetried(t *testing.T) {
 		<input type="hidden" id="searchResultsTotal" value="1"/>
 		</body></html>`))
 	})
-	if _, err := runCmd(t, mux, "bible", "cited", "Jeremiah 31:15", "-l", "en"); err != nil {
+	if _, err := runCmdHere(t, mux, "bible", "cited", "Jeremiah 31:15", "-l", "en"); err != nil {
 		t.Fatal(err)
 	}
 	if len(queries) != 2 {
@@ -252,7 +252,7 @@ func TestBibleCitedReadsEveryPage(t *testing.T) {
 		w.Write([]byte(b.String()))
 	})
 
-	out, err := runCmd(t, mux, "bible", "cited", "Jeremiah 31:15", "-l", "en")
+	out, err := runCmdHere(t, mux, "bible", "cited", "Jeremiah 31:15", "-l", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestBibleCitedReadsEveryPage(t *testing.T) {
 func TestBibleCitedExcerpts(t *testing.T) {
 	var queries []string
 	var docs atomic.Int64
-	out, err := runCmd(t, citedMuxDocs(t, &queries, &docs), "bible", "cited", "Jeremiah 31:15", "-l", "en")
+	out, err := runCmdHere(t, citedMuxDocs(t, &queries, &docs), "bible", "cited", "Jeremiah 31:15", "-l", "en")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -342,7 +342,7 @@ func citedVideosMux(t *testing.T, queries, videoQueries *[]string) *http.ServeMu
 
 func TestBibleCitedVideos(t *testing.T) {
 	var queries, videoQueries []string
-	out, err := runCmd(t, citedVideosMux(t, &queries, &videoQueries), "bible", "cited", "Jeremiah 31:15", "-l", "en", "-o", "raw")
+	out, err := runCmdHere(t, citedVideosMux(t, &queries, &videoQueries), "bible", "cited", "Jeremiah 31:15", "-l", "en", "-o", "raw")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestBibleCitedVideoFlags(t *testing.T) {
 	for _, tt := range tests {
 		var queries, videoQueries []string
 		args := append([]string{"bible", "cited", "-l", "en"}, tt.args...)
-		if _, err := runCmd(t, citedVideosMux(t, &queries, &videoQueries), args...); err != nil {
+		if _, err := runCmdHere(t, citedVideosMux(t, &queries, &videoQueries), args...); err != nil {
 			t.Fatalf("%v: %v", tt.args, err)
 		}
 		if !slices.Equal(videoQueries, tt.want) {

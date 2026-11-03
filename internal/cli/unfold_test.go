@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -194,7 +195,10 @@ func TestArticleUnfoldOneLevelKeepsResearchPending(t *testing.T) {
 func citedResultsPage(docs map[int]string) string {
 	var b strings.Builder
 	b.WriteString(`<html><body><main><div class="resultsContainer">`)
-	for id, ref := range docs {
+	// in the order of the ids, as a page has one order: the runs of a test
+	// compare what they print
+	for _, id := range slices.Sorted(maps.Keys(docs)) {
+		ref := docs[id]
 		fmt.Fprintf(&b, `<ul class="results resultContentDocument">
 		  <li class="caption"><a class="lnk" href="/en/wol/d/r1/lp-e/%d">Doc %d</a></li>
 		  <li class="result"><ul class="resultItems">
@@ -241,7 +245,7 @@ func citedUnfoldMux(t *testing.T, queries *[]string) *http.ServeMux {
 // guide of that verse already points at.
 func TestArticleUnfoldListsWhoCitesTheVerse(t *testing.T) {
 	var queries []string
-	out, err := runCmd(t, citedUnfoldMux(t, &queries), "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "1", "-y")
+	out, err := runCmdHere(t, citedUnfoldMux(t, &queries), "article", "2024360", "-l", "en", "-o", "raw", "--unfold", "1", "-y")
 	if err != nil {
 		t.Fatal(err)
 	}

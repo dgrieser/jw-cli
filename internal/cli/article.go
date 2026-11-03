@@ -108,6 +108,9 @@ Examples:
 // only resolved — and only required — for a docid, which is looked up in the
 // library of that language.
 func fetchArticle(ctx context.Context, a *app.App, target string) (model.Article, error) {
+	if a.Remote() {
+		return remoteArticle(ctx, a, target)
+	}
 	var lng model.Language
 	if _, err := strconv.Atoi(target); err == nil {
 		if lng, err = a.Lang(ctx); err != nil {

@@ -93,7 +93,7 @@ Examples:
 					if err != nil {
 						return rs, header, err
 					}
-					_ = results.Save(a.Cache().Dir(), &rs)
+					_ = saveListing(a, &rs)
 					return rs, header, nil
 				}, label)
 			}

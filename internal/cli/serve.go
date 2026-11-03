@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/server"
 )
 
@@ -80,6 +81,11 @@ hours during the day (6 to 21 o'clock, Berlin time), with languages spread
 over the following 15 minutes, not at night, on the
 server: it fills the cache and the list, and downloads none of the media.
 
+Any command of this binary can run on the server: jw --server <address>
+(or $JW_SERVER) sends it to POST /api/v1/cli, and the server runs it against
+its own cache and answers with the output, which the client prints as a local
+run would. Listings, downloads and questions stay on the client.
+
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
 
@@ -120,7 +126,10 @@ Examples:
 				GlossaryLangs: glossaryLangs(glossary),
 				StudyLangs:    glossaryLangs(study),
 				Svc:           a.Service(),
-				DefaultLang:   a.Flags.Lang,
+				RunCLI: func(ctx context.Context, req remote.Request) remote.Response {
+					return RunForClient(ctx, a.Service(), req)
+				},
+				DefaultLang: a.Flags.Lang,
 				Logf: func(format string, args ...any) {
 					fmt.Fprintf(a.Stderr, format+"\n", args...)
 				},

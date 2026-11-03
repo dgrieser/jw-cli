@@ -14,6 +14,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -87,11 +88,8 @@ Examples:
 				if err != nil {
 					return err
 				}
-				path, err := downloadURL(ctx, a, f.URL, f.Checksum, f.Filesize, dir, "")
-				if err != nil {
-					return err
-				}
-				return a.Write(path)
+				return downloadFile(ctx, a, remote.Download{URL: f.URL, Checksum: f.Checksum,
+					Size: f.Filesize, Dir: dir, PathOnly: true})
 			}
 			if format == render.JSON {
 				return a.WriteJSON(intro)

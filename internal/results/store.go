@@ -74,6 +74,11 @@ func Resolve(dir string, index int) (model.Result, error) {
 	if err != nil {
 		return model.Result{}, err
 	}
+	return rs.Item(index)
+}
+
+// Item returns item number index (1-based, as printed) of the set.
+func (rs ResultSet) Item(index int) (model.Result, error) {
 	if index < 1 || index > len(rs.Items) {
 		return model.Result{}, fmt.Errorf("index %d out of range: last listing had %d items", index, len(rs.Items))
 	}

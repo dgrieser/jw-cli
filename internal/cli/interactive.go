@@ -103,7 +103,10 @@ func tuiDownload(ctx context.Context, a *app.App, item model.Result) (string, er
 
 // categoryFetcher pages through one mediator category ("" = root list).
 func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key string) tui.Fetcher {
-	const pageSize = 50
+	if a.Remote() {
+		return remoteCategoryFetcher(ctx, a, key)
+	}
+	const pageSize = categoryPageSize
 	return func(page int) (results.ResultSet, string, error) {
 		if key == "" {
 			cats, err := a.Mediator().RootCategories(ctx, lng.Symbol)
@@ -111,7 +114,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 				return results.ResultSet{}, "", err
 			}
 			rs := results.ResultSet{Kind: "media-browse", Lang: lng.Symbol, Items: rootCategoryRows(cats, lng.Symbol)}
-			_ = results.Save(a.Cache().Dir(), &rs)
+			_ = saveListing(a, &rs)
 			return rs, a.Text().MediaCategories, nil
 		}
 		cat, err := a.Service().Category(ctx, lng.Symbol, key, pageSize, (page-1)*pageSize)
@@ -123,7 +126,7 @@ func categoryFetcher(ctx context.Context, a *app.App, lng model.Language, key st
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreItems)
 		}
 		rs := results.ResultSet{Kind: "media-browse", Query: key, Lang: lng.Symbol, Page: page, Items: items}
-		_ = results.Save(a.Cache().Dir(), &rs)
+		_ = saveListing(a, &rs)
 		header := fmt.Sprintf("%s (%s)", cat.Name, cat.Key)
 		if page > 1 {
 			header += fmt.Sprintf(a.Text().PageSuffixShort, page)
@@ -145,7 +148,7 @@ func searchFetcher(ctx context.Context, a *app.App, lng model.Language, p servic
 			return results.ResultSet{}, "", errors.New(a.Text().NoMoreResults)
 		}
 		rs.Items = dropRepeats(rs.Items, page, listed)
-		_ = results.Save(a.Cache().Dir(), &rs)
+		_ = saveListing(a, &rs)
 		return rs, header, nil
 	}
 }
@@ -209,9 +212,17 @@ func runSearchTUI(ctx context.Context, a *app.App, lng model.Language, fetch tui
 }
 
 func runBrowseTUI(ctx context.Context, a *app.App, lng model.Language, key string) error {
-	header := "Media categories"
+	return tui.Run(browseHeader(key), categoryFetcher(ctx, a, lng, key), tuiActions(ctx, a, lng))
+}
+
+// categoryPageSize is how many rows a page of a category holds in the
+// interactive browser.
+const categoryPageSize = 50
+
+// browseHeader heads the interactive browser of a category ("" = the root).
+func browseHeader(key string) string {
 	if key != "" {
-		header = key
+		return key
 	}
-	return tui.Run(header, categoryFetcher(ctx, a, lng, key), tuiActions(ctx, a, lng))
+	return "Media categories"
 }

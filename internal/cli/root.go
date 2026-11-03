@@ -56,6 +56,8 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 		"use what jw.org and wol.jw.org answered as is this long, then check with a HEAD request whether it changed (0 checks every time)")
 	pf.Var(newSizeValue(&a.Flags.CacheMax, os.Getenv("JW_CACHE_MAX")), "cache-max",
 		"bound the cache, dropping what was used least recently beyond it, e.g. 500MB or 2GB; 0 turns the cache off ($JW_CACHE_MAX)")
+	pf.StringVar(&a.Flags.Server, "server", os.Getenv("JW_SERVER"),
+		"run the command on this jw serve (http://host:port), drawing on its cache; credentials in the address or in $JW_SERVER_USER/$JW_SERVER_PASSWORD ($JW_SERVER)")
 	for _, hidden := range []string{"base-cdn", "base-jworg", "base-wol", "cache-dir"} {
 		_ = pf.MarkHidden(hidden)
 	}
@@ -63,17 +65,18 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	root.AddCommand(
 		newLanguagesCmd(a),
 		newPubCmd(a),
-		newDownloadCmd(a),
+		takesListing(newDownloadCmd(a)),
 		newMediaCmd(a),
 		newSearchCmd(a),
-		newOpenCmd(a),
-		newShowCmd(a),
+		runHere(newOpenCmd(a)),
+		takesListing(newShowCmd(a)),
 		newArticleCmd(a),
 		newBibleCmd(a),
 		newDailyTextCmd(a),
 		newMeetingsCmd(a),
-		newServeCmd(a),
+		runHere(newServeCmd(a)),
 	)
+	wireRemote(a, root)
 	return root
 }
 

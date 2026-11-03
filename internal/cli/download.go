@@ -15,7 +15,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/download"
 	"github.com/dgrieser/jw-cli/internal/model"
-	"github.com/dgrieser/jw-cli/internal/results"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -58,7 +58,7 @@ Examples:
 			}
 
 			if idx, err := strconv.Atoi(target); err == nil {
-				item, err := results.Resolve(a.Cache().Dir(), idx)
+				item, err := listingItem(a, idx)
 				if err != nil {
 					return err
 				}
@@ -68,11 +68,7 @@ Examples:
 				return downloadLANK(ctx, a, target, opts)
 			}
 			if strings.HasPrefix(target, "http://") || strings.HasPrefix(target, "https://") {
-				path, err := downloadURL(ctx, a, target, "", 0, dir, "")
-				if err != nil {
-					return err
-				}
-				return a.Writef(a.Text().Downloaded+"\n", path)
+				return downloadFile(ctx, a, remote.Download{URL: target, Dir: dir})
 			}
 			// a search result's key, as -o json shows it, or a publication
 			// symbol with the flags that narrow it down
@@ -153,11 +149,7 @@ func docKey(lank string) (model.PubKey, bool) {
 func downloadResult(ctx context.Context, a *app.App, item model.Result, opts downloadOpts) error {
 	media := isMediaLANK(item.LANK) || isGalleryVideo(item)
 	if item.FileURL != "" && (!opts.qualitySet || !media) {
-		path, err := downloadURL(ctx, a, item.FileURL, item.Checksum, item.Filesize, opts.dir, "")
-		if err != nil {
-			return err
-		}
-		return a.Writef(a.Text().Downloaded+"\n", path)
+		return downloadFile(ctx, a, remote.Download{URL: item.FileURL, Checksum: item.Checksum, Size: item.Filesize, Dir: opts.dir})
 	}
 	if mi, ok, err := mediaOf(ctx, a, item); ok {
 		if err != nil {
@@ -218,21 +210,34 @@ func downloadMedia(ctx context.Context, a *app.App, item model.MediaItem, opts d
 	if err != nil {
 		return fmt.Errorf("%s: %w", item.Title, err)
 	}
-	path, err := downloadURL(ctx, a, file.URL, file.Checksum, file.Filesize, opts.dir, "")
-	if err != nil {
-		return err
-	}
-	if err := a.Writef(a.Text().Downloaded+"\n", path); err != nil {
+	if err := downloadFile(ctx, a, remote.Download{URL: file.URL, Checksum: file.Checksum, Size: file.Filesize, Dir: opts.dir}); err != nil {
 		return err
 	}
 	if opts.subtitles && file.SubtitlesURL != "" {
-		sp, err := downloadURL(ctx, a, file.SubtitlesURL, "", 0, opts.dir, "")
-		if err != nil {
-			return fmt.Errorf("subtitles: %w", err)
-		}
-		return a.Writef(a.Text().Downloaded+"\n", sp)
+		return downloadFile(ctx, a, remote.Download{URL: file.SubtitlesURL, Dir: opts.dir, Wrap: "subtitles"})
 	}
 	return nil
+}
+
+// downloadFile downloads one file and reports where it went. Every download
+// of a command goes through here: for a command run on jw serve, the file is
+// the client's to download, so the server only says which.
+func downloadFile(ctx context.Context, a *app.App, d remote.Download) error {
+	if a.Capture != nil {
+		a.Capture.Add(remote.Event{Kind: remote.KindDownload, Download: &d})
+		return nil
+	}
+	path, err := downloadURL(ctx, a, d.URL, d.Checksum, d.Size, d.Dir, d.Name)
+	if err != nil {
+		if d.Wrap != "" {
+			return fmt.Errorf("%s: %w", d.Wrap, err)
+		}
+		return err
+	}
+	if d.PathOnly {
+		return a.Write(path)
+	}
+	return a.Writef(a.Text().Downloaded+"\n", path)
 }
 
 // downloadURL runs one download job with a progress bar on stderr.

@@ -17,6 +17,8 @@
 - **Interactive TUI** for navigating search results and the media library.
 - **Web server** (`jw serve`): the same features as a browsable web site and a
   JSON API under `/api/v1`.
+- **Remote mode** (`jw --server URL`): run any command on a `jw serve`, drawing
+  on its cache, with the output exactly as a local run prints it.
 
 ## Build
 
@@ -53,6 +55,7 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 | `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
 | `--no-urls` | Leave links and URLs out of the output. Link text stays in the sentence, an image becomes `[image: alt]`, and result listings drop their link line. `-o json` is unaffected. |
 | `-v, --verbose` | Log HTTP requests to stderr. |
+| `--server` | Run the command on a `jw serve` at this address instead of here (`$JW_SERVER`); see [Remote mode](#remote-mode-jw---server). |
 | `--version` | Print the version, commit, build date, Go version, and platform. Released binaries report their tag (`v1.2.3`); local builds report `dev+<commit>` plus `-dirty` for an uncommitted tree. |
 
 ### Output language
@@ -1106,6 +1109,7 @@ them; a stream that fails gives its verses back.
 | `GET /api/v1/glossary` | — | — (the words the glossaries of the language explain: `books` (the study bible's glossary, Insight, the Research Guide, as the library titles them), `terms` (`t` the word, `b` its book, `d` the document explaining it, `n` the entry's title when it is more than the word), `docURL` (a document's address without its docid), how words are matched (`caseSensitive`, `suffixes`), and `common`, the docids of the entries left out as words of every day. Read off the tables of contents once a week, like `/bible/reading`; `partial` when some of them could not be read. A language not in `--glossary-langs` has no terms) |
 | `GET /api/v1/dailytext` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw dailytext` |
 | `GET /api/v1/meetings[/{midweek\|weekend}]` | `date`, `format`, `unfold`, `force=1`, `urls=0` | `jw meetings ...` (also `mid`/`mw`, `we`/`wt`) |
+| `POST /api/v1/cli` | JSON body: `args`* (a command line), `listing`, `answers` | any command, as `jw --server` sends it (see [Remote mode](#remote-mode-jw---server)) |
 | `GET /download/media/{lank}` | `quality`, `subtitles=true` | `jw download LANK -q` (with `subtitles=true` the redirect goes to the `.vtt` alone, `404` when there is none, where `jw download --subtitles` saves the video and its subtitles) |
 | `GET /download/pub` | pub parameters | `jw pub --download` (one file: `302` to it; several: `300 Multiple Choices` with the listing to pick a `fileUrl` from; none: `404`) |
 
@@ -1141,6 +1145,88 @@ one takes minutes: the command line is the better place for it.
 A bible reading folds what it brings. Each verse's study notes, indexes,
 marginal references and quotations become a disclosure of its own, closed until
 it is opened, so the verses stay readable however much hangs off them.
+
+## Remote mode (`jw --server`)
+
+```sh
+jw --server http://jw.example:8080 bible read "Joh 3:16" --unfold 1
+export JW_SERVER=http://me:secret@jw.example:8080   # every command from now on
+jw search kingdom && jw show 1 && jw download 2
+```
+
+With `--server` (or `$JW_SERVER`) a command runs on a running `jw serve`
+instead of on this machine. The server runs the very same command, with the
+same code, against its own service, and so draws on everything it keeps: the
+pages on its disk, what it read ahead (start page, daily text, meetings, this
+week's bible reading, unfolded overnight), the models built from them in its
+memory, and the verses its expansions have already read. `jw bible read "Joh
+3:16" --unfold 1` takes about two minutes on a cold cache and under a second
+once the server has read it before — for anyone asking it.
+
+What a command writes comes back in the order it was written, and the client
+carries out what belongs to the reader's machine:
+
+- **Output** is styled for this terminal (`-o markdown`), written raw, or
+  written to `-f` here. The output is the local output, byte for byte.
+- **Listings** are laid out here and kept as this machine's last listing, so
+  `jw show|open|download <n>` work as usual; `jw show` and `jw download` send
+  that listing along with the index.
+- **Downloads** go from the public CDN straight to this machine, into `-d`
+  here; the server only says which files.
+- **Questions**: an unfold level that needs many requests is asked about here,
+  as a local run asks (or refused without a terminal unless `-y`); the answer
+  goes to the server with the command again, which finds the levels already
+  read in its cache.
+- **`-i`**, the interactive browser, runs here; every page, item and category
+  it opens is asked of the server.
+- **`jw open`** never asks the server: it only reads the last listing.
+
+The language goes along with every command: `-l`, or the one this machine's
+locale names, never the server's. What only concerns this machine stays here:
+`-f`, `--no-color`, `-v`, the cache flags. `-v` logs only the downloads, the
+one thing this machine still asks of the sites, and the progress lines of
+unfolds and excerpts are not shown.
+
+Behind the server's basic authentication, put the credentials in the address
+(`http://user:password@host:8080`) or in `$JW_SERVER_USER` and
+`$JW_SERVER_PASSWORD`; use `https://` behind a TLS proxy for anything beyond a
+trusted network. A command on the server is bound by the API's ten-minute
+deadline, and the client warns when the server is a different release than
+itself — the output is then the server's version of it.
+
+The endpoint is `POST /api/v1/cli` with `{"args": [...], "listing": {...},
+"answers": {"2": true}}`; it answers with the events the command recorded
+(`write`, `writef`, `markdown`, `stderr`, `listing`, `save`, `download`), the
+language it resolved, the server's version, and its error, if any (`confirm`
+for an unfold waiting for an answer). It runs every command except `jw serve`
+and `jw open`, never with `-i`, and keeps neither a listing nor a download on
+the server.
+
+### Keeping remote mode in sync
+
+Remote mode needs no per-command code, and must stay that way: every command
+is sent to the server unless it is marked to run here (`runHere` in
+`internal/cli/remote.go`), and the server runs exactly the commands that are
+sent. A command works both ways as long as it
+
+- writes through the app: `a.Write`, `a.Writef`, `a.WriteMarkdown`,
+  `a.WriteJSON`, warnings to `a.Stderr`;
+- prints a listing with `writeListing`, keeps one with `saveListing`, and
+  resolves an index with `listingItem` / `resolveIndexArg` — never
+  `results.Save`/`Resolve` on `a.Cache().Dir()` directly; a command taking an
+  index is marked `takesListing`;
+- downloads with `downloadFile`, never `downloadURL` (the interactive browser
+  excepted, which runs on the client);
+- asks with `unfoldConfirmer`, never `os.Stdin` directly;
+- reads a document or a media item for the interactive browser through
+  `fetchArticle` and `mediaOf`, and pages it through `searchFetcher` /
+  `categoryFetcher`, which go to the server in remote mode.
+
+The test suite holds every command to it: each test of `internal/cli` that
+runs a command through `runCmd` or `runCmdWithCache` runs it a second time
+through a `jw serve` on the same mock and fails when the two runs write or fail
+differently. A test that counts upstream requests runs its command once, with
+`runCmdHere`.
 
 ## How it talks to the sites
 

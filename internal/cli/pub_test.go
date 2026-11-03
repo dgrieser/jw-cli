@@ -7,9 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
-
-	"github.com/dgrieser/jw-cli/internal/app"
 )
 
 // pubMux serves a GETPUBMEDIALINKS response whose file URL points back at the
@@ -70,22 +69,25 @@ func TestPubListAndDownloadByIndex(t *testing.T) {
 }
 
 // runCmdWithCache is runCmd with a caller-controlled cache dir so multiple
-// invocations share the results cache.
+// invocations share the results cache. Like runCmd, it runs the command in
+// remote mode as well, from a client whose cache is kept for the same test
+// and cache dir — so a listing and the jw download <n> after it go through a
+// server just as they go locally — and holds the two runs to the same output.
 func runCmdWithCache(t *testing.T, mux *http.ServeMux, cacheDir string, args ...string) (string, error) {
 	t.Helper()
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
-	srv := server.URL
-	a := app.New(app.Flags{})
-	var out strings.Builder
-	a.Stdout = &out
-	a.Stderr = &out
-	root := NewRootCmd(a)
-	root.SetArgs(append([]string{
-		"--base-cdn", srv, "--base-jworg", srv, "--base-wol", srv, "--cache-dir", cacheDir,
-	}, args...))
-	root.SetOut(&out)
-	root.SetErr(&out)
-	err := root.Execute()
-	return out.String(), err
+	out, err := runLocalCmd(t, server.URL, append([]string{"--cache-dir", cacheDir}, args...)...)
+	rout, rerr := runRemoteCmd(t, server.URL, append([]string{"--cache-dir", remoteCacheDir(t, cacheDir)}, args...)...)
+	checkParity(t, args, out, err, rout, rerr)
+	return out, err
+}
+
+// remoteCacheDirs are the caches of the clients of remote mode, by the
+// local cache dir they stand beside.
+var remoteCacheDirs sync.Map
+
+func remoteCacheDir(t *testing.T, local string) string {
+	dir, _ := remoteCacheDirs.LoadOrStore(local, t.TempDir())
+	return dir.(string)
 }

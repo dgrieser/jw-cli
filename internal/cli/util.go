@@ -12,6 +12,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 )
@@ -23,7 +24,32 @@ func resolveIndexArg(a *app.App, arg string) (model.Result, error) {
 	if err != nil {
 		return model.Result{}, fmt.Errorf("expected a result index (a number from the last listing), got %q", arg)
 	}
+	return listingItem(a, idx)
+}
+
+// listingItem is item number idx of the last listing: the one saved here, or,
+// for a command run on jw serve, the one the client sent along.
+func listingItem(a *app.App, idx int) (model.Result, error) {
+	if a.Capture != nil {
+		if a.Capture.Listing == nil {
+			return model.Result{}, errors.New("no cached results; run a listing command like 'jw search' first")
+		}
+		return a.Capture.Listing.Item(idx)
+	}
 	return results.Resolve(a.Cache().Dir(), idx)
+}
+
+// saveListing numbers and stamps a listing and keeps it as the last one, for
+// jw show|open|download <n>: here, or — for a command run on jw serve — on the
+// client, never on the server.
+func saveListing(a *app.App, rs *results.ResultSet) error {
+	if a.Capture != nil {
+		_ = results.Save("", rs) // numbers and stamps, keeps nothing
+		saved := *rs
+		a.Capture.Add(remote.Event{Kind: remote.KindSave, Listing: &saved})
+		return nil
+	}
+	return results.Save(a.Cache().Dir(), rs)
 }
 
 // linkTarget passes a URL through, or drops it under --no-urls. Callers hand

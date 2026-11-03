@@ -10,6 +10,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/results"
 )
@@ -17,8 +18,14 @@ import (
 // writeListing prints a numbered result list (or JSON with -o json) and saves
 // it to the results cache so `jw show|open|download <index>` can act on it.
 func writeListing(a *app.App, rs results.ResultSet, header string) error {
+	// a listing is laid out for the reader's terminal and kept as the
+	// reader's last one: for a command run on jw serve, both on the client
+	if a.Capture != nil {
+		a.Capture.Add(remote.Event{Kind: remote.KindListing, Listing: &rs, Header: header})
+		return nil
+	}
 	// Save numbers and stamps rs itself, so what is printed is what was saved
-	if err := results.Save(a.Cache().Dir(), &rs); err != nil {
+	if err := saveListing(a, &rs); err != nil {
 		return err
 	}
 	format, err := a.Format()

@@ -21,7 +21,9 @@ import (
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/lang"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/render"
+	"github.com/dgrieser/jw-cli/internal/results"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -45,6 +47,10 @@ type Flags struct {
 	// CacheMax bounds the cache in bytes, dropping the least recently used
 	// entries beyond it; negative turns the cache off, zero is the default.
 	CacheMax int64
+
+	// Server is the address of a jw serve to run the commands on (--server,
+	// $JW_SERVER); empty runs them here.
+	Server string
 }
 
 type App struct {
@@ -73,10 +79,95 @@ type App struct {
 
 	// framed records that the blank line above terminal output was written.
 	framed bool
+
+	// Capture, set when the command runs on jw serve for a client, records
+	// what the command does for the client to carry out (see NewCaptured).
+	Capture *Capture
+	// shared says the service is someone else's — jw serve's — and is not
+	// the app's to close.
+	shared bool
 }
 
 func New(f Flags) *App {
 	return &App{Flags: f, Stdout: os.Stdout, Stderr: os.Stderr}
+}
+
+// NewCaptured builds the app a command runs in on jw serve for a client of
+// it: around the server's own service, so the command draws on everything the
+// server keeps, and with its output recorded in c instead of written.
+func NewCaptured(f Flags, svc *service.Service, c *Capture) *App {
+	a := &App{Flags: f, Capture: c, shared: true}
+	a.Stdout = io.Discard
+	a.Stderr = captureWriter{c}
+	a.once.Do(func() {
+		a.svc = svc
+		a.http, a.cache = svc.HTTP, svc.Cache
+		a.mediator, a.pubmedia, a.search = svc.Mediator, svc.PubMedia, svc.Search
+		a.wol, a.jworg, a.resolver = svc.WOL, svc.JWOrg, svc.Langs
+	})
+	return a
+}
+
+// Capture is what a command run for a client did, in order, and what the
+// client sent along for it.
+type Capture struct {
+	mu     sync.Mutex
+	events []remote.Event
+	// Listing is the client's last listing, which an index argument
+	// resolves against.
+	Listing *results.ResultSet
+	// Answers are the client's answers to unfold confirmations, by level.
+	Answers map[int]bool
+}
+
+// NewCapture starts the record of one command run for req.
+func NewCapture(req *remote.Request) *Capture {
+	return &Capture{Listing: req.Listing, Answers: req.Answers}
+}
+
+// Add records one event.
+func (c *Capture) Add(e remote.Event) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// consecutive stderr writes are one event, as the bytes were one stream
+	if n := len(c.events); n > 0 && e.Kind == remote.KindStderr && c.events[n-1].Kind == remote.KindStderr {
+		c.events[n-1].Text += e.Text
+		return
+	}
+	c.events = append(c.events, e)
+}
+
+// Events is what was recorded, in order.
+func (c *Capture) Events() []remote.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]remote.Event{}, c.events...)
+}
+
+// captureWriter records what a command writes to stderr.
+type captureWriter struct{ c *Capture }
+
+func (w captureWriter) Write(p []byte) (int, error) {
+	w.c.Add(remote.Event{Kind: remote.KindStderr, Text: string(p)})
+	return len(p), nil
+}
+
+// Remote reports whether commands run on a jw serve rather than here.
+func (a *App) Remote() bool { return a.Flags.Server != "" && a.Capture == nil }
+
+// ResolvedLanguage is the content language, if a command resolved it.
+func (a *App) ResolvedLanguage() (model.Language, bool) {
+	if a.langErr != nil || a.language.Locale == "" {
+		return model.Language{}, false
+	}
+	return a.language, true
+}
+
+// SetLanguage takes the content language as resolved elsewhere — by the jw
+// serve a command ran on — so what the client adds itself is worded in it.
+// Without effect once the language is resolved.
+func (a *App) SetLanguage(lng model.Language) {
+	a.langOnce.Do(func() { a.language = lng })
 }
 
 func (a *App) init() {
@@ -148,7 +239,7 @@ func (a *App) Cache() *httpx.Cache {
 // Close lets a cache sweep under way finish, so the cache stays within its
 // limit even when commands run only briefly.
 func (a *App) Close() {
-	if a.cache != nil {
+	if a.cache != nil && !a.shared {
 		a.cache.Close()
 	}
 }
@@ -217,6 +308,10 @@ func (a *App) RenderOptions(baseURL string) render.Options {
 // the non-markdown formats, when the target is a file, and when stdout is not a
 // terminal — so pipes and redirects stay machine-readable.
 func (a *App) WriteMarkdown(content string) error {
+	if a.Capture != nil {
+		a.Capture.Add(remote.Event{Kind: remote.KindMarkdown, Text: content})
+		return nil
+	}
 	if !a.Styled() {
 		return a.Write(content)
 	}
@@ -260,6 +355,10 @@ func (a *App) Styled() bool {
 
 // Write sends content to stdout or, with -f|--file, to a file.
 func (a *App) Write(content string) error {
+	if a.Capture != nil {
+		a.Capture.Add(remote.Event{Kind: remote.KindWrite, Text: content})
+		return nil
+	}
 	if len(content) > 0 && content[len(content)-1] != '\n' {
 		content += "\n"
 	}
@@ -272,6 +371,10 @@ func (a *App) Write(content string) error {
 // Writef formats a line onto stdout inside the same blank-line frame as Write,
 // for commands that report progressively instead of in one block.
 func (a *App) Writef(format string, args ...any) error {
+	if a.Capture != nil {
+		a.Capture.Add(remote.Event{Kind: remote.KindWritef, Text: fmt.Sprintf(format, args...)})
+		return nil
+	}
 	return a.writeStdout(fmt.Sprintf(format, args...))
 }
 

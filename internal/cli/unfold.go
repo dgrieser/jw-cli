@@ -9,6 +9,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/i18n"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/render"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -69,6 +70,18 @@ func statusLine(w io.Writer, txt *i18n.Messages) func(level, done, total int) {
 func unfoldConfirmer(a *app.App, assumeYes bool) func(level, requests int) (bool, error) {
 	if assumeYes {
 		return nil
+	}
+	// on jw serve for a client, the question is the client's to ask: a level
+	// it answered goes by that answer, any other stops the command until it
+	// has (see runRemote)
+	if a.Capture != nil {
+		answers := a.Capture.Answers
+		return func(level, requests int) (bool, error) {
+			if yes, ok := answers[level]; ok {
+				return yes, nil
+			}
+			return false, &remote.ConfirmError{Confirm: remote.Confirm{Level: level, Requests: requests}}
+		}
 	}
 	if !render.IsTerminal(os.Stdin) {
 		return func(level, requests int) (bool, error) {

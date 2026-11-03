@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -40,6 +41,9 @@ type Config struct {
 	// reading is studied ahead in at night; nil is DefaultStudyLangs, empty
 	// none.
 	StudyLangs []string
+	// RunCLI runs a command of the jw CLI for a client in remote mode (jw
+	// --server), against Svc; nil answers POST /api/v1/cli with 404.
+	RunCLI func(ctx context.Context, req remote.Request) remote.Response
 }
 
 // Server handles the API and UI routes around one shared service.
@@ -73,6 +77,8 @@ type Server struct {
 	studyLangs []string
 	// latestMedia is what the media library published lately (latest.go)
 	latestMedia latestMedia
+	// runCLI runs a client's command (Config.RunCLI)
+	runCLI func(ctx context.Context, req remote.Request) remote.Response
 }
 
 // New builds a Server. Template parse errors panic: they are programming
@@ -85,6 +91,7 @@ func New(cfg Config) *Server {
 		auth:        cfg.Auth,
 		pageCache:   cfg.PageCache,
 		apiTimeout:  apiTimeout,
+		runCLI:      cfg.RunCLI,
 	}
 	s.glossaryLangs = cfg.GlossaryLangs
 	if s.glossaryLangs == nil {
@@ -136,6 +143,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/dailytext", s.apiDailyText)
 	mux.HandleFunc("GET /api/v1/meetings", s.apiMeetings)
 	mux.HandleFunc("GET /api/v1/meetings/{part}", s.apiMeetingPart)
+	mux.HandleFunc("POST "+remote.Path, s.apiCLI)
 
 	// download selection: pick a rendition/file server-side, then redirect to
 	// the public CDN URL rather than proxying the bytes

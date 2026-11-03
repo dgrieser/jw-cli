@@ -212,6 +212,9 @@ func isGalleryVideo(r model.Result) bool {
 // gallery page. ok is false for a row that is neither, which has no media item
 // to ask for — not even one by an empty key.
 func mediaOf(ctx context.Context, a *app.App, r model.Result) (item model.MediaItem, ok bool, err error) {
+	if a.Remote() {
+		return remoteMediaOf(ctx, a, r)
+	}
 	switch {
 	case isMediaLANK(r.LANK):
 		lng, err := a.Lang(ctx)
@@ -258,7 +261,7 @@ func galleryVideo(ctx context.Context, a *app.App, page string) (model.MediaItem
 // the same thing and leave the same listing behind.
 func writeMediaInfo(a *app.App, item model.MediaItem) error {
 	rs := results.ResultSet{Kind: "media-info", Query: item.LANK, Items: mediaFileRows(item)}
-	if err := results.Save(a.Cache().Dir(), &rs); err != nil {
+	if err := saveListing(a, &rs); err != nil {
 		return err
 	}
 	format, err := a.Format()

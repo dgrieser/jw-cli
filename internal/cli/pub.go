@@ -9,6 +9,7 @@ import (
 	"github.com/dgrieser/jw-cli/internal/api/pubmedia"
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/results"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -85,11 +86,7 @@ func downloadAll(ctx context.Context, a *app.App, items []model.Result, dir stri
 		return fmt.Errorf("no files matched")
 	}
 	for _, it := range items {
-		path, err := downloadURL(ctx, a, it.FileURL, it.Checksum, it.Filesize, dir, "")
-		if err != nil {
-			return err
-		}
-		if err := a.Writef(a.Text().Downloaded+"\n", path); err != nil {
+		if err := downloadFile(ctx, a, remote.Download{URL: it.FileURL, Checksum: it.Checksum, Size: it.Filesize, Dir: dir}); err != nil {
 			return err
 		}
 	}
