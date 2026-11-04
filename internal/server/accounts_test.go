@@ -100,7 +100,10 @@ func newAuthEnv(t *testing.T) *authEnv {
 	s := New(Config{Svc: &service.Service{}, Accounts: users, Settings: settings, SetupToken: "setup-secret",
 		Mailer: func(accounts.SMTP) accounts.Mailer { return box }})
 	box.wait = s.mailing.Wait
-	srv := httptest.NewServer(s.Handler())
+	// TLS, as the public URL of the test settings is https and the session
+	// cookie is Secure: Go before 1.26 does not send a Secure cookie to a
+	// plain http server on the loopback address
+	srv := httptest.NewTLSServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return &authEnv{srv: srv, users: users, settings: settings, box: box, s: s}
 }
@@ -108,7 +111,7 @@ func newAuthEnv(t *testing.T) *authEnv {
 // client is a browser: it keeps cookies and does not follow redirects.
 func (e *authEnv) client(t *testing.T) *http.Client {
 	jar, _ := cookiejar.New(nil)
-	return &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return &http.Client{Jar: jar, Transport: e.srv.Client().Transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
 func (e *authEnv) get(t *testing.T, c *http.Client, path string) (*http.Response, string) {
@@ -560,7 +563,7 @@ func (e *authEnv) callAPI(t *testing.T, header, key string) int {
 	case "basic":
 		req.SetBasicAuth("admin@example.org", "secret-pass")
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := e.srv.Client().Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -615,7 +618,7 @@ func TestAPIKeys(t *testing.T) {
 	for _, path := range []string{"/account/keys", "/account", "/admin/users", "/admin/settings"} {
 		req, _ := http.NewRequest(http.MethodGet, e.srv.URL+path, nil)
 		req.Header.Set("Authorization", "Bearer "+key)
-		resp, err := http.DefaultTransport.RoundTrip(req)
+		resp, err := e.srv.Client().Transport.RoundTrip(req)
 		if err != nil {
 			t.Fatal(err)
 		}
