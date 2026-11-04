@@ -1,7 +1,7 @@
 // Package server exposes the features of the jw CLI over HTTP: a JSON API
 // under /api/v1 and a server-rendered web UI on the same routes the CLI's
-// commands cover. Authentication is optional HTTP basic auth (see
-// Credentials); jw serve binds to localhost unless asked otherwise.
+// commands cover. With accounts (Config.Accounts) every route is behind a
+// sign-in (accounts.go); jw serve binds to localhost unless asked otherwise.
 package server
 
 import (
@@ -9,11 +9,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/accounts"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -28,9 +30,20 @@ type Config struct {
 	// Logf, when set, receives one line per request, and what the study of
 	// the week's reading did (study.go).
 	Logf func(format string, args ...any)
-	// Auth, when it holds users, puts every route behind HTTP basic
-	// authentication.
-	Auth *Credentials
+	// Accounts, when set, puts the routes behind a sign-in, with the
+	// server's settings in Settings (both required together). Nil serves
+	// everybody.
+	Accounts *accounts.Store
+	Settings *accounts.SettingsFile
+	// Mailer sends the mails of the accounts through a mail server; nil is
+	// accounts.SMTPMailer.
+	Mailer func(accounts.SMTP) accounts.Mailer
+	// SetupToken is the secret of the setup link (/setup?token=), which
+	// opens the setup while there is no admin; empty makes one.
+	SetupToken string
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For names
+	// the client (for the rate limits); nil trusts loopback only.
+	TrustedProxies []*net.IPNet
 	// PageCache is how the browser's copy of the pages is used (see
 	// PageCachePolicies); empty is PageCacheAuto.
 	PageCache string
@@ -51,8 +64,16 @@ type Server struct {
 	svc         *service.Service
 	defaultLang string
 	logf        func(format string, args ...any)
-	auth        *Credentials
-	pageCache   string
+	accounts    *accounts.Store
+	settings    *accounts.SettingsFile
+	mailer      func(accounts.SMTP) accounts.Mailer
+	setupToken  string
+	setupMu     sync.Mutex // one setup at a time
+	// mailing counts the mails of the public forms still being sent
+	// (sendLater)
+	mailing   sync.WaitGroup
+	proxies   []*net.IPNet
+	pageCache string
 	// apiTimeout is how long one request to the JSON API may take
 	// (limitsAPI).
 	apiTimeout time.Duration
@@ -88,7 +109,11 @@ func New(cfg Config) *Server {
 		svc:         cfg.Svc,
 		defaultLang: cfg.DefaultLang,
 		logf:        cfg.Logf,
-		auth:        cfg.Auth,
+		accounts:    cfg.Accounts,
+		settings:    cfg.Settings,
+		mailer:      cfg.Mailer,
+		setupToken:  cfg.SetupToken,
+		proxies:     cfg.TrustedProxies,
 		pageCache:   cfg.PageCache,
 		apiTimeout:  apiTimeout,
 		runCLI:      cfg.RunCLI,
@@ -100,6 +125,12 @@ func New(cfg Config) *Server {
 	s.studyLangs = cfg.StudyLangs
 	if s.studyLangs == nil {
 		s.studyLangs = DefaultStudyLangs
+	}
+	if s.mailer == nil {
+		s.mailer = func(m accounts.SMTP) accounts.Mailer { return accounts.SMTPMailer{SMTP: m} }
+	}
+	if s.setupToken == "" {
+		s.setupToken = accounts.NewSecret()
 	}
 	if s.logf == nil {
 		s.logf = func(string, ...any) {}
@@ -180,8 +211,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /pub/library/{path...}", s.uiPubLibrary)
 	mux.HandleFunc("GET /pub/publication/{path...}", s.uiPubPublication)
 
+	// accounts: sign-in, registration, the admin pages and the setup
+	if s.authOn() {
+		s.accountRoutes(mux)
+	}
+
 	s.routes = mux
-	return s.logged(s.auth.RequireAuth(s.busy(s.remembersLanguage(private(refreshes(s.limitsAPI(mux)))))))
+	return s.logged(s.gate(s.busy(s.remembersLanguage(private(refreshes(s.limitsAPI(mux)))))))
 }
 
 // private marks what a page or the API answers as the reader's own: it

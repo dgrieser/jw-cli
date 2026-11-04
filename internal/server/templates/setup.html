@@ -1,0 +1,27 @@
+{{define "content"}}
+<div class="auth wide">
+<h1>{{.A.SetupTitle}}</h1>
+{{- if not .SetupAllowed}}
+<p class="error" role="alert">{{.A.SetupNeedLink}}</p>
+{{- else}}
+<p class="hint">{{.A.SetupIntro}}</p>
+{{template "notice" .}}
+<form class="auth-form" method="post" action="/setup">
+  {{template "serverform" .}}
+  <fieldset class="auth-section">
+    <legend>{{.A.SecAdmin}}</legend>
+    <p class="hint">{{.A.SetupAdminHint}}</p>
+    <label class="field"><span>{{.A.Email}}</span>
+      <input type="email" name="email" value="{{.Email}}" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+    <label class="field"><span>{{.A.Password}}</span>
+      <input type="password" name="password" autocomplete="new-password" minlength="{{.MinPassword}}" required>
+      <small class="hint">{{printf .A.PasswordHint .MinPassword}}</small></label>
+    <label class="field"><span>{{.A.PasswordRepeat}}</span>
+      <input type="password" name="password2" autocomplete="new-password"></label>
+    <button type="submit" name="action" value="test" formnovalidate>{{.A.SendTest}}</button>
+  </fieldset>
+  <button type="submit" name="action" value="save" class="primary">{{.A.SetupSave}}</button>
+</form>
+{{- end}}
+</div>
+{{end}}

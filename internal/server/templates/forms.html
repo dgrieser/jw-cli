@@ -1,0 +1,43 @@
+{{define "notice"}}
+{{- if .Notice}}<p class="auth-ok" role="status">{{.Notice}}</p>{{end}}
+{{- end}}
+
+{{define "serverform"}}
+<fieldset class="auth-section">
+  <legend>{{.A.SecAccess}}</legend>
+  <label class="field"><span>{{.A.PublicURL}}</span>
+    <input type="url" name="public_url" value="{{.Settings.PublicURL}}" placeholder="https://jw.example.org" autocomplete="off" spellcheck="false">
+    <small class="hint">{{.A.PublicURLHint}}</small></label>
+  <div class="field" role="radiogroup" aria-label="{{.A.Registration}}"><span>{{.A.Registration}}</span>
+    <label class="check"><input type="radio" name="registration" value="closed" {{if eq .Settings.Registration "closed"}}checked{{end}}> {{.A.RegClosed}}</label>
+    <label class="check"><input type="radio" name="registration" value="approval" {{if eq .Settings.Registration "approval"}}checked{{end}}> {{.A.RegApproval}}</label>
+    <label class="check"><input type="radio" name="registration" value="open" {{if eq .Settings.Registration "open"}}checked{{end}}> {{.A.RegOpen}}</label>
+  </div>
+  <label class="check field-check"><input type="checkbox" name="anonymous" {{if .Settings.Anonymous}}checked{{end}}> <span>{{.A.Anonymous}}<small class="hint">{{.A.AnonymousHint}}</small></span></label>
+</fieldset>
+<fieldset class="auth-section">
+  <legend>{{.A.SecMail}}</legend>
+  <p class="hint">{{.A.MailHint}}</p>
+  <div class="field-row">
+    <label class="field grow"><span>{{.A.SMTPHost}}</span>
+      <input name="smtp_host" value="{{.Settings.SMTP.Host}}" placeholder="smtp.example.org" autocomplete="off" spellcheck="false"></label>
+    <label class="field"><span>{{.A.SMTPPort}}</span>
+      <input name="smtp_port" type="number" min="1" max="65535" class="num" value="{{.Settings.SMTP.Port}}"></label>
+  </div>
+  <label class="field"><span>{{.A.SMTPSecurity}}</span>
+    <select name="smtp_security">
+      <option value="starttls" {{if eq .Settings.SMTP.Security "starttls"}}selected{{end}}>{{.A.SecStartTLS}}</option>
+      <option value="tls" {{if eq .Settings.SMTP.Security "tls"}}selected{{end}}>{{.A.SecTLS}}</option>
+      <option value="none" {{if eq .Settings.SMTP.Security "none"}}selected{{end}}>{{.A.SecNone}}</option>
+    </select></label>
+  <div class="field-row">
+    <label class="field grow"><span>{{.A.SMTPUser}}</span>
+      <input name="smtp_username" value="{{.Settings.SMTP.Username}}" autocomplete="off" spellcheck="false"></label>
+    <label class="field grow"><span>{{.A.SMTPPassword}}</span>
+      <input name="smtp_password" type="password" autocomplete="new-password" {{with .SMTPPassword}}value="{{.}}" {{end}}{{if .SMTPPasswordSet}}placeholder="••••••••"{{end}}>
+      {{- if .SMTPPasswordSet}}<small class="hint">{{.A.SMTPPasswordKeep}}</small>{{end}}</label>
+  </div>
+  <label class="field"><span>{{.A.SMTPFrom}}</span>
+    <input name="smtp_from" value="{{.Settings.SMTP.From}}" placeholder="{{.A.SMTPFromHint}}" autocomplete="off" spellcheck="false"></label>
+</fieldset>
+{{- end}}

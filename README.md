@@ -577,34 +577,76 @@ from a verse's clip — a stretch of a longer video, which jw.org links with
 `ts=00:05:02.26-00:07:52.31` — the page takes the same `ts=`: the player starts
 at the clip and pauses at its end, and **From the start** plays the whole video.
 
-The server binds to `127.0.0.1` unless `--addr` says otherwise, and warns when
-it is about to listen on a non-loopback address without authentication.
+The server binds to `127.0.0.1` unless `--addr` says otherwise.
 
-### Basic authentication
+### Accounts
 
-HTTP basic auth puts every route — web site, API and downloads — behind a
-login. Either source turns it on, and both may be used together:
+Every route — web site, API and downloads — is behind a sign-in. The email
+address is the user name; passwords are stored as argon2id hashes.
 
-- **A file**: `--auth-file PATH`, or `JW_AUTH_FILE=PATH`. It may be an
-  `.htpasswd` file (`user:hash` lines, as `htpasswd` writes them) or an
-  `.htaccess` file whose `AuthUserFile` names one (a relative path is resolved
-  against the `.htaccess` file's directory) and whose `AuthName` becomes the
-  login prompt's realm. A path that does not exist is skipped, so the setting
-  can stay in place while no file is mounted. Supported hashes: bcrypt
-  (`htpasswd -B`, recommended), Apache MD5 (`htpasswd -m`) and SHA-1
-  (`htpasswd -s`); any other entry stops the server rather than locking a user
-  out silently.
-- **One user from the environment**: `JW_AUTH_USER` and `JW_AUTH_PASSWORD`
-  (both, or neither).
+**First start.** While there is no admin, the server prints a one-time setup
+link and every page leads there:
 
-```sh
-htpasswd -cB .htpasswd anne
-jw serve --addr 0.0.0.0 --auth-file .htpasswd
-JW_AUTH_USER=me JW_AUTH_PASSWORD=secret jw serve --addr 0.0.0.0
+```
+listening on http://localhost:8080
+no admin yet: open the setup link to configure the server and create one
+  http://localhost:8080/setup?token=…
 ```
 
-Basic auth sends the password with every request; put TLS in front (a reverse
-proxy) for anything beyond a trusted network.
+The setup page asks for:
+
+1. **Access**: the public address readers open (the links in emails lead
+   there), who may register — *closed* (only admins add accounts), *open with
+   approval* (anybody registers, an admin lets them in) or *open* (anybody
+   with a confirmed address) — and whether people may read without an
+   account.
+2. **Email**: the SMTP server (host, port, STARTTLS/TLS/none, user, password,
+   sender), with a button that sends a test email. It is needed for
+   registration, invitations and forgotten passwords; without it, admins set
+   passwords themselves and registration stays closed.
+3. **Admin**: the first admin's email address and password.
+
+Saving signs the admin in.
+
+**Registration** sends a confirmation link to the address; the account exists
+only once the link is opened and a password chosen. With approval, the admins
+get an email and the account waits under **Users** until one approves it; the
+user gets an email then. Registering an address that has an account tells its
+owner by email instead, so the form never reveals who has one.
+
+**Forgotten passwords**: *Forgot your password?* on the sign-in page sends a
+link (valid for one hour) that sets a new password and signs out the
+account's other sessions.
+
+**Admins** find **Users** and **Server settings** in the bar's settings
+menu. Under `/admin/users` they approve, disable, enable, promote, demote and
+delete accounts, send password links, and add accounts: with a password, or
+without one, which sends an invitation to choose it. The last admin cannot
+be removed, disabled or demoted. `/admin/settings` holds the setup's
+settings. Everybody changes their own password under `/account`.
+
+Accounts and settings live in `--data-dir` (`$JW_DATA_DIR`, default
+`<config dir>/jw/server`): `accounts.json` and `settings.json`, both readable
+by their owner only (the settings hold the SMTP password). `jw serve user`
+manages the accounts from the command line, also while the server runs —
+the way back in when the only admin forgot the password:
+
+```sh
+jw serve user list
+jw serve user add anne@example.org admin   # asks for the password
+jw serve user passwd anne@example.org
+jw serve user approve|disable|enable|delete anne@example.org
+jw serve user role anne@example.org user
+echo 'new-password' | jw serve user passwd anne@example.org   # without a terminal
+```
+
+Failed sign-ins are limited per client (8 per address and 32 overall within
+15 minutes), and so are the emails one client or address can trigger. Put TLS
+in front (a reverse proxy) for anything beyond a trusted network; with an
+`https://` public address the session cookie is HTTPS only. Behind a proxy the
+client is the address the proxy names in `X-Forwarded-For`, from proxies on
+the same machine only; name others with `--trusted-proxies`
+(`$JW_TRUSTED_PROXIES`, addresses or CIDR ranges such as `172.16.0.0/12`).
 
 ### Docker
 
@@ -614,14 +656,12 @@ docker run --rm -p 8080:8080 jw:dev            # http://127.0.0.1:8080
 docker run --rm -p 8080:8080 -v jw-cache:/data jw:dev   # keep the cache
 docker run --rm jw:dev languages -s german     # any CLI command works too
 
-# with basic auth: the image looks for /config/.htaccess ($JW_AUTH_FILE) ...
-docker run --rm -p 8080:8080 -v "$PWD/.htaccess:/config/.htaccess:ro" jw:dev
-# ... or takes one user from the environment
-docker run --rm -p 8080:8080 -e JW_AUTH_USER=me -e JW_AUTH_PASSWORD=secret jw:dev
+# the setup link is in the log; accounts and settings go to /data/server
+docker run -d --name jw -p 8080:8080 -v jw-data:/data jw:dev
+docker logs jw
+# manage the accounts in the running container
+docker exec -it jw /jw serve user list
 ```
-
-The container runs as a non-root user, so a mounted auth file (and the
-`AuthUserFile` it names, e.g. also under `/config`) must be world-readable.
 
 Published images land on GHCR on every release tag (`latest`, `1.2`, `1.2.3`)
 and on every push to `main` (`edge`):
@@ -632,10 +672,9 @@ docker run --rm -p 8080:8080 ghcr.io/dgrieser/jw-cli:latest
 
 The image is distroless, runs as a non-root user, and defaults to
 `serve --addr 0.0.0.0 --port 8080` — inside the container network the port
-mapping is the boundary; without basic auth configured, publish the port to
-localhost (`-p 127.0.0.1:8080:8080`) or put an authenticating reverse proxy in
-front for anything internet-facing. `/data`
-holds the on-disk cache; mount a volume to keep it across restarts.
+mapping is the boundary. `/data` holds the on-disk cache and, under
+`/data/server`, the accounts and settings; mount a volume to keep them across
+restarts (without one, every new container starts with the setup again).
 
 What jw.org and wol.jw.org answer is kept on disk (in the user cache
 directory, `/data` in the image) with no expiry, and reused — by the next
@@ -900,7 +939,7 @@ and issues) for the day. Behind a login, every page is asked of the server
 first, so a revoked or switched login is never bypassed; the kept copy then
 only stands in while the server cannot be reached at all. `--page-cache`
 (`$JW_PAGE_CACHE`) sets that: `auto` (the default) does so behind this
-server's own login, or a proxy's that its requests show (an `Authorization`
+server's own sign-in (unless reading without an account is allowed), or a proxy's that its requests show (an `Authorization`
 header, or a header naming the user such as `X-Forwarded-User` or
 `Remote-User`), and serves the copy first otherwise; `first` and `fallback`
 choose one way whatever the login, and `off` keeps no pages. Behind an
@@ -1187,9 +1226,10 @@ locale names, never the server's. What only concerns this machine stays here:
 one thing this machine still asks of the sites, and the progress lines of
 unfolds and excerpts are not shown.
 
-Behind the server's basic authentication, put the credentials in the address
-(`http://user:password@host:8080`) or in `$JW_SERVER_USER` and
-`$JW_SERVER_PASSWORD`; use `https://` behind a TLS proxy for anything beyond a
+The client signs in with an account of the server: its email address and
+password in `$JW_SERVER_USER` and `$JW_SERVER_PASSWORD`, or in the address
+(`http://anne%40example.org:password@host:8080`), sent with HTTP basic
+authentication; use `https://` behind a TLS proxy for anything beyond a
 trusted network. A command on the server is bound by the API's ten-minute
 deadline, and the client warns when the server is a different release than
 itself — the output is then the server's version of it.

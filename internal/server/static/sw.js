@@ -18,7 +18,7 @@
 // server for every page first, so whoever decides who may read it — a
 // login, here or in a proxy in front — does every time, and the copy only
 // stands in while the server cannot be reached at all; "off" keeps none.
-// A login refused drops every page kept.
+// A login refused, and signing out, drop every page kept.
 "use strict";
 
 var BUILD = "__BUILD__";
@@ -228,8 +228,14 @@ function asset(req) {
 
 self.addEventListener("fetch", function (e) {
   var req = e.request;
-  if (req.method !== "GET") return;
   var u = new URL(req.url);
+  if (req.method === "POST" && u.origin === self.location.origin && u.pathname === "/logout") {
+    // signing out: the pages kept were read with the login and must not
+    // stand in for anybody after it
+    e.respondWith(caches.delete(PAGES).then(function () { return fetch(req); }));
+    return;
+  }
+  if (req.method !== "GET") return;
   if (u.origin !== self.location.origin) return;
   if (u.pathname.indexOf("/static/") === 0) {
     e.respondWith(asset(req));

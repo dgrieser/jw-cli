@@ -1,0 +1,16 @@
+{{define "content"}}
+<div class="auth wide">
+<h1>{{.A.ServerSettings}}</h1>
+{{template "notice" .}}
+<form class="auth-form" method="post" action="/admin/settings">
+  {{template "serverform" .}}
+  <div class="field-row test-mail">
+    <label class="field grow"><span>{{.A.TestTo}}</span>
+      <input type="email" name="test_to" value="{{.TestTo}}" autocomplete="off" spellcheck="false"></label>
+    <button type="submit" name="action" value="test" formnovalidate>{{.A.SendTest}}</button>
+  </div>
+  <button type="submit" name="action" value="save" class="primary">{{.A.Save}}</button>
+</form>
+<p class="auth-links"><a href="/admin/users">{{.A.Users}}</a></p>
+</div>
+{{end}}

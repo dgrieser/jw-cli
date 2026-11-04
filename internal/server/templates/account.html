@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="auth">
+<h1>{{.A.Account}}</h1>
+<p>{{printf .A.SignedInAs .Email}} · {{if .Admin}}{{.A.RoleAdmin}}{{else}}{{.A.RoleUser}}{{end}}</p>
+{{template "notice" .}}
+<h2>{{.A.ChangePassword}}</h2>
+<form class="auth-form" method="post" action="/account">
+  <input type="email" name="email" value="{{.Email}}" autocomplete="username" hidden readonly>
+  <label class="field"><span>{{.A.PasswordOld}}</span>
+    <input type="password" name="old" autocomplete="current-password" required></label>
+  <label class="field"><span>{{.A.PasswordNew}}</span>
+    <input type="password" name="password" autocomplete="new-password" minlength="{{.MinPassword}}" required>
+    <small class="hint">{{printf .A.PasswordHint .MinPassword}}</small></label>
+  <label class="field"><span>{{.A.PasswordRepeat}}</span>
+    <input type="password" name="password2" autocomplete="new-password" minlength="{{.MinPassword}}" required></label>
+  <button type="submit" class="primary">{{.A.ChangePassword}}</button>
+</form>
+<form method="post" action="/logout" class="auth-form"><button type="submit">{{.A.SignOut}}</button></form>
+</div>
+{{end}}

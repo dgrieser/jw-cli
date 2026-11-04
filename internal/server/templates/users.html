@@ -1,0 +1,48 @@
+{{define "content"}}
+<div class="auth wide">
+<h1>{{.A.Users}}</h1>
+{{template "notice" .}}
+<div class="table-scroll">
+<table class="users">
+  <thead><tr><th>{{.A.Email}}</th><th>{{.A.Role}}</th><th>{{.A.Status}}</th><th>{{.A.Created}}</th><th>{{.A.LastLogin}}</th><th class="actions">{{.A.Actions}}</th></tr></thead>
+  <tbody>
+  {{- range .Users}}
+  {{- $self := eq .Email $.Email}}
+  <tr{{if .Pending}} class="pending"{{end}}>
+    <td>{{.Email}}{{if $self}} <span class="hint">({{$.A.You}})</span>{{end}}</td>
+    <td>{{if eq .Role "admin"}}{{$.A.RoleAdmin}}{{else}}{{$.A.RoleUser}}{{end}}</td>
+    <td>{{if .Pending}}<strong>{{$.A.StatusPending}}</strong>{{else if .Disabled}}{{$.A.StatusDisabled}}{{else if .Invited}}{{$.A.StatusInvited}}{{else}}{{$.A.StatusActive}}{{end}}</td>
+    <td class="num">{{.Created.Local.Format "2006-01-02"}}</td>
+    <td class="num">{{if .LastLogin.IsZero}}{{$.A.Never}}{{else}}{{.LastLogin.Local.Format "2006-01-02 15:04"}}{{end}}</td>
+    <td class="actions">
+      <form method="post" action="/admin/users" class="user-actions">
+        <input type="hidden" name="email" value="{{.Email}}">
+        {{- if .Pending}}<button class="small primary" name="op" value="approve">{{$.A.Approve}}</button>{{end}}
+        {{- if not $self}}
+        {{- if .Disabled}}<button class="small" name="op" value="enable">{{$.A.Enable}}</button>{{else}}<button class="small" name="op" value="disable">{{$.A.Disable}}</button>{{end}}
+        {{- if eq .Role "admin"}}<button class="small" name="op" value="user">{{$.A.MakeUser}}</button>{{else}}<button class="small" name="op" value="admin">{{$.A.MakeAdmin}}</button>{{end}}
+        {{- end}}
+        {{- if $.MailReady}}<button class="small" name="op" value="reset">{{if .Invited}}{{$.A.ResendInvite}}{{else}}{{$.A.SendReset}}{{end}}</button>{{end}}
+        {{- if not $self}}<button class="small danger" name="op" value="delete" data-confirm="{{printf $.A.ConfirmDelete .Email}}">{{$.A.Delete}}</button>{{end}}
+      </form>
+    </td>
+  </tr>
+  {{- end}}
+  </tbody>
+</table>
+</div>
+<h2>{{.A.CreateUser}}</h2>
+<p class="hint">{{if .MailReady}}{{.A.CreateUserHint}}{{else}}{{.A.CreateUserNoMail}}{{end}}</p>
+<form class="auth-form" method="post" action="/admin/users">
+  <input type="hidden" name="op" value="create">
+  <label class="field"><span>{{.A.Email}}</span>
+    <input type="email" name="email" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
+  <label class="field"><span>{{if .MailReady}}{{.A.PasswordOptional}}{{else}}{{.A.Password}}{{end}}</span>
+    <input type="password" name="password" autocomplete="new-password" minlength="{{.MinPassword}}" {{if not .MailReady}}required{{end}}></label>
+  <label class="field"><span>{{.A.Role}}</span>
+    <select name="role"><option value="user">{{.A.RoleUser}}</option><option value="admin">{{.A.RoleAdmin}}</option></select></label>
+  <button type="submit" class="primary">{{.A.Add}}</button>
+</form>
+<p class="auth-links"><a href="/admin/settings">{{.A.ServerSettings}}</a></p>
+</div>
+{{end}}
