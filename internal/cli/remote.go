@@ -139,7 +139,7 @@ func flagValue(f *pflag.Flag) string {
 
 // remoteClient is the client of the server the app names.
 func remoteClient(a *app.App) (*remote.Client, error) {
-	return remote.NewClient(a.Flags.Server, os.Getenv("JW_SERVER_USER"), os.Getenv("JW_SERVER_PASSWORD"))
+	return remote.NewClient(a.Flags.Server, os.Getenv("JW_SERVER_KEY"))
 }
 
 // versionWarned keeps the warning about a server of another version to one

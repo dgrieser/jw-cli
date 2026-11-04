@@ -50,7 +50,7 @@ func (s *Server) rememberLanguage(w http.ResponseWriter, r *http.Request) {
 // remembersOn reports whether a path is a page a reader reads, as opposed to
 // the API, the downloads, the streams a page loads, and the page's own files.
 func remembersOn(path string) bool {
-	for _, prefix := range []string{"/api/", "/download/", "/unfold/", "/static/"} {
+	for _, prefix := range []string{"/api/", "/ui/", "/download/", "/unfold/", "/static/"} {
 		if strings.HasPrefix(path, prefix) {
 			return false
 		}

@@ -15,8 +15,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/accounts"
+	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
@@ -246,6 +248,9 @@ func TestLoginGate(t *testing.T) {
 	}
 	if resp, _ := e.get(t, c, "/api/v1/languages"); resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("api without login: %d", resp.StatusCode)
+	}
+	if resp, _ := e.get(t, c, "/ui/open"); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the pages' endpoints without login: %d", resp.StatusCode)
 	}
 	if resp, body := e.post(t, c, "/login", url.Values{"email": {"admin@example.org"}, "password": {"wrong-pass"}}); resp.StatusCode != http.StatusUnauthorized ||
 		!strings.Contains(body, "Wrong email address or password") {
@@ -536,5 +541,141 @@ func TestSameOriginComparesScheme(t *testing.T) {
 		if got := s.sameOrigin(r); got != c.want {
 			t.Errorf("%+v: %v", c, got)
 		}
+	}
+}
+
+var keyRe = regexp.MustCompile(accounts.KeyPrefix + `[A-Za-z0-9_-]{43}`)
+
+// callAPI posts to the command endpoint with a key (or none): 401 without a
+// usable key, 404 past the gate (the test server runs no commands).
+func (e *authEnv) callAPI(t *testing.T, header, key string) int {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodPost, e.srv.URL+remote.Path, strings.NewReader(`{"args":["dailytext"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	switch header {
+	case "bearer":
+		req.Header.Set("Authorization", "Bearer "+key)
+	case "x-api-key":
+		req.Header.Set("X-API-Key", key)
+	case "basic":
+		req.SetBasicAuth("admin@example.org", "secret-pass")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized && !strings.HasPrefix(resp.Header.Get("WWW-Authenticate"), "Bearer") {
+		t.Errorf("401 without a Bearer challenge")
+	}
+	return resp.StatusCode
+}
+
+func TestAPIKeys(t *testing.T) {
+	e := newAuthEnv(t)
+	e.withAdmin(t, accounts.RegisterClosed)
+	st := e.settings.Get()
+	st.Anonymous = true // the pages for everybody: the API still not
+	if err := e.settings.Save(st); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := e.get(t, e.client(t), "/api/v1/languages"); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("API anonymously: %d", resp.StatusCode)
+	}
+	// what the pages' scripts ask for follows the pages
+	if resp, _ := e.get(t, e.client(t), "/ui/open"); resp.StatusCode == http.StatusUnauthorized {
+		t.Errorf("the pages' endpoints refused anonymous readers")
+	}
+	if code := e.callAPI(t, "", ""); code != http.StatusUnauthorized {
+		t.Errorf("no key: %d", code)
+	}
+	if code := e.callAPI(t, "basic", ""); code != http.StatusUnauthorized {
+		t.Errorf("basic authentication: %d", code)
+	}
+
+	admin := e.login(t, "admin@example.org", "secret-pass")
+	resp, body := e.post(t, admin, "/account/keys", url.Values{"op": {"create"}, "name": {"laptop"}, "expires": {"never"}})
+	key := keyRe.FindString(body)
+	if resp.StatusCode != http.StatusOK || key == "" {
+		t.Fatalf("create: %d\n%s", resp.StatusCode, body)
+	}
+	if _, body := e.get(t, admin, "/account/keys"); strings.Contains(body, key) || !strings.Contains(body, "laptop") {
+		t.Errorf("the secret shows again, or the key is not listed")
+	}
+	for _, h := range []string{"bearer", "x-api-key"} {
+		if code := e.callAPI(t, h, key); code != http.StatusNotFound {
+			t.Errorf("%s: %d", h, code)
+		}
+	}
+	if code := e.callAPI(t, "bearer", key+"x"); code != http.StatusUnauthorized {
+		t.Errorf("wrong key: %d", code)
+	}
+
+	// a key reads, but does not open the account's pages
+	for _, path := range []string{"/account/keys", "/account", "/admin/users", "/admin/settings"} {
+		req, _ := http.NewRequest(http.MethodGet, e.srv.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, err := http.DefaultTransport.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Errorf("%s with a key: %d", path, resp.StatusCode)
+		}
+	}
+
+	id := e.users.Keys("admin@example.org")[0].ID
+	// a date in the past is refused, a later one taken
+	_, body = e.post(t, admin, "/account/keys", url.Values{"op": {"update"}, "id": {id}, "name": {"laptop"}, "expires": {"date"}, "expires_date": {"2020-01-01"}})
+	if !strings.Contains(body, "The expiry must lie in the future") {
+		t.Errorf("past date accepted")
+	}
+	_, body = e.post(t, admin, "/account/keys", url.Values{"op": {"update"}, "id": {id}, "name": {"old laptop"}, "expires": {"30d"}})
+	if !strings.Contains(body, "Key old laptop changed") || e.users.Keys("admin@example.org")[0].Expires.IsZero() {
+		t.Errorf("update:\n%s", body)
+	}
+
+	// rotation: a new secret, the old one refused at once
+	_, body = e.post(t, admin, "/account/keys", url.Values{"op": {"rotate"}, "id": {id}, "grace": {""}, "expires": {"keep"}})
+	fresh := keyRe.FindString(body)
+	if fresh == "" || fresh == key {
+		t.Fatalf("rotate:\n%s", body)
+	}
+	if code := e.callAPI(t, "bearer", key); code != http.StatusUnauthorized {
+		t.Errorf("old secret after rotation: %d", code)
+	}
+	if code := e.callAPI(t, "bearer", fresh); code != http.StatusNotFound {
+		t.Errorf("new secret: %d", code)
+	}
+
+	_, body = e.post(t, admin, "/account/keys", url.Values{"op": {"delete"}, "id": {id}})
+	if !strings.Contains(body, "Key old laptop deleted") {
+		t.Errorf("delete:\n%s", body)
+	}
+	if code := e.callAPI(t, "bearer", fresh); code != http.StatusUnauthorized {
+		t.Errorf("deleted key: %d", code)
+	}
+
+	// an admin deletes somebody's keys
+	_ = e.users.Create("bob@example.org", "bob-pass1", accounts.RoleUser, false, "en")
+	bobKey, _, _ := e.users.CreateKey("bob@example.org", "script", time.Time{})
+	if resp, _ := e.post(t, admin, "/admin/users", url.Values{"op": {"keys"}, "email": {"bob@example.org"}}); resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("delete keys of bob: %d", resp.StatusCode)
+	}
+	if code := e.callAPI(t, "bearer", bobKey); code != http.StatusUnauthorized {
+		t.Errorf("bob's key after the admin deleted it: %d", code)
+	}
+}
+
+// The pages' own lookups, like the API, never change the reader's language.
+func TestUILookupsKeepTheLanguage(t *testing.T) {
+	for _, p := range []string{"/ui/bible/nav", "/ui/languages", "/api/v1/languages"} {
+		if remembersOn(p) {
+			t.Errorf("%s remembers the language", p)
+		}
+	}
+	if !remembersOn("/bible") {
+		t.Errorf("a page does not remember the language")
 	}
 }

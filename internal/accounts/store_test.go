@@ -95,19 +95,6 @@ func TestRateLimit(t *testing.T) {
 	}
 }
 
-func TestBasicCacheFollowsPassword(t *testing.T) {
-	s := openTest(t)
-	_ = s.Create("anne@example.org", "secret-pass", RoleUser, false, "")
-	if _, err := s.CheckBasic("anne@example.org", "secret-pass", "ip"); err != nil {
-		t.Fatal(err)
-	}
-	pw := "other-pass"
-	_ = s.Apply("anne@example.org", Update{Password: &pw})
-	if _, err := s.CheckBasic("anne@example.org", "secret-pass", "ip"); !errors.Is(err, ErrBadLogin) {
-		t.Errorf("old password after change: %v", err)
-	}
-}
-
 func TestTokens(t *testing.T) {
 	s := openTest(t)
 	first, _ := s.NewToken(TokenRegister, "anne@example.org", "de", time.Hour)

@@ -21,14 +21,17 @@ import (
 // Who may do what, once the server has accounts (Config.Accounts):
 //
 //	anonymous  nothing but the sign-in, registration and password pages —
-//	           or read everything, when the settings allow reading without
-//	           an account
-//	user       read everything
+//	           or read the pages, when the settings allow reading without
+//	           an account; never the JSON API
+//	user       read everything, and make API keys
 //	admin      also the server's settings and the accounts
 //
-// Browsers sign in at /login and carry a session cookie. Other clients (jw
-// --server) send the account's email address and password with HTTP basic
-// authentication on every request.
+// Browsers sign in at /login and carry a session cookie, which the pages'
+// own scripts use for the JSON API too. Other clients (jw --server, scripts)
+// send one of the account's API keys on every request: Authorization: Bearer
+// <key>, or X-API-Key: <key>. A key reads like its account, but does not
+// open the account's pages (/account, /admin): it cannot make more keys,
+// change the password or manage the server.
 //
 // While there is no admin, every page leads to /setup, which only the setup
 // link the server printed at startup opens: there the settings are chosen
@@ -40,6 +43,35 @@ const (
 )
 
 type userKey struct{}
+
+// keyAuth marks a request signed in with an API key rather than a session.
+type keyAuth struct{}
+
+// byKey reports whether a request came with an API key.
+func byKey(r *http.Request) bool { return r.Context().Value(keyAuth{}) != nil }
+
+// apiKeyOf is the API key a request carries, "" for none.
+func apiKeyOf(r *http.Request) string {
+	if k := strings.TrimSpace(r.Header.Get("X-API-Key")); k != "" {
+		return k
+	}
+	scheme, v, ok := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
+	if ok && strings.EqualFold(scheme, "Bearer") {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+// unauthorized answers a client of the API that sent no usable key.
+func unauthorized(w http.ResponseWriter, msg string) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="jw"`)
+	writeError(w, http.StatusUnauthorized, "unauthorized", msg)
+}
+
+// accountPath is a page about the account or the server: not for API keys.
+func accountPath(p string) bool {
+	return p == "/account" || strings.HasPrefix(p, "/account/") || strings.HasPrefix(p, "/admin/") || p == "/setup"
+}
 
 // userOf is the account signed in for a request, nil when nobody is.
 func userOf(r *http.Request) *accounts.User {
@@ -73,25 +105,33 @@ func (s *Server) gate(next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var u *accounts.User
-		if c, err := r.Cookie(sessionCookie); err == nil {
+		if k := apiKeyOf(r); k != "" {
+			ku, _, err := s.accounts.CheckKey(k, s.clientIP(r))
+			if err != nil {
+				var le *accounts.LimitError
+				if errors.As(err, &le) {
+					w.Header().Set("Retry-After", strconv.Itoa(int(le.Wait.Seconds())+1))
+					writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many failed API keys; try again later")
+					return
+				}
+				unauthorized(w, "API key refused: "+err.Error())
+				return
+			}
+			if accountPath(r.URL.Path) {
+				writeError(w, http.StatusForbidden, "forbidden", "an API key does not open the account pages: sign in with the password")
+				return
+			}
+			u = ku
+			r = r.WithContext(context.WithValue(r.Context(), keyAuth{}, true))
+		} else if _, _, ok := r.BasicAuth(); ok {
+			unauthorized(w, "basic authentication is not accepted: send an API key (Authorization: Bearer <key>), made on the account's API keys page")
+			return
+		} else if c, err := r.Cookie(sessionCookie); err == nil {
 			u = s.accounts.Session(c.Value)
 			if u != nil && r.Method == http.MethodGet && !apiPath(r.URL.Path) && !strings.HasPrefix(r.URL.Path, "/static/") {
 				// the session lasts SessionTTL past its last use: so does
 				// the cookie
 				s.setSession(w, r, c.Value)
-			}
-		}
-		if name, pw, ok := r.BasicAuth(); ok && u == nil {
-			var err error
-			if u, err = s.accounts.CheckBasic(name, pw, s.clientIP(r)); err != nil {
-				var le *accounts.LimitError
-				if errors.As(err, &le) {
-					w.Header().Set("Retry-After", strconv.Itoa(int(le.Wait.Seconds())+1))
-					writeError(w, http.StatusTooManyRequests, "too_many_requests", "too many failed logins; try again later")
-					return
-				}
-				writeError(w, http.StatusUnauthorized, "unauthorized", "login refused: "+err.Error())
-				return
 			}
 		}
 		if u != nil {
@@ -115,12 +155,13 @@ func (s *Server) gate(next http.Handler) http.Handler {
 			http.Redirect(w, r, "/setup", http.StatusFound)
 			return
 		}
-		if u != nil || publicPath(p) || s.settingsNow().Anonymous {
+		// the JSON API only with an account, whatever the pages allow
+		if u != nil || publicPath(p) || (s.settingsNow().Anonymous && !strings.HasPrefix(p, "/api/")) {
 			next.ServeHTTP(w, r)
 			return
 		}
 		if apiPath(p) || r.Method != http.MethodGet {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "sign in first: send the account's email address and password with basic authentication")
+			unauthorized(w, "an API key is needed: send it as Authorization: Bearer <key>; make one on the account's API keys page (/account/keys)")
 			return
 		}
 		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
@@ -130,7 +171,7 @@ func (s *Server) gate(next http.Handler) http.Handler {
 // apiPath is a request of a script or a client rather than a page: it is
 // answered with a status, not sent to the sign-in page.
 func apiPath(p string) bool {
-	return strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/unfold/")
+	return strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/unfold/") || strings.HasPrefix(p, "/ui/")
 }
 
 // sameOrigin reports whether a request comes from this site's own pages (or
@@ -281,6 +322,8 @@ func (s *Server) accountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /account/password", s.passwordPost)
 	mux.HandleFunc("GET /account", s.requireUser(s.accountPage))
 	mux.HandleFunc("POST /account", s.requireUser(s.accountPost))
+	mux.HandleFunc("GET /account/keys", s.requireUser(s.keysPage))
+	mux.HandleFunc("POST /account/keys", s.requireUser(s.keysPost))
 	mux.HandleFunc("GET /admin/users", s.requireAdmin(s.usersPage))
 	mux.HandleFunc("POST /admin/users", s.requireAdmin(s.usersPost))
 	mux.HandleFunc("GET /admin/settings", s.requireAdmin(s.settingsPage))
@@ -293,6 +336,11 @@ func (s *Server) requireUser(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if userOf(r) == nil {
 			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusFound)
+			return
+		}
+		if byKey(r) {
+			// the gate refuses these already; an account page never takes a key
+			writeError(w, http.StatusForbidden, "forbidden", "an API key does not open the account pages: sign in with the password")
 			return
 		}
 		h(w, r)
@@ -338,6 +386,13 @@ type authPage struct {
 	// the users page
 	Users     []accounts.Info
 	MailReady bool
+	// the keys page: the keys, and a secret made just now, shown once
+	Keys       []accounts.KeyInfo
+	NewKey     string
+	NewKeyName string
+	ServerURL  string
+	MaxKeys    int
+	MaxKeyName int
 }
 
 // authLang is the language of the account pages and of the mails a request
@@ -429,6 +484,16 @@ func errText(a *i18n.AuthText, err error) string {
 		return a.ErrRegisterNoMail
 	case errors.Is(err, accounts.ErrBadSMTP):
 		return a.ErrBadSMTP
+	case errors.Is(err, accounts.ErrKeyName):
+		return fmt.Sprintf(a.ErrKeyName, accounts.MaxKeyName)
+	case errors.Is(err, accounts.ErrManyKeys):
+		return fmt.Sprintf(a.ErrManyKeys, accounts.MaxKeys)
+	case errors.Is(err, accounts.ErrKeyTaken):
+		return a.ErrKeyTaken
+	case errors.Is(err, accounts.ErrKeyExpiry):
+		return a.ErrKeyExpiry
+	case errors.Is(err, accounts.ErrKeyNotFound):
+		return a.ErrKeyNotFound
 	case errors.Is(err, errMail):
 		return fmt.Sprintf(a.ErrMail, strings.TrimPrefix(err.Error(), errMail.Error()+": "))
 	}
@@ -831,6 +896,7 @@ func userMessage(a *i18n.AuthText, code, email string) string {
 	f := map[string]string{
 		"created": a.MsgCreated, "invited": a.MsgInvited, "approved": a.MsgApproved, "disabled": a.MsgDisabled,
 		"enabled": a.MsgEnabled, "role": a.MsgRole, "reset": a.MsgResetSent, "deleted": a.MsgDeleted,
+		"keys": a.MsgKeysRevoked,
 	}[code]
 	if f == "" {
 		return ""
@@ -930,6 +996,9 @@ func (s *Server) userAction(r *http.Request, me *accounts.User, op, email string
 			return "", errors.New(a.ErrSelf)
 		}
 		return "deleted", s.accounts.Delete(u.Email)
+	case "keys":
+		_, err := s.accounts.DeleteKeys(u.Email)
+		return "keys", err
 	}
 	return "", fmt.Errorf("unknown action %q", op)
 }

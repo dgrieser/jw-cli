@@ -1,0 +1,95 @@
+{{define "expiry"}}
+<select name="expires" class="key-expiry">
+  {{- if .Keep}}<option value="keep" selected>{{.A.ExpKeep}}</option>{{end}}
+  <option value="never"{{if not .Keep}} selected{{end}}>{{.A.ExpNever}}</option>
+  <option value="7d">{{.A.Exp7d}}</option>
+  <option value="30d">{{.A.Exp30d}}</option>
+  <option value="90d">{{.A.Exp90d}}</option>
+  <option value="1y">{{.A.Exp1y}}</option>
+  <option value="date">{{.A.ExpDate}}</option>
+</select>
+<input type="date" name="expires_date" class="key-date" aria-label="{{.A.ExpDate}}">
+{{- end}}
+
+{{define "content"}}
+<div class="auth wide">
+<h1>{{.A.APIKeys}}</h1>
+<p class="hint">{{.A.KeysIntro}}</p>
+{{template "notice" .}}
+{{- if .NewKey}}
+<section class="key-new" role="status">
+  <h2>{{.A.KeyNewTitle}}: {{.NewKeyName}}</h2>
+  <p><strong>{{.A.KeyNewHint}}</strong></p>
+  <div class="key-secret">
+    <input type="text" readonly value="{{.NewKey}}" id="key-secret" spellcheck="false" autocomplete="off" aria-label="{{.A.Key}}">
+    <button type="button" class="small primary" data-copy="key-secret" data-copied="{{.A.KeyCopied}}">{{.A.KeyCopy}}</button>
+  </div>
+  <p class="hint">{{.A.KeyUseHint}}</p>
+  <pre class="key-use">export JW_SERVER={{.ServerURL}}
+export JW_SERVER_KEY={{.NewKey}}
+jw daily</pre>
+  <pre class="key-use">curl -H "Authorization: Bearer {{.NewKey}}" {{.ServerURL}}/api/v1/dailytext</pre>
+</section>
+{{- end}}
+
+{{- if .Keys}}
+<ul class="keys">
+  {{- range .Keys}}
+  <li class="key-card{{if .Expired}} expired{{end}}">
+    <div class="key-head">
+      <strong class="key-name">{{.Name}}</strong>
+      <code>{{.Hint}}</code>
+      {{- if .Expired}}<span class="key-badge">{{$.A.KeyExpired}}</span>{{end}}
+    </div>
+    <dl class="key-meta">
+      <div><dt>{{$.A.Created}}</dt><dd>{{.Created.Local.Format "2006-01-02"}}</dd></div>
+      <div><dt>{{$.A.KeyExpires}}</dt><dd>{{if .Expires.IsZero}}{{$.A.ExpiresNever}}{{else}}{{.Expires.Local.Format "2006-01-02 15:04"}}{{end}}</dd></div>
+      <div><dt>{{$.A.KeyLastUsed}}</dt><dd>{{if .LastUsed.IsZero}}{{$.A.Never}}{{else}}{{.LastUsed.Local.Format "2006-01-02 15:04"}}{{end}}</dd></div>
+    </dl>
+    {{- if .OldValid}}<p class="hint">{{printf $.A.KeyOldUntil (.OldUntil.Local.Format "2006-01-02 15:04")}}</p>{{end}}
+    <div class="key-actions">
+      <button type="button" class="small" data-panel="edit-{{.ID}}" aria-controls="edit-{{.ID}}" aria-expanded="false" hidden>{{$.A.KeyEdit}}</button>
+      <button type="button" class="small" data-panel="rotate-{{.ID}}" aria-controls="rotate-{{.ID}}" aria-expanded="false" hidden>{{$.A.KeyRotate}}</button>
+      <form method="post" action="/account/keys" class="key-delete">
+        <input type="hidden" name="id" value="{{.ID}}">
+        <button class="small danger" name="op" value="delete" data-confirm="{{printf $.A.KeyConfirmDelete .Name}}">{{$.A.Delete}}</button>
+      </form>
+    </div>
+    <form method="post" action="/account/keys" class="auth-form key-form key-panel" id="edit-{{.ID}}">
+      <h3>{{$.A.KeyEdit}}</h3>
+      <input type="hidden" name="op" value="update"><input type="hidden" name="id" value="{{.ID}}">
+      <label class="field"><span>{{$.A.KeyName}}</span>
+        <input type="text" name="name" value="{{.Name}}" maxlength="{{$.MaxKeyName}}" required autocomplete="off"></label>
+      <label class="field"><span>{{$.A.KeyExpires}}</span>{{template "expiry" (keyExpiry $.A true)}}</label>
+      <button type="submit" class="small primary">{{$.A.Save}}</button>
+    </form>
+    <form method="post" action="/account/keys" class="auth-form key-form key-panel" id="rotate-{{.ID}}">
+      <h3>{{$.A.KeyRotate}}</h3>
+      <input type="hidden" name="op" value="rotate"><input type="hidden" name="id" value="{{.ID}}">
+      <p class="hint">{{$.A.KeyRotateHint}}</p>
+      <label class="field"><span>{{$.A.KeyGrace}}</span>
+        <select name="grace"><option value="">{{$.A.GraceNone}}</option><option value="1h">{{$.A.Grace1h}}</option><option value="1d">{{$.A.Grace1d}}</option><option value="7d">{{$.A.Grace7d}}</option></select></label>
+      <label class="field"><span>{{$.A.KeyExpires}}</span>{{template "expiry" (keyExpiry $.A (not .Expired))}}</label>
+      <button type="submit" class="small primary">{{$.A.KeyRotate}}</button>
+    </form>
+  </li>
+  {{- end}}
+</ul>
+{{- else}}
+<p class="empty">{{.A.KeysNone}}</p>
+{{- end}}
+
+{{- if lt (len .Keys) .MaxKeys}}
+<h2>{{.A.KeyCreate}}</h2>
+<form class="auth-form" method="post" action="/account/keys">
+  <input type="hidden" name="op" value="create">
+  <label class="field"><span>{{.A.KeyName}}</span>
+    <input type="text" name="name" maxlength="{{.MaxKeyName}}" required autocomplete="off">
+    <small class="hint">{{.A.KeyNameHint}}</small></label>
+  <label class="field"><span>{{.A.KeyExpires}}</span>{{template "expiry" (keyExpiry .A false)}}</label>
+  <button type="submit" class="primary">{{.A.KeyCreate}}</button>
+</form>
+{{- end}}
+<p class="auth-links"><a href="/account">{{.A.Account}}</a></p>
+</div>
+{{end}}

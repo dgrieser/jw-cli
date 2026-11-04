@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/version"
 )
 
@@ -63,8 +64,19 @@ type htmlTemplate = template.Template
 var uiPages = []string{
 	"index", "search", "article", "bible", "dailytext", "meetings",
 	"media", "media_category", "media_item", "pub", "error", "confirm",
-	"cited", "login", "register", "forgot", "password", "account", "users",
+	"cited", "login", "register", "forgot", "password", "account", "keys", "users",
 	"settings", "setup",
+}
+
+// expiryField is what the expiry choice of the keys page shows: whether
+// "as it is" is offered (and chosen).
+type expiryField struct {
+	A    *i18n.AuthText
+	Keep bool
+}
+
+var templateFuncs = template.FuncMap{
+	"keyExpiry": func(a *i18n.AuthText, keep bool) expiryField { return expiryField{A: a, Keep: keep} },
 }
 
 // parseTemplates builds one template set per page at startup, so a parse error
@@ -72,7 +84,7 @@ var uiPages = []string{
 func parseTemplates() map[string]*template.Template {
 	out := make(map[string]*template.Template, len(uiPages))
 	for _, page := range uiPages {
-		out[page] = template.Must(template.New("base.html").ParseFS(templatesFS,
+		out[page] = template.Must(template.New("base.html").Funcs(templateFuncs).ParseFS(templatesFS,
 			"templates/base.html", "templates/listing.html", "templates/forms.html", "templates/"+page+".html"))
 	}
 	return out

@@ -448,7 +448,7 @@
       var q = new URLSearchParams({ weeks: String(AHEAD), date: start });
       var lang = new URLSearchParams(location.search).get("lang");
       if (lang) q.set("lang", lang);
-      fetch("/api/v1/bible/reading?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
+      fetch("/ui/bible/reading?" + q.toString(), { credentials: "same-origin" }).then(function (res) {
         if (!res.ok) throw new Error(res.status + " " + res.statusText);
         return res.json();
       }).then(function (j) {
@@ -507,7 +507,7 @@
       if (lang) q.set("lang", lang);
       var key = q.toString();
       if (!navCache[key]) {
-        navCache[key] = fetch("/api/v1/bible/nav?" + key, { credentials: "same-origin" }).then(function (res) {
+        navCache[key] = fetch("/ui/bible/nav?" + key, { credentials: "same-origin" }).then(function (res) {
           if (!res.ok) throw new Error(res.status + " " + res.statusText);
           return res.json();
         });
@@ -954,7 +954,7 @@
         leave(u.toString());
       });
       document.body.appendChild(dialog);
-      fetch("/api/v1/languages", { headers: { Accept: "application/json" } })
+      fetch("/ui/languages", { headers: { Accept: "application/json" } })
         .then(function (r) {
           if (!r.ok) throw new Error(r.status + " " + r.statusText);
           return r.json();
@@ -1226,6 +1226,71 @@
       return Promise.all(names.filter(function (n) { return n.indexOf("jw-pages-") === 0; })
         .map(function (n) { return caches.delete(n); }));
     }).then(go, go);
+  });
+
+  // the keys page: copy a new key, and the date field only for "on a date"
+  document.addEventListener("click", function (e) {
+    var b = e.target instanceof Element && e.target.closest("button[data-copy]");
+    if (!b) return;
+    var field = document.getElementById(b.getAttribute("data-copy"));
+    if (!field) return;
+    var done = function () {
+      var was = b.textContent;
+      b.textContent = b.getAttribute("data-copied") || was;
+      setTimeout(function () { b.textContent = was; }, 1600);
+    };
+    field.select();
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(field.value).then(done, function () {
+        if (document.execCommand("copy")) done();
+      });
+    } else if (document.execCommand("copy")) {
+      done();
+    }
+  });
+  var keyDates = function (root) {
+    root.querySelectorAll("select.key-expiry").forEach(function (sel) {
+      var date = sel.parentNode.querySelector("input.key-date");
+      if (!date) return;
+      var show = function () {
+        // the date picker may have wrapped the field (.date-field)
+        var box = date.closest(".date-field") || date;
+        var off = sel.value !== "date";
+        box.hidden = off;
+        date.required = !off;
+        // a hidden field must not hold the form back: disabled, it is not
+        // checked; what it complained about stays for when it is back
+        [date].concat(Array.prototype.slice.call(box.querySelectorAll("input, button"))).forEach(function (el) {
+          el.disabled = off;
+        });
+      };
+      sel.addEventListener("change", show);
+      show();
+    });
+  };
+  keyDates(document);
+  // a key's Change and Rotate open their form below the buttons, one at a
+  // time; without script the forms simply show
+  document.querySelectorAll(".key-card").forEach(function (card) {
+    var buttons = card.querySelectorAll("button[data-panel]");
+    var panels = card.querySelectorAll(".key-panel");
+    panels.forEach(function (p) { p.hidden = true; });
+    buttons.forEach(function (b) {
+      b.hidden = false;
+      b.addEventListener("click", function () {
+        var open = b.getAttribute("aria-expanded") !== "true";
+        buttons.forEach(function (o) { o.setAttribute("aria-expanded", "false"); });
+        panels.forEach(function (p) { p.hidden = true; });
+        if (!open) return;
+        b.setAttribute("aria-expanded", "true");
+        var p = document.getElementById(b.getAttribute("data-panel"));
+        if (p) {
+          p.hidden = false;
+          var first = p.querySelector("input:not([type=hidden]), select");
+          if (first) first.focus();
+        }
+      });
+    });
   });
 
   // a button that asks first (deleting an account)
@@ -2399,7 +2464,7 @@
     var known = knownPage(page);
     if (known) return Promise.resolve(known);
     var u = new URL(page.href, location.href);
-    return fetch("/api/v1/open" + u.search, { credentials: "same-origin", headers: { Accept: "application/json" } })
+    return fetch("/ui/open" + u.search, { credentials: "same-origin", headers: { Accept: "application/json" } })
       .then(function (res) {
         return res.json().then(function (j) {
           if (!res.ok) throw new Error((j && j.error && j.error.message) || res.statusText);
@@ -2912,21 +2977,21 @@
 
     // chaptersOf is the chapters a book has, or null until they are known
     function chaptersOf(book) {
-      return fetched("c" + book, ["/api/v1/bible/nav", { book: String(book) }], function (nav) {
+      return fetched("c" + book, ["/ui/bible/nav", { book: String(book) }], function (nav) {
         return nav.chapters || [];
       });
     }
 
     // versesOf is how many verses a chapter has, or null until it is known
     function versesOf(book, chapter) {
-      return fetched("v" + book + ":" + chapter, ["/api/v1/bible/verses", { book: String(book), chapter: String(chapter) }], function (j) {
+      return fetched("v" + book + ":" + chapter, ["/ui/bible/verses", { book: String(book), chapter: String(chapter) }], function (j) {
         return j.verses || 0;
       });
     }
 
     // load knows the books of the edition, once asked for
     function load() {
-      books = fetched("b", ["/api/v1/bible/nav", {}], function (nav) {
+      books = fetched("b", ["/ui/bible/nav", {}], function (nav) {
         var list = [];
         (nav.sections || []).forEach(function (sec) {
           (sec.books || []).forEach(function (b) {

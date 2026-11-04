@@ -90,6 +90,11 @@ Any command of this binary can run on the server: jw --server <address>
 its own cache and answers with the output, which the client prints as a local
 run would. Listings, downloads and questions stay on the client.
 
+The JSON API (and so jw --server) needs an API key of an account, sent as
+Authorization: Bearer <key>; the client takes it from $JW_SERVER_KEY. Users
+make, rotate and delete their keys on the API keys page (/account/keys), or
+with jw serve user key.
+
 The global flags apply: --lang sets the default content language (overridable
 per request with ?lang=), -v logs the upstream requests.
 

@@ -4,7 +4,7 @@
 {{template "notice" .}}
 <div class="table-scroll">
 <table class="users">
-  <thead><tr><th>{{.A.Email}}</th><th>{{.A.Role}}</th><th>{{.A.Status}}</th><th>{{.A.Created}}</th><th>{{.A.LastLogin}}</th><th class="actions">{{.A.Actions}}</th></tr></thead>
+  <thead><tr><th>{{.A.Email}}</th><th>{{.A.Role}}</th><th>{{.A.Status}}</th><th>{{.A.Created}}</th><th>{{.A.LastLogin}}</th><th class="num">{{.A.KeysOf}}</th><th class="actions">{{.A.Actions}}</th></tr></thead>
   <tbody>
   {{- range .Users}}
   {{- $self := eq .Email $.Email}}
@@ -14,6 +14,7 @@
     <td>{{if .Pending}}<strong>{{$.A.StatusPending}}</strong>{{else if .Disabled}}{{$.A.StatusDisabled}}{{else if .Invited}}{{$.A.StatusInvited}}{{else}}{{$.A.StatusActive}}{{end}}</td>
     <td class="num">{{.Created.Local.Format "2006-01-02"}}</td>
     <td class="num">{{if .LastLogin.IsZero}}{{$.A.Never}}{{else}}{{.LastLogin.Local.Format "2006-01-02 15:04"}}{{end}}</td>
+    <td class="num">{{.Keys}}</td>
     <td class="actions">
       <form method="post" action="/admin/users" class="user-actions">
         <input type="hidden" name="email" value="{{.Email}}">
@@ -23,6 +24,7 @@
         {{- if eq .Role "admin"}}<button class="small" name="op" value="user">{{$.A.MakeUser}}</button>{{else}}<button class="small" name="op" value="admin">{{$.A.MakeAdmin}}</button>{{end}}
         {{- end}}
         {{- if $.MailReady}}<button class="small" name="op" value="reset">{{if .Invited}}{{$.A.ResendInvite}}{{else}}{{$.A.SendReset}}{{end}}</button>{{end}}
+        {{- if .Keys}}<button class="small" name="op" value="keys" data-confirm="{{printf $.A.ConfirmRevokeKeys .Email}}">{{$.A.RevokeKeys}}</button>{{end}}
         {{- if not $self}}<button class="small danger" name="op" value="delete" data-confirm="{{printf $.A.ConfirmDelete .Email}}">{{$.A.Delete}}</button>{{end}}
       </form>
     </td>

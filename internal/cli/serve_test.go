@@ -57,6 +57,10 @@ func TestServeSmoke(t *testing.T) {
 	if err := users.Create("admin@example.org", "secret-pass", accounts.RoleAdmin, false, ""); err != nil {
 		t.Fatal(err)
 	}
+	key, _, err := users.CreateKey("admin@example.org", "smoke", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	root := NewRootCmd(a)
 	root.SetArgs([]string{
@@ -90,7 +94,7 @@ func TestServeSmoke(t *testing.T) {
 		t.Helper()
 		req, _ := http.NewRequest(http.MethodGet, base+path, nil)
 		if login {
-			req.SetBasicAuth("admin@example.org", "secret-pass")
+			req.Header.Set("Authorization", "Bearer "+key)
 		}
 		resp, err := http.DefaultTransport.RoundTrip(req)
 		if err != nil {

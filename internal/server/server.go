@@ -175,6 +175,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/meetings", s.apiMeetings)
 	mux.HandleFunc("GET /api/v1/meetings/{part}", s.apiMeetingPart)
 	mux.HandleFunc("POST "+remote.Path, s.apiCLI)
+	// what the pages' scripts ask for, under /ui/: like the pages, these
+	// follow whether people may read without an account, while /api/ always
+	// wants a key or a sign-in
+	mux.HandleFunc("GET /ui/languages", s.apiLanguages)
+	mux.HandleFunc("GET /ui/open", s.apiOpen)
+	mux.HandleFunc("GET /ui/bible/nav", s.apiBibleNav)
+	mux.HandleFunc("GET /ui/bible/reading", s.apiBibleReading)
+	mux.HandleFunc("GET /ui/bible/verses", s.apiBibleVerses)
 
 	// download selection: pick a rendition/file server-side, then redirect to
 	// the public CDN URL rather than proxying the bytes
@@ -255,7 +263,7 @@ const apiTimeout = 10 * time.Minute
 // not notice the deadline at once does not hold the answer up.
 func (s *Server) limitsAPI(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/api/") {
+		if !strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/ui/") {
 			next.ServeHTTP(w, r)
 			return
 		}

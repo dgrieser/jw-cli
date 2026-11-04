@@ -138,15 +138,15 @@ func (e *ConfirmError) Error() string {
 type Client struct {
 	// Base is the server's address, without the endpoint path.
 	Base string
-	// User and Password log in with basic authentication when User is set:
-	// the email address and password of an account of the server.
-	User, Password string
-	HTTP           *http.Client
+	// Key is an API key of an account of the server, sent with every
+	// request.
+	Key  string
+	HTTP *http.Client
 }
 
-// NewClient parses a server address. Credentials in it (https://user:pw@host)
-// log in; otherwise user and password do, when user is set.
-func NewClient(addr, user, password string) (*Client, error) {
+// NewClient parses a server address; key is the API key the server is used
+// with.
+func NewClient(addr, key string) (*Client, error) {
 	if !strings.Contains(addr, "://") {
 		addr = "http://" + addr
 	}
@@ -154,12 +154,10 @@ func NewClient(addr, user, password string) (*Client, error) {
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
 		return nil, fmt.Errorf("invalid server address %q (want http://host:port)", addr)
 	}
-	c := &Client{User: user, Password: password, HTTP: &http.Client{}}
 	if u.User != nil {
-		c.User = u.User.Username()
-		c.Password, _ = u.User.Password()
-		u.User = nil
+		return nil, fmt.Errorf("invalid server address %q: the server takes an API key ($JW_SERVER_KEY), not credentials in the address", u.Redacted())
 	}
+	c := &Client{Key: strings.TrimSpace(key), HTTP: &http.Client{}}
 	c.Base = strings.TrimRight(u.String(), "/")
 	return c, nil
 }
@@ -179,8 +177,8 @@ func (c *Client) Run(ctx context.Context, req Request) (Response, error) {
 	}
 	hr.Header.Set("Content-Type", "application/json")
 	hr.Header.Set("Accept", "application/json")
-	if c.User != "" {
-		hr.SetBasicAuth(c.User, c.Password)
+	if c.Key != "" {
+		hr.Header.Set("Authorization", "Bearer "+c.Key)
 	}
 	resp, err := c.HTTP.Do(hr)
 	if err != nil {
@@ -215,7 +213,9 @@ func statusError(base string, status int, body []byte) error {
 	}
 	switch status {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("jw serve at %s refused the login (%s): set the account's email address and password in $JW_SERVER_USER and $JW_SERVER_PASSWORD, or in the address (http://name%%40example.org:password@host)", base, msg)
+		return fmt.Errorf("jw serve at %s refused the request: %s\nset an API key of your account in $JW_SERVER_KEY (made on %s/account/keys)", base, msg, base)
+	case http.StatusForbidden:
+		return fmt.Errorf("jw serve at %s refused the request: %s", base, msg)
 	case http.StatusNotFound, http.StatusMethodNotAllowed:
 		return fmt.Errorf("jw serve at %s does not run commands (HTTP %d): it is older than this client, or not jw serve", base, status)
 	}

@@ -582,7 +582,9 @@ The server binds to `127.0.0.1` unless `--addr` says otherwise.
 ### Accounts
 
 Every route — web site, API and downloads — is behind a sign-in. The email
-address is the user name; passwords are stored as argon2id hashes.
+address is the user name; passwords are stored as argon2id hashes. Browsers
+sign in with the password; programs, `jw --server` among them, use the JSON
+API with an [API key](#api-keys).
 
 **First start.** While there is no admin, the server prints a one-time setup
 link and every page leads there:
@@ -639,6 +641,56 @@ jw serve user approve|disable|enable|delete anne@example.org
 jw serve user role anne@example.org user
 echo 'new-password' | jw serve user passwd anne@example.org   # without a terminal
 ```
+
+#### API keys
+
+The JSON API under `/api/` takes an account's API key, or the session of a
+signed-in browser (the pages' own scripts use the API that way). It never
+answers anonymously, even when the settings let people read the pages without
+an account (the pages' scripts then use a few endpoints of their own under
+`/ui/`, which follow the pages). Send the key with every request:
+
+```sh
+curl -H "Authorization: Bearer jw_…" https://jw.example.org/api/v1/dailytext
+curl -H "X-API-Key: jw_…" https://jw.example.org/api/v1/search?q=kingdom
+```
+
+Every user manages their keys under **API keys** in the bar's settings menu
+(`/account/keys`):
+
+- **Create** a key with a name (*laptop*, *backup script*) and an expiry: in
+  7, 30 or 90 days, in a year, on a date, or never. The secret is shown once,
+  with how to use it; only its hash is kept.
+- **Change** a key's name or expiry.
+- **Rotate** a key: it gets a new secret, keeping its name. The old secret
+  stops at once, or keeps working for one more hour, day or week, to replace
+  it where it is used. An expired key comes back with a rotation and a new
+  expiry.
+- **Delete** a key: whatever uses it is refused at once.
+
+An account has at most 50 keys. A key reads like its account, but does not
+open the account's pages (`/account`, `/admin`): with a key nobody can make
+more keys, change the password or manage the server. A disabled account's
+keys stop working, and deleting an account deletes its keys. Admins see each
+account's number of keys under **Users** and can delete them all. Failed keys
+count against the client like failed sign-ins. HTTP basic authentication is
+not accepted.
+
+From the command line, also while the server runs:
+
+```sh
+jw serve user key add anne@example.org laptop --expires 90d   # prints the secret
+jw serve user key list anne@example.org
+jw serve user key update anne@example.org laptop --name desktop --expires never
+jw serve user key rotate anne@example.org desktop --grace 24h
+jw serve user key delete anne@example.org desktop
+jw serve user key delete anne@example.org             # all keys of the account
+```
+
+Expiries are `never`, a number of days, weeks or years (`30d`, `12w`, `1y`), a
+duration (`36h`) or a date (`2027-01-31`, until the end of that day).
+
+#### Limits and proxies
 
 Failed sign-ins are limited per client (8 per address and 32 overall within
 15 minutes), and so are the emails one client or address can trigger. Put TLS
@@ -1119,6 +1171,9 @@ token): the server keeps the verses each run has shown for an hour, so the
 verse, paragraph and article streams of one run show a verse once between
 them; a stream that fails gives its verses back.
 
+Every endpoint below needs an [API key](#api-keys) (`Authorization: Bearer
+<key>`) or a signed-in browser session; without one it answers `401`.
+
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
@@ -1189,7 +1244,7 @@ it is opened, so the verses stay readable however much hangs off them.
 
 ```sh
 jw --server http://jw.example:8080 bible read "Joh 3:16" --unfold 1
-export JW_SERVER=http://me:secret@jw.example:8080   # every command from now on
+export JW_SERVER=https://jw.example.org JW_SERVER_KEY=jw_…   # every command from now on
 jw search kingdom && jw show 1 && jw download 2
 ```
 
@@ -1226,11 +1281,11 @@ locale names, never the server's. What only concerns this machine stays here:
 one thing this machine still asks of the sites, and the progress lines of
 unfolds and excerpts are not shown.
 
-The client signs in with an account of the server: its email address and
-password in `$JW_SERVER_USER` and `$JW_SERVER_PASSWORD`, or in the address
-(`http://anne%40example.org:password@host:8080`), sent with HTTP basic
-authentication; use `https://` behind a TLS proxy for anything beyond a
-trusted network. A command on the server is bound by the API's ten-minute
+The client uses the server with an [API key](#api-keys) of your account in
+`$JW_SERVER_KEY`, sent as `Authorization: Bearer` with every command; make
+one on the server's **API keys** page or with `jw serve user key add`. Without
+a key, or with one the server refuses, the command fails and says so. Use
+`https://` behind a TLS proxy for anything beyond a trusted network. A command on the server is bound by the API's ten-minute
 deadline, and the client warns when the server is a different release than
 itself — the output is then the server's version of it.
 

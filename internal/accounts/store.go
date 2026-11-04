@@ -94,6 +94,7 @@ type Info struct {
 	Created   time.Time
 	LastLogin time.Time
 	Sessions  int
+	Keys      int // API keys
 }
 
 // Token kinds: what a link sent by email does.
@@ -125,6 +126,7 @@ type file struct {
 	Users    []*User    `json:"users"`
 	Sessions []*session `json:"sessions"`
 	Tokens   []*Token   `json:"tokens,omitempty"`
+	Keys     []*APIKey  `json:"keys,omitempty"`
 }
 
 // Store holds accounts, sessions and tokens. It is safe for concurrent use
@@ -136,16 +138,13 @@ type Store struct {
 	users    map[string]*User // email -> user
 	sessions map[string]*session
 	tokens   map[string]*Token
+	keys     map[string]*APIKey // by the hash of the secret
 	modTime  time.Time
 	size     int64
 	checked  time.Time
-	dirtyAt  time.Time // a session's Seen changed and is not saved yet
+	dirtyAt  time.Time // a session's Seen or a key's LastUsed changed and is not saved yet
 
 	limiter limiter
-	// basic remembers credentials of HTTP basic authentication that passed,
-	// so the password hash is not recomputed on every request a client
-	// makes: key -> the hash the user had then.
-	basic sync.Map
 }
 
 // Open loads (or starts) the store at path.
@@ -185,7 +184,7 @@ func key(email string) string { return strings.ToLower(strings.TrimSpace(email))
 
 // load reads the file; the caller holds mu.
 func (s *Store) load() error {
-	s.users, s.sessions, s.tokens = map[string]*User{}, map[string]*session{}, map[string]*Token{}
+	s.users, s.sessions, s.tokens, s.keys = map[string]*User{}, map[string]*session{}, map[string]*Token{}, map[string]*APIKey{}
 	st, err := os.Stat(s.path)
 	if errors.Is(err, os.ErrNotExist) {
 		s.modTime, s.size = time.Time{}, 0
@@ -218,6 +217,11 @@ func (s *Store) load() error {
 			s.tokens[t.Hash] = t
 		}
 	}
+	for _, k := range f.Keys {
+		if k != nil && k.Hash != "" && s.users[key(k.Email)] != nil {
+			s.keys[k.Hash] = k
+		}
+	}
 	s.modTime, s.size = st.ModTime(), st.Size()
 	return nil
 }
@@ -247,12 +251,20 @@ func (s *Store) sync() error {
 	case st.ModTime().Equal(s.modTime) && st.Size() == s.size:
 		return nil
 	}
-	seen := map[string]time.Time{}
+	seen, used := map[string]time.Time{}, map[string]time.Time{}
 	for h, se := range s.sessions {
 		seen[h] = se.Seen
 	}
+	for _, k := range s.keys {
+		used[k.ID] = k.LastUsed
+	}
 	if err := s.load(); err != nil {
 		return err
+	}
+	for _, k := range s.keys {
+		if t, ok := used[k.ID]; ok && t.After(k.LastUsed) {
+			k.LastUsed = t
+		}
 	}
 	for h, se := range s.sessions {
 		if t, ok := seen[h]; ok && t.After(se.Seen) {
@@ -336,6 +348,10 @@ func (s *Store) save() error {
 		f.Tokens = append(f.Tokens, t)
 	}
 	sort.Slice(f.Tokens, func(a, b int) bool { return f.Tokens[a].Expires.Before(f.Tokens[b].Expires) })
+	for _, k := range s.keys {
+		f.Keys = append(f.Keys, k)
+	}
+	sort.Slice(f.Keys, func(a, b int) bool { return f.Keys[a].Created.Before(f.Keys[b].Created) })
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -430,14 +446,17 @@ func (s *Store) List() []Info {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.refresh()
-	count := map[string]int{}
+	count, keys := map[string]int{}, map[string]int{}
 	for _, se := range s.sessions {
 		count[key(se.Email)]++
+	}
+	for _, k := range s.keys {
+		keys[key(k.Email)]++
 	}
 	out := make([]Info, 0, len(s.users))
 	for k, u := range s.users {
 		out = append(out, Info{Email: u.Email, Role: u.Role, Pending: u.Pending, Disabled: u.Disabled, Invited: u.Hash == "",
-			Created: u.Created, LastLogin: u.LastLogin, Sessions: count[k]})
+			Created: u.Created, LastLogin: u.LastLogin, Sessions: count[k], Keys: keys[k]})
 	}
 	sort.Slice(out, func(a, b int) bool {
 		if out[a].Pending != out[b].Pending {
@@ -571,6 +590,7 @@ func (s *Store) Delete(email string) error {
 		delete(s.users, key(email))
 		s.dropSessions(u.Email, "")
 		s.dropTokens(u.Email, "")
+		s.dropKeys(u.Email)
 		return true, nil
 	})
 }
@@ -877,36 +897,6 @@ func (s *Store) Check(email, password, client string) (*User, error) {
 	return &cp, nil
 }
 
-// CheckBasic verifies the credentials of HTTP basic authentication (jw
-// --server and other API clients). Credentials that passed are remembered for
-// as long as the account's password stays the same, so a client's every
-// request does not pay for the password hash.
-func (s *Store) CheckBasic(email, password, client string) (*User, error) {
-	sum := sha256.Sum256([]byte(key(email) + "\x00" + password))
-	k := hex.EncodeToString(sum[:])
-	if h, ok := s.basic.Load(k); ok {
-		s.mu.Lock()
-		s.refresh()
-		u := s.users[key(email)]
-		var cp User
-		good := u.Active() && u.Hash == h.(string)
-		if good {
-			cp = *u
-		}
-		s.mu.Unlock()
-		if good {
-			return &cp, nil
-		}
-		s.basic.Delete(k)
-	}
-	u, err := s.Check(email, password, client)
-	if err != nil {
-		return nil, err
-	}
-	s.basic.Store(k, u.Hash)
-	return u, nil
-}
-
 // StartSession signs a user in without a password (right after the setup
 // wizard made the admin, or a link set the password).
 func (s *Store) StartSession(email string) (string, error) {
@@ -979,7 +969,7 @@ func (s *Store) Logout(tok string) {
 	})
 }
 
-// Flush writes pending session times.
+// Flush writes pending session times and key uses.
 func (s *Store) Flush() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

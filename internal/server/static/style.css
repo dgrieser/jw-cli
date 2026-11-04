@@ -2312,3 +2312,48 @@ ul.gallery .imagemeta { color: var(--muted); font-size: 0.8rem; overflow-wrap: a
 /* the text fields and the page size among the search's options */
 .options .opt input[type="text"], .options .opt input[type="number"] { width: 100%; }
 .options .opt.off input:not([type="hidden"]) { opacity: 0.45; }
+
+/* the API keys page */
+.key-new {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.8rem 1rem;
+  margin: 1rem 0;
+  background: var(--accent-soft);
+}
+.key-new h2 { margin-top: 0; }
+.key-secret { display: flex; gap: 0.5rem; align-items: center; }
+.key-secret input { flex: 1; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
+.key-use {
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+ul.keys { list-style: none; padding: 0; margin: 1rem 0; display: grid; gap: 0.75rem; }
+.key-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+}
+.key-card.expired { opacity: 0.75; }
+.key-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.75rem; }
+.key-head code { font-size: 0.85rem; color: var(--muted); }
+.key-badge { font-size: 0.8rem; color: var(--danger); background: var(--danger-soft); border-radius: 999px; padding: 0.05rem 0.5rem; }
+.key-meta { display: flex; flex-wrap: wrap; gap: 0.2rem 1.5rem; margin: 0.4rem 0 0; font-size: 0.9rem; }
+.key-meta dt { color: var(--muted); display: inline; }
+.key-meta dt::after { content: ":"; }
+.key-meta dd { display: inline; margin: 0 0 0 0.3rem; }
+.key-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: flex-start; margin-top: 0.6rem; }
+.key-panel { border-top: 1px solid var(--line); padding-top: 0.6rem; margin-top: 0.75rem; }
+.key-panel h3 { margin: 0; font-size: 1rem; }
+html.js .key-panel[hidden], .auth .date-field[hidden] { display: none; }
+.key-actions button[aria-expanded="true"] { background: var(--accent-soft); border-color: var(--accent); }
+.key-form { margin-top: 0.5rem; max-width: 28rem; }
+.key-form select, .key-form input[type="date"] { width: 100%; }
+input.key-date { margin-top: 0.35rem; }
+.auth input.key-date[hidden] { display: none; }

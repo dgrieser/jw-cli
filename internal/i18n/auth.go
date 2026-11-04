@@ -48,6 +48,21 @@ type AuthText struct {
 	ErrMail                                                      string // %[1]s the failure
 	ErrSelf, ErrNoMail, ErrRegisterClosed                        string
 
+	// API keys: the keys page, and the column and action of the users page.
+	APIKeys, KeysIntro, KeysNone, KeyName, KeyNameHint, Key, KeyLastUsed   string
+	KeyExpires, ExpNever, Exp7d, Exp30d, Exp90d, Exp1y, ExpDate, ExpKeep   string
+	ExpiresNever, KeyExpired, KeyCreate, KeyEdit, KeyRotate, KeyRotateHint string
+	KeyGrace, GraceNone, Grace1h, Grace1d, Grace7d                         string
+	KeyNewTitle, KeyNewHint, KeyUseHint, KeyCopy, KeyCopied                string
+	KeyOldUntil                                                            string // %[1]s the time
+	KeyConfirmDelete                                                       string // %[1]s the key's name
+	MsgKeyUpdated, MsgKeyDeleted                                           string // %[1]s the key's name
+	KeysOf, RevokeKeys                                                     string
+	ConfirmRevokeKeys, MsgKeysRevoked                                      string // %[1]s the address
+	ErrKeyName                                                             string // %[1]d the longest name
+	ErrManyKeys                                                            string // %[1]d the most keys
+	ErrKeyTaken, ErrKeyExpiry, ErrKeyNotFound, ErrKeyBadExpiry, ErrKeyHere string
+
 	// Mails: %[1]s names the site (its address); %[2]s is the link.
 	MailRegisterSubject, MailRegisterBody string
 	MailExistsSubject, MailExistsBody     string
@@ -128,6 +143,33 @@ var authEN = AuthText{
 	ErrBadSMTP:        "The mail server needs a host, a port and a sender address.",
 	ErrMail:           "The email could not be sent: %[1]s",
 	ErrSelf:           "Not for your own account.", ErrNoMail: "No mail server is set up.", ErrRegisterClosed: "Registration is closed.",
+
+	APIKeys:   "API keys",
+	KeysIntro: "Programs use the JSON API under /api/ with a key, jw --server among them. Send it as Authorization: Bearer <key> or X-API-Key: <key>.",
+	KeysNone:  "No keys yet.",
+	KeyName:   "Name", KeyNameHint: "What the key is for, such as laptop or backup script.",
+	Key: "Key", KeyLastUsed: "Last used",
+	KeyExpires: "Expires", ExpNever: "never", Exp7d: "in 7 days", Exp30d: "in 30 days", Exp90d: "in 90 days", Exp1y: "in a year",
+	ExpDate: "on a date", ExpKeep: "as it is",
+	ExpiresNever: "never", KeyExpired: "expired", KeyCreate: "Create key", KeyEdit: "Change", KeyRotate: "Rotate",
+	KeyRotateHint: "A new secret replaces the old one. The old one can keep working for a while, to replace it where it is used.",
+	KeyGrace:      "Old secret works", GraceNone: "no longer", Grace1h: "one more hour", Grace1d: "one more day", Grace7d: "seven more days",
+	KeyNewTitle: "Your new key",
+	KeyNewHint:  "Copy it now: it is not shown again.",
+	KeyUseHint:  "For jw on the command line:",
+	KeyCopy:     "Copy", KeyCopied: "Copied",
+	KeyOldUntil:      "the old secret works until %[1]s",
+	KeyConfirmDelete: "Delete the key %[1]s? Whatever uses it is refused at once.",
+	MsgKeyUpdated:    "Key %[1]s changed.", MsgKeyDeleted: "Key %[1]s deleted.",
+	KeysOf: "API keys", RevokeKeys: "Delete keys",
+	ConfirmRevokeKeys: "Delete all API keys of %[1]s?", MsgKeysRevoked: "The API keys of %[1]s are deleted.",
+	ErrKeyName:      "A key needs a name of at most %[1]d characters.",
+	ErrManyKeys:     "An account has at most %[1]d API keys.",
+	ErrKeyTaken:     "There is a key of this name already.",
+	ErrKeyExpiry:    "The expiry must lie in the future.",
+	ErrKeyNotFound:  "No such key.",
+	ErrKeyBadExpiry: "Choose a date for the expiry.",
+	ErrKeyHere:      "Sign in with your password to manage the account: an API key does not open these pages.",
 
 	MailRegisterSubject: "Confirm your email address",
 	MailRegisterBody: "Hello,\n\nsomebody, hopefully you, wants to create an account on %[1]s with this email address.\n" +
@@ -219,6 +261,33 @@ var authDE = AuthText{
 	ErrBadSMTP:        "Der Mailserver braucht einen Host, einen Port und eine Absenderadresse.",
 	ErrMail:           "Die E-Mail konnte nicht gesendet werden: %[1]s",
 	ErrSelf:           "Nicht für dein eigenes Konto.", ErrNoMail: "Kein Mailserver eingerichtet.", ErrRegisterClosed: "Die Registrierung ist geschlossen.",
+
+	APIKeys:   "API-Schlüssel",
+	KeysIntro: "Programme nutzen die JSON-API unter /api/ mit einem Schlüssel, darunter jw --server. Sende ihn als Authorization: Bearer <Schlüssel> oder X-API-Key: <Schlüssel>.",
+	KeysNone:  "Noch keine Schlüssel.",
+	KeyName:   "Name", KeyNameHint: "Wofür der Schlüssel ist, etwa Laptop oder Backup-Skript.",
+	Key: "Schlüssel", KeyLastUsed: "Zuletzt benutzt",
+	KeyExpires: "Läuft ab", ExpNever: "nie", Exp7d: "in 7 Tagen", Exp30d: "in 30 Tagen", Exp90d: "in 90 Tagen", Exp1y: "in einem Jahr",
+	ExpDate: "an einem Datum", ExpKeep: "wie bisher",
+	ExpiresNever: "nie", KeyExpired: "abgelaufen", KeyCreate: "Schlüssel anlegen", KeyEdit: "Ändern", KeyRotate: "Erneuern",
+	KeyRotateHint: "Ein neues Geheimnis ersetzt das alte. Das alte kann noch eine Weile gelten, um es überall zu ersetzen, wo es benutzt wird.",
+	KeyGrace:      "Altes Geheimnis gilt", GraceNone: "nicht mehr", Grace1h: "noch eine Stunde", Grace1d: "noch einen Tag", Grace7d: "noch sieben Tage",
+	KeyNewTitle: "Dein neuer Schlüssel",
+	KeyNewHint:  "Kopiere ihn jetzt: Er wird nicht noch einmal gezeigt.",
+	KeyUseHint:  "Für jw auf der Kommandozeile:",
+	KeyCopy:     "Kopieren", KeyCopied: "Kopiert",
+	KeyOldUntil:      "das alte Geheimnis gilt bis %[1]s",
+	KeyConfirmDelete: "Den Schlüssel %[1]s löschen? Was ihn benutzt, wird sofort abgewiesen.",
+	MsgKeyUpdated:    "Schlüssel %[1]s geändert.", MsgKeyDeleted: "Schlüssel %[1]s gelöscht.",
+	KeysOf: "API-Schlüssel", RevokeKeys: "Schlüssel löschen",
+	ConfirmRevokeKeys: "Alle API-Schlüssel von %[1]s löschen?", MsgKeysRevoked: "Die API-Schlüssel von %[1]s sind gelöscht.",
+	ErrKeyName:      "Ein Schlüssel braucht einen Namen mit höchstens %[1]d Zeichen.",
+	ErrManyKeys:     "Ein Konto hat höchstens %[1]d API-Schlüssel.",
+	ErrKeyTaken:     "Es gibt schon einen Schlüssel mit diesem Namen.",
+	ErrKeyExpiry:    "Der Ablauf muss in der Zukunft liegen.",
+	ErrKeyNotFound:  "Diesen Schlüssel gibt es nicht.",
+	ErrKeyBadExpiry: "Wähle ein Datum für den Ablauf.",
+	ErrKeyHere:      "Melde dich mit deinem Passwort an, um das Konto zu verwalten: Ein API-Schlüssel öffnet diese Seiten nicht.",
 
 	MailRegisterSubject: "Bestätige deine E-Mail-Adresse",
 	MailRegisterBody: "Hallo,\n\njemand, hoffentlich du, möchte auf %[1]s ein Konto mit dieser E-Mail-Adresse anlegen.\n" +

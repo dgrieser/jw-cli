@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dgrieser/jw-cli/internal/accounts"
 	"github.com/dgrieser/jw-cli/internal/remote"
@@ -27,7 +28,7 @@ func cliServer(t *testing.T, users *accounts.Store, settings *accounts.SettingsF
 
 func TestAPICLIRunsTheCommand(t *testing.T) {
 	srv := cliServer(t, nil, nil)
-	c, err := remote.NewClient(srv.URL, "", "")
+	c, err := remote.NewClient(srv.URL, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,30 +74,31 @@ func TestAPICLIBehindLogin(t *testing.T) {
 	}
 	srv := cliServer(t, users, settings)
 	req := remote.Request{Args: []string{"dailytext"}}
-	c, _ := remote.NewClient(srv.URL, "", "")
-	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_USER") {
-		t.Errorf("without a login: %v", err)
+	c, _ := remote.NewClient(srv.URL, "")
+	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_KEY") {
+		t.Errorf("without a key: %v", err)
 	}
-	c, _ = remote.NewClient(srv.URL, "me@example.org", "wrong-pass")
-	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_USER") {
-		t.Errorf("wrong password: %v", err)
+	c, _ = remote.NewClient(srv.URL, accounts.KeyPrefix+"wrong")
+	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_KEY") {
+		t.Errorf("wrong key: %v", err)
 	}
-	c, _ = remote.NewClient(strings.Replace(srv.URL, "://", "://me%40example.org:secret-pass@", 1), "", "")
+	if _, err := remote.NewClient(strings.Replace(srv.URL, "://", "://me%40example.org:secret-pass@", 1), ""); err == nil {
+		t.Errorf("credentials in the address accepted")
+	}
+	key, _, err := users.CreateKey("me@example.org", "cli", time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ = remote.NewClient(srv.URL, key)
 	if _, err := c.Run(context.Background(), req); err != nil {
-		t.Errorf("login in the address: %v", err)
-	}
-	c, _ = remote.NewClient(srv.URL, "me@example.org", "secret-pass")
-	for range 2 { // the second time from the remembered credentials
-		if _, err := c.Run(context.Background(), req); err != nil {
-			t.Errorf("login from the environment: %v", err)
-		}
+		t.Errorf("with the key: %v", err)
 	}
 }
 
 func TestAPICLIWithoutRunner(t *testing.T) {
 	srv := httptest.NewServer(New(Config{Svc: &service.Service{}}).Handler())
 	t.Cleanup(srv.Close)
-	c, _ := remote.NewClient(srv.URL, "", "")
+	c, _ := remote.NewClient(srv.URL, "")
 	if _, err := c.Run(context.Background(), remote.Request{Args: []string{"dailytext"}}); err == nil ||
 		!strings.Contains(err.Error(), "does not run commands") {
 		t.Errorf("err = %v", err)

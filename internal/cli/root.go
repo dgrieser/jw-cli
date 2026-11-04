@@ -57,7 +57,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 	pf.Var(newSizeValue(&a.Flags.CacheMax, os.Getenv("JW_CACHE_MAX")), "cache-max",
 		"bound the cache, dropping what was used least recently beyond it, e.g. 500MB or 2GB; 0 turns the cache off ($JW_CACHE_MAX)")
 	pf.StringVar(&a.Flags.Server, "server", os.Getenv("JW_SERVER"),
-		"run the command on this jw serve (http://host:port), drawing on its cache; credentials in the address or in $JW_SERVER_USER/$JW_SERVER_PASSWORD ($JW_SERVER)")
+		"run the command on this jw serve (http://host:port), drawing on its cache; with the API key in $JW_SERVER_KEY ($JW_SERVER)")
 	for _, hidden := range []string{"base-cdn", "base-jworg", "base-wol", "cache-dir"} {
 		_ = pf.MarkHidden(hidden)
 	}
