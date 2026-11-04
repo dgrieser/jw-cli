@@ -65,11 +65,11 @@ func TestServiceWorkerPolicy(t *testing.T) {
 		{"asked fallback", PageCacheFallback, false, "", PageCacheFallback},
 		{"off", PageCacheOff, false, "", PageCacheOff},
 	} {
-		var creds Credentials
+		cfg := Config{PageCache: c.policy}
 		if c.users {
-			creds.Add("anne", "secret")
+			cfg.Accounts, cfg.Settings = testAccounts(t)
 		}
-		s := New(Config{Auth: &creds, PageCache: c.policy})
+		s := New(cfg)
 		r := httptest.NewRequest(http.MethodGet, "/sw.js", nil)
 		if c.header != "" {
 			r.Header.Set(c.header, "anne")

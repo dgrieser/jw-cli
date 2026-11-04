@@ -134,3 +134,22 @@ func TestTextForFallsBackToEnglish(t *testing.T) {
 		t.Error("de-CH should match German")
 	}
 }
+
+// TestAuthCatalogsComplete is TestCatalogsComplete and
+// TestCatalogsAgreeOnVerbs for the text of the accounts.
+func TestAuthCatalogsComplete(t *testing.T) {
+	base := reflect.ValueOf(authEN)
+	typ := base.Type()
+	for l, m := range authCatalog {
+		v := reflect.ValueOf(*m)
+		for i := range v.NumField() {
+			name := typ.Field(i).Name
+			if strings.TrimSpace(v.Field(i).String()) == "" {
+				t.Errorf("%s: Auth.%s is empty", l, name)
+			}
+			if got, want := verbs(v.Field(i).String()), verbs(base.Field(i).String()); got != want {
+				t.Errorf("%s: Auth.%s has verbs %q, English has %q", l, name, got, want)
+			}
+		}
+	}
+}

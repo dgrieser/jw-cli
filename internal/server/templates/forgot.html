@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="auth">
+<h1>{{.A.ResetTitle}}</h1>
+{{template "notice" .}}
+{{- if and .CanReset (not .Sent)}}
+<p class="hint">{{.A.ForgotIntro}}</p>
+<form class="auth-form" method="post" action="/forgot">
+  <label class="field"><span>{{.A.Email}}</span>
+    <input type="email" name="email" value="{{.Email}}" autocomplete="username" autocapitalize="none" spellcheck="false" required data-autofocus></label>
+  <button type="submit" class="primary">{{.A.SendLink}}</button>
+</form>
+{{- end}}
+<p class="auth-links"><a href="/login">{{.A.BackToSignIn}}</a></p>
+</div>
+{{end}}

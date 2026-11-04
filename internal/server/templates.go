@@ -63,7 +63,8 @@ type htmlTemplate = template.Template
 var uiPages = []string{
 	"index", "search", "article", "bible", "dailytext", "meetings",
 	"media", "media_category", "media_item", "pub", "error", "confirm",
-	"cited",
+	"cited", "login", "register", "forgot", "password", "account", "users",
+	"settings", "setup",
 }
 
 // parseTemplates builds one template set per page at startup, so a parse error
@@ -72,7 +73,7 @@ func parseTemplates() map[string]*template.Template {
 	out := make(map[string]*template.Template, len(uiPages))
 	for _, page := range uiPages {
 		out[page] = template.Must(template.New("base.html").ParseFS(templatesFS,
-			"templates/base.html", "templates/listing.html", "templates/"+page+".html"))
+			"templates/base.html", "templates/listing.html", "templates/forms.html", "templates/"+page+".html"))
 	}
 	return out
 }
@@ -112,7 +113,7 @@ func (s *Server) pageCachePolicy(r *http.Request) string {
 	case PageCacheFirst, PageCacheFallback, PageCacheOff:
 		return s.pageCache
 	}
-	if !s.auth.Empty() {
+	if s.authOn() && !s.settingsNow().Anonymous {
 		return PageCacheFallback
 	}
 	for _, h := range proxyUserHeaders {

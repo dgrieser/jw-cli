@@ -138,7 +138,8 @@ func (e *ConfirmError) Error() string {
 type Client struct {
 	// Base is the server's address, without the endpoint path.
 	Base string
-	// User and Password log in with basic authentication when User is set.
+	// User and Password log in with basic authentication when User is set:
+	// the email address and password of an account of the server.
 	User, Password string
 	HTTP           *http.Client
 }
@@ -214,7 +215,7 @@ func statusError(base string, status int, body []byte) error {
 	}
 	switch status {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("jw serve at %s refused the login: set the credentials in the address (http://user:password@host) or in $JW_SERVER_USER and $JW_SERVER_PASSWORD", base)
+		return fmt.Errorf("jw serve at %s refused the login (%s): set the account's email address and password in $JW_SERVER_USER and $JW_SERVER_PASSWORD, or in the address (http://name%%40example.org:password@host)", base, msg)
 	case http.StatusNotFound, http.StatusMethodNotAllowed:
 		return fmt.Errorf("jw serve at %s does not run commands (HTTP %d): it is older than this client, or not jw serve", base, status)
 	}

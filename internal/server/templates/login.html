@@ -1,0 +1,17 @@
+{{define "content"}}
+<div class="auth">
+<h1>{{.A.SignIn}}</h1>
+<form class="auth-form" method="post" action="/login">
+  <input type="hidden" name="next" value="{{.Next}}">
+  <label class="field"><span>{{.A.Email}}</span>
+    <input type="email" name="email" value="{{.Email}}" autocomplete="username" autocapitalize="none" spellcheck="false" required data-autofocus></label>
+  <label class="field"><span>{{.A.Password}}</span>
+    <input type="password" name="password" autocomplete="current-password" required></label>
+  <button type="submit" class="primary">{{.A.SignIn}}</button>
+</form>
+<p class="auth-links">
+  {{- if .CanReset}}<a href="/forgot">{{.A.Forgot}}</a>{{end}}
+  {{- if .CanRegister}}<span>{{.A.NoAccount}} <a href="/register">{{.A.Register}}</a></span>{{end}}
+</p>
+</div>
+{{end}}

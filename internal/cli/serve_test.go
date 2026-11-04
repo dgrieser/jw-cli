@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/accounts"
 	"github.com/dgrieser/jw-cli/internal/app"
 )
 
@@ -47,11 +48,21 @@ func TestServeSmoke(t *testing.T) {
 	a.Stdout = &out
 	a.Stderr = &out
 
+	dataDir := t.TempDir()
+	usersPath, _ := accounts.Paths(dataDir)
+	users, err := accounts.Open(usersPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := users.Create("admin@example.org", "secret-pass", accounts.RoleAdmin, false, ""); err != nil {
+		t.Fatal(err)
+	}
+
 	root := NewRootCmd(a)
 	root.SetArgs([]string{
 		"--base-cdn", upstream.URL, "--base-jworg", upstream.URL, "--base-wol", upstream.URL,
 		"--cache-dir", t.TempDir(),
-		"serve", "--port", "0",
+		"serve", "--port", "0", "--data-dir", dataDir,
 	})
 	root.SetOut(&out)
 	root.SetErr(&out)
@@ -75,10 +86,28 @@ func TestServeSmoke(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	resp, err := http.Get(base + "/api/v1/languages")
-	if err != nil {
-		t.Fatal(err)
+	get := func(path string, login bool) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, base+path, nil)
+		if login {
+			req.SetBasicAuth("admin@example.org", "secret-pass")
+		}
+		resp, err := http.DefaultTransport.RoundTrip(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
 	}
+
+	// without an account: the API refuses, a page leads to the sign-in
+	if resp := get("/api/v1/languages", false); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("api without login: status %d", resp.StatusCode)
+	}
+	if resp := get("/", false); resp.StatusCode != http.StatusFound || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
+		t.Errorf("page without login: status %d, Location %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+
+	resp := get("/api/v1/languages", true)
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(body), `"symbol": "X"`) {
@@ -87,10 +116,7 @@ func TestServeSmoke(t *testing.T) {
 
 	// the chrome follows the content language, so the page has to be asked for
 	// one rather than left to the machine's locale
-	resp, err = http.Get(base + "/?lang=en")
-	if err != nil {
-		t.Fatal(err)
-	}
+	resp = get("/?lang=en", true)
 	page, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(page), "Daily text") {
@@ -125,20 +151,6 @@ func TestServeRejectsBadAddr(t *testing.T) {
 	root.SetErr(&out)
 	if err := root.Execute(); err == nil {
 		t.Fatal("expected an address error")
-	}
-}
-
-func TestLoopbackHost(t *testing.T) {
-	for host, want := range map[string]bool{
-		"localhost": true,
-		"127.0.0.1": true,
-		"::1":       true,
-		"0.0.0.0":   false,
-		"10.1.2.3":  false,
-	} {
-		if got := loopbackHost(host); got != want {
-			t.Errorf("loopbackHost(%q) = %v, want %v", host, got, want)
-		}
 	}
 }
 

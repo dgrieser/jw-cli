@@ -8,14 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dgrieser/jw-cli/internal/accounts"
 	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 // cliServer is a jw serve whose command runner echoes what it was sent.
-func cliServer(t *testing.T, auth *Credentials) *httptest.Server {
+func cliServer(t *testing.T, users *accounts.Store, settings *accounts.SettingsFile) *httptest.Server {
 	t.Helper()
-	s := New(Config{Svc: &service.Service{}, Auth: auth,
+	s := New(Config{Svc: &service.Service{}, Accounts: users, Settings: settings,
 		RunCLI: func(ctx context.Context, req remote.Request) remote.Response {
 			return remote.Response{Events: []remote.Event{{Kind: remote.KindWrite, Text: strings.Join(req.Args, " ")}}}
 		}})
@@ -25,7 +26,7 @@ func cliServer(t *testing.T, auth *Credentials) *httptest.Server {
 }
 
 func TestAPICLIRunsTheCommand(t *testing.T) {
-	srv := cliServer(t, nil)
+	srv := cliServer(t, nil, nil)
 	c, err := remote.NewClient(srv.URL, "", "")
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +43,7 @@ func TestAPICLIRunsTheCommand(t *testing.T) {
 // The endpoint takes JSON only, so a form another site posts cannot run a
 // command in the browser of someone logged in.
 func TestAPICLIWantsJSON(t *testing.T) {
-	srv := cliServer(t, nil)
+	srv := cliServer(t, nil, nil)
 	resp, err := http.Post(srv.URL+remote.Path, "text/plain", strings.NewReader(`{"args":["article","1"]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -66,21 +67,29 @@ func TestAPICLIWantsJSON(t *testing.T) {
 }
 
 func TestAPICLIBehindLogin(t *testing.T) {
-	auth := &Credentials{}
-	auth.Add("me", "secret")
-	srv := cliServer(t, auth)
+	users, settings := testAccounts(t)
+	if err := users.Create("me@example.org", "secret-pass", accounts.RoleAdmin, false, ""); err != nil {
+		t.Fatal(err)
+	}
+	srv := cliServer(t, users, settings)
 	req := remote.Request{Args: []string{"dailytext"}}
 	c, _ := remote.NewClient(srv.URL, "", "")
 	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_USER") {
 		t.Errorf("without a login: %v", err)
 	}
-	c, _ = remote.NewClient(strings.Replace(srv.URL, "://", "://me:secret@", 1), "", "")
+	c, _ = remote.NewClient(srv.URL, "me@example.org", "wrong-pass")
+	if _, err := c.Run(context.Background(), req); err == nil || !strings.Contains(err.Error(), "JW_SERVER_USER") {
+		t.Errorf("wrong password: %v", err)
+	}
+	c, _ = remote.NewClient(strings.Replace(srv.URL, "://", "://me%40example.org:secret-pass@", 1), "", "")
 	if _, err := c.Run(context.Background(), req); err != nil {
 		t.Errorf("login in the address: %v", err)
 	}
-	c, _ = remote.NewClient(srv.URL, "me", "secret")
-	if _, err := c.Run(context.Background(), req); err != nil {
-		t.Errorf("login from the environment: %v", err)
+	c, _ = remote.NewClient(srv.URL, "me@example.org", "secret-pass")
+	for range 2 { // the second time from the remembered credentials
+		if _, err := c.Run(context.Background(), req); err != nil {
+			t.Errorf("login from the environment: %v", err)
+		}
 	}
 }
 

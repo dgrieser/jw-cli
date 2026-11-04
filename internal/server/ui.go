@@ -56,6 +56,18 @@ type basePage struct {
 	// SiteURL is where the page's document is read on jw.org or
 	// wol.jw.org, which the settings offer to open.
 	SiteURL string
+	// A is the text of the accounts, in the language of T.
+	A *i18n.AuthText
+	// Bare leaves the navigation and the reading settings off the bar: an
+	// account page, shown before anybody may read.
+	Bare bool
+	// Auth reports a server with accounts; User is who is signed in, Admin
+	// whether they are an admin, and PendingUsers how many registrations
+	// wait for one.
+	Auth         bool
+	User         string
+	Admin        bool
+	PendingUsers int
 }
 
 // withSite is b offering to open u on the site it comes from.
@@ -204,6 +216,8 @@ func (s *Server) base(r *http.Request, title string) basePage {
 			page.LangName = lng.Symbol
 		}
 	}
+	page.A = i18n.Match(page.Locale).Auth()
+	s.withAccount(r, &page)
 	return page
 }
 

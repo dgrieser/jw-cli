@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath \
         -X github.com/dgrieser/jw-cli/internal/version.Commit=${COMMIT} \
         -X github.com/dgrieser/jw-cli/internal/version.Date=${DATE}" \
       -o /out/jw ./cmd/jw \
- && mkdir -p /out/data/cache
+ && mkdir -p /out/data/cache /out/data/server
 
 # Runtime stage: distroless carries CA certificates and a nonroot user, and
 # nothing else — the binary is static.
@@ -37,15 +37,14 @@ COPY --from=build /out/jw /jw
 COPY --from=build --chown=nonroot:nonroot /out/data /data
 ENV XDG_CACHE_HOME=/data/cache
 
-# Basic auth: mount an .htaccess or .htpasswd file here (or point
-# JW_AUTH_FILE elsewhere) and every route asks for a login; without the file
-# the server runs open. JW_AUTH_USER and JW_AUTH_PASSWORD add one more user.
-ENV JW_AUTH_FILE=/config/.htaccess
+# Accounts and the server's settings (accounts.json, settings.json): on the
+# first start the log carries the setup link that creates the first admin.
+ENV JW_DATA_DIR=/data/server
 
 VOLUME /data
 EXPOSE 8080
 
 # 0.0.0.0 on purpose: inside the container network, port mapping (-p) is the
-# boundary. Without auth configured, publish the port thoughtfully.
+# boundary; every route is behind a sign-in.
 ENTRYPOINT ["/jw"]
 CMD ["serve", "--addr", "0.0.0.0", "--port", "8080"]

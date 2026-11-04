@@ -1205,6 +1205,35 @@
     }
   }
 
+  // the sign-in page: whoever lands here has no login (any more: expired,
+  // disabled, signed out elsewhere), and the pages kept with one go. A
+  // navigation's redirect here is opaque to the worker, so the page does it.
+  if (location.pathname === "/login" && window.caches) {
+    caches.keys().then(function (names) {
+      names.forEach(function (n) { if (n.indexOf("jw-pages-") === 0) caches.delete(n); });
+    }).catch(function () {});
+  }
+
+  // signing out: drop the pages the worker kept with the login too, also
+  // when no worker controls this page to see the request
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!(form instanceof HTMLFormElement) || e.defaultPrevented || !window.caches) return;
+    if (new URL(form.action, location.href).pathname !== "/logout" || form.dataset.cleared) return;
+    e.preventDefault();
+    var go = function () { form.dataset.cleared = "1"; form.submit(); };
+    caches.keys().then(function (names) {
+      return Promise.all(names.filter(function (n) { return n.indexOf("jw-pages-") === 0; })
+        .map(function (n) { return caches.delete(n); }));
+    }).then(go, go);
+  });
+
+  // a button that asks first (deleting an account)
+  document.addEventListener("submit", function (e) {
+    var q = e.submitter && e.submitter.getAttribute("data-confirm");
+    if (q && !window.confirm(q)) e.preventDefault();
+  }, true);
+
   // a form on its way to the server: the submit button spins until the next
   // page replaces this one
   document.addEventListener("submit", function (e) {

@@ -1,0 +1,15 @@
+{{define "content"}}
+<div class="auth">
+<h1>{{.A.Register}}</h1>
+{{template "notice" .}}
+{{- if and .CanRegister (not .Sent)}}
+<p class="hint">{{if .Approval}}{{.A.RegisterIntroApproval}}{{else}}{{.A.RegisterIntro}}{{end}}</p>
+<form class="auth-form" method="post" action="/register">
+  <label class="field"><span>{{.A.Email}}</span>
+    <input type="email" name="email" value="{{.Email}}" autocomplete="email" autocapitalize="none" spellcheck="false" required data-autofocus></label>
+  <button type="submit" class="primary">{{.A.SendLink}}</button>
+</form>
+{{- end}}
+<p class="auth-links"><a href="/login">{{.A.BackToSignIn}}</a></p>
+</div>
+{{end}}
