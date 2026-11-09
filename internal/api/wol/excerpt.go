@@ -17,6 +17,15 @@ const selDocBlock = "p, li, td, th, figcaption, blockquote, h1, h2, h3, h4, h5, 
 // exactly and lets the renderer highlight the words themselves.
 const selMark = "span.mk, .mk"
 
+// A footnote of a Bible book and the verse that calls it: the footnote sits at
+// the end of the book, the verse carries an a.fn with the same data-fnid. The
+// same footnote text recurs on many verses ("Or ...", "The Hebrew word ..."),
+// so a hit in it is only told apart by the verse it belongs to.
+const (
+	selFootnote       = "div.fn-ref[data-fnid], [id^=footnote][data-fnid]"
+	selFootnoteSource = "a.fn[data-fnid]" // the verse is its selVerse ancestor
+)
+
 // chromeInBlock is what a block carries that is not text: the answer boxes of a
 // study article, and anything scripted.
 const chromeInBlock = ".gen-field, textarea, script, style"
@@ -52,6 +61,9 @@ func (c *Client) Excerpts(ctx context.Context, pageURL, fragment string) ([]stri
 	found := map[*html.Node]bool{}
 	doc.Find(selMark).Each(func(_ int, s *goquery.Selection) {
 		if n := blockOf(s); n != nil {
+			found[n] = true
+		}
+		if n := verseOfFootnote(doc, s); n != nil {
 			found[n] = true
 		}
 	})
@@ -150,6 +162,28 @@ func normalize(s string) string {
 	return cleanSpace(strings.ReplaceAll(s, softHyphen, ""))
 }
 
+// verseOfFootnote is the verse that calls the footnote a hit sits in, nil when
+// the hit is not in a footnote or the verse cannot be found.
+func verseOfFootnote(doc *goquery.Document, s *goquery.Selection) *html.Node {
+	fn := s.Closest(selFootnote)
+	if fn.Length() == 0 {
+		return nil
+	}
+	id, _ := fn.Attr("data-fnid")
+	if id = strings.TrimSpace(id); id == "" || strings.Contains(id, `"`) {
+		return nil
+	}
+	src := doc.Find(selFootnoteSource + `[data-fnid="` + id + `"]`).First()
+	if src.Length() == 0 {
+		return nil
+	}
+	v := src.Closest(selVerse)
+	if v.Length() == 0 {
+		return nil
+	}
+	return v.Nodes[0]
+}
+
 // blockOf is the block a hit belongs to: the nearest paragraph, list item,
 // heading or caption around it, and the whole table when the hit is in a cell.
 func blockOf(s *goquery.Selection) *html.Node {
@@ -171,11 +205,14 @@ func blockOf(s *goquery.Selection) *html.Node {
 }
 
 // blocksInOrder walks the document once and returns the marked blocks in the
-// order they are read, leaving out a block another one already contains.
+// order they are read, leaving out a block another one already contains and a
+// block that reads the same as one already taken: a footnote repeated on many
+// verses is quoted once, after the verses.
 func blocksInOrder(doc *goquery.Document, found map[*html.Node]bool) []string {
 	var out []string
 	var taken []*goquery.Selection
-	doc.Find(selDocBlock + ", table").Each(func(_ int, s *goquery.Selection) {
+	seen := map[string]bool{}
+	doc.Find(selDocBlock + ", table, " + selVerse).Each(func(_ int, s *goquery.Selection) {
 		if !found[s.Nodes[0]] {
 			return
 		}
@@ -187,9 +224,19 @@ func blocksInOrder(doc *goquery.Document, found map[*html.Node]bool) []string {
 		taken = append(taken, s)
 		clone := s.Clone()
 		clone.Find(chromeInBlock).Remove()
-		if h, err := goquery.OuterHtml(clone); err == nil {
-			out = append(out, h)
+		text := normalize(clone.Text())
+		if seen[text] {
+			return
 		}
+		seen[text] = true
+		h, err := goquery.OuterHtml(clone)
+		if err != nil {
+			return
+		}
+		if s.Is(selVerse) {
+			h = "<p>" + h + "</p>" // a verse on its own is a passage of its own
+		}
+		out = append(out, h)
 	})
 	return out
 }
