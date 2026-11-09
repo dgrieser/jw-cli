@@ -178,3 +178,37 @@ func TestExcerptsFollowsMarks(t *testing.T) {
 		t.Errorf("the mark is what the renderer highlights, and it is gone: %q", blocks[0])
 	}
 }
+
+// A hit in a Bible footnote is told apart by the verse that calls it: every
+// such verse is quoted, and the footnote text they share only once.
+func TestExcerptsFootnoteVerses(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/de/wol/d/r10/lp-x/1001061116", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<html><body><div id="article">
+		<p id="p136" data-pid="136"><span id="v12-17-11-1" class="v">11 Auf allen Höhen.</span>
+		<span id="v12-17-12-1" class="v">12 Sie dienten widerlichen Götzen<a id="footnotesource136" data-fnid="136" class="fn" href="/fn/135">*</a>.</span></p>
+		<p id="p200" data-pid="200"><span id="v12-21-11-1" class="v">11 Juda mit seinen widerlichen Götzen<a id="footnotesource186" data-fnid="186" class="fn" href="/fn/185">*</a>.</span></p>
+		<div id="footnote135" data-fnid="135" class="fn-ref"><p id="p362" data-pid="362">Oder „Pfähle“.</p></div>
+		<div id="footnote136" data-fnid="136" class="fn-ref"><p id="p363" data-pid="363">Ausdruck, das „<span class="mk">Dung</span>“ bedeutet.</p></div>
+		<div id="footnote186" data-fnid="186" class="fn-ref"><p id="p413" data-pid="413">Ausdruck, das „<span class="mk">Dung</span>“ bedeutet.</p></div>
+		</div></body></html>`))
+	})
+	c := testClient(t, mux)
+	blocks, err := c.Excerpts(context.Background(),
+		c.hc.Base.WOL+"/de/wol/d/r10/lp-x/1001061116?q=Dung", `<p>Ausdruck, das „Dung“ bedeutet.</p>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 3 {
+		t.Fatalf("blocks = %q, want two verses and the footnote once", blocks)
+	}
+	if !strings.Contains(blocks[0], "12 Sie dienten") || strings.Contains(blocks[0], "Auf allen Höhen") {
+		t.Errorf("first block = %q, want verse 17:12 alone", blocks[0])
+	}
+	if !strings.Contains(blocks[1], "Juda mit seinen") {
+		t.Errorf("second block = %q, want verse 21:11", blocks[1])
+	}
+	if !strings.Contains(blocks[2], `class="mk"`) {
+		t.Errorf("third block = %q, want the marked footnote", blocks[2])
+	}
+}
