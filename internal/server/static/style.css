@@ -27,7 +27,9 @@
   --chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%23676b74' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
 
   --gutter: clamp(1rem, 3vw, 2.5rem);
-  --wrap: 76rem;
+  /* the width of a page's content; the bar above it ends where it ends */
+  --content: 60rem;
+  --wrap: calc(var(--content) + 2 * var(--gutter));
   --measure: 68ch;
   --control: 2.5rem;
   --r: 8px;
@@ -327,7 +329,7 @@ button:active, .btn:active { background: var(--line); }
 
 /* forms --------------------------------------------------------------- */
 
-.form { margin: 0.75rem 0 1.5rem; max-width: 56rem; }
+.form { margin: 0.75rem 0 1.5rem; max-width: var(--content); }
 fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 .query { display: flex; gap: 0.5rem; }
@@ -363,7 +365,7 @@ fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   pointer-events: none;
 }
 
-.query.large { max-width: 40rem; }
+.query.large { max-width: var(--content); }
 .query.large input, .query.large button { min-height: 3rem; font-size: 1.05rem; border-radius: 10px; }
 .query.large input { padding-inline: 1rem; }
 .query.large button { padding-inline: 1.25rem; }
@@ -412,7 +414,7 @@ dialog.search-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 
 /* the bible's books and chapters, laid out as the library's own navigation:
    one tile per book, coloured by the kind of book it is */
-.bible-nav { max-width: 56rem; margin-top: 1.5rem; }
+.bible-nav { max-width: var(--content); margin-top: 1.5rem; }
 .bible-nav-heading {
   margin: 1.5rem 0 0.5rem;
   color: var(--muted);
@@ -435,7 +437,7 @@ dialog.search-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 .book-doc:hover, .book-doc:focus-visible { border-color: var(--accent); color: var(--accent); }
 .book-doc-icon { display: inline-flex; flex: none; color: var(--muted); }
 .book-doc:hover .book-doc-icon { color: var(--accent); }
-.book-doc-page { max-width: 60rem; }
+.book-doc-page { max-width: var(--content); }
 .book-doc-page > h2 { margin-top: 0.25rem; }
 .book-facts { margin-top: 0; }
 .book-notes h2 { font-size: 1.15rem; }
@@ -525,7 +527,7 @@ label.check { display: inline-flex; align-items: center; gap: 0.5rem; cursor: po
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
   gap: 0.75rem 1rem;
-  max-width: 56rem;
+  max-width: var(--content);
 }
 .fields label {
   display: flex;
@@ -583,7 +585,7 @@ label.check { display: inline-flex; align-items: center; gap: 0.5rem; cursor: po
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 60rem;
+  max-width: var(--content);
 }
 .listing > li {
   display: grid;
@@ -641,7 +643,7 @@ mark { background: var(--accent-soft); color: inherit; border-radius: 3px; paddi
   justify-content: space-between;
   gap: 1rem;
   margin-top: 1.5rem;
-  max-width: 60rem;
+  max-width: var(--content);
 }
 
 @media (max-width: 40rem) {
@@ -1161,7 +1163,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
 
 /* index --------------------------------------------------------------- */
 
-.hero { padding: 1rem 0 1.5rem; max-width: 56rem; }
+.hero { padding: 1rem 0 1.5rem; max-width: var(--content); }
 .hero h1 { font-size: 2rem; margin-bottom: 1.25rem; }
 
 .destinations {
@@ -1171,7 +1173,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
   gap: 0 2rem;
-  max-width: 60rem;
+  max-width: var(--content);
 }
 .destinations li { border-top: 1px solid var(--line); }
 .destinations a {
@@ -1196,7 +1198,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
   grid-template-columns: minmax(0, 1fr);
   gap: 1.25rem 2rem;
   margin-bottom: 1.5rem;
-  max-width: 60rem;
+  max-width: var(--content);
 }
 .hero-image { margin: 0; }
 .hero-image img { display: block; width: 100%; max-height: 22rem; object-fit: cover; border-radius: var(--r); background: var(--field); }
@@ -1224,7 +1226,7 @@ ul.gallery .credit { color: var(--muted); font-size: 0.8rem; }
    reads, the transcript of its subtitles. A line the player is at is marked;
    with a script, a timed line plays from its time when pressed. */
 
-.mediatext { max-width: 60rem; margin-bottom: 1.5rem; }
+.mediatext { max-width: var(--content); margin-bottom: 1.5rem; }
 .lyrics { max-width: var(--measure); }
 .lyrics p { margin: 0; }
 .lyr-context { color: var(--muted); font-size: 0.85rem; font-weight: 600; letter-spacing: 0.04em; }
@@ -1289,7 +1291,7 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 /* media start page: a featured video and carousels ------------------- */
 
-.shelf { max-width: 60rem; margin: 0 0 2rem; }
+.shelf { max-width: var(--content); margin: 0 0 2rem; }
 .shelf > h2 { margin: 0 0 0.75rem; }
 .shelf > h2 a { color: inherit; text-decoration: none; }
 .shelf > h2 a:hover { color: var(--accent); }
@@ -1369,7 +1371,7 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  max-width: 60rem;
+  max-width: var(--content);
   margin: 0 0 2rem;
   padding: 0;
   list-style: none;
@@ -1416,7 +1418,7 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   overflow: hidden;
 }
 
-.pubgroup { max-width: 60rem; margin: 0 0 2rem; }
+.pubgroup { max-width: var(--content); margin: 0 0 2rem; }
 .pubgroup > h2 { margin: 0 0 0.75rem; }
 .pubgrid {
   display: grid;
@@ -1500,7 +1502,7 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
   .pubitem { grid-template-columns: 12rem minmax(0, 1fr); }
 }
 
-.pubfiles { max-width: 60rem; }
+.pubfiles { max-width: var(--content); }
 .pubfiles .format {
   display: inline-block;
   min-width: 3.4rem;
@@ -1531,12 +1533,12 @@ details.transcript-wrap .transcript { padding: 0.6rem 0.8rem; }
 
 /* what is there besides the page's content — its details, its files —
    folded away at its end */
-details.fold { max-width: 60rem; margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
+details.fold { max-width: var(--content); margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
 details.fold + details.fold { margin-top: 0; }
 /* the library's own folded sections of a document (a topic of the research
    guide: "Allgemeines", "Familienmitglieder" …) look the same, one under
    the other */
-.document details:not(.section) { max-width: 60rem; margin: 0; border-top: 1px solid var(--line); }
+.document details:not(.section) { max-width: var(--content); margin: 0; border-top: 1px solid var(--line); }
 .document details:not(.section, .print-edition):last-of-type { border-bottom: 1px solid var(--line); }
 :is(details.fold, .document details:not(.section)) > summary {
   display: flex;
@@ -1601,7 +1603,7 @@ dl.facts dd { margin: 0; }
 
 .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
 
-table { border-collapse: collapse; width: 100%; max-width: 60rem; }
+table { border-collapse: collapse; width: 100%; max-width: var(--content); }
 th, td { text-align: left; padding: 0.55rem 1rem 0.55rem 0; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { color: var(--muted); font-weight: 500; font-size: 0.85rem; white-space: nowrap; }
 td.num { white-space: nowrap; color: var(--muted); }
@@ -1623,15 +1625,15 @@ tbody tr:hover { background: var(--surface); }
   border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
   border-radius: var(--r);
   padding: 0.7rem 0.9rem;
-  max-width: 56rem;
+  max-width: var(--content);
 }
 
 .notice { max-width: var(--measure); }
 
 /* accounts: sign-in, registration, the admin pages --------------------- */
 
-.auth { max-width: 26rem; margin: 1.5rem auto 3rem; }
-.auth.wide { max-width: 46rem; }
+.auth { max-width: 26rem; margin: 1.5rem 0 3rem; }
+.auth.wide { max-width: var(--content); }
 .auth h2 { margin-top: 2rem; font-size: 1.2rem; }
 .auth-form { display: grid; gap: 0.9rem; margin: 1rem 0; }
 .auth-form > button { justify-self: start; }
@@ -1644,6 +1646,9 @@ tbody tr:hover { background: var(--surface); }
 .auth .field-row { display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: end; }
 .auth .field-row .grow { flex: 1 1 12rem; }
 .auth .test-mail button { flex: none; }
+.auth .test-result { margin: 0; }
+/* the form's default button, for Enter in a field: there, but not seen */
+.auth .default-submit { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); }
 .auth-section { display: grid; gap: 0.9rem; padding: 1rem 0 0.5rem; border-top: 1px solid var(--line); }
 .auth-section legend { font-weight: 700; font-size: 1.1rem; padding: 0 0 0.5rem; }
 .auth-ok {

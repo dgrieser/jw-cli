@@ -1,9 +1,9 @@
 {{define "content"}}
-<div class="auth">
+<div class="auth wide">
+{{template "settingtabs" .}}
 <h1>{{.A.Account}}</h1>
 <p>{{printf .A.SignedInAs .Email}} · {{if .Admin}}{{.A.RoleAdmin}}{{else}}{{.A.RoleUser}}{{end}}</p>
 {{template "notice" .}}
-<p class="auth-links"><a href="/account/keys">{{.A.APIKeys}}</a></p>
 <h2>{{.A.ChangePassword}}</h2>
 <form class="auth-form" method="post" action="/account">
   <input type="email" name="email" value="{{.Email}}" autocomplete="username" hidden readonly>

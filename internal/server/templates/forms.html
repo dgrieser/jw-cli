@@ -2,6 +2,17 @@
 {{- if .Notice}}<p class="auth-ok" role="status">{{.Notice}}</p>{{end}}
 {{- end}}
 
+{{define "settingtabs"}}
+<nav class="tabs" aria-label="{{.T.UISettings}}">
+  <a href="/account" {{if eq .Path "/account"}}class="active" aria-current="page"{{end}}>{{.A.Account}}</a>
+  <a href="/account/keys" {{if eq .Path "/account/keys"}}class="active" aria-current="page"{{end}}>{{.A.APIKeys}}</a>
+  {{- if .Admin}}
+  <a href="/admin/users" {{if eq .Path "/admin/users"}}class="active" aria-current="page"{{end}}>{{.A.Users}}</a>
+  <a href="/admin/settings" {{if eq .Path "/admin/settings"}}class="active" aria-current="page"{{end}}>{{.A.ServerSettings}}</a>
+  {{- end}}
+</nav>
+{{- end}}
+
 {{define "serverform"}}
 <fieldset class="auth-section">
   <legend>{{.A.SecAccess}}</legend>
@@ -18,18 +29,18 @@
 <fieldset class="auth-section">
   <legend>{{.A.SecMail}}</legend>
   <p class="hint">{{.A.MailHint}}</p>
+  <label class="field"><span>{{.A.SMTPHost}}</span>
+    <input name="smtp_host" value="{{.Settings.SMTP.Host}}" placeholder="smtp.example.org" autocomplete="off" spellcheck="false"></label>
   <div class="field-row">
-    <label class="field grow"><span>{{.A.SMTPHost}}</span>
-      <input name="smtp_host" value="{{.Settings.SMTP.Host}}" placeholder="smtp.example.org" autocomplete="off" spellcheck="false"></label>
+    <label class="field grow"><span>{{.A.SMTPSecurity}}</span>
+      <select name="smtp_security">
+        <option value="starttls" data-port="587" {{if eq .Settings.SMTP.Security "starttls"}}selected{{end}}>{{.A.SecStartTLS}}</option>
+        <option value="tls" data-port="465" {{if eq .Settings.SMTP.Security "tls"}}selected{{end}}>{{.A.SecTLS}}</option>
+        <option value="none" data-port="25" {{if eq .Settings.SMTP.Security "none"}}selected{{end}}>{{.A.SecNone}}</option>
+      </select></label>
     <label class="field"><span>{{.A.SMTPPort}}</span>
       <input name="smtp_port" type="number" min="1" max="65535" class="num" value="{{.Settings.SMTP.Port}}"></label>
   </div>
-  <label class="field"><span>{{.A.SMTPSecurity}}</span>
-    <select name="smtp_security">
-      <option value="starttls" {{if eq .Settings.SMTP.Security "starttls"}}selected{{end}}>{{.A.SecStartTLS}}</option>
-      <option value="tls" {{if eq .Settings.SMTP.Security "tls"}}selected{{end}}>{{.A.SecTLS}}</option>
-      <option value="none" {{if eq .Settings.SMTP.Security "none"}}selected{{end}}>{{.A.SecNone}}</option>
-    </select></label>
   <div class="field-row">
     <label class="field grow"><span>{{.A.SMTPUser}}</span>
       <input name="smtp_username" value="{{.Settings.SMTP.Username}}" autocomplete="off" spellcheck="false"></label>

@@ -209,6 +209,22 @@
     video.addEventListener("play", function () { player.classList.add("played"); });
   });
 
+  // --- the mail server's encryption and port ---------------------------------
+
+  // each encryption has its usual port: choosing one sets the port to it,
+  // unless the port was changed from the usual one of the encryption before
+  document.querySelectorAll('select[name="smtp_security"]').forEach(function (sel) {
+    var port = sel.form && sel.form.elements.smtp_port;
+    if (!port) return;
+    var usual = function () { return sel.options[sel.selectedIndex].getAttribute("data-port"); };
+    var was = usual();
+    sel.addEventListener("change", function () {
+      var now = usual();
+      if (port.value === "" || port.value === was) port.value = now;
+      was = now;
+    });
+  });
+
   // --- the outline in the bible reader --------------------------------------
 
   // the headings of a book's outline between the verses are always on the
@@ -1219,7 +1235,7 @@
   document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!(form instanceof HTMLFormElement) || e.defaultPrevented || !window.caches) return;
-    if (new URL(form.action, location.href).pathname !== "/logout" || form.dataset.cleared) return;
+    if (new URL(form.getAttribute("action") || "", location.href).pathname !== "/logout" || form.dataset.cleared) return;
     e.preventDefault();
     var go = function () { form.dataset.cleared = "1"; form.submit(); };
     caches.keys().then(function (names) {
@@ -1305,11 +1321,59 @@
     var form = e.target;
     if (!(form instanceof HTMLFormElement) || e.defaultPrevented) return;
     var button = e.submitter || form.querySelector('button[type="submit"], button:not([type])');
+    // Enter in a field submits with a button not seen: the one seen spins
+    if (button && button.classList.contains("default-submit")) button = form.querySelector("button.primary") || button;
     // the next tick, so a submission the browser still rejects (validation)
     // does not leave a spinner behind
     setTimeout(function () {
       if (!e.defaultPrevented) startLoading(button);
     }, 0);
+  });
+
+  // the test mail of the server's settings goes out in the background: its
+  // outcome shows below the button and the form stays as it was typed. What
+  // does not answer as expected (a login gone, a refused setup link) is sent
+  // again the plain way, and the whole page says what happened.
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    var button = e.submitter;
+    if (!(form instanceof HTMLFormElement) || e.defaultPrevented || !window.fetch) return;
+    if (!button || button.name !== "action" || button.value !== "test" || button.dataset.plain) return;
+    e.preventDefault();
+    var body = new URLSearchParams(new FormData(form));
+    body.set("action", "test");
+    var anchor = button.closest(".field-row") || button;
+    var out = anchor.nextElementSibling;
+    if (!out || !out.classList.contains("test-result")) {
+      out = document.createElement("p");
+      out.className = "test-result";
+      out.setAttribute("role", "status");
+      out.hidden = true;
+      anchor.insertAdjacentElement("afterend", out);
+    }
+    var plain = function () {
+      button.removeAttribute("aria-busy");
+      button.dataset.plain = "1";
+      button.click();
+    };
+    button.setAttribute("aria-busy", "true");
+    // the attribute: the buttons named "action" hide the form's property
+    fetch(form.getAttribute("action") || location.href, {
+      method: "POST",
+      body: body,
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    }).then(function (res) {
+      var type = res.headers.get("Content-Type") || "";
+      if (!res.ok || type.indexOf("application/json") !== 0) throw new Error(res.status);
+      return res.json();
+    }).then(function (r) {
+      button.removeAttribute("aria-busy");
+      out.textContent = r.error || r.notice || "";
+      out.classList.toggle("error", !!r.error);
+      out.classList.toggle("auth-ok", !r.error);
+      out.hidden = !out.textContent;
+    }, plain);
   });
 
   // a link inside the site: pages that read from jw.org can take a while
