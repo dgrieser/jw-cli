@@ -7,6 +7,8 @@
 <p class="hint">{{.A.SetupIntro}}</p>
 {{template "notice" .}}
 <form class="auth-form" method="post" action="/setup">
+  <!-- Enter in a field saves: the first submit button is the form's default -->
+  <button type="submit" name="action" value="save" class="default-submit" tabindex="-1" aria-hidden="true"></button>
   {{template "serverform" .}}
   <fieldset class="auth-section">
     <legend>{{.A.SecAdmin}}</legend>

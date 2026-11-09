@@ -13,6 +13,7 @@
 
 {{define "content"}}
 <div class="auth wide">
+{{template "settingtabs" .}}
 <h1>{{.A.APIKeys}}</h1>
 <p class="hint">{{.A.KeysIntro}}</p>
 {{template "notice" .}}
@@ -90,6 +91,5 @@ jw daily</pre>
   <button type="submit" class="primary">{{.A.KeyCreate}}</button>
 </form>
 {{- end}}
-<p class="auth-links"><a href="/account">{{.A.Account}}</a></p>
 </div>
 {{end}}

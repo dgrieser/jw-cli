@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -464,6 +465,12 @@ func TestSettingsPage(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || strings.Contains(body, "mail-secret") {
 		t.Fatalf("settings page: %d, password shown: %v", resp.StatusCode, strings.Contains(body, "mail-secret"))
 	}
+	// Enter in a field saves: the form's first submit button is a save
+	_, html, _ := strings.Cut(body, `method="post" action="/admin/settings"`)
+	html, _, _ = strings.Cut(html, "</form>")
+	if i := strings.Index(html, `type="submit"`); i < 0 || !strings.HasPrefix(html[i:], `type="submit" name="action" value="save"`) {
+		t.Errorf("the settings form's default button does not save")
+	}
 	form := url.Values{"action": {"save"}, "registration": {"open"}, "public_url": {"https://jw.example.org"},
 		"smtp_host": {"smtp.example.org"}, "smtp_port": {"465"}, "smtp_security": {"tls"}, "smtp_username": {"mailer"},
 		"smtp_from": {"JW <jw@example.org>"}}
@@ -479,6 +486,83 @@ func TestSettingsPage(t *testing.T) {
 	form.Set("smtp_from", "")
 	if _, body := e.post(t, admin, "/admin/settings", form); !strings.Contains(body, "Registration needs a mail server") {
 		t.Errorf("no refusal")
+	}
+}
+
+// The settings of the menu lead to each other through tabs: an admin's four,
+// another user's two, the page shown marked.
+func TestSettingsTabs(t *testing.T) {
+	e := newAuthEnv(t)
+	e.withAdmin(t, accounts.RegisterClosed)
+	if err := e.users.Create("bob@example.org", "bob-pass1", accounts.RoleUser, false, "en"); err != nil {
+		t.Fatal(err)
+	}
+	all := []string{"/account", "/account/keys", "/admin/users", "/admin/settings"}
+	tabs := func(body string) (links []string, current string) {
+		_, nav, _ := strings.Cut(body, `<nav class="tabs"`)
+		nav, _, _ = strings.Cut(nav, "</nav>")
+		for _, m := range regexp.MustCompile(`<a href="([^"]+)"( class="active" aria-current="page")?`).FindAllStringSubmatch(nav, -1) {
+			links = append(links, m[1])
+			if m[2] != "" {
+				current = m[1]
+			}
+		}
+		return links, current
+	}
+	admin := e.login(t, "admin@example.org", "secret-pass")
+	for _, path := range all {
+		_, body := e.get(t, admin, path)
+		if links, current := tabs(body); !slices.Equal(links, all) || current != path {
+			t.Errorf("admin's tabs on %s: %v, current %q", path, links, current)
+		}
+		if strings.Contains(body, `class="auth-links"`) {
+			t.Errorf("%s still links to other settings below", path)
+		}
+	}
+	bob := e.login(t, "bob@example.org", "bob-pass1")
+	for _, path := range all[:2] {
+		_, body := e.get(t, bob, path)
+		if links, current := tabs(body); !slices.Equal(links, all[:2]) || current != path {
+			t.Errorf("user's tabs on %s: %v, current %q", path, links, current)
+		}
+	}
+}
+
+// The page's script sends the test mail in the background and gets its
+// outcome alone, not the page; nothing is saved by it.
+func TestSettingsTestMailInBackground(t *testing.T) {
+	e := newAuthEnv(t)
+	e.withAdmin(t, accounts.RegisterClosed)
+	admin := e.login(t, "admin@example.org", "secret-pass")
+	before := e.settings.Get()
+	test := func(to string) (*http.Response, map[string]string) {
+		t.Helper()
+		form := url.Values{"action": {"test"}, "test_to": {to}, "registration": {"closed"}, "public_url": {"https://jw.example.org"},
+			"smtp_host": {"other.example.org"}, "smtp_port": {"2525"}, "smtp_security": {"starttls"}, "smtp_from": {"jw@example.org"}}
+		req, _ := http.NewRequest(http.MethodPost, e.srv.URL+"/admin/settings", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", e.srv.URL)
+		req.Header.Set("Accept", "application/json")
+		resp, err := admin.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var got map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+			t.Fatalf("test mail reply: %d, %s: %v", resp.StatusCode, resp.Header.Get("Content-Type"), err)
+		}
+		return resp, got
+	}
+	resp, got := test("me@example.org")
+	if resp.StatusCode != http.StatusOK || got["notice"] == "" || got["error"] != "" || e.box.count() != 1 {
+		t.Errorf("test mail: %d %v, %d mails", resp.StatusCode, got, e.box.count())
+	}
+	if _, got := test("not-an-address"); got["error"] == "" || got["notice"] != "" || e.box.count() != 1 {
+		t.Errorf("test mail to a bad address: %v, %d mails", got, e.box.count())
+	}
+	if after := e.settings.Get(); after.SMTP != before.SMTP {
+		t.Errorf("test mail saved the settings: %+v", after.SMTP)
 	}
 }
 

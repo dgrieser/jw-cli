@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"mime"
 	"net"
 	"net/http"
 	"net/url"
@@ -1048,6 +1049,9 @@ func (s *Server) settingsPost(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("action") == "test" {
 		p.TestTo = strings.TrimSpace(r.PostFormValue("test_to"))
 		p.Notice, p.Error = s.testMail(r, st, p.TestTo, p.A)
+		if testReply(w, r, p.Notice, p.Error) {
+			return
+		}
 		p.SMTPPassword = r.PostFormValue("smtp_password")
 		s.renderAuth(w, http.StatusOK, "settings", p)
 		return
@@ -1083,6 +1087,21 @@ func (s *Server) testMail(r *http.Request, st accounts.Settings, to string, a *i
 		return "", errText(a, err)
 	}
 	return fmt.Sprintf(a.MsgTestSent, email), ""
+}
+
+// testReply answers a test mail the page's script sent in the background
+// with its outcome alone, so the form stays as it was typed. It reports
+// whether it answered; a plain form submit gets the whole page.
+func testReply(w http.ResponseWriter, r *http.Request, notice, failure string) bool {
+	if mt, _, _ := mime.ParseMediaType(r.Header.Get("Accept")); mt != "application/json" {
+		return false
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, struct {
+		Notice string `json:"notice,omitempty"`
+		Error  string `json:"error,omitempty"`
+	}{notice, failure})
+	return true
 }
 
 // --- setup ------------------------------------------------------------------------------
@@ -1156,6 +1175,9 @@ func (s *Server) setupPost(w http.ResponseWriter, r *http.Request) {
 	if r.PostFormValue("action") == "test" {
 		p.TestTo = p.Email
 		p.Notice, p.Error = s.testMail(r, st, p.Email, p.A)
+		if testReply(w, r, p.Notice, p.Error) {
+			return
+		}
 		p.SMTPPassword = r.PostFormValue("smtp_password")
 		s.renderAuth(w, http.StatusOK, "setup", p)
 		return

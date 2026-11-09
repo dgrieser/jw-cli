@@ -1,5 +1,6 @@
 {{define "content"}}
 <div class="auth wide">
+{{template "settingtabs" .}}
 <h1>{{.A.Users}}</h1>
 {{template "notice" .}}
 <div class="table-scroll">
@@ -45,6 +46,5 @@
     <select name="role"><option value="user">{{.A.RoleUser}}</option><option value="admin">{{.A.RoleAdmin}}</option></select></label>
   <button type="submit" class="primary">{{.A.Add}}</button>
 </form>
-<p class="auth-links"><a href="/admin/settings">{{.A.ServerSettings}}</a></p>
 </div>
 {{end}}
