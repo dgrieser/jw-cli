@@ -236,3 +236,22 @@ func TestRemoteBibleIntroDownloadsOnTheClient(t *testing.T) {
 		t.Errorf("the server saved %v", entries)
 	}
 }
+
+// $JW_LANG is the language when -l is not given, and goes to the server like
+// -l does; -l wins over it.
+func TestRemoteLangFromEnv(t *testing.T) {
+	t.Setenv("JW_LANG", "X")
+	server, reqs := fakeServe(t, func(int, remote.Request) remote.Response { return remote.Response{} })
+	if _, err := runClient(t, server, t.TempDir(), "search", "faith"); err != nil {
+		t.Fatal(err)
+	}
+	if args := (*reqs)[0].Args; !slices.Contains(args, "--lang=X") {
+		t.Errorf("args %q lack --lang=X from $JW_LANG", args)
+	}
+	if _, err := runClient(t, server, t.TempDir(), "-l", "E", "search", "faith"); err != nil {
+		t.Fatal(err)
+	}
+	if args := (*reqs)[1].Args; !slices.Contains(args, "--lang=E") || slices.Contains(args, "--lang=X") {
+		t.Errorf("args %q: -l E should win over $JW_LANG", args)
+	}
+}

@@ -49,7 +49,7 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 
 | Flag | Meaning |
 |---|---|
-| `-l, --lang` | Content language: JW symbol (`X`), ISO code (`de`), or BCP-47 (`de-AT`). Defaults to the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`), mapped to the closest available content language. Also selects the language of jw-cli's own labels and dates — see below. |
+| `-l, --lang` | Content language: JW symbol (`X`), ISO code (`de`), or BCP-47 (`de-AT`). Defaults to `$JW_LANG`, else the system locale (`LC_ALL`/`LC_MESSAGES`/`LANG`), mapped to the closest available content language. Also selects the language of jw-cli's own labels and dates — see below. |
 | `-o, --output` | Output format: `markdown` (default), `raw`, `html`, `text`, or `json`. `json` emits the underlying data model of any command. |
 | `-f, --file` | Write output to a file instead of stdout. |
 | `--no-color` | Render markdown without ANSI colors (also honors `NO_COLOR`). |
@@ -61,7 +61,8 @@ fetched at pinned versions via `go run`; `make tools` installs them.
 ### Output language
 
 The headings, labels, hints and dates jw-cli prints follow `-l|--lang`, so an
-article is not framed in English. German and English are translated; every other
+article is not framed in English. `export JW_LANG=de` sets the language for
+every command without touching the system locale; `-l` still wins for one run. German and English are translated; every other
 language keeps its own content inside an English frame.
 
 ```sh
@@ -1275,8 +1276,8 @@ carries out what belongs to the reader's machine:
   it opens is asked of the server.
 - **`jw open`** never asks the server: it only reads the last listing.
 
-The language goes along with every command: `-l`, or the one this machine's
-locale names, never the server's. What only concerns this machine stays here:
+The language goes along with every command: `-l`, else `$JW_LANG`, else the
+one this machine's locale names, never the server's. What only concerns this machine stays here:
 `-f`, `--no-color`, `-v`, the cache flags. `-v` logs only the downloads, the
 one thing this machine still asks of the sites, and the progress lines of
 unfolds and excerpts are not shown.
