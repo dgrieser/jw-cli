@@ -14,6 +14,31 @@
 
   var root = document.documentElement;
 
+  // --- pictures jw.org refuses the browser -------------------------------
+  //
+  // A picture is loaded where jw.org keeps it. wol.jw.org may refuse one to a
+  // browser that never opened its pages (its bot management); such a picture
+  // is asked for once more through the server (/image), which reads it the
+  // way it reads wol's pages. A picture that failed before this script ran
+  // is found by looking.
+
+  var JW_IMAGE = /^https:\/\/([^\/?#]+\.)?(jw\.org|jw-cdn\.org)\//i;
+
+  function viaServer(img) {
+    var src = img.currentSrc || img.src || "";
+    if (img.dataset.viaServer || !JW_IMAGE.test(src)) return;
+    img.dataset.viaServer = "1";
+    img.removeAttribute("srcset");
+    img.src = "/image?u=" + encodeURIComponent(src);
+  }
+
+  document.addEventListener("error", function (e) {
+    if (e.target && e.target.tagName === "IMG") viaServer(e.target);
+  }, true);
+  Array.prototype.forEach.call(document.images, function (img) {
+    if (img.complete && img.naturalWidth === 0 && img.getAttribute("src")) viaServer(img);
+  });
+
   // --- menu ---------------------------------------------------------------
 
   var header = document.querySelector(".page-bar");

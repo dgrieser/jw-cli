@@ -189,6 +189,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /download/media/{lank}", s.downloadMedia)
 	mux.HandleFunc("GET /download/pub", s.downloadPub)
 
+	// a picture of jw.org, for a page whose browser jw.org refused it
+	mux.HandleFunc("GET /image", s.image)
+
 	// what the web UI loads once a page is on screen: the expansion of one
 	// verse or of one paragraph, streamed section by section
 	mux.HandleFunc("GET /unfold/verse", s.unfoldVerse)
