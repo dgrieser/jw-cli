@@ -766,3 +766,26 @@ func TestUILookupsKeepTheLanguage(t *testing.T) {
 		t.Errorf("a page does not remember the language")
 	}
 }
+
+// The account lives in the menu, as one entry leading to its tabs; the
+// bar's settings keep only the reading settings.
+func TestAccountInMenu(t *testing.T) {
+	e := newAuthEnv(t)
+	e.withAdmin(t, accounts.RegisterClosed)
+	admin := e.login(t, "admin@example.org", "secret-pass")
+	for _, path := range []string{"/account", "/admin/settings"} {
+		_, body := e.get(t, admin, path)
+		_, nav, _ := strings.Cut(body, `<nav class="site-nav"`)
+		nav, _, _ = strings.Cut(nav, "</nav>")
+		if !strings.Contains(nav, `<a class="nav-account active" href="/account"`) {
+			t.Errorf("menu on %s has no marked account entry:\n%s", path, nav)
+		}
+		_, panel, _ := strings.Cut(body, `id="settings-menu"`)
+		panel, _, _ = strings.Cut(panel, `<div class="menu"`)
+		for _, gone := range []string{`href="/account`, `href="/admin/`, `action="/logout"`, `href="/login"`} {
+			if strings.Contains(panel, gone) {
+				t.Errorf("settings on %s still hold %s", path, gone)
+			}
+		}
+	}
+}
