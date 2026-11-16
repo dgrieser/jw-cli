@@ -209,6 +209,8 @@ html:not(.js) .page-bar { position: static; }
 }
 .site-nav a:hover { background: var(--field); }
 .site-nav a.active { border-left-color: var(--accent); background: var(--accent-soft); }
+.site-nav .nav-account { margin-top: 0.4rem; border-top: 1px solid var(--line); }
+.nav-badge { margin-left: auto; color: var(--accent); font-weight: 600; font-size: 0.9em; }
 
 .langform {
   display: flex;
@@ -1664,8 +1666,6 @@ table.users td { vertical-align: top; }
 table.users tr.pending td { background: var(--accent-soft); }
 .user-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
 button.danger { color: var(--danger); }
-.ps-logout { margin: 0; }
-.ps-badge { color: var(--accent); font-weight: 600; }
 .notice .actions { margin-top: 1.25rem; }
 
 .links { font-size: 0.9rem; }
