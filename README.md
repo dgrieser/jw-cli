@@ -1144,19 +1144,36 @@ that need none).
 Or a machine jw.org lets through hands the server jw.org's list instead: it
 posts the RSS feed of the page of what is new with an admin's API key.
 
+Each language has a feed of its own, under its own page of what is new
+(`/de/neu-auf-unserer-website/`, `/fr/nouveautes/`, `/ja/新着情報/`, …); jw.org's
+finder leads to that page for a language symbol, so one script serves them all:
+
 ```sh
-# crontab of that machine: every 6 hours, the German list
-0 */6 * * * curl -fsS https://www.jw.org/de/neu-auf-unserer-website/rss/WhatsNewWebArticles/feed.xml \
-  | curl -fsS -X POST -H "Authorization: Bearer $JW_KEY" -H "Content-Type: application/rss+xml" \
-      --data-binary @- https://jw.example.org/api/v1/latest/feed
+#!/bin/sh
+# Posts jw.org's feed of what is new, in each language, to a jw serve that
+# jw.org turns away. Run every few hours, e.g. from cron:
+#   0 */6 * * * JW_KEY=jw_… /usr/local/bin/jw-feeds.sh
+set -u
+SERVER=${JW_SERVER:-https://jw.example.org}
+LANGS=${JW_FEED_LANGS:-"X E"}   # JW language symbols
+status=0
+for l in $LANGS; do
+  # the finder leads to the language's own page of what is new; its feed is below it
+  page=$(curl -fsS -o /dev/null -w '%{redirect_url}' "https://www.jw.org/finder?docid=1011267&wtlocale=$l&prefer=lang") &&
+  curl -fsS "${page}rss/WhatsNewWebArticles/feed.xml" |
+    curl -fsS -X POST -H "Authorization: Bearer $JW_KEY" -H "Content-Type: application/rss+xml" \
+      --data-binary @- "$SERVER/api/v1/latest/feed" >/dev/null ||
+  { echo "jw-feeds: $l failed" >&2; status=1; }
+done
+exit $status
 ```
 
 A feed posted is what is new for 24 hours, and each feed posted starts that
 anew: until then the server does not ask www.jw.org for the list at all — not
 in its updates, not when a reader reloads the page. When 24 hours pass with no
 feed, it reads the page again; if that fails too, the last feed stays until a
-feed or the page answers. The feed's link names its language (`?lang=`, if
-given, must match); the server keeps the last feed of each language in its
+feed or the page answers. The feed's link names its language — any of jw.org's,
+sign languages included (`?lang=`, if given, must match); the server keeps the last feed of each language in its
 data folder (`feeds/`), so a restart keeps it and its 24 hours. The feed says
 a little less than the page: issues are listed as publications.
 `GET /api/v1/latest/feed?lang=de` says when the last feed came and until when

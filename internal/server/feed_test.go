@@ -127,3 +127,34 @@ func TestPostedFeedRefused(t *testing.T) {
 		t.Errorf("a refused feed was kept: %d", resp.StatusCode)
 	}
 }
+
+// Feeds of several languages are kept side by side, each by the language its
+// link names: one does not replace another, and each language's pages show
+// its own.
+func TestPostedFeedsByLanguage(t *testing.T) {
+	srv, hits := feedServer(t)
+	for _, f := range []string{"whatsnew_de.xml", "whatsnew_en.xml"} {
+		body, err := os.ReadFile("../api/jworg/testdata/" + f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp, answer := postFeed(t, srv, "/api/v1/latest/feed", "application/rss+xml", string(body)); resp.StatusCode != 200 {
+			t.Fatalf("post %s: %d %s", f, resp.StatusCode, answer)
+		}
+	}
+	for lang, want := range map[string][2]string{
+		"de": {"Ein Jahrhundert der „Verteidigung", "Three Married Couples"},
+		"en": {"Three Married Couples Sentenced to Prison in Russia", "Ein Jahrhundert"},
+	} {
+		_, page := get(t, srv, "/latest?kind=news&refresh=1&lang="+lang)
+		if !strings.Contains(page, want[0]) || strings.Contains(page, want[1]) {
+			t.Errorf("%s: want %q and not %q", lang, want[0], want[1])
+		}
+		if resp, status := get(t, srv, "/api/v1/latest/feed?lang="+lang); resp.StatusCode != 200 || !strings.Contains(status, `"holds": true`) {
+			t.Errorf("%s status: %d %s", lang, resp.StatusCode, status)
+		}
+	}
+	if hits.Load() != 0 {
+		t.Errorf("jw.org asked %d times", hits.Load())
+	}
+}
