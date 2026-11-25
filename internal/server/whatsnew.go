@@ -151,13 +151,14 @@ func (s *Server) latestViews(items []model.NewItem, t *i18n.Messages, lang strin
 	views := make([]resultView, len(items))
 	for i, it := range items {
 		v := resultView{
-			Kind:     newItemKind(t, it.Kind),
-			Title:    it.Title,
-			Context:  it.Context,
-			Href:     newItemHref(it, lang),
-			External: it.URL,
-			ImageURL: it.ImageURL,
-			Duration: it.Duration,
+			Kind:      it.Kind,
+			KindLabel: newItemKind(t, it.Kind),
+			Title:     it.Title,
+			Context:   it.Context,
+			Href:      newItemHref(it, lang),
+			External:  it.URL,
+			ImageURL:  it.ImageURL,
+			Duration:  it.Duration,
 		}
 		if strings.EqualFold(v.Context, t.UILatestNews) {
 			v.Context = "" // "NEWS" beside the mark saying it is news

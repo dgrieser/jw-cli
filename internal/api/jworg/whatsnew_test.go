@@ -20,7 +20,7 @@ const whatsNewPage = `<html><body>
   <div class="syn-body"><p class="meta pubDate">2026-11-23</p><p class="contextTitle">GOTTES WORT IST WAHRHEIT</p>
   <h3><a href="/de/bibliothek/buecher/gottes-wort-ist-wahrheit/zephanja/">Bibelbuch 36: Zephanja</a></h3></div>
 </div>
-<div class="synopsis borderDotted publications pub-w ml-X PublicationIssue">
+<div class="synopsis borderDotted publications pub-w iss-202702 ml-X PublicationIssue">
   <div class="syn-body"><p class="meta pubDate">2026-11-17</p>
   <h3><a href="/de/bibliothek/zeitschriften/wachtturm-studienausgabe-februar-2027/">Februar 2027</a></h3></div>
 </div>
@@ -48,7 +48,7 @@ func TestParseWhatsNew(t *testing.T) {
 	if p := items[1]; p.Kind != "publication" || p.DocID != 1102026536 {
 		t.Errorf("publication: %+v", p)
 	}
-	if i := items[2]; i.Kind != "issue" {
+	if i := items[2]; i.Kind != "issue" || i.Symbol != "w" || i.Issue != "202702" {
 		t.Errorf("issue: %+v", i)
 	}
 	if v := items[3]; v.Kind != "video" || v.LANK != "pub-jwb-142_1_VIDEO" {

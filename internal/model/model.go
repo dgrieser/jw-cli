@@ -95,8 +95,12 @@ type NewItem struct {
 	Published string `json:"published"` // 2006-01-02
 	ImageURL  string `json:"imageUrl,omitempty"`
 	DocID     int    `json:"docid,omitempty"`
-	LANK      string `json:"lank,omitempty"` // a video's or recording's media item
-	Duration  string `json:"duration,omitempty"`
+	// Symbol and Issue name the publication an entry is from, as jw.org
+	// tags it: "w" and "202702" for an issue of the Watchtower.
+	Symbol   string `json:"symbol,omitempty"`
+	Issue    string `json:"issue,omitempty"`
+	LANK     string `json:"lank,omitempty"` // a video's or recording's media item
+	Duration string `json:"duration,omitempty"`
 }
 
 type MediaItem struct {

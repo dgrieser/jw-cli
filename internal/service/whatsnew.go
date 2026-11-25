@@ -181,7 +181,10 @@ func LatestGroup(it model.NewItem) string {
 
 // NewItemsToResults turns what is new into listing rows: a medium by its
 // key, which jw show, jw media info and jw download take; anything else by
-// its page on jw.org. The day leads the context.
+// its page on jw.org, and for jw download by what pub-media knows it by —
+// an issue by its publication and issue, an article or a publication by
+// its document. News are no publication's documents. The day leads the
+// context.
 func NewItemsToResults(items []model.NewItem) []model.Result {
 	out := make([]model.Result, 0, len(items))
 	for _, it := range items {
@@ -198,6 +201,13 @@ func NewItemsToResults(items []model.NewItem) []model.Result {
 		}
 		if it.LANK == "" {
 			r.JWLink = it.URL
+		}
+		switch {
+		case it.LANK != "" || it.Kind == "news":
+		case it.Kind == "issue" && it.Symbol != "" && it.Issue != "":
+			r.Pub = &model.PubKey{Pub: it.Symbol, Issue: it.Issue}
+		default:
+			r.DocID = it.DocID
 		}
 		out = append(out, r)
 	}

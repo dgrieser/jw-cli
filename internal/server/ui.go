@@ -404,19 +404,22 @@ func inlineText(fragment string) string {
 // resultView is one listing row as the UI shows it: where it leads inside the
 // site, where it points outside, and what it says about itself.
 type resultView struct {
-	Index    int
-	Kind     string
-	Title    string
-	Context  string
-	Snippet  template.HTML
-	Excerpt  template.HTML
-	Href     string // internal page, when the row has one
-	External string // the row's own link on jw.org / wol.jw.org, which its menu offers
-	FileURL  string
-	ImageURL string
-	Duration string
-	Size     string
-	Meta     []string // image metadata lines
+	Index int
+	Kind  string
+	// KindLabel names the kind in the page's language, where a page says
+	// it in words; Kind stays the kind the listing lays a row out by.
+	KindLabel string
+	Title     string
+	Context   string
+	Snippet   template.HTML
+	Excerpt   template.HTML
+	Href      string // internal page, when the row has one
+	External  string // the row's own link on jw.org / wol.jw.org, which its menu offers
+	FileURL   string
+	ImageURL  string
+	Duration  string
+	Size      string
+	Meta      []string // image metadata lines
 }
 
 // resultViews prepares listing rows for a page. lang keeps the reader's

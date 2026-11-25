@@ -63,7 +63,7 @@ func parseWhatsNew(doc *goquery.Document, base string) []model.NewItem {
 			it.ImageURL, _ = s.Find(".syn-img img[src]").First().Attr("src")
 		}
 		cls, _ := s.Attr("class")
-		it.Kind, it.DocID = classify(cls)
+		it.Kind, it.DocID, it.Symbol, it.Issue = classify(cls)
 		if lank := mediaKey(href); lank != "" {
 			it.Kind, it.LANK = "video", lank
 		}
@@ -75,10 +75,11 @@ func parseWhatsNew(doc *goquery.Document, base string) []model.NewItem {
 // classify reads what an entry is off its class list: "news" and the
 // announcements (NewsArticlePage) are news, an issue of a periodical an
 // issue, anything under the library a publication; the rest are articles of
-// the site. The docId-… token names the document.
-func classify(cls string) (kind string, docid int) {
+// the site. The docId-… token names the document, pub-… and iss-… the
+// publication and the issue it is from.
+func classify(cls string) (kind string, docid int, symbol, issue string) {
 	kind = "article"
-	var news, pubs, issue bool
+	var news, pubs, isIssue bool
 	for tok := range strings.FieldsSeq(cls) {
 		switch {
 		case tok == "news" || tok == "NewsArticlePage":
@@ -86,20 +87,24 @@ func classify(cls string) (kind string, docid int) {
 		case tok == "publications":
 			pubs = true
 		case tok == "PublicationIssue":
-			issue = true
+			isIssue = true
 		case strings.HasPrefix(tok, "docId-"):
 			docid, _ = strconv.Atoi(strings.TrimPrefix(tok, "docId-"))
+		case strings.HasPrefix(tok, "pub-"):
+			symbol = strings.TrimPrefix(tok, "pub-")
+		case strings.HasPrefix(tok, "iss-"):
+			issue = strings.TrimPrefix(tok, "iss-")
 		}
 	}
 	switch {
-	case issue:
+	case isIssue:
 		kind = "issue"
 	case news:
 		kind = "news"
 	case pubs:
 		kind = "publication"
 	}
-	return kind, docid
+	return kind, docid, symbol, issue
 }
 
 // mediaKey is the media item a link of the video library opens:
