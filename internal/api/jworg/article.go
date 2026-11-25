@@ -23,14 +23,19 @@ func New(hc *httpx.Client) *Client { return &Client{hc: hc} }
 
 // ArticleByURL fetches and parses a www.jw.org article page.
 func (c *Client) ArticleByURL(ctx context.Context, pageURL string) (model.Article, error) {
-	doc, err := c.hc.GetHTML(ctx, pageURL)
+	var art model.Article
+	_, err := c.hc.GetHTMLChecked(ctx, pageURL, func(doc *goquery.Document) error {
+		art = parse(doc, c.hc.Base.JWOrg)
+		art.URL = pageURL
+		if art.HTML == "" {
+			// not kept: a page without content is jw.org turning the
+			// reader away more often than a page that has none
+			return fmt.Errorf("no article content found at %s: %w", pageURL, ErrNoContent)
+		}
+		return nil
+	})
 	if err != nil {
-		return model.Article{}, err
-	}
-	art := parse(doc, c.hc.Base.JWOrg)
-	art.URL = pageURL
-	if art.HTML == "" {
-		return art, fmt.Errorf("no article content found at %s", pageURL)
+		return art, err
 	}
 	return art, nil
 }

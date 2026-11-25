@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -68,6 +69,13 @@ Examples:
 				items = items[:limit]
 			}
 			rs := results.ResultSet{Kind: "new", Query: kind, Lang: lng.Symbol, Items: service.NewItemsToResults(items)}
+			// what could be read is listed; what could not says so
+			switch {
+			case errors.Is(err, service.ErrWhatsNew):
+				rs.Notes = append(rs.Notes, a.Text().UILatestUnreadable)
+			case err != nil:
+				rs.Notes = append(rs.Notes, err.Error())
+			}
 			return writeListing(a, rs, a.Text().UINavLatest)
 		},
 	}

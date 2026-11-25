@@ -2,6 +2,8 @@ package jworg
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -16,6 +18,11 @@ import (
 // jw.org"), which the finder leads to in every language.
 const whatsNewDocID = 1011267
 
+// ErrNoContent is a page of jw.org without what it is the page of: jw.org's
+// bot management answers some networks — a server's — that way, with a
+// page of its own and a 200.
+var ErrNoContent = errors.New("jw.org answered without the page's content (its bot protection may be turning this network away)")
+
 // WhatsNewURL is the page of what is new on jw.org in a language.
 func (c *Client) WhatsNewURL(symbol string) string {
 	return c.DocumentURL(symbol, whatsNewDocID)
@@ -24,11 +31,18 @@ func (c *Client) WhatsNewURL(symbol string) string {
 // WhatsNew reads jw.org's page of what is new on the site: the articles,
 // publications, news and videos it published lately, newest first.
 func (c *Client) WhatsNew(ctx context.Context, symbol string) ([]model.NewItem, error) {
-	doc, err := c.hc.GetHTML(ctx, c.WhatsNewURL(symbol))
-	if err != nil {
-		return nil, err
-	}
-	return parseWhatsNew(doc, c.hc.Base.JWOrg), nil
+	u := c.WhatsNewURL(symbol)
+	var items []model.NewItem
+	_, err := c.hc.GetHTMLChecked(ctx, u, func(doc *goquery.Document) error {
+		// the page lists itself first, dateless: a page of jw.org without
+		// one entry is not that page
+		if doc.Find(".synopsis").Length() == 0 {
+			return fmt.Errorf("what's new %s: %w", u, ErrNoContent)
+		}
+		items = parseWhatsNew(doc, c.hc.Base.JWOrg)
+		return nil
+	})
+	return items, err
 }
 
 // parseWhatsNew reads the entries of the page: each a .synopsis with a date,

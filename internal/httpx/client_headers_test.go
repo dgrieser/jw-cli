@@ -3,6 +3,7 @@ package httpx
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -105,8 +106,25 @@ func TestBrowserHeadersOnJWOrgOnly(t *testing.T) {
 	if got := seen.Get("Sec-Fetch-Mode"); got != "navigate" {
 		t.Errorf("JWOrg navigation mode = %q", got)
 	}
-	if got := seen.Get("Accept-Language"); got != "en-US,en;q=0.9" {
-		t.Errorf("JWOrg language = %q", got)
+	// jw.org is read as wol is: the same browser, the cookie consent given,
+	// but none of wol's own settings
+	for name, want := range map[string]string{
+		"Accept-Language": "en,en-US;q=0.9,de-DE;q=0.8,de;q=0.7",
+		"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		"Priority":        "u=0, i",
+		"Cache-Control":   "no-cache",
+		"Pragma":          "no-cache",
+	} {
+		if got := seen.Get(name); got != want {
+			t.Errorf("JWOrg %s = %q, want %q", name, got, want)
+		}
+	}
+	cookies := seen.Get("Cookie")
+	if !strings.Contains(cookies, "cookieConsent-STRICTLY_NECESSARY=true") || !strings.Contains(cookies, "cookieConsent-USAGE=true") {
+		t.Errorf("JWOrg cookies without the consent: %q", cookies)
+	}
+	if strings.Contains(cookies, "fontScale") || strings.Contains(cookies, "binavview") {
+		t.Errorf("JWOrg sent wol's own settings: %q", cookies)
 	}
 
 	c = New(WithBaseURLs(BaseURLs{}))

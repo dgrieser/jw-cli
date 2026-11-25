@@ -91,3 +91,17 @@ func TestDownloadNewResult(t *testing.T) {
 		t.Errorf("news: want nothing downloadable, got %v", err)
 	}
 }
+
+// A jw.org that turns the reader away with a page of its own is an error
+// for jw new --kind pub, which has nothing else to list, not an empty list.
+func TestNewSaysWhenJWOrgTurnsAway(t *testing.T) {
+	mux := languagesMux(t)
+	mux.HandleFunc("/finder", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><p>Access Denied</p></body></html>`)
+	})
+	out, err := runCmd(t, mux, "new", "-l", "en", "--kind", "pub")
+	if err == nil || !strings.Contains(err.Error(), "could not be read") {
+		t.Errorf("want jw.org's list unread, got %v\n%s", err, out)
+	}
+}

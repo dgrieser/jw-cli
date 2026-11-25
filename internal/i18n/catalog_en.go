@@ -314,6 +314,7 @@ var en = Messages{
 	UILatestAll:          "All",
 	UILatestNews:         "News",
 	UILatestPublications: "Latest publications",
+	UILatestUnreadable:   "jw.org's list of what is new could not be read, so news and publications are missing. jw.org turned this server away or cannot be reached.",
 	UIKindVideo:          "Video",
 	UIKindAudio:          "Audio",
 	UIKindPublication:    "Publication",

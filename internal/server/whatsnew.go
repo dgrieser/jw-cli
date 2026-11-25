@@ -42,13 +42,13 @@ type latestDay struct {
 }
 
 // whatsNew is jw.org's page of what is new in lang; one that cannot be read
-// is no entries, logged, rather than no page.
-func (s *Server) whatsNew(ctx context.Context, lang string) []model.NewItem {
+// is no entries and the error, logged, rather than no page.
+func (s *Server) whatsNew(ctx context.Context, lang string) ([]model.NewItem, error) {
 	items, err := s.svc.WhatsNew(ctx, lang)
 	if err != nil {
 		s.logf("what's new: %s: %v", lang, err)
 	}
-	return items
+	return items, err
 }
 
 // latestPubShelf is the row of the latest publications on the
@@ -124,12 +124,13 @@ func (s *Server) uiLatest(w http.ResponseWriter, r *http.Request) {
 
 	// the media as the media start page has them: found at the last update
 	var (
-		news   []model.NewItem
-		pick   model.Category
-		recent []model.MediaItem
-		wg     sync.WaitGroup
+		news    []model.NewItem
+		newsErr error
+		pick    model.Category
+		recent  []model.MediaItem
+		wg      sync.WaitGroup
 	)
-	wg.Go(func() { news = s.whatsNew(r.Context(), lng.Symbol) })
+	wg.Go(func() { news, newsErr = s.whatsNew(r.Context(), lng.Symbol) })
 	if kind == "" || kind == "media" {
 		wg.Go(func() { recent = s.latest(r.Context(), lng.Symbol) })
 		wg.Go(func() {
@@ -141,6 +142,10 @@ func (s *Server) uiLatest(w http.ResponseWriter, r *http.Request) {
 	items := service.LatestItems(news, service.MergeRecent(pick.Media, recent))
 	if kind != "" {
 		items = slices.DeleteFunc(items, func(it model.NewItem) bool { return service.LatestGroup(it) != kind })
+	}
+	// the media are there without jw.org's list; the page says what is not
+	if newsErr != nil && kind != "media" {
+		page.Error = t.UILatestUnreadable
 	}
 	page.Days = groupByDay(s.latestViews(items, t, page.Lang), items, t)
 	s.render(w, http.StatusOK, "latest", page)
@@ -232,7 +237,7 @@ func (s *Server) apiLatest(w http.ResponseWriter, r *http.Request) {
 		newsErr error
 		wg      sync.WaitGroup
 	)
-	wg.Go(func() { news, newsErr = s.svc.WhatsNew(r.Context(), lng.Symbol) })
+	wg.Go(func() { news, newsErr = s.whatsNew(r.Context(), lng.Symbol) })
 	if kind == "" || kind == "media" {
 		wg.Go(func() {
 			if days == latestDays {
@@ -257,5 +262,10 @@ func (s *Server) apiLatest(w http.ResponseWriter, r *http.Request) {
 	if items == nil {
 		items = []model.NewItem{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"lang": lng.Symbol, "items": items})
+	answer := map[string]any{"lang": lng.Symbol, "items": items}
+	if newsErr != nil {
+		// a partial answer says it is partial: the media without jw.org's list
+		answer["error"] = newsErr.Error()
+	}
+	writeJSON(w, http.StatusOK, answer)
 }

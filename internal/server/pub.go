@@ -181,7 +181,7 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 		page.Heading = txt.UINavPublications
 		var latest []model.NewItem
 		var wg sync.WaitGroup
-		wg.Go(func() { latest = s.whatsNew(r.Context(), lng.Symbol) })
+		wg.Go(func() { latest, _ = s.whatsNew(r.Context(), lng.Symbol) }) // logged; no row
 		page.Categories, page.Shelves = s.pubStart(r.Context(), lng, lib, page.basePage)
 		wg.Wait()
 		if sh := latestPubShelf(latest, txt.UILatestPublications, page.basePage); sh != nil {
