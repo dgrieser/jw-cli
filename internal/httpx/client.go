@@ -122,6 +122,10 @@ func New(opts ...Option) *Client {
 	if c.hc.CheckRedirect == nil {
 		c.hc.CheckRedirect = c.checkRedirect
 	}
+	// www.jw.org is spoken to as Chrome speaks to it (chrome.go)
+	if _, ok := c.hc.Transport.(*hostTransport); !ok {
+		c.hc.Transport = chromeFor(c.Base.JWOrg, c.hc.Transport)
+	}
 	c.limiters = map[string]*rate.Limiter{}
 	for _, raw := range []string{c.Base.WOL, c.Base.JWOrg} {
 		if h := hostOf(raw); h != "" {
