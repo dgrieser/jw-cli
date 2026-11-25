@@ -153,10 +153,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	}
 	if req.Header.Get("Accept-Language") == "" {
 		language := "en"
-		if wol {
+		if browserSite {
 			language = "en,en-US;q=0.9,de-DE;q=0.8,de;q=0.7"
-		} else if browserSite {
-			language = "en-US,en;q=0.9"
 		}
 		req.Header.Set("Accept-Language", language)
 	}
@@ -174,7 +172,11 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 
 // browserHeaders describes the request as a Chrome page navigation or an
 // in-page fetch. Keep headers supplied by callers, especially the Accept and
-// X-Requested-With values that select wol's JSON response.
+// X-Requested-With values that select wol's JSON response. wol and jw.org
+// sit behind the same bot management, and both are read as one browser
+// reads them — the same headers, the cookie consent given — or a network
+// the one lets through can find itself turned away by the other; only
+// wol's own settings (its font scale, its book grid) are wol's alone.
 func browserHeaders(req *http.Request, wol bool) {
 	setDefault := func(name, value string) {
 		if req.Header.Get(name) == "" {
@@ -184,20 +186,20 @@ func browserHeaders(req *http.Request, wol bool) {
 	setDefault("Sec-CH-UA", `"Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"`)
 	setDefault("Sec-CH-UA-Mobile", "?0")
 	setDefault("Sec-CH-UA-Platform", `"Linux"`)
+	setDefault("Cache-Control", "no-cache")
+	setDefault("Pragma", "no-cache")
+	cookies := []struct{ name, value string }{
+		{"cookieConsent-STRICTLY_NECESSARY", "true"},
+		{"cookieConsent-FUNCTIONAL", "true"},
+		{"cookieConsent-DIAGNOSTIC", "true"},
+		{"cookieConsent-USAGE", "true"},
+	}
 	if wol {
-		setDefault("Cache-Control", "no-cache")
-		setDefault("Pragma", "no-cache")
-		for _, cookie := range []struct{ name, value string }{
-			{"cookieConsent-STRICTLY_NECESSARY", "true"},
-			{"cookieConsent-FUNCTIONAL", "true"},
-			{"cookieConsent-DIAGNOSTIC", "true"},
-			{"cookieConsent-USAGE", "true"},
-			{"fontScale", "1"},
-			{"binavview", "grid"},
-		} {
-			if _, err := req.Cookie(cookie.name); err == http.ErrNoCookie {
-				req.AddCookie(&http.Cookie{Name: cookie.name, Value: cookie.value})
-			}
+		cookies = append(cookies, []struct{ name, value string }{{"fontScale", "1"}, {"binavview", "grid"}}...)
+	}
+	for _, cookie := range cookies {
+		if _, err := req.Cookie(cookie.name); err == http.ErrNoCookie {
+			req.AddCookie(&http.Cookie{Name: cookie.name, Value: cookie.value})
 		}
 	}
 
@@ -208,12 +210,8 @@ func browserHeaders(req *http.Request, wol bool) {
 		setDefault("Sec-Fetch-Site", "same-origin")
 		return
 	}
-	accept := "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
-	if wol {
-		accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
-		setDefault("Priority", "u=0, i")
-	}
-	setDefault("Accept", accept)
+	setDefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	setDefault("Priority", "u=0, i")
 	setDefault("Sec-Fetch-Dest", "document")
 	setDefault("Sec-Fetch-Mode", "navigate")
 	setDefault("Sec-Fetch-Site", "none")
