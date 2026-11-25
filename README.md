@@ -1085,8 +1085,9 @@ loads only when that section is opened.
 The **Publications** page browses the library the way wol lays it out: the
 categories (Bibles, Watchtower, Awake!, Books, Meeting Workbooks, ...), then a
 category's years, a year's editions and months, down to an issue or a
-publication. The start page leads with the categories and rows of covers: for a
-periodical its latest issues gathered across years until the row holds 24,
+publication. The start page leads with the categories, a row of the latest
+publications (the publications on jw.org's page of what is new), and rows of
+covers: for a periodical its latest issues gathered across years until the row holds 24,
 newest first and one row per edition (the Watchtower's public and study
 editions); for books, brochures, tracts and the like the publications
 themselves, newest release first (the year a publication's page records, else
@@ -1109,6 +1110,13 @@ no counterpart in the language asked for leads back to the start page. A publica
 (`/pub/publication/lff`). Looking a
 publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.
+
+The **What's new** page (`/latest`) puts together what the site published
+lately, by day and newest first: jw.org's page of what is new ("Neu auf
+jw.org": articles, publications, news) and the media library's latest media,
+as the media start page's row of the latest videos holds them. Tabs filter it
+to media, publications or news. jw.org's page is read anew with the latest
+media, every three hours during the day.
 
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker

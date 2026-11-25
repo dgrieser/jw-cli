@@ -1,0 +1,16 @@
+{{define "content"}}
+<h1>{{.T.UINavLatest}}</h1>
+<nav class="tabs" aria-label="{{.T.UINavLatest}}">
+  {{- range .Tabs}}
+  <a href="{{.Href}}"{{if .Active}} class="active" aria-current="page"{{end}}>{{.Title}}</a>
+  {{- end}}
+</nav>
+{{- range .Days}}
+<section class="latest-day">
+  <h2>{{.Heading}}</h2>
+  {{template "listing" .}}
+</section>
+{{- else}}
+<p class="empty">{{.T.NoResults}}</p>
+{{- end}}
+{{end}}

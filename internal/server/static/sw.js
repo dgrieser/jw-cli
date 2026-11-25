@@ -130,7 +130,7 @@ function key(u, lng) {
 // asked for by name
 function current(u) {
   var p = u.pathname;
-  if (p === "/" || p === "/media" || p === "/pub" || /^\/(media\/category|pub\/library)\//.test(p)) return true;
+  if (p === "/" || p === "/media" || p === "/pub" || p === "/latest" || /^\/(media\/category|pub\/library)\//.test(p)) return true;
   return (p === "/dailytext" || /^\/meetings/.test(p)) && !u.searchParams.get("date");
 }
 

@@ -729,6 +729,28 @@ type documentPage struct {
 	// Images are the pictures the document shows, listed below it as on an
 	// article's page (--images on the command line).
 	Images []model.MediaAsset
+	// Crumbs lead from a meeting up to the overview of its week.
+	Crumbs []crumb
+}
+
+// PartName names a meeting page: the meeting it shows, or the overview.
+func (p documentPage) PartName() string {
+	switch p.Part {
+	case "midweek":
+		return p.T.UIMidweek
+	case "weekend":
+		return p.T.UIWeekend
+	}
+	return p.T.UIOverview
+}
+
+// meetingCrumbs lead from a meeting up to the overview of its week; the
+// overview, at the top, has none.
+func (p documentPage) meetingCrumbs() []crumb {
+	if p.Part == "" {
+		return nil
+	}
+	return withHere([]crumb{{Label: p.T.UIOverview, Href: p.PartURL("")}}, p.PartName())
 }
 
 // PartURL addresses one of the meeting tabs, keeping the chosen week and
@@ -839,7 +861,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	s.render(w, http.StatusOK, "meetings", documentPage{
+	page := documentPage{
 		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")).withSite(art.URL),
 		Heading:      ownHeading(art.Title, body),
 		URL:          art.URL,
@@ -851,7 +873,9 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
 		Images:       withoutPrintEditions(art.Images, string(body)),
-	})
+	}
+	page.Crumbs = page.meetingCrumbs()
+	s.render(w, http.StatusOK, "meetings", page)
 }
 
 type mediaPage struct {

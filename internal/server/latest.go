@@ -124,6 +124,9 @@ func (s *Server) findLatest(ctx context.Context, lang string) ([]model.MediaItem
 		for _, key := range mediaRowCategories() {
 			wg.Go(func() { _, _ = s.svc.Mediator.Category(ctx, lang, key, mediaRowLimit(key), 0) })
 		}
+		// and jw.org's page of what is new, which the page of what is new
+		// and the publications' row of the latest show
+		wg.Go(func() { _ = s.whatsNew(ctx, lang) })
 		defer wg.Wait()
 		media, err := s.svc.RecentMedia(ctx, lang, time.Now().AddDate(0, 0, -latestDays))
 		if err != nil {

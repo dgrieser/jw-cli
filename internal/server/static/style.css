@@ -2362,3 +2362,9 @@ html.js .key-panel[hidden], .auth .date-field[hidden] { display: none; }
 .key-form select, .key-form input[type="date"] { width: 100%; }
 input.key-date { margin-top: 0.35rem; }
 .auth input.key-date[hidden] { display: none; }
+
+/* the page of what is new: jw.org writes an entry's publication in capitals,
+   set small as a label rather than shouted */
+.latest-day .listing .context,
+.latest-pubs .cap .sub { font-size: 0.75em; letter-spacing: 0.03em; }
+.latest-day { margin-top: 1.5rem; }
