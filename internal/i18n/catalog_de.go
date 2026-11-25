@@ -314,6 +314,7 @@ var de = Messages{
 	UILatestAll:          "Alle",
 	UILatestNews:         "Nachrichten",
 	UILatestPublications: "Neueste Publikationen",
+	UILatestUnreadable:   "Die Liste „Neu auf jw.org“ konnte nicht gelesen werden, deshalb fehlen Nachrichten und Publikationen. jw.org hat die Anfrage dieses Servers abgewiesen oder ist nicht erreichbar.",
 	UIKindVideo:          "Video",
 	UIKindAudio:          "Audio",
 	UIKindPublication:    "Publikation",

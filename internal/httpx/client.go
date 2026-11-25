@@ -296,6 +296,27 @@ func (c *Client) GetHTML(ctx context.Context, rawURL string) (*goquery.Document,
 	return doc, nil
 }
 
+// GetHTMLChecked fetches rawURL like GetHTML, but keeps a new body in the
+// cache only once check accepts the page. A site behind bot management can
+// answer 200 with a page of its own in place of the one asked for; kept, it
+// would be served for as long as the cache holds it, after the site has
+// long let the reader through again.
+func (c *Client) GetHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
+	f, err := c.read(ctx, rawURL, http.Header{})
+	if err != nil {
+		return nil, err
+	}
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(f.body))
+	if err != nil {
+		return nil, fmt.Errorf("parse HTML %s: %w", rawURL, err)
+	}
+	if err := check(doc); err != nil {
+		return nil, err
+	}
+	c.keep(ctx, f)
+	return doc, nil
+}
+
 // GetText fetches rawURL and returns the body as a string.
 func (c *Client) GetText(ctx context.Context, rawURL string, hdr http.Header) (string, error) {
 	if hdr == nil {

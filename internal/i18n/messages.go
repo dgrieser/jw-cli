@@ -511,12 +511,15 @@ type Messages struct {
 	UILatestAll          string
 	UILatestNews         string
 	UILatestPublications string
-	UIKindVideo          string
-	UIKindAudio          string
-	UIKindPublication    string
-	UIKindIssue          string
-	UIKindNews           string
-	UIKindArticle        string
+	// UILatestUnreadable says jw.org's list of what is new could not be
+	// read, so what is new shows the media alone.
+	UILatestUnreadable string
+	UIKindVideo        string
+	UIKindAudio        string
+	UIKindPublication  string
+	UIKindIssue        string
+	UIKindNews         string
+	UIKindArticle      string
 }
 
 // Date renders t as a full date in the language's own word order.

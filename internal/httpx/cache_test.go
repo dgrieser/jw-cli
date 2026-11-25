@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 // A body read once is read from disk the second time, by a new client on the
@@ -686,5 +689,42 @@ func TestParseSize(t *testing.T) {
 		if _, err := ParseSize(bad); err == nil {
 			t.Errorf("ParseSize(%q) accepted", bad)
 		}
+	}
+}
+
+// A page its reader rejects is not kept: the next read asks the site again,
+// which may have let the reader through by then; an accepted page is kept.
+func TestGetHTMLCheckedKeepsAcceptedPagesOnly(t *testing.T) {
+	var hits atomic.Int32
+	var blocked atomic.Bool
+	blocked.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if blocked.Load() {
+			w.Write([]byte(`<html><body><p>Access check</p></body></html>`))
+			return
+		}
+		w.Write([]byte(`<html><body><main class="content">page</main></body></html>`))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	c := New(WithResponseCache(OpenCacheAt(t.TempDir())))
+	check := func(doc *goquery.Document) error {
+		if doc.Find("main.content").Length() == 0 {
+			return errors.New("not the page")
+		}
+		return nil
+	}
+	if _, err := c.GetHTMLChecked(ctx, srv.URL+"/p", check); err == nil {
+		t.Fatal("a rejected page read as accepted")
+	}
+	blocked.Store(false)
+	for range 2 {
+		if _, err := c.GetHTMLChecked(ctx, srv.URL+"/p", check); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if hits.Load() != 2 {
+		t.Errorf("%d upstream reads, want 2: the rejected page anew, the accepted one once", hits.Load())
 	}
 }

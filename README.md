@@ -1129,6 +1129,15 @@ to media, publications or news; `jw new` lists the same on the command line.
 jw.org's page is read anew with the latest
 media, every three hours during the day.
 
+jw.org's bot protection turns some networks away — those of data centers
+especially — with a page of its own in place of the one asked for, while the
+library (wol.jw.org) and the media and search APIs still answer. The page of
+what is new then shows the media alone and says that jw.org's list could not be
+read; such a page is never cached, so the list is back as soon as jw.org lets
+the server through. A server in such a network can reach jw.org through a proxy
+in another one: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the hosts
+that need none).
+
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
 at `/sw.js`, which a new build of the server starts anew — and pages not

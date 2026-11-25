@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -39,6 +40,11 @@ func (s *Service) WhatsNew(ctx context.Context, lang string) ([]model.NewItem, e
 	return s.JWOrg.WhatsNew(ctx, lang)
 }
 
+// ErrWhatsNew marks the failure to read jw.org's page of what is new among
+// what Latest could not read: the media come without the articles,
+// publications and news.
+var ErrWhatsNew = errors.New("jw.org's list of what is new could not be read")
+
 // LatestFilter says what Latest reads.
 type LatestFilter struct {
 	// Since bounds the media walked for; the zero time takes 30 days.
@@ -71,6 +77,9 @@ func (s *Service) Latest(ctx context.Context, lang string, f LatestFilter) ([]mo
 		wg.Go(func() { recent, recentErr = s.RecentMedia(ctx, lang, f.Since) })
 	}
 	wg.Wait()
+	if newsErr != nil {
+		newsErr = fmt.Errorf("%w: %w", ErrWhatsNew, newsErr)
+	}
 	if errors.Is(pickErr, pubmedia.ErrNotFound) {
 		pickErr = nil
 	}
