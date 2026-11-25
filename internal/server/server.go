@@ -173,6 +173,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/glossary", s.apiGlossary)
 	mux.HandleFunc("GET /api/v1/dailytext", s.apiDailyText)
 	mux.HandleFunc("GET /api/v1/latest", s.apiLatest)
+	mux.HandleFunc("GET /api/v1/latest/feed", s.apiFeed)
+	mux.HandleFunc("POST /api/v1/latest/feed", s.apiPostFeed)
 	mux.HandleFunc("GET /api/v1/meetings", s.apiMeetings)
 	mux.HandleFunc("GET /api/v1/meetings/{part}", s.apiMeetingPart)
 	mux.HandleFunc("POST "+remote.Path, s.apiCLI)
