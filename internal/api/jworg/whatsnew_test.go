@@ -55,3 +55,20 @@ func TestParseWhatsNew(t *testing.T) {
 		t.Errorf("video: %+v", v)
 	}
 }
+
+// A page that is not the one asked for is described in the error: enough to
+// tell a challenge from a denial.
+func TestDescribePage(t *testing.T) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(`<html><head><title>Challenge Validation</title>
+<meta http-equiv="refresh" content="5; URL='/x?bm-verify=abc'"><script src="/_sec/cp_challenge/ak-challenge-4-3.js"></script>
+<script>var a=1</script></head><body><p>Please wait while we verify.</p><noscript>Enable JavaScript</noscript></body></html>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := describePage(doc)
+	for _, want := range []string{`title "Challenge Validation"`, "bm-verify", "/_sec/cp_challenge/", "1 inline scripts", "Please wait while we verify.", "Enable JavaScript"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("want %q in %q", want, got)
+		}
+	}
+}

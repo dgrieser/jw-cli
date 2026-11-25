@@ -30,7 +30,7 @@ func (c *Client) ArticleByURL(ctx context.Context, pageURL string) (model.Articl
 		if art.HTML == "" {
 			// not kept: a page without content is jw.org turning the
 			// reader away more often than a page that has none
-			return fmt.Errorf("no article content found at %s: %w", pageURL, ErrNoContent)
+			return fmt.Errorf("no article content found at %s: %w — %s", pageURL, ErrNoContent, describePage(doc))
 		}
 		return nil
 	})
