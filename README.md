@@ -1141,6 +1141,27 @@ whether it makes the difference). A server in such a network can also reach jw.o
 in another one: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the hosts
 that need none).
 
+Or a machine jw.org lets through hands the server jw.org's list instead: it
+posts the RSS feed of the page of what is new with an admin's API key.
+
+```sh
+# crontab of that machine: every 6 hours, the German list
+0 */6 * * * curl -fsS https://www.jw.org/de/neu-auf-unserer-website/rss/WhatsNewWebArticles/feed.xml \
+  | curl -fsS -X POST -H "Authorization: Bearer $JW_KEY" -H "Content-Type: application/rss+xml" \
+      --data-binary @- https://jw.example.org/api/v1/latest/feed
+```
+
+A feed posted is what is new for 24 hours, and each feed posted starts that
+anew: until then the server does not ask www.jw.org for the list at all — not
+in its updates, not when a reader reloads the page. When 24 hours pass with no
+feed, it reads the page again; if that fails too, the last feed stays until a
+feed or the page answers. The feed's link names its language (`?lang=`, if
+given, must match); the server keeps the last feed of each language in its
+data folder (`feeds/`), so a restart keeps it and its 24 hours. The feed says
+a little less than the page: issues are listed as publications.
+`GET /api/v1/latest/feed?lang=de` says when the last feed came and until when
+it holds.
+
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
 at `/sw.js`, which a new build of the server starts anew — and pages not
@@ -1210,6 +1231,8 @@ Every endpoint below needs an [API key](#api-keys) (`Authorization: Bearer
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
 | `GET /api/v1/latest` | `kind=media\|pub\|news`, `days` | `jw new` |
+| `POST /api/v1/latest/feed` | body: the RSS feed of jw.org's page of what is new (`application/rss+xml`), `lang`; admins only | — (stands in for jw.org's page for 24 h) |
+| `GET /api/v1/latest/feed` | `lang` | — (when the last feed came, until when it holds) |
 | `GET /api/v1/open` | `path`* (a wol citation or footnote) | — (the page of this server it is read on, as `{"url": …}`) |
 | `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤36, jw.org only: wol's pages are 40 results), `page`, `scope`, `all`/`include`/`exclude` (checked with either engine), `excerpts=0` | `jw search` |
 | `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3), `force=1`, `urls=0` | `jw article` (images and scripture refs are fields of the response) |

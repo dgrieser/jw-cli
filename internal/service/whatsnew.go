@@ -35,9 +35,20 @@ var LatestZone = func() *time.Location {
 }()
 
 // WhatsNew is what jw.org's page of what is new lists in a language: its
-// articles, publications, news and videos, newest first.
+// articles, publications, news and videos, newest first. A feed posted
+// within FeedHold is that list, and jw.org is not asked, however the
+// request asks to refresh; past it, the page is read, and when that fails,
+// the last feed posted stands, with a StaleFeedError (feeds.go).
 func (s *Service) WhatsNew(ctx context.Context, lang string) ([]model.NewItem, error) {
-	return s.JWOrg.WhatsNew(ctx, lang)
+	feed, posted := s.Feeds.Get(lang)
+	if posted && feed.Holds(time.Now()) {
+		return feed.Items, nil
+	}
+	items, err := s.JWOrg.WhatsNew(ctx, lang)
+	if err != nil && posted {
+		return feed.Items, &StaleFeedError{Received: feed.Received, Err: err}
+	}
+	return items, err
 }
 
 // ErrWhatsNew marks the failure to read jw.org's page of what is new among
@@ -77,7 +88,10 @@ func (s *Service) Latest(ctx context.Context, lang string, f LatestFilter) ([]mo
 		wg.Go(func() { recent, recentErr = s.RecentMedia(ctx, lang, f.Since) })
 	}
 	wg.Wait()
-	if newsErr != nil {
+	switch {
+	case IsStaleFeed(newsErr):
+		newsErr = nil // the last feed posted stands in
+	case newsErr != nil:
 		newsErr = fmt.Errorf("%w: %w", ErrWhatsNew, newsErr)
 	}
 	if errors.Is(pickErr, pubmedia.ErrNotFound) {
