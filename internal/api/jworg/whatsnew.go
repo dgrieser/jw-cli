@@ -23,6 +23,46 @@ const whatsNewDocID = 1011267
 // page of its own and a 200.
 var ErrNoContent = errors.New("jw.org answered without the page's content (its bot protection may be turning this network away)")
 
+// describePage says what a page that is not the one asked for is, for the
+// error that reports it: its title, its size, where it sends the browser on
+// to, the scripts it loads and how its text begins. A bot protection's
+// challenge, a denial and a consent wall tell themselves apart by these.
+func describePage(doc *goquery.Document) string {
+	short := func(s string, n int) string {
+		s = clean(s)
+		if r := []rune(s); len(r) > n {
+			return string(r[:n]) + "…"
+		}
+		return s
+	}
+	html, _ := doc.Html()
+	parts := []string{fmt.Sprintf("it answered %d bytes, title %q", len(html), short(doc.Find("title").First().Text(), 120))}
+	if to, ok := doc.Find(`meta[http-equiv="refresh" i]`).First().Attr("content"); ok {
+		parts = append(parts, fmt.Sprintf("refresh %q", short(to, 160)))
+	}
+	var scripts []string
+	doc.Find("script[src]").EachWithBreak(func(_ int, s *goquery.Selection) bool {
+		src, _ := s.Attr("src")
+		scripts = append(scripts, short(src, 100))
+		return len(scripts) < 4
+	})
+	if len(scripts) > 0 {
+		parts = append(parts, "scripts "+strings.Join(scripts, " "))
+	}
+	if n := doc.Find("script:not([src])").Length(); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d inline scripts", n))
+	}
+	body := doc.Find("body").Clone()
+	body.Find("script, style, noscript").Remove()
+	if text := short(body.Text(), 300); text != "" {
+		parts = append(parts, fmt.Sprintf("text %q", text))
+	}
+	if ns := short(doc.Find("noscript").First().Text(), 200); ns != "" {
+		parts = append(parts, fmt.Sprintf("noscript %q", ns))
+	}
+	return strings.Join(parts, "; ")
+}
+
 // WhatsNewURL is the page of what is new on jw.org in a language.
 func (c *Client) WhatsNewURL(symbol string) string {
 	return c.DocumentURL(symbol, whatsNewDocID)
@@ -37,7 +77,7 @@ func (c *Client) WhatsNew(ctx context.Context, symbol string) ([]model.NewItem, 
 		// the page lists itself first, dateless: a page of jw.org without
 		// one entry is not that page
 		if doc.Find(".synopsis").Length() == 0 {
-			return fmt.Errorf("what's new %s: %w", u, ErrNoContent)
+			return fmt.Errorf("what's new %s: %w — %s", u, ErrNoContent, describePage(doc))
 		}
 		items = parseWhatsNew(doc, c.hc.Base.JWOrg)
 		return nil
