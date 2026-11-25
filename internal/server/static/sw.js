@@ -33,7 +33,7 @@ var KEEP_CURRENT = 6 * HOUR;
 var STAMP = "X-JW-Kept-At";
 
 // the pages of the site, as opposed to its API, streams and downloads
-var PAGE = /^\/(search|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?)?$/;
+var PAGE = /^\/(search|latest|cited|article|bible|dailytext|meetings(\/[^/]+)?|media(\/.*)?|pub(\/.*)?)?$/;
 
 self.addEventListener("install", function (e) {
   e.waitUntil(caches.open(STATIC).then(function (c) {
@@ -130,7 +130,7 @@ function key(u, lng) {
 // asked for by name
 function current(u) {
   var p = u.pathname;
-  if (p === "/" || p === "/media" || p === "/pub" || /^\/(media\/category|pub\/library)\//.test(p)) return true;
+  if (p === "/" || p === "/media" || p === "/pub" || p === "/latest" || /^\/(media\/category|pub\/library)\//.test(p)) return true;
   return (p === "/dailytext" || /^\/meetings/.test(p)) && !u.searchParams.get("date");
 }
 

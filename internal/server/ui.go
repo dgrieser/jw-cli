@@ -404,19 +404,22 @@ func inlineText(fragment string) string {
 // resultView is one listing row as the UI shows it: where it leads inside the
 // site, where it points outside, and what it says about itself.
 type resultView struct {
-	Index    int
-	Kind     string
-	Title    string
-	Context  string
-	Snippet  template.HTML
-	Excerpt  template.HTML
-	Href     string // internal page, when the row has one
-	External string // the row's own link on jw.org / wol.jw.org, which its menu offers
-	FileURL  string
-	ImageURL string
-	Duration string
-	Size     string
-	Meta     []string // image metadata lines
+	Index int
+	Kind  string
+	// KindLabel names the kind in the page's language, where a page says
+	// it in words; Kind stays the kind the listing lays a row out by.
+	KindLabel string
+	Title     string
+	Context   string
+	Snippet   template.HTML
+	Excerpt   template.HTML
+	Href      string // internal page, when the row has one
+	External  string // the row's own link on jw.org / wol.jw.org, which its menu offers
+	FileURL   string
+	ImageURL  string
+	Duration  string
+	Size      string
+	Meta      []string // image metadata lines
 }
 
 // resultViews prepares listing rows for a page. lang keeps the reader's
@@ -729,6 +732,28 @@ type documentPage struct {
 	// Images are the pictures the document shows, listed below it as on an
 	// article's page (--images on the command line).
 	Images []model.MediaAsset
+	// Crumbs lead from a meeting up to the overview of its week.
+	Crumbs []crumb
+}
+
+// PartName names a meeting page: the meeting it shows, or the overview.
+func (p documentPage) PartName() string {
+	switch p.Part {
+	case "midweek":
+		return p.T.UIMidweek
+	case "weekend":
+		return p.T.UIWeekend
+	}
+	return p.T.UIOverview
+}
+
+// meetingCrumbs lead from a meeting up to the overview of its week; the
+// overview, at the top, has none.
+func (p documentPage) meetingCrumbs() []crumb {
+	if p.Part == "" {
+		return nil
+	}
+	return withHere([]crumb{{Label: p.T.UIOverview, Href: p.PartURL("")}}, p.PartName())
 }
 
 // PartURL addresses one of the meeting tabs, keeping the chosen week and
@@ -839,7 +864,7 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		s.failUI(w, r, err)
 		return
 	}
-	s.render(w, http.StatusOK, "meetings", documentPage{
+	page := documentPage{
 		basePage:     s.base(r, firstNonEmpty(art.Title, "Meetings")).withSite(art.URL),
 		Heading:      ownHeading(art.Title, body),
 		URL:          art.URL,
@@ -851,7 +876,9 @@ func (s *Server) uiMeetings(w http.ResponseWriter, r *http.Request) {
 		UnfoldLevels: unfoldLevels(r, max(depth, auto), 0),
 		Body:         body,
 		Images:       withoutPrintEditions(art.Images, string(body)),
-	})
+	}
+	page.Crumbs = page.meetingCrumbs()
+	s.render(w, http.StatusOK, "meetings", page)
 }
 
 type mediaPage struct {
@@ -945,34 +972,7 @@ func mediaRowLimit(key string) int {
 
 // mediaLatestCategory is jw.org's pick of the latest videos, which the media
 // start page completes with everything else published lately (latest.go).
-const mediaLatestCategory = "LatestVideos"
-
-// withRecent is jw.org's pick of the latest media with the recent media it
-// does not have, newest first. A recording comes once: the video of a talk
-// or a song is listed again as audio, and a song in each album it is on,
-// under the same key or title; the pick's comes first, then a video.
-func withRecent(pick, recent []model.MediaItem) []model.MediaItem {
-	var videos, others []model.MediaItem
-	for _, m := range recent {
-		if m.Type == "video" {
-			videos = append(videos, m)
-		} else {
-			others = append(others, m)
-		}
-	}
-	var media []model.MediaItem
-	stems, titles := map[string]bool{}, map[string]bool{}
-	for _, m := range slices.Concat(pick, videos, others) {
-		stem, title := service.MediaStem(m.LANK), strings.ToLower(strings.TrimSpace(m.Title))
-		if stems[stem] || title != "" && titles[title] {
-			continue
-		}
-		stems[stem], titles[title] = true, true
-		media = append(media, m)
-	}
-	service.NewestFirst(media)
-	return media
-}
+const mediaLatestCategory = service.LatestVideosCategory
 
 // featuredCategory reports whether a root category is one of the curated
 // rows (and their variants) rather than a library to browse.
@@ -1020,7 +1020,7 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		}
 		media := cat.Media
 		if cat.Key == mediaLatestCategory {
-			media = withRecent(media, recent)
+			media = service.MergeRecent(media, recent)
 		}
 		row := s.resultViews(service.MediaToResults(media), page.Lang)
 		// a row named like the section before it carries that section on

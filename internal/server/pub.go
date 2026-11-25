@@ -55,6 +55,7 @@ type pubTile struct {
 // issues or its publications, and where they were found below it.
 type pubShelf struct {
 	Heading, Context, Href string
+	Class                  string // a class of the row's own
 	Tiles                  []pubTile
 }
 
@@ -178,7 +179,14 @@ func (s *Server) uiPubPage(w http.ResponseWriter, r *http.Request, kind, path st
 	root := kind == wol.LibraryKind && !strings.Contains(path, "/")
 	if root {
 		page.Heading = txt.UINavPublications
+		var latest []model.NewItem
+		var wg sync.WaitGroup
+		wg.Go(func() { latest = s.whatsNew(r.Context(), lng.Symbol) })
 		page.Categories, page.Shelves = s.pubStart(r.Context(), lng, lib, page.basePage)
+		wg.Wait()
+		if sh := latestPubShelf(latest, txt.UILatestPublications, page.basePage); sh != nil {
+			page.Shelves = append([]pubShelf{*sh}, page.Shelves...)
+		}
 		s.render(w, http.StatusOK, "pub", page)
 		return
 	}

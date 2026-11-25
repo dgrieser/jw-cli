@@ -405,9 +405,19 @@ jw dailytext                                 # today's text (or a date)
 jw meetings                                  # this week's meeting material
 jw meetings midweek                          # the Life and Ministry workbook part
 jw meetings weekend --date 2026-07-20        # that week's Watchtower study article
+jw new                                       # what is new: media, publications, news
+jw new --kind pub -n 10                      # the ten latest publications (media|pub|news)
 jw languages -s german                       # language codes
 jw completion bash|zsh|fish
 ```
+
+`jw new` (`latest`, `whatsnew`) lists what the site published lately, newest
+first, each row led by its day: jw.org's page of what is new together with the
+media library's latest media (jw.org's pick of the latest videos and everything
+else published in the last `--days`, default 30). Finding the media walks the
+whole media category tree, a few dozen requests the first time; `--kind pub`
+and `--kind news` read jw.org's page alone. The rows are numbered for `jw show`,
+`jw open` and `jw download`.
 
 `jw meetings` lists what each meeting covers and which publications it uses;
 `midweek` (`mid`, `mw`) and `weekend` (`we`, `wt`) read the material itself. The
@@ -1085,8 +1095,9 @@ loads only when that section is opened.
 The **Publications** page browses the library the way wol lays it out: the
 categories (Bibles, Watchtower, Awake!, Books, Meeting Workbooks, ...), then a
 category's years, a year's editions and months, down to an issue or a
-publication. The start page leads with the categories and rows of covers: for a
-periodical its latest issues gathered across years until the row holds 24,
+publication. The start page leads with the categories, a row of the latest
+publications (the publications on jw.org's page of what is new), and rows of
+covers: for a periodical its latest issues gathered across years until the row holds 24,
 newest first and one row per edition (the Watchtower's public and study
 editions); for books, brochures, tracts and the like the publications
 themselves, newest release first (the year a publication's page records, else
@@ -1109,6 +1120,14 @@ no counterpart in the language asked for leads back to the start page. A publica
 (`/pub/publication/lff`). Looking a
 publication up by symbol, document id, issue, book or track
 stays with `jw pub` and `GET /api/v1/pub`.
+
+The **What's new** page (`/latest`) puts together what the site published
+lately, by day and newest first: jw.org's page of what is new ("Neu auf
+jw.org": articles, publications, news) and the media library's latest media,
+as the media start page's row of the latest videos holds them. Tabs filter it
+to media, publications or news; `jw new` lists the same on the command line.
+jw.org's page is read anew with the latest
+media, every three hours during the day.
 
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
@@ -1178,6 +1197,7 @@ Every endpoint below needs an [API key](#api-keys) (`Authorization: Bearer
 | Endpoint | Parameters | CLI equivalent |
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
+| `GET /api/v1/latest` | `kind=media\|pub\|news`, `days` | `jw new` |
 | `GET /api/v1/open` | `path`* (a wol citation or footnote) | — (the page of this server it is read on, as `{"url": …}`) |
 | `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤36, jw.org only: wol's pages are 40 results), `page`, `scope`, `all`/`include`/`exclude` (checked with either engine), `excerpts=0` | `jw search` |
 | `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3), `force=1`, `urls=0` | `jw article` (images and scripture refs are fields of the response) |

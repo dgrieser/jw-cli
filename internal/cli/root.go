@@ -75,6 +75,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 		newBibleCmd(a),
 		newDailyTextCmd(a),
 		newMeetingsCmd(a),
+		newNewCmd(a),
 		runHere(newServeCmd(a)),
 	)
 	wireRemote(a, root)

@@ -1,5 +1,8 @@
+{{define "pagebar"}}<span class="pb-title">{{if .Part}}{{.PartName}}{{else}}{{.T.UINavMeetings}}{{end}}</span>{{end}}
 {{define "content"}}
-<h1>{{.T.UINavMeetings}}</h1>
+{{- if .Crumbs}}{{template "crumbs" .}}{{else}}
+<h1>{{.PartName}}</h1>
+{{- end}}
 <form class="form" method="get" action="{{if .Part}}/meetings/{{.Part}}{{else}}/meetings{{end}}">
   {{- if .Lang}}<input type="hidden" name="lang" value="{{.Lang}}">{{end}}
   {{- if or .Unfold .AutoUnfold}}<input type="hidden" name="unfold" value="{{or .AutoUnfold .Unfold}}">{{end}}

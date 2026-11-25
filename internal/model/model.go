@@ -85,6 +85,24 @@ type MediaFile struct {
 }
 
 // MediaItem is one video/audio item from the mediator API.
+// NewItem is one entry of jw.org's page of what is new on the site: an
+// article, a publication or an issue of one, a news report, a video.
+type NewItem struct {
+	Kind      string `json:"kind"` // article|publication|issue|news|video|audio
+	Title     string `json:"title"`
+	Context   string `json:"context,omitempty"` // the publication or series, "NEWS"
+	URL       string `json:"url"`
+	Published string `json:"published"` // 2006-01-02
+	ImageURL  string `json:"imageUrl,omitempty"`
+	DocID     int    `json:"docid,omitempty"`
+	// Symbol and Issue name the publication an entry is from, as jw.org
+	// tags it: "w" and "202702" for an issue of the Watchtower.
+	Symbol   string `json:"symbol,omitempty"`
+	Issue    string `json:"issue,omitempty"`
+	LANK     string `json:"lank,omitempty"` // a video's or recording's media item
+	Duration string `json:"duration,omitempty"`
+}
+
 type MediaItem struct {
 	LANK               string                       `json:"lank"`
 	Type               string                       `json:"type"` // video|audio

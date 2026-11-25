@@ -245,6 +245,7 @@ type Messages struct {
 	// for everything else.
 	UINavHome         string
 	UINavSearch       string
+	UINavLatest       string
 	UINavBible        string
 	UINavDailyText    string
 	UINavMeetings     string
@@ -325,6 +326,7 @@ type Messages struct {
 	UIWeekend       string
 	// UICard* describe the sections on the start page.
 	UICardSearch       string
+	UICardLatest       string
 	UICardBible        string
 	UICardDailyText    string
 	UICardMeetings     string
@@ -504,6 +506,17 @@ type Messages struct {
 	UIClip      string
 	UIClipFrom  string
 	UIFromStart string
+	// The page of what is new: its filters, the row of the latest
+	// publications on the publications' start page, and what an entry is.
+	UILatestAll          string
+	UILatestNews         string
+	UILatestPublications string
+	UIKindVideo          string
+	UIKindAudio          string
+	UIKindPublication    string
+	UIKindIssue          string
+	UIKindNews           string
+	UIKindArticle        string
 }
 
 // Date renders t as a full date in the language's own word order.

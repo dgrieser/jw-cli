@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 // The media start page's row of the latest videos holds jw.org's pick of
@@ -35,13 +36,7 @@ const (
 )
 
 // latestZone is the time the updates keep.
-var latestZone = func() *time.Location {
-	loc, err := time.LoadLocation("Europe/Berlin")
-	if err != nil {
-		return time.UTC
-	}
-	return loc
-}()
+var latestZone = service.LatestZone
 
 // latestUpdates are the times of the updates on the day of t, in order.
 func latestUpdates(t time.Time) []time.Time {
@@ -124,6 +119,9 @@ func (s *Server) findLatest(ctx context.Context, lang string) ([]model.MediaItem
 		for _, key := range mediaRowCategories() {
 			wg.Go(func() { _, _ = s.svc.Mediator.Category(ctx, lang, key, mediaRowLimit(key), 0) })
 		}
+		// and jw.org's page of what is new, which the page of what is new
+		// and the publications' row of the latest show
+		wg.Go(func() { _ = s.whatsNew(ctx, lang) })
 		defer wg.Wait()
 		media, err := s.svc.RecentMedia(ctx, lang, time.Now().AddDate(0, 0, -latestDays))
 		if err != nil {

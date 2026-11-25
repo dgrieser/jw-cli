@@ -1685,11 +1685,11 @@
   })();
 
   // meetingTitle names a meeting page by which meeting and which week:
-  // "Zusammenkünfte am Wochenende · 5.–11. Okt. 2026"
+  // "Zusammenkünfte · Wochenende · 5.–11. Okt. 2026"
   function meetingTitle() {
     var name = T.secMeetings || "";
     var tab = document.querySelector("main nav.tabs:not(.unfold) a.active");
-    if (tab && /^\/meetings\/./.test(location.pathname)) name += " " + clean(tab.textContent);
+    if (tab && /^\/meetings\/./.test(location.pathname)) name += " · " + clean(tab.textContent);
     var art = document.querySelector(".document[data-week]");
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(art ? art.getAttribute("data-week") : "");
     if (!m) return name;
@@ -1708,28 +1708,58 @@
   var PS = { key: failed ? null : recordKey(location), record: null, loaded: false, restored: false };
   // the last page of a section is the page itself, never a level to unfold
   // it to on the way back
+  // — and so is the section's start page, where the reader went back up to:
+  // the menu leads there then, not down to what was left
   PS.remember = function () {
-    if (!inSection) return;
+    if (!inSection && !atSectionStart()) return;
     storageSet(lastKey(here.id, pageLang), pageHref(location.href));
   };
-  PS.remember();
 
-  // the menu and the start page lead back to the last page of each section
-  document.querySelectorAll(".site-nav a[href], .destinations a[href]").forEach(function (a) {
-    var u;
+  // atSectionStart reports a page that is its section's own page in the
+  // menu (/bible, /media, /pub …), whatever it was asked with
+  function atSectionStart() {
+    if (!here || failed) return false;
+    var nav = document.querySelector(".site-nav a.active[href]");
+    if (!nav) return false;
     try {
-      u = new URL(a.href, location.href);
+      return new URL(nav.getAttribute("href"), location.href).pathname === location.pathname;
     } catch (err) {
-      return;
+      return false;
     }
-    var sec = sectionOf(u.pathname);
-    if (!sec || u.origin !== location.origin) return;
-    var q = new URLSearchParams(u.search);
-    var linkLang = q.get("lang") || "";
-    q.delete("lang");
-    if (q.toString() !== "") return;
-    var last = storageGet(lastKey(sec.id, linkLang));
-    if (last && last.charAt(0) === "/") a.href = pageHref(last);
+  }
+
+  // the menu and the start page lead back to the last page of each section;
+  // the entry of the section the reader is in leads to its start page, the
+  // way up out of where they are
+  function relinkSections() {
+    document.querySelectorAll(".site-nav a[href], .destinations a[href]").forEach(function (a) {
+      var home = a.getAttribute("data-home") || a.getAttribute("href");
+      a.setAttribute("data-home", home);
+      var u;
+      try {
+        u = new URL(home, location.href);
+      } catch (err) {
+        return;
+      }
+      var sec = sectionOf(u.pathname);
+      if (!sec || u.origin !== location.origin) return;
+      var q = new URLSearchParams(u.search);
+      var linkLang = q.get("lang") || "";
+      q.delete("lang");
+      if (q.toString() !== "") return;
+      var last = storageGet(lastKey(sec.id, linkLang));
+      if (here && sec.id === here.id) last = "";
+      a.setAttribute("href", last && last.charAt(0) === "/" ? pageHref(last) : home);
+    });
+  }
+  PS.remember();
+  relinkSections();
+  // back on this page out of the browser's cache, nothing above ran again:
+  // it is the last page of its section anew, and the menu leads on from it
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) return;
+    PS.remember();
+    relinkSections();
   });
 
   // page records: one per page, dropped after two months unvisited
@@ -2163,6 +2193,9 @@
     // beside the page's title, at the row's end; the title gives way, cut to
     // a word's start and a dot ("Zusammenk.") when the row is too narrow
     var h1 = main.querySelector("h1");
+    // a meeting's own document opens with the week, not the page's title:
+    // the page is named by its breadcrumb
+    if (h1 && h1.closest(".document[data-week]")) h1 = null;
     // a title of text alone moves; one holding a link or a control stays
     if (!h1 || h1.querySelector("a:not(.chapter-num), button, input, select, img")) {
       // a row of its own, at its end — below the breadcrumb, which always

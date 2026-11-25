@@ -11,7 +11,7 @@
 {{- end}}
 
 {{- range .Shelves}}
-<section class="shelf">
+<section class="shelf{{with .Class}} {{.}}{{end}}">
   <h2><a href="{{.Href}}">{{.Heading}}</a></h2>
   {{- if .Context}}<p class="shelf-context">{{.Context}}</p>{{end}}
   <div class="carousel" data-carousel>
