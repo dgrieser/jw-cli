@@ -8,46 +8,17 @@ import (
 	"github.com/dgrieser/jw-cli/internal/model"
 )
 
-// What is new goes by day, newest first; on a day jw.org's entries come
-// before the media, and the media go latest first.
+// The rows of what is new go under the days their entries came out on.
 func TestGroupByDay(t *testing.T) {
-	at := func(s string) time.Time {
-		v, err := time.ParseInLocation("2006-01-02 15:04", s, latestZone)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return v
-	}
-	entries := []latestEntry{
-		{at: at("2026-11-23 09:00"), kind: "media", view: resultView{Title: "m1"}},
-		{at: at("2026-11-24 00:00"), kind: "pub", view: resultView{Title: "p1"}},
-		{at: at("2026-11-24 18:00"), kind: "media", view: resultView{Title: "m2"}},
-		{at: at("2026-11-24 08:00"), kind: "media", view: resultView{Title: "m3"}},
-		{at: at("2026-11-23 00:00"), kind: "news", view: resultView{Title: "n1"}},
-	}
+	items := []model.NewItem{{Published: "2026-11-24"}, {Published: "2026-11-24"}, {Published: "2026-11-23"}}
+	views := []resultView{{Title: "a"}, {Title: "b"}, {Title: "c"}}
 	tx := i18n.TextFor("de")
-	days := groupByDay(entries, tx)
-	if len(days) != 2 || days[0].Heading != tx.Date(at("2026-11-24 00:00")) {
+	days := groupByDay(views, items, tx)
+	if len(days) != 2 || len(days[0].Items) != 2 || days[1].Items[0].Title != "c" || days[1].Items[0].Index != 1 {
 		t.Fatalf("days: %+v", days)
 	}
-	var got [][]string
-	for _, d := range days {
-		var titles []string
-		for _, v := range d.Items {
-			titles = append(titles, v.Title)
-		}
-		got = append(got, titles)
-	}
-	want := [][]string{{"p1", "m2", "m3"}, {"n1", "m1"}}
-	for i := range want {
-		if len(got[i]) != len(want[i]) {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-		for j := range want[i] {
-			if got[i][j] != want[i][j] {
-				t.Fatalf("got %v, want %v", got, want)
-			}
-		}
+	if want := tx.Date(time.Date(2026, 11, 24, 0, 0, 0, 0, latestZone)); days[0].Heading != want {
+		t.Errorf("heading %q, want %q", days[0].Heading, want)
 	}
 }
 

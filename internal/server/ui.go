@@ -969,34 +969,7 @@ func mediaRowLimit(key string) int {
 
 // mediaLatestCategory is jw.org's pick of the latest videos, which the media
 // start page completes with everything else published lately (latest.go).
-const mediaLatestCategory = "LatestVideos"
-
-// withRecent is jw.org's pick of the latest media with the recent media it
-// does not have, newest first. A recording comes once: the video of a talk
-// or a song is listed again as audio, and a song in each album it is on,
-// under the same key or title; the pick's comes first, then a video.
-func withRecent(pick, recent []model.MediaItem) []model.MediaItem {
-	var videos, others []model.MediaItem
-	for _, m := range recent {
-		if m.Type == "video" {
-			videos = append(videos, m)
-		} else {
-			others = append(others, m)
-		}
-	}
-	var media []model.MediaItem
-	stems, titles := map[string]bool{}, map[string]bool{}
-	for _, m := range slices.Concat(pick, videos, others) {
-		stem, title := service.MediaStem(m.LANK), strings.ToLower(strings.TrimSpace(m.Title))
-		if stems[stem] || title != "" && titles[title] {
-			continue
-		}
-		stems[stem], titles[title] = true, true
-		media = append(media, m)
-	}
-	service.NewestFirst(media)
-	return media
-}
+const mediaLatestCategory = service.LatestVideosCategory
 
 // featuredCategory reports whether a root category is one of the curated
 // rows (and their variants) rather than a library to browse.
@@ -1044,7 +1017,7 @@ func (s *Server) uiMedia(w http.ResponseWriter, r *http.Request) {
 		}
 		media := cat.Media
 		if cat.Key == mediaLatestCategory {
-			media = withRecent(media, recent)
+			media = service.MergeRecent(media, recent)
 		}
 		row := s.resultViews(service.MediaToResults(media), page.Lang)
 		// a row named like the section before it carries that section on

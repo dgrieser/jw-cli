@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/httpx"
 	"github.com/dgrieser/jw-cli/internal/model"
+	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 // The media start page's row of the latest videos holds jw.org's pick of
@@ -35,13 +36,7 @@ const (
 )
 
 // latestZone is the time the updates keep.
-var latestZone = func() *time.Location {
-	loc, err := time.LoadLocation("Europe/Berlin")
-	if err != nil {
-		return time.UTC
-	}
-	return loc
-}()
+var latestZone = service.LatestZone
 
 // latestUpdates are the times of the updates on the day of t, in order.
 func latestUpdates(t time.Time) []time.Time {

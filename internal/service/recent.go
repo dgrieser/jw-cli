@@ -119,9 +119,3 @@ func MediaStem(lank string) string {
 	}
 	return lank
 }
-
-// WhatsNew is what jw.org's page of what is new lists in a language: its
-// articles, publications, news and videos, newest first.
-func (s *Service) WhatsNew(ctx context.Context, lang string) ([]model.NewItem, error) {
-	return s.JWOrg.WhatsNew(ctx, lang)
-}
