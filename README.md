@@ -1134,7 +1134,10 @@ especially — with a page of its own in place of the one asked for, while the
 library (wol.jw.org) and the media and search APIs still answer. The page of
 what is new then shows the media alone and says that jw.org's list could not be
 read; such a page is never cached, so the list is back as soon as jw.org lets
-the server through. A server in such a network can reach jw.org through a proxy
+the server through. So that the connection matches the Chrome headers the
+requests carry, www.jw.org — and only it — is spoken to with Chrome's TLS
+handshake and over HTTP/2 (`JW_JWORG_TLS=go` goes back to Go's own, to tell
+whether it makes the difference). A server in such a network can also reach jw.org through a proxy
 in another one: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the hosts
 that need none).
 
