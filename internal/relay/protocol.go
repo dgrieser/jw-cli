@@ -37,6 +37,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
 const (
@@ -52,7 +54,7 @@ const (
 	ServerVersionHeader = "X-JW-Server-Version"
 	// ProxyIDHeader carries, on an answer a proxy fetched, the proxy's id:
 	// what Rejected counts a bot page against.
-	ProxyIDHeader = "X-JW-Proxy-ID"
+	ProxyIDHeader = httpx.ProxyIDHeader
 	// ProxyHeader names, on an answer a proxy fetched, the proxy.
 	ProxyHeader = "X-JW-Proxy"
 

@@ -410,3 +410,35 @@ func TestFailingProxyRespectsBackoff(t *testing.T) {
 		t.Errorf("new proxy: %v %q", err, got)
 	}
 }
+
+// A 405 to a HEAD says the site does not answer HEAD, which a GET settles:
+// no proxy is asked, and the answer goes on to revalidation as it is.
+func TestHead405NotRelayed(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	cl := New(WithRetryDelays())
+	relay := &fakeRelay{page: "x"}
+	cl.SetRelay(relay)
+	resp, err := cl.send(context.Background(), http.MethodHead, srv.URL+"/x", http.Header{})
+	if err != nil || resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("HEAD: %v %v", err, resp)
+	}
+	resp.Body.Close()
+	if relay.calls.Load() != 0 {
+		t.Error("a HEAD the site does not answer went to a proxy")
+	}
+	// a 405 to a GET is a refusal
+	resp, err = cl.send(context.Background(), http.MethodGet, srv.URL+"/x", http.Header{})
+	if err == nil {
+		resp.Body.Close()
+	}
+	if relay.calls.Load() != 1 {
+		t.Error("a refused GET did not go to a proxy")
+	}
+}

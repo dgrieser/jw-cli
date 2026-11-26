@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
+
 	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 )
@@ -1100,5 +1102,86 @@ func TestRedirectedRejectionCountsAtHostAsked(t *testing.T) {
 	}
 	if p.Available("https://wol.jw.org/other") {
 		t.Error("the proxy is counted on for the host the redirect led to")
+	}
+}
+
+// A HEAD a site does not answer (405) is no failure of the proxy that asked:
+// the answer comes back, and the proxy is counted on for the GET that follows.
+func TestHead405KeepsProxy(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer up.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), up)
+	waitOnline(t, p)
+	resp, err := p.Fetch(context.Background(), http.MethodHead, "https://wol.jw.org/de/x", nil)
+	if err != nil || resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("HEAD: %v %v", err, resp)
+	}
+	resp.Body.Close()
+	if !p.Available("https://wol.jw.org/de/y") {
+		t.Error("a HEAD the site does not answer held the proxy off the host")
+	}
+}
+
+// Of two proxies, one gives a page the bot checks do not know, which the
+// reader rejects (not the page, a page for JSON): it is counted against
+// that proxy, and the other serves every read.
+func TestRejectedContentFailsOver(t *testing.T) {
+	wall := `<!DOCTYPE html><html><body>` + strings.Repeat("an unknown wall ", 2000) + `</body></html>`
+	walled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wall))
+	}))
+	defer walled.Close()
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"path":"` + r.URL.Path + `"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><main class="content">` + r.URL.Path + `</main></body></html>`))
+	}))
+	defer good.Close()
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer refusing.Close()
+	p, srv := testPool(t)
+	a, b := enrolled(t, p, srv, "a"), enrolled(t, p, srv, "b")
+	running(t, a, walled)
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if st := p.Proxies(time.Now()); st[0].Polls > 0 && st[1].Polls > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both proxies never polled")
+		}
+	}
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	check := func(doc *goquery.Document) error {
+		if doc.Find("main.content").Length() == 0 {
+			return errors.New("not the page")
+		}
+		return nil
+	}
+	ctx := context.Background()
+	for i := range 10 {
+		path := "/p/" + strconv.Itoa(i)
+		doc, err := server.GetHTMLChecked(ctx, "https://www.jw.org"+path, check)
+		if err != nil || doc.Find("main").Text() != path {
+			t.Fatalf("page %d: %v", i, err)
+		}
+		var out struct{ Path string }
+		apiPath := "/apis/x/" + strconv.Itoa(i)
+		if err := server.GetJSON(ctx, "https://b.jw-cdn.org"+apiPath, nil, &out); err != nil || out.Path != apiPath {
+			t.Fatalf("JSON %d: %v %+v", i, err, out)
+		}
 	}
 }

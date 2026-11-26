@@ -253,13 +253,18 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 	if hdr.Get("Accept") == "" {
 		hdr.Set("Accept", "application/json")
 	}
+	ctx, via := withVia(ctx)
 	f, err := c.read(ctx, rawURL, hdr)
 	if err != nil {
 		return err
 	}
 	if err := json.Unmarshal(f.body, out); err != nil {
 		// a page in place of the JSON asked for: a bot protection's, which
-		// a proxy may get past
+		// a proxy may get past — another than the one that gave it, if one
+		// did
+		if isHTML(f.body) {
+			c.rejectVia(rawURL, via)
+		}
 		if isHTML(f.body) && !relayNow(ctx) && ctx.Err() == nil {
 			if r := c.relayer(); r != nil && r.Allows(http.MethodGet, rawURL) {
 				if rerr := c.GetJSON(withRelayNow(ctx), rawURL, hdr, out); rerr == nil {
@@ -349,6 +354,7 @@ func (c *Client) GetHTMLChecked(ctx context.Context, rawURL string, check func(*
 }
 
 func (c *Client) getHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
+	ctx, via := withVia(ctx)
 	f, err := c.read(ctx, rawURL, http.Header{})
 	if err != nil {
 		return nil, err
@@ -358,6 +364,9 @@ func (c *Client) getHTMLChecked(ctx context.Context, rawURL string, check func(*
 		return nil, fmt.Errorf("parse HTML %s: %w", rawURL, err)
 	}
 	if err := check(doc); err != nil {
+		// not the page: the proxy that gave it, if one did, is not asked
+		// for its host again for a while
+		c.rejectVia(rawURL, via)
 		return nil, err
 	}
 	c.keep(ctx, f)

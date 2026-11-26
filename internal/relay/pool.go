@@ -916,9 +916,12 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	}
 	// a refusal or a failure is the proxy's trouble too; a page not found
 	// is an answer
+	// a 405 to a HEAD says the site does not answer HEAD — the GET that
+	// follows (httpx headUnsupported) is the proxy's to serve
+	headUnsupported := j.Method == http.MethodHead && res.Status == http.StatusMethodNotAllowed
 	o := outcome{
-		ok:      !slices.Contains(refusals, res.Status),
-		counted: res.Status < 400 || res.Status == http.StatusNotFound,
+		ok:      !slices.Contains(refusals, res.Status) || headUnsupported,
+		counted: res.Status < 400 || res.Status == http.StatusNotFound || headUnsupported,
 		millis:  res.Millis,
 		failure: fmt.Sprintf("HTTP %d for %s", res.Status, j.URL),
 	}
