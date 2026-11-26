@@ -1307,7 +1307,8 @@ Raspberry Pi. Each proxy belongs to one server.
 - **Revoked at once.** Disabling or deleting a proxy ends its open polls and
   fails the requests it holds, which then go to another proxy or upstream.
 - **Health per proxy and site.** A proxy that a site turns away (a refusal, a
-  challenge page, no answer) is not counted on for that site for 10 minutes;
+  challenge page, a connection that fails, no answer) is not counted on for
+  that site for 10 minutes;
   its jobs for it go to the others, and the request it failed is tried once
   more on another. Only when every proxy fails at a site does the server hold
   off asking through them. A proxy that comes online, or is enabled again,

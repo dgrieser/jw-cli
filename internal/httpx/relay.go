@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -31,15 +32,20 @@ type Relay interface {
 	// rawURL: online, and not one that failed at its host lately. Which
 	// proxy failed where is the relay's to know.
 	Available(rawURL string) bool
-	// Rejected tells the relay that an answer it gave was no answer — a bot
-	// protection's page the proxy took for one — so it counts against the
-	// proxy that fetched it.
-	Rejected(resp *http.Response)
+	// Rejected tells the relay that an answer it gave to a request of rawURL
+	// was no answer — a bot protection's page the proxy took for one — so it
+	// counts against the proxy that fetched it, at the host asked.
+	Rejected(rawURL string, resp *http.Response)
 }
 
 // ErrNoRelay is a request no proxy could take: none is registered, enabled
 // and connected, or none answered in time.
 var ErrNoRelay = errors.New("no proxy could fetch it")
+
+// ErrProxyFailed is a request a proxy took and failed at — its fetch failed,
+// it did not answer, it was revoked meanwhile — as opposed to one no proxy
+// took: another proxy may get it. It is an ErrNoRelay too.
+var ErrProxyFailed = fmt.Errorf("%w: the proxy that took it failed", ErrNoRelay)
 
 // relayFor is how long a host that turned the client away is asked through
 // the proxies first.
@@ -199,7 +205,13 @@ func (c *Client) viaRelay(ctx context.Context, r Relay, method, rawURL string, h
 	for try := 0; ; try++ {
 		c.verbose("%s %s (through a proxy)", method, rawURL)
 		resp, err := r.Fetch(ctx, method, rawURL, hdr)
+		again := try == 0 && ctx.Err() == nil
 		if err != nil {
+			// the proxy that took it failed: once more, if another can
+			// serve the host; none took it, or the caller gave up: no
+			if again && errors.Is(err, ErrProxyFailed) && r.Available(rawURL) {
+				continue
+			}
 			return nil, err
 		}
 		resp, reason := blocked(resp, nil)
@@ -207,8 +219,8 @@ func (c *Client) viaRelay(ctx context.Context, r Relay, method, rawURL string, h
 			return resp, nil
 		}
 		resp.Body.Close()
-		r.Rejected(resp)
-		if try > 0 || ctx.Err() != nil || !r.Available(rawURL) {
+		r.Rejected(rawURL, resp)
+		if !again || !r.Available(rawURL) {
 			return nil, errors.New("the proxy was turned away too: " + reason)
 		}
 	}

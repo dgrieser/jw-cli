@@ -288,7 +288,7 @@ func (p *Pool) revoke(px *proxy, why string) {
 	for _, j := range p.jobs {
 		if j.proxy == px.ID {
 			p.end(j)
-			j.done <- jobResult{err: fmt.Errorf("%w: %s", httpx.ErrNoRelay, why)}
+			j.done <- jobResult{err: fmt.Errorf("%w: %s", httpx.ErrProxyFailed, why)}
 		}
 	}
 }
@@ -436,8 +436,14 @@ func (px *proxy) failingAt(host string, now time.Time) bool {
 func (p *Pool) hostResult(id, host string, ok bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	px, found := p.proxies[id]
-	if !found || host == "" {
+	if px, found := p.proxies[id]; found {
+		px.hostResult(host, ok)
+	}
+}
+
+// hostResult is Pool.hostResult for px; the caller holds mu.
+func (px *proxy) hostResult(host string, ok bool) {
+	if host == "" {
 		return
 	}
 	if ok {
@@ -474,12 +480,20 @@ func (p *Pool) Available(rawURL string) bool {
 }
 
 // Rejected counts an answer the server found to be no answer — a bot
-// protection's page — against the proxy that fetched it (httpx.Relay).
-func (p *Pool) Rejected(resp *http.Response) {
-	if resp == nil || resp.Request == nil || resp.Request.URL == nil {
+// protection's page — against the proxy that fetched it (httpx.Relay): at
+// the host asked, which the proxy is chosen by, and at the one a redirect
+// led to, if another.
+func (p *Pool) Rejected(rawURL string, resp *http.Response) {
+	if resp == nil {
 		return
 	}
-	p.hostResult(resp.Header.Get(ProxyIDHeader), strings.ToLower(resp.Request.URL.Hostname()), false)
+	id := resp.Header.Get(ProxyIDHeader)
+	p.hostResult(id, hostOfURL(rawURL), false)
+	if resp.Request != nil && resp.Request.URL != nil {
+		if final := strings.ToLower(resp.Request.URL.Hostname()); final != hostOfURL(rawURL) {
+			p.hostResult(id, final, false)
+		}
+	}
 }
 
 // canServe reports a proxy other than px online and not failing at host;
@@ -545,7 +559,7 @@ func (p *Pool) Fetch(ctx context.Context, method, rawURL string, hdr http.Header
 		p.mu.Unlock()
 		p.noted(taker, false, 0, "no answer within "+answerWait.String())
 		p.hostResult(taker, hostOfURL(rawURL), false)
-		return nil, fmt.Errorf("%w: the proxy did not answer within %s", httpx.ErrNoRelay, answerWait)
+		return nil, fmt.Errorf("%w: the proxy did not answer within %s", httpx.ErrProxyFailed, answerWait)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -555,10 +569,13 @@ func (p *Pool) Fetch(ctx context.Context, method, rawURL string, hdr http.Header
 func (p *Pool) noted(id string, ok bool, millis int64, failure string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	px, found := p.proxies[id]
-	if !found {
-		return
+	if px, found := p.proxies[id]; found {
+		px.note(ok, millis, failure)
 	}
+}
+
+// note is Pool.noted for px; the caller holds mu.
+func (px *proxy) note(ok bool, millis int64, failure string) {
 	now := time.Now()
 	px.lastJob = now
 	if ok {
@@ -826,17 +843,14 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	}
 	var res Result
 	if raw := r.Header.Get(ResultHeader); len(raw) > 16<<10 || json.Unmarshal([]byte(raw), &res) != nil {
-		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: unreadable result", px.Name)}) {
-			p.noted(px.ID, false, 0, "unreadable result")
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("%w: proxy %q: unreadable result", httpx.ErrProxyFailed, px.Name)}, failed(0, "unreadable result")) {
 			fail(w, http.StatusBadRequest, "unreadable "+ResultHeader)
 		}
 		return
 	}
 	if res.Error != "" || res.Status < 100 || res.Status > 599 {
 		failure := cmpOr(res.Error, "no status")
-		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: %s", px.Name, failure)}) {
-			p.noted(px.ID, false, res.Millis, failure)
-			p.hostResult(px.ID, hostOfURL(j.URL), false)
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("%w: proxy %q: %s", httpx.ErrProxyFailed, px.Name, failure)}, failed(res.Millis, failure)) {
 			w.WriteHeader(http.StatusNoContent)
 		}
 		return
@@ -863,8 +877,7 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Connection", "close")
 	}
 	if err != nil {
-		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: the answer's body: %w", px.Name, err)}) {
-			p.noted(px.ID, false, res.Millis, "the answer's body: "+err.Error())
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("%w: proxy %q: the answer's body: %w", httpx.ErrProxyFailed, px.Name, err)}, failed(res.Millis, "the answer's body: "+err.Error())) {
 			fail(w, http.StatusBadRequest, "unreadable body")
 		}
 		return
@@ -874,8 +887,7 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	final := j.URL
 	if res.URL != "" {
 		if !Allowed(j.Method, res.URL) {
-			if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: redirected off jw.org's sites", px.Name)}) {
-				p.noted(px.ID, false, res.Millis, "redirected off jw.org's sites: "+res.URL)
+			if p.settle(w, j, px, jobResult{err: fmt.Errorf("%w: proxy %q: redirected off jw.org's sites", httpx.ErrProxyFailed, px.Name)}, failed(res.Millis, "redirected off jw.org's sites: "+res.URL)) {
 				fail(w, http.StatusBadRequest, "the answer's address is not one a proxy fetches")
 			}
 			return
@@ -902,27 +914,49 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	if j.Method == http.MethodHead {
 		resp.ContentLength = res.Length
 	}
-	if !p.settle(w, j, px, jobResult{resp: resp}) {
-		return
-	}
 	// a refusal or a failure is the proxy's trouble too; a page not found
 	// is an answer
-	ok = res.Status < 400 || res.Status == http.StatusNotFound
-	p.noted(px.ID, ok, res.Millis, fmt.Sprintf("HTTP %d for %s", res.Status, j.URL))
-	p.hostResult(px.ID, hostOfURL(j.URL), !slices.Contains(refusals, res.Status))
+	o := outcome{
+		ok:      !slices.Contains(refusals, res.Status),
+		counted: res.Status < 400 || res.Status == http.StatusNotFound,
+		millis:  res.Millis,
+		failure: fmt.Sprintf("HTTP %d for %s", res.Status, j.URL),
+	}
+	if !p.settle(w, j, px, jobResult{resp: resp}, o) {
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// outcome is what an answer says of its proxy: how it did at the job's
+// host, and for its statistics.
+type outcome struct {
+	ok      bool // at the job's host: served, or failed there
+	counted bool // a request served, for the statistics (a 404 is, a 403 is not)
+	millis  int64
+	failure string
+}
+
+// failed is the outcome of an answer that is a failure of the proxy.
+func failed(millis int64, failure string) outcome {
+	return outcome{millis: millis, failure: failure}
 }
 
 // settle ends a job with what its proxy answered — when the job is still
 // waited for and the proxy still enabled and registered, all at once, so
-// that an answer and a revocation never both end it. When it cannot, it
-// answers the proxy why and reports false.
-func (p *Pool) settle(w http.ResponseWriter, j *job, px *proxy, r jobResult) bool {
+// that an answer and a revocation never both end it — and notes what the
+// answer says of the proxy at the job's host before the caller has it, so
+// what the caller then finds (Rejected) is never undone by it, and the
+// proxy's statistics count it by then too. When it
+// cannot, it answers the proxy why and reports false.
+func (p *Pool) settle(w http.ResponseWriter, j *job, px *proxy, r jobResult, o outcome) bool {
 	p.mu.Lock()
 	waited := p.jobs[j.ID] == j
 	deleted := p.proxies[px.ID] != px
 	enabled := px.Enabled
 	if waited && !deleted && enabled {
+		px.hostResult(hostOfURL(j.URL), o.ok)
+		px.note(o.counted, o.millis, o.failure)
 		p.end(j)
 		j.done <- r // the one end of the job: buffered for it
 	}

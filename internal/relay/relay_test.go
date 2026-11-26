@@ -1010,3 +1010,95 @@ func TestCutUploadClosesConnection(t *testing.T) {
 		t.Fatal("the upload was not cut off")
 	}
 }
+
+// Of two proxies, one that cannot connect to jw.org at all — a failure of
+// its own, not an answer — has the request tried on the other: every read
+// is served.
+func TestTransportFailureFailsOver(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("the page " + r.URL.Path))
+	}))
+	defer good.Close()
+	gone := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	gone.Close() // connections to it are refused
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer refusing.Close()
+	p, srv := testPool(t)
+	a, b := enrolled(t, p, srv, "a"), enrolled(t, p, srv, "b")
+	running(t, a, gone)
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if st := p.Proxies(time.Now()); st[0].Polls > 0 && st[1].Polls > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both proxies never polled")
+		}
+	}
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	for i := range 20 {
+		path := "/p/" + strconv.Itoa(i)
+		got, err := server.GetText(context.Background(), "https://www.jw.org"+path, nil)
+		if err != nil || got != "the page "+path {
+			t.Fatalf("read %d: %v %q", i, err, got)
+		}
+	}
+}
+
+// A proxy's answer the server rejects counts against it, whatever the order
+// in which its upload ends and the server looks at the answer: the success
+// the pool saw is noted before the caller has the answer, never after.
+func TestRejectedStaysRejected(t *testing.T) {
+	challenge := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><script src="https://x.token.awswaf.com/x/challenge.js"></script></html>`))
+	}))
+	defer challenge.Close()
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer refusing.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), challenge)
+	waitOnline(t, p)
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	for i := range 30 {
+		u := "https://h" + strconv.Itoa(i) + ".jw.org/p"
+		if _, err := server.GetText(context.Background(), u, nil); err == nil {
+			t.Fatalf("host %d: a challenge read as the page", i)
+		}
+		if p.Available(u) {
+			t.Fatalf("host %d: the proxy that gave a bot page is counted on again", i)
+		}
+	}
+}
+
+// A bot page a redirect led to counts against the proxy at the host asked,
+// which jobs are given out by, and at the one the redirect led to.
+func TestRedirectedRejectionCountsAtHostAsked(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/a" {
+			http.Redirect(w, r, "https://wol.jw.org/b", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><script src="https://x.token.awswaf.com/x/challenge.js"></script></html>`))
+	}))
+	defer up.Close()
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer refusing.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), up)
+	waitOnline(t, p)
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	if _, err := server.GetText(context.Background(), "https://www.jw.org/a", nil); err == nil {
+		t.Fatal("a challenge read as the page")
+	}
+	if p.Available("https://www.jw.org/other") {
+		t.Error("the proxy is counted on for the host asked, where it failed")
+	}
+	if p.Available("https://wol.jw.org/other") {
+		t.Error("the proxy is counted on for the host the redirect led to")
+	}
+}

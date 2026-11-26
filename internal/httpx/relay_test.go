@@ -30,7 +30,7 @@ func (f *fakeRelay) Allows(string, string) bool { return true }
 
 func (f *fakeRelay) Available(string) bool { return !f.away.Load() && !f.failed.Load() }
 
-func (f *fakeRelay) Rejected(*http.Response) { f.rejected.Add(1); f.failed.Store(true) }
+func (f *fakeRelay) Rejected(string, *http.Response) { f.rejected.Add(1); f.failed.Store(true) }
 
 // fresh has another proxy come online, which has failed at nothing.
 func (f *fakeRelay) fresh() { f.failed.Store(false) }
