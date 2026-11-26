@@ -17,6 +17,7 @@ import (
 
 	"github.com/dgrieser/jw-cli/internal/accounts"
 	"github.com/dgrieser/jw-cli/internal/httpx"
+	"github.com/dgrieser/jw-cli/internal/relay"
 	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/service"
 )
@@ -24,6 +25,9 @@ import (
 // Config is what a Server is built from.
 type Config struct {
 	Svc *service.Service
+	// Proxies are the proxies registered with the server (jw proxy), which
+	// fetch what it cannot; nil has none, and no /proxy/v1/ routes.
+	Proxies *relay.Pool
 	// DefaultLang is the language a request without ?lang= resolves; empty
 	// falls back to the system locale, as the CLI does.
 	DefaultLang string
@@ -62,6 +66,7 @@ type Config struct {
 // Server handles the API and UI routes around one shared service.
 type Server struct {
 	svc         *service.Service
+	relays      *relay.Pool
 	defaultLang string
 	logf        func(format string, args ...any)
 	accounts    *accounts.Store
@@ -107,6 +112,7 @@ type Server struct {
 func New(cfg Config) *Server {
 	s := &Server{
 		svc:         cfg.Svc,
+		relays:      cfg.Proxies,
 		defaultLang: cfg.DefaultLang,
 		logf:        cfg.Logf,
 		accounts:    cfg.Accounts,
@@ -230,7 +236,22 @@ func (s *Server) Handler() http.Handler {
 	}
 
 	s.routes = mux
-	return s.logged(s.gate(s.busy(s.remembersLanguage(private(refreshes(s.limitsAPI(mux)))))))
+	site := s.logged(s.gate(s.busy(s.remembersLanguage(private(refreshes(s.limitsAPI(mux)))))))
+	if s.relays == nil {
+		return site
+	}
+	// the proxies' protocol stands outside the sign-in and the API's
+	// limits: a proxy shows a credential of its own, which nothing else
+	// takes, and its polls are held open on purpose
+	s.relays.SetClientIP(s.clientIP)
+	proxies := s.loggedProxies(s.relays.Handler())
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, relay.PathPrefix) {
+			proxies.ServeHTTP(w, r)
+			return
+		}
+		site.ServeHTTP(w, r)
+	})
 }
 
 // private marks what a page or the API answers as the reader's own: it
@@ -376,6 +397,19 @@ func (w *statusWriter) WriteHeader(code int) {
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
 // logged writes one line per request: method, path, status, duration.
+// loggedProxies logs the proxies' registrations and what failed: their polls
+// and answers come every few seconds, and the admin's page counts them.
+func (s *Server) loggedProxies(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		sw := &statusWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(sw, r)
+		if sw.status >= 400 || strings.HasSuffix(r.URL.Path, "/register") {
+			s.logf("%s %s %d %s", r.Method, r.URL.Path, sw.status, time.Since(start).Round(time.Millisecond))
+		}
+	})
+}
+
 func (s *Server) logged(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

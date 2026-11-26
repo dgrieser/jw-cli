@@ -2368,3 +2368,19 @@ input.key-date { margin-top: 0.35rem; }
 .latest-day .listing .context,
 .latest-pubs .cap .sub { font-size: 0.75em; letter-spacing: 0.03em; }
 .latest-day { margin-top: 1.5rem; }
+
+/* the admin's page of the proxies: a proxy's state as a badge, the hosts
+   the server asks through them right now as a warning */
+.auth-warn {
+  color: var(--ink);
+  background: var(--danger-soft);
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent);
+  border-radius: var(--r);
+  padding: 0.7rem 0.9rem;
+}
+.proxy-online .proxy-state { color: var(--accent); background: var(--accent-soft); }
+.proxy-offline .proxy-state, .proxy-never .proxy-state { color: var(--danger); background: var(--danger-soft); }
+.proxy-disabled .proxy-state { color: var(--muted, var(--ink)); background: var(--field); }
+.proxy-disabled { opacity: 0.75; }
+.proxy-steps { padding-left: 1.2rem; }
+.proxy-steps li { margin: 0.4rem 0; }

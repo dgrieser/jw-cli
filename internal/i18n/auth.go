@@ -58,6 +58,19 @@ type AuthText struct {
 	KeyConfirmDelete                                                       string // %[1]s the key's name
 	MsgKeyUpdated, MsgKeyDeleted                                           string // %[1]s the key's name
 	KeysOf, RevokeKeys                                                     string
+
+	// Proxies: the admin page of the proxies (jw proxy) that fetch what the
+	// server cannot.
+	Proxies, ProxiesIntro, ProxiesNone, ProxyAdd, ProxyAddHint, ProxyName  string
+	ProxyNameHint, ProxyCreate, ProxyEnrollHint, ProxyRunRoot              string
+	ProxyRunUser, ProxyRunCheck, ProxyDownload, ProxyPending, ProxyValid   string
+	ProxyRevoke, ProxyOnline, ProxyOffline, ProxyNever, ProxyLastSeen      string
+	ProxyVersion, ProxyAddress, ProxyRequests, ProxyFailed, ProxyAvg       string
+	ProxyLastError, ProxyRelayedNone, ProxyRelayedTitle                    string
+	ProxyEnrollTitle                                                       string // %[1]s the proxy's name
+	ProxyRelayed                                                           string // %[1]s the host, %[2]s why, %[3]s until when
+	ProxyConfirmDelete                                                     string // %[1]s the proxy's name
+	MsgProxyEnabled, MsgProxyDisabled, MsgProxyDeleted, MsgProxyRevoked    string // %[1]s the proxy's name
 	ConfirmRevokeKeys, MsgKeysRevoked                                      string // %[1]s the address
 	ErrKeyName                                                             string // %[1]d the longest name
 	ErrManyKeys                                                            string // %[1]d the most keys
@@ -162,6 +175,26 @@ var authEN = AuthText{
 	KeyConfirmDelete: "Delete the key %[1]s? Whatever uses it is refused at once.",
 	MsgKeyUpdated:    "Key %[1]s changed.", MsgKeyDeleted: "Key %[1]s deleted.",
 	KeysOf: "API keys", RevokeKeys: "Delete keys",
+	Proxies:      "Proxies",
+	ProxiesIntro: "Proxies are copies of jw on other machines, in networks jw.org lets through. When this server cannot read jw.org itself — a bot protection's challenge, a refusal, a network that fails — it hands the request to one of them. A proxy only connects out to this server and takes no connections.",
+	ProxiesNone:  "No proxies yet.",
+	ProxyAdd:     "Add a proxy", ProxyAddHint: "Makes a one-time token for setting the proxy up, valid for an hour.",
+	ProxyName: "Name", ProxyNameHint: "e.g. home-raspberry", ProxyCreate: "Make the setup command",
+	ProxyEnrollTitle: "Set up %[1]s",
+	ProxyEnrollHint:  "Run this on the machine that becomes the proxy (Linux with systemd), within the hour. The token works once and is not shown again.",
+	ProxyRunRoot:     "As root, it installs a locked-down service for the whole machine (jw-proxy.service; the binary in /usr/local/bin, the credential in /etc/jw, readable by root alone). As another user, it installs a user service; to keep that running after logging out: sudo loginctl enable-linger $USER.",
+	ProxyRunUser:     "Without systemd, add --no-service and start jw proxy run however you like.",
+	ProxyRunCheck:    "Check it with systemctl status jw-proxy and journalctl -u jw-proxy -f; it shows as online here within seconds.",
+	ProxyDownload:    "The jw binary for the machine (the same version as this server)",
+	ProxyPending:     "Waiting to be set up", ProxyValid: "valid until", ProxyRevoke: "Withdraw",
+	ProxyOnline: "online", ProxyOffline: "offline", ProxyNever: "never connected",
+	ProxyLastSeen: "Last seen", ProxyVersion: "Version", ProxyAddress: "Address", ProxyRequests: "Requests",
+	ProxyFailed: "failed", ProxyAvg: "avg.", ProxyLastError: "Last failure",
+	ProxyRelayedTitle: "Right now", ProxyRelayedNone: "The server reads jw.org itself.",
+	ProxyRelayed:       "%[1]s turned this server away (%[2]s): asked through the proxies first until %[3]s.",
+	ProxyConfirmDelete: "Delete the proxy %[1]s? Its credential stops working; setting it up again takes a new token.",
+	MsgProxyEnabled:    "Proxy %[1]s enabled.", MsgProxyDisabled: "Proxy %[1]s disabled: it gets no requests until enabled again.",
+	MsgProxyDeleted: "Proxy %[1]s deleted.", MsgProxyRevoked: "The setup token for %[1]s was withdrawn.",
 	ConfirmRevokeKeys: "Delete all API keys of %[1]s?", MsgKeysRevoked: "The API keys of %[1]s are deleted.",
 	ErrKeyName:      "A key needs a name of at most %[1]d characters.",
 	ErrManyKeys:     "An account has at most %[1]d API keys.",
@@ -280,6 +313,26 @@ var authDE = AuthText{
 	KeyConfirmDelete: "Den Schlüssel %[1]s löschen? Was ihn benutzt, wird sofort abgewiesen.",
 	MsgKeyUpdated:    "Schlüssel %[1]s geändert.", MsgKeyDeleted: "Schlüssel %[1]s gelöscht.",
 	KeysOf: "API-Schlüssel", RevokeKeys: "Schlüssel löschen",
+	Proxies:      "Proxys",
+	ProxiesIntro: "Proxys sind Kopien von jw auf anderen Rechnern, in Netzen, die jw.org durchlässt. Kann dieser Server jw.org selbst nicht lesen – die Prüfung eines Bot-Schutzes, eine Ablehnung, ein Netz, das versagt –, gibt er die Anfrage an einen von ihnen weiter. Ein Proxy verbindet sich nur zu diesem Server und nimmt keine Verbindungen an.",
+	ProxiesNone:  "Noch keine Proxys.",
+	ProxyAdd:     "Proxy hinzufügen", ProxyAddHint: "Erzeugt ein einmaliges Token zum Einrichten des Proxys, eine Stunde gültig.",
+	ProxyName: "Name", ProxyNameHint: "z. B. raspberry-zuhause", ProxyCreate: "Befehl zum Einrichten erzeugen",
+	ProxyEnrollTitle: "%[1]s einrichten",
+	ProxyEnrollHint:  "Führe das auf dem Rechner aus, der Proxy wird (Linux mit systemd), innerhalb der Stunde. Das Token gilt einmal und wird nicht wieder angezeigt.",
+	ProxyRunRoot:     "Als root richtet es einen abgesicherten Dienst für den ganzen Rechner ein (jw-proxy.service; das Programm in /usr/local/bin, die Zugangsdaten in /etc/jw, nur für root lesbar). Als anderer Benutzer einen Benutzerdienst; damit er nach dem Abmelden weiterläuft: sudo loginctl enable-linger $USER.",
+	ProxyRunUser:     "Ohne systemd --no-service anhängen und jw proxy run auf beliebige Weise starten.",
+	ProxyRunCheck:    "Prüfen mit systemctl status jw-proxy und journalctl -u jw-proxy -f; hier erscheint er binnen Sekunden als online.",
+	ProxyDownload:    "Das jw-Programm für den Rechner (dieselbe Version wie dieser Server)",
+	ProxyPending:     "Wartet auf Einrichtung", ProxyValid: "gültig bis", ProxyRevoke: "Zurückziehen",
+	ProxyOnline: "online", ProxyOffline: "offline", ProxyNever: "nie verbunden",
+	ProxyLastSeen: "Zuletzt gesehen", ProxyVersion: "Version", ProxyAddress: "Adresse", ProxyRequests: "Anfragen",
+	ProxyFailed: "fehlgeschlagen", ProxyAvg: "Ø", ProxyLastError: "Letzter Fehler",
+	ProxyRelayedTitle: "Gerade jetzt", ProxyRelayedNone: "Der Server liest jw.org selbst.",
+	ProxyRelayed:       "%[1]s hat diesen Server abgewiesen (%[2]s): bis %[3]s zuerst über die Proxys gefragt.",
+	ProxyConfirmDelete: "Proxy %[1]s löschen? Seine Zugangsdaten gelten dann nicht mehr; neu einrichten braucht ein neues Token.",
+	MsgProxyEnabled:    "Proxy %[1]s aktiviert.", MsgProxyDisabled: "Proxy %[1]s deaktiviert: Er bekommt keine Anfragen, bis er wieder aktiviert wird.",
+	MsgProxyDeleted: "Proxy %[1]s gelöscht.", MsgProxyRevoked: "Das Token zum Einrichten von %[1]s wurde zurückgezogen.",
 	ConfirmRevokeKeys: "Alle API-Schlüssel von %[1]s löschen?", MsgKeysRevoked: "Die API-Schlüssel von %[1]s sind gelöscht.",
 	ErrKeyName:      "Ein Schlüssel braucht einen Namen mit höchstens %[1]d Zeichen.",
 	ErrManyKeys:     "Ein Konto hat höchstens %[1]d API-Schlüssel.",

@@ -9,6 +9,9 @@
   {{- if .Admin}}
   <a href="/admin/users" {{if eq .Path "/admin/users"}}class="active" aria-current="page"{{end}}>{{.A.Users}}</a>
   <a href="/admin/settings" {{if eq .Path "/admin/settings"}}class="active" aria-current="page"{{end}}>{{.A.ServerSettings}}</a>
+  {{- if .Proxies}}
+  <a href="/admin/proxies" {{if eq .Path "/admin/proxies"}}class="active" aria-current="page"{{end}}>{{.A.Proxies}}</a>
+  {{- end}}
   {{- end}}
 </nav>
 {{- end}}

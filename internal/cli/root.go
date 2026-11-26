@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -23,10 +24,25 @@ func Execute() int {
 	a.Close()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
+		var ec *exitCodeError
+		if errors.As(err, &ec) {
+			return ec.code
+		}
 		return 1
 	}
 	return 0
 }
+
+// exitCodeError ends the program with a status of its own: one a service
+// manager tells apart (jw proxy run's 3, a proxy deleted on its server, is
+// not restarted).
+type exitCodeError struct {
+	code int
+	err  error
+}
+
+func (e *exitCodeError) Error() string { return e.err.Error() }
+func (e *exitCodeError) Unwrap() error { return e.err }
 
 // NewRootCmd builds the full command tree around the given app container.
 // The app's flag values are bound to the persistent flags.
@@ -77,6 +93,7 @@ videos, audio, and publications (PDF, EPUB, ...).`,
 		newMeetingsCmd(a),
 		newNewCmd(a),
 		runHere(newServeCmd(a)),
+		runHere(newProxyCmd(a)),
 	)
 	wireRemote(a, root)
 	return root

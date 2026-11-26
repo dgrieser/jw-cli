@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,6 +57,9 @@ type Client struct {
 	// hosts that failed lately; see outage.go
 	failed sync.Map
 	down   downHosts
+	// relayed is the proxies the client asks for what it cannot get
+	// itself, and the hosts it asks through them first (relay.go)
+	relayed relayState
 	// retryDelays, when set, replace the pauses before a busy upstream is
 	// asked again (see outage.go)
 	retryDelays []time.Duration
@@ -122,9 +126,10 @@ func New(opts ...Option) *Client {
 	if c.hc.CheckRedirect == nil {
 		c.hc.CheckRedirect = c.checkRedirect
 	}
-	// www.jw.org is spoken to as Chrome speaks to it (chrome.go)
-	if _, ok := c.hc.Transport.(*hostTransport); !ok {
-		c.hc.Transport = chromeFor(c.Base.JWOrg, c.hc.Transport)
+	// www.jw.org is spoken to as Chrome speaks to it (chrome.go); a
+	// transport of the caller's own is left as it is
+	if c.hc.Transport == nil {
+		c.hc.Transport = chromeFor(c.Base.JWOrg, nil)
 	}
 	c.limiters = map[string]*rate.Limiter{}
 	for _, raw := range []string{c.Base.WOL, c.Base.JWOrg} {
@@ -304,6 +309,30 @@ func (c *Client) GetHTML(ctx context.Context, rawURL string) (*goquery.Document,
 // would be served for as long as the cache holds it, after the site has
 // long let the reader through again.
 func (c *Client) GetHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
+	doc, err := c.getHTMLChecked(ctx, rawURL, check)
+	// not the page asked for, though upstream answered: a challenge too
+	// new to tell, or a page its protection made up; a proxy may get the
+	// real one
+	if err == nil || relayNow(ctx) || ctx.Err() != nil {
+		return doc, err
+	}
+	var se *StatusError
+	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
+		return doc, err
+	}
+	r := c.relayer()
+	if r == nil || !r.Allows(http.MethodGet, rawURL) {
+		return doc, err
+	}
+	rdoc, rerr := c.getHTMLChecked(withRelayNow(ctx), rawURL, check)
+	if rerr != nil {
+		return doc, err
+	}
+	c.markRelayed(hostOf(rawURL), "not the page asked for")
+	return rdoc, nil
+}
+
+func (c *Client) getHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
 	f, err := c.read(ctx, rawURL, http.Header{})
 	if err != nil {
 		return nil, err

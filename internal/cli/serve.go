@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -17,8 +18,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/dgrieser/jw-cli/internal/app"
+	"github.com/dgrieser/jw-cli/internal/relay"
 	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/server"
+	"github.com/dgrieser/jw-cli/internal/version"
 )
 
 func newServeCmd(a *app.App) *cobra.Command {
@@ -51,6 +54,12 @@ under /admin/users and the settings under /admin/settings.
 Accounts and settings live in --data-dir ($JW_DATA_DIR, default
 <config dir>/jw/server): accounts.json and settings.json. jw serve user
 manages the accounts from the command line, also while the server runs.
+
+When jw.org turns the server away (a bot protection's challenge, a refusal,
+a network that fails), proxies on other networks can fetch for it: an admin
+adds one on the Proxies page, which shows the command (jw proxy setup …) to
+run on the proxy's machine. The server always asks jw.org itself first; the
+proxies are kept in proxies.json in --data-dir. See jw proxy --help.
 
 Over HTTPS (or on localhost) the browser keeps the pages it read, so they
 come back at once and offline. --page-cache says how that copy is used:
@@ -118,6 +127,18 @@ Examples:
 			if err != nil {
 				return err
 			}
+			// the proxies registered with the server, kept beside the
+			// accounts; they fetch what the server cannot (jw proxy)
+			dir, err := serverDataDir(dataDir)
+			if err != nil {
+				return err
+			}
+			logf := func(format string, args ...any) { fmt.Fprintf(a.Stderr, format+"\n", args...) }
+			relays, err := relay.OpenPool(filepath.Join(dir, "proxies.json"), version.String(), logf)
+			if err != nil {
+				return err
+			}
+			a.Service().HTTP.SetRelay(relays)
 			defer users.Flush()
 			trusted, err := server.ParseProxies(proxies)
 			if err != nil {
@@ -138,13 +159,12 @@ Examples:
 				GlossaryLangs:  glossaryLangs(glossary),
 				StudyLangs:     glossaryLangs(study),
 				Svc:            a.Service(),
+				Proxies:        relays,
 				RunCLI: func(ctx context.Context, req remote.Request) remote.Response {
 					return RunForClient(ctx, a.Service(), req)
 				},
 				DefaultLang: a.Flags.Lang,
-				Logf: func(format string, args ...any) {
-					fmt.Fprintf(a.Stderr, format+"\n", args...)
-				},
+				Logf:        logf,
 			})
 			hs := &http.Server{
 				Addr:    listen,

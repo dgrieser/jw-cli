@@ -19,6 +19,10 @@
   JSON API under `/api/v1`.
 - **Remote mode** (`jw --server URL`): run any command on a `jw serve`, drawing
   on its cache, with the output exactly as a local run prints it.
+- **Proxies** (`jw proxy`): machines in other networks fetch for a `jw serve`
+  that jw.org turns away (a bot protection's challenge), set up with one
+  command and managed on the server's admin page; see
+  [Proxies](#proxies-jw-proxy).
 
 ## Build
 
@@ -1137,9 +1141,10 @@ read; such a page is never cached, so the list is back as soon as jw.org lets
 the server through. So that the connection matches the Chrome headers the
 requests carry, www.jw.org — and only it — is spoken to with Chrome's TLS
 handshake and over HTTP/2 (`JW_JWORG_TLS=go` goes back to Go's own, to tell
-whether it makes the difference). A server in such a network can also reach jw.org through a proxy
-in another one: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the hosts
-that need none).
+whether it makes the difference). A server in such a network can have
+[proxies](#proxies-jw-proxy) on other networks fetch for it, or reach jw.org
+through an HTTP proxy: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the
+hosts that need none).
 
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
@@ -1272,6 +1277,80 @@ one takes minutes: the command line is the better place for it.
 A bible reading folds what it brings. Each verse's study notes, indexes,
 marginal references and quotations become a disclosure of its own, closed until
 it is opened, so the verses stay readable however much hangs off them.
+
+## Proxies (`jw proxy`)
+
+A `jw serve` that jw.org turns away — a bot protection's JavaScript challenge, a
+refusal, a network that fails — can have **proxies** fetch for it: copies of the
+same `jw` binary on machines in networks jw.org lets through, a home server or a
+Raspberry Pi. Each proxy belongs to one server.
+
+- **Only when needed.** The server always asks jw.org itself first. Only what it
+  could not get — HTTP 202/403/405/429/502/503/504, a connection that fails, a
+  200 that is a bot protection's challenge page, or a page its reader rejects —
+  goes to a proxy. A host that turned the server away is then asked through the
+  proxies first for 10 minutes, then directly again.
+- **Out only.** A proxy connects out to its server (a long poll over HTTPS) and
+  takes no connections, so it works behind a home router. A job goes to
+  whichever free proxy asks first; with several proxies the work spreads over
+  them.
+- **jw.org only.** Server and proxy both hold to the same rule: GET or HEAD,
+  over https, to jw.org's and jw-cdn.org's sites — a redirect off them is
+  refused too. Cookies and credentials never travel with a job; answers are
+  capped at 32 MB.
+
+### Setting one up
+
+An admin opens **Account → Proxies** on the server, names the new proxy and
+gets a one-time token (valid for an hour, stored hashed) with the command to
+run on the proxy's machine:
+
+```sh
+jw proxy setup https://jw.example.org jwpe_…
+```
+
+That is all the machine needs besides the binary. As root it installs a
+locked-down service for the whole machine: the binary at `/usr/local/bin/jw`,
+the credential at `/etc/jw/proxy.json` (root only), and
+`/etc/systemd/system/jw-proxy.service`, which runs as a user systemd makes up for
+it (`DynamicUser`) and gets the credential from systemd (`LoadCredential`), with
+the file system read-only and no privileges. As another user it installs a user
+service (`~/.config/systemd/user/jw-proxy.service`); `sudo loginctl
+enable-linger $USER` keeps that running after logging out. Without systemd, or
+with `--no-service`, it registers and writes the credential only; then run
+`jw proxy run` under anything that keeps it running.
+
+```sh
+systemctl status jw-proxy          # is it running (--user for a user service)
+journalctl -u jw-proxy -f          # what it does
+jw proxy status                    # how the server sees it
+jw proxy uninstall                 # stop and remove service and credential
+```
+
+### Watching and managing them
+
+The Proxies page lists each proxy with its state (online, offline, never
+connected, disabled), when it was last seen, from which address, its version,
+how many requests it served and how many failed, the average time, and the
+last failure; and which hosts the server asks through the proxies right now,
+and why. From there an admin **disables** a proxy (it gets no work and asks
+again every minute until enabled), **enables** it again, or **deletes** it:
+its credential stops working, and `jw proxy run` exits with status 3, which
+the service does not restart. The proxies live in `proxies.json` in the
+server's data folder.
+
+### The protocol
+
+Under `/proxy/v1/`, outside the server's sign-in: a proxy's credential
+(`Authorization: JW-Proxy jwp_…`) opens these routes and nothing else, and an
+API key opens none of them. Only the hash of a credential is kept.
+
+| Route | What |
+|---|---|
+| `POST /proxy/v1/register` | `{"token", "name", "version"}` → `201 {"id", "name", "credential"}`; the enrollment is used up. Ten failures in 15 minutes from one address and it waits. |
+| `GET /proxy/v1/poll` | held up to 25 s: `200` a job `{"id", "method", "url", "header"}`, `204` none, `403` disabled, `401` deleted |
+| `POST /proxy/v1/jobs/{id}` | the answer's body as is; status, headers (Content-Type, ETag, Last-Modified, …) or the failure in the `X-JW-Result` header |
+| `GET /proxy/v1/self` | `{"id", "name", "enabled"}` |
 
 ## Remote mode (`jw --server`)
 
