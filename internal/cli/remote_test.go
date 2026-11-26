@@ -255,3 +255,18 @@ func TestRemoteLangFromEnv(t *testing.T) {
 		t.Errorf("args %q: -l E should win over $JW_LANG", args)
 	}
 }
+
+// No command of jw proxy runs on a server for a client: the proxy and its
+// service are the machine's own.
+func TestProxyRunsHereOnly(t *testing.T) {
+	root := NewRootCmd(app.New(app.Flags{}))
+	for _, args := range [][]string{{"proxy", "setup"}, {"proxy", "run"}, {"proxy", "status"}, {"proxy", "uninstall"}} {
+		cmd, _, err := root.Find(args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cmd.Annotations[remoteAnnotation] != runsHere {
+			t.Errorf("%v runs on a server", args)
+		}
+	}
+}

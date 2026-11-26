@@ -68,6 +68,8 @@ type basePage struct {
 	User         string
 	Admin        bool
 	PendingUsers int
+	// Proxies is set for an admin of a server that can have proxies.
+	Proxies bool
 }
 
 // withSite is b offering to open u on the site it comes from.

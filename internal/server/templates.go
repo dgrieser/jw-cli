@@ -65,7 +65,7 @@ var uiPages = []string{
 	"index", "search", "latest", "article", "bible", "dailytext", "meetings",
 	"media", "media_category", "media_item", "pub", "error", "confirm",
 	"cited", "login", "register", "forgot", "password", "account", "keys", "users",
-	"settings", "setup",
+	"settings", "setup", "proxies",
 }
 
 // expiryField is what the expiry choice of the keys page shows: whether

@@ -2,8 +2,6 @@ package server
 
 import (
 	"context"
-	"io"
-	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -12,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dgrieser/jw-cli/internal/api/jworg"
 	"github.com/dgrieser/jw-cli/internal/i18n"
 	"github.com/dgrieser/jw-cli/internal/model"
 	"github.com/dgrieser/jw-cli/internal/service"
@@ -147,7 +144,7 @@ func (s *Server) uiLatest(w http.ResponseWriter, r *http.Request) {
 		items = slices.DeleteFunc(items, func(it model.NewItem) bool { return service.LatestGroup(it) != kind })
 	}
 	// the media are there without jw.org's list; the page says what is not
-	if newsErr != nil && !service.IsStaleFeed(newsErr) && kind != "media" {
+	if newsErr != nil && kind != "media" {
 		page.Error = t.UILatestUnreadable
 	}
 	page.Days = groupByDay(s.latestViews(items, t, page.Lang), items, t)
@@ -266,107 +263,9 @@ func (s *Server) apiLatest(w http.ResponseWriter, r *http.Request) {
 		items = []model.NewItem{}
 	}
 	answer := map[string]any{"lang": lng.Symbol, "items": items}
-	switch {
-	case service.IsStaleFeed(newsErr):
-		// the last feed posted, past its hold: what it is, not a failure
-		answer["stale"] = newsErr.Error()
-	case newsErr != nil:
+	if newsErr != nil {
 		// a partial answer says it is partial: the media without jw.org's list
 		answer["error"] = newsErr.Error()
 	}
 	writeJSON(w, http.StatusOK, answer)
-}
-
-// maxFeed bounds a posted feed: jw.org's runs to some 20 KB.
-const maxFeed = 2 << 20
-
-// feedTypes are the types a feed is posted as. None of them is a type a
-// form of another site can post without the browser asking first.
-var feedTypes = []string{"application/rss+xml", "application/xml", "text/xml"}
-
-// apiPostFeed is POST /api/v1/latest/feed: the RSS feed of jw.org's page of
-// what is new (…/rss/WhatsNewWebArticles/feed.xml), as a machine jw.org
-// lets through read it, for a server it turns away. The feed's own link
-// names its language; ?lang=, when given, must be the same. Admins only,
-// when the server has accounts. The feed stands in for jw.org's page for
-// service.FeedHold, during which www.jw.org is not asked for it at all.
-func (s *Server) apiPostFeed(w http.ResponseWriter, r *http.Request) {
-	if s.authOn() {
-		if u := userOf(r); u == nil || !u.IsAdmin() {
-			writeError(w, http.StatusForbidden, "forbidden", "posting the feed of what is new takes an admin's API key")
-			return
-		}
-	}
-	if mt, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || !slices.Contains(feedTypes, mt) {
-		writeError(w, http.StatusUnsupportedMediaType, "bad_request", "want the RSS feed as "+strings.Join(feedTypes, ", "))
-		return
-	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxFeed))
-	if err != nil {
-		badRequest(w, "unreadable feed: %v", err)
-		return
-	}
-	items, locale, err := jworg.ParseWhatsNewFeed(body)
-	if err != nil {
-		badRequest(w, "%s", err)
-		return
-	}
-	lng, err := s.resolveLanguage(r.Context(), locale)
-	if err != nil {
-		badRequest(w, "the feed's language %q: %v", locale, err)
-		return
-	}
-	if spec := r.FormValue("lang"); spec != "" {
-		asked, err := s.resolveLanguage(r.Context(), spec)
-		if err != nil {
-			failJSON(w, r, err)
-			return
-		}
-		if asked.Symbol != lng.Symbol {
-			badRequest(w, "the feed is in %s (%s), not in %s", lng.Symbol, locale, asked.Symbol)
-			return
-		}
-	}
-	if s.svc.Feeds == nil {
-		writeError(w, http.StatusNotFound, "not_found", "this server keeps no posted feeds")
-		return
-	}
-	feed, err := s.svc.Feeds.Put(lng.Symbol, items, time.Now())
-	if err != nil {
-		failJSON(w, r, err)
-		return
-	}
-	s.logf("what's new: %s: feed posted, %d entries, holds until %s", lng.Symbol, len(items), feed.Until().Format(time.RFC3339))
-	writeJSON(w, http.StatusOK, feedStatus(feed, true, time.Now()))
-}
-
-// apiFeed is GET /api/v1/latest/feed?lang=: the feed last posted in a
-// language and whether it still holds; 404 for none.
-func (s *Server) apiFeed(w http.ResponseWriter, r *http.Request) {
-	lng, err := s.language(r)
-	if err != nil {
-		failJSON(w, r, err)
-		return
-	}
-	feed, ok := s.svc.Feeds.Get(lng.Symbol)
-	if !ok {
-		writeError(w, http.StatusNotFound, "not_found", "no feed of what is new was posted in "+lng.Symbol)
-		return
-	}
-	writeJSON(w, http.StatusOK, feedStatus(feed, false, time.Now()))
-}
-
-// feedStatus is what the feed routes answer about a posted feed.
-func feedStatus(feed service.PostedFeed, withItems bool, now time.Time) map[string]any {
-	out := map[string]any{
-		"lang":     feed.Lang,
-		"received": feed.Received,
-		"until":    feed.Until(),
-		"holds":    feed.Holds(now),
-		"count":    len(feed.Items),
-	}
-	if withItems {
-		out["items"] = feed.Items
-	}
-	return out
 }

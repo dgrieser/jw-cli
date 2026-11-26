@@ -1,0 +1,94 @@
+{{define "content"}}
+<div class="auth wide">
+{{template "settingtabs" .}}
+<h1>{{.A.Proxies}}</h1>
+<p class="hint">{{.A.ProxiesIntro}}</p>
+{{template "notice" .}}
+
+<section class="proxy-now">
+  <h2>{{.A.ProxyRelayedTitle}}</h2>
+  {{- range .Relayed}}
+  <p class="auth-warn">{{.}}</p>
+  {{- else}}
+  <p class="hint">{{.A.ProxyRelayedNone}}</p>
+  {{- end}}
+</section>
+
+{{- if .Command}}
+<section class="key-new" role="status">
+  <h2>{{printf .A.ProxyEnrollTitle .NewName}}</h2>
+  <p><strong>{{.A.ProxyEnrollHint}}</strong></p>
+  <ol class="proxy-steps">
+    <li><a href="{{.DownloadURL}}" rel="noopener">{{.A.ProxyDownload}}</a></li>
+    <li>
+      <div class="key-secret">
+        <input type="text" readonly value="{{.Command}}" id="proxy-command" spellcheck="false" autocomplete="off" aria-label="{{.A.ProxyCreate}}">
+        <button type="button" class="small primary" data-copy="proxy-command" data-copied="{{.A.KeyCopied}}">{{.A.KeyCopy}}</button>
+      </div>
+      <p class="hint">{{.A.ProxyRunRoot}}</p>
+      <p class="hint">{{.A.ProxyRunUser}}</p>
+    </li>
+    <li><p class="hint">{{.A.ProxyRunCheck}}</p></li>
+  </ol>
+</section>
+{{- end}}
+
+{{- if .List}}
+<ul class="keys proxies">
+  {{- range .List}}
+  <li class="key-card proxy-{{.State}}">
+    <div class="key-head">
+      <strong class="key-name">{{.Name}}</strong>
+      <span class="key-badge proxy-state">{{$.StateText .}}</span>
+    </div>
+    <dl class="key-meta">
+      <div><dt>{{$.A.ProxyLastSeen}}</dt><dd>{{$.When .LastSeen}}</dd></div>
+      <div><dt>{{$.A.ProxyRequests}}</dt><dd>{{.OK}}{{if .Failed}} · {{.Failed}} {{$.A.ProxyFailed}}{{end}}{{if .AvgMillis}} · {{$.A.ProxyAvg}} {{.AvgMillis}} ms{{end}}</dd></div>
+      <div><dt>{{$.A.ProxyVersion}}</dt><dd>{{or .Version "–"}}</dd></div>
+      <div><dt>{{$.A.ProxyAddress}}</dt><dd>{{or .Addr "–"}}</dd></div>
+      <div><dt>{{$.A.Created}}</dt><dd>{{$.When .Created}}</dd></div>
+    </dl>
+    {{- if .LastError}}<p class="hint">{{$.A.ProxyLastError}} ({{$.When .LastErrorAt}}): {{.LastError}}</p>{{end}}
+    {{- if .FailingAt}}<p class="hint">{{$.A.ProxyFailingAt}}: {{range $i, $h := .FailingAt}}{{if $i}}, {{end}}{{$h}}{{end}}</p>{{end}}
+    <form method="post" action="/admin/proxies" class="key-actions">
+      <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+      {{- if .Enabled}}
+      <button class="small" name="op" value="disable">{{$.A.Disable}}</button>
+      {{- else}}
+      <button class="small" name="op" value="enable">{{$.A.Enable}}</button>
+      {{- end}}
+      <button class="small danger" name="op" value="delete" data-confirm="{{printf $.A.ProxyConfirmDelete .Name}}">{{$.A.Delete}}</button>
+    </form>
+  </li>
+  {{- end}}
+</ul>
+{{- else}}
+<p class="empty">{{.A.ProxiesNone}}</p>
+{{- end}}
+
+{{- if .Enrollments}}
+<h2>{{.A.ProxyPending}}</h2>
+<ul class="keys">
+  {{- range .Enrollments}}
+  <li class="key-card">
+    <div class="key-head"><strong class="key-name">{{.Name}}</strong>
+      <span class="hint">{{$.A.ProxyValid}} {{$.When .Expires}}</span></div>
+    <form method="post" action="/admin/proxies" class="key-actions">
+      <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
+      <button class="small" name="op" value="revoke">{{$.A.ProxyRevoke}}</button>
+    </form>
+  </li>
+  {{- end}}
+</ul>
+{{- end}}
+
+<form class="auth-form" method="post" action="/admin/proxies">
+  <h2>{{.A.ProxyAdd}}</h2>
+  <p class="hint">{{.A.ProxyAddHint}}</p>
+  <input type="hidden" name="op" value="enroll">
+  <label class="field"><span>{{.A.ProxyName}}</span>
+    <input type="text" name="name" maxlength="64" required autocomplete="off" placeholder="{{.A.ProxyNameHint}}"></label>
+  <button type="submit" class="primary">{{.A.ProxyCreate}}</button>
+</form>
+</div>
+{{end}}

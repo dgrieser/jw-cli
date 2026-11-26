@@ -19,6 +19,10 @@
   JSON API under `/api/v1`.
 - **Remote mode** (`jw --server URL`): run any command on a `jw serve`, drawing
   on its cache, with the output exactly as a local run prints it.
+- **Proxies** (`jw proxy`): machines in other networks fetch for a `jw serve`
+  that jw.org turns away (a bot protection's challenge), set up with one
+  command and managed on the server's admin page; see
+  [Proxies](#proxies-jw-proxy).
 
 ## Build
 
@@ -1137,47 +1141,10 @@ read; such a page is never cached, so the list is back as soon as jw.org lets
 the server through. So that the connection matches the Chrome headers the
 requests carry, www.jw.org — and only it — is spoken to with Chrome's TLS
 handshake and over HTTP/2 (`JW_JWORG_TLS=go` goes back to Go's own, to tell
-whether it makes the difference). A server in such a network can also reach jw.org through a proxy
-in another one: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the hosts
-that need none).
-
-Or a machine jw.org lets through hands the server jw.org's list instead: it
-posts the RSS feed of the page of what is new with an admin's API key.
-
-Each language has a feed of its own, under its own page of what is new
-(`/de/neu-auf-unserer-website/`, `/fr/nouveautes/`, `/ja/新着情報/`, …); jw.org's
-finder leads to that page for a language symbol, so one script serves them all:
-
-```sh
-#!/bin/sh
-# Posts jw.org's feed of what is new, in each language, to a jw serve that
-# jw.org turns away. Run every few hours, e.g. from cron:
-#   0 */6 * * * JW_KEY=jw_… /usr/local/bin/jw-feeds.sh
-set -u
-SERVER=${JW_SERVER:-https://jw.example.org}
-LANGS=${JW_FEED_LANGS:-"X E"}   # JW language symbols
-status=0
-for l in $LANGS; do
-  # the finder leads to the language's own page of what is new; its feed is below it
-  page=$(curl -fsS -o /dev/null -w '%{redirect_url}' "https://www.jw.org/finder?docid=1011267&wtlocale=$l&prefer=lang") &&
-  curl -fsS "${page}rss/WhatsNewWebArticles/feed.xml" |
-    curl -fsS -X POST -H "Authorization: Bearer $JW_KEY" -H "Content-Type: application/rss+xml" \
-      --data-binary @- "$SERVER/api/v1/latest/feed" >/dev/null ||
-  { echo "jw-feeds: $l failed" >&2; status=1; }
-done
-exit $status
-```
-
-A feed posted is what is new for 24 hours, and each feed posted starts that
-anew: until then the server does not ask www.jw.org for the list at all — not
-in its updates, not when a reader reloads the page. When 24 hours pass with no
-feed, it reads the page again; if that fails too, the last feed stays until a
-feed or the page answers. The feed's link names its language — any of jw.org's,
-sign languages included (`?lang=`, if given, must match); the server keeps the last feed of each language in its
-data folder (`feeds/`), so a restart keeps it and its 24 hours. The feed says
-a little less than the page: issues are listed as publications.
-`GET /api/v1/latest/feed?lang=de` says when the last feed came and until when
-it holds.
+whether it makes the difference). A server in such a network can have
+[proxies](#proxies-jw-proxy) on other networks fetch for it, or reach jw.org
+through an HTTP proxy: `jw serve` honors `HTTPS_PROXY` (with `NO_PROXY` for the
+hosts that need none).
 
 What a page remembers (see above) is kept in this browser only —
 `localStorage`, IndexedDB and, over HTTPS, the page cache of the service worker
@@ -1248,8 +1215,6 @@ Every endpoint below needs an [API key](#api-keys) (`Authorization: Bearer
 |---|---|---|
 | `GET /api/v1/languages` | `q` | `jw languages -s` |
 | `GET /api/v1/latest` | `kind=media\|pub\|news`, `days` | `jw new` |
-| `POST /api/v1/latest/feed` | body: the RSS feed of jw.org's page of what is new (`application/rss+xml`), `lang`; admins only | — (stands in for jw.org's page for 24 h) |
-| `GET /api/v1/latest/feed` | `lang` | — (when the last feed came, until when it holds) |
 | `GET /api/v1/open` | `path`* (a wol citation or footnote) | — (the page of this server it is read on, as `{"url": …}`) |
 | `GET /api/v1/search` | `q`*, `engine=jworg\|wol`, `type`, `sort`, `limit` (≤36, jw.org only: wol's pages are 40 results), `page`, `scope`, `all`/`include`/`exclude` (checked with either engine), `excerpts=0` | `jw search` |
 | `GET /api/v1/article` | `target`* (docid or URL), `format`, `unfold` (≤3), `force=1`, `urls=0` | `jw article` (images and scripture refs are fields of the response) |
@@ -1312,6 +1277,99 @@ one takes minutes: the command line is the better place for it.
 A bible reading folds what it brings. Each verse's study notes, indexes,
 marginal references and quotations become a disclosure of its own, closed until
 it is opened, so the verses stay readable however much hangs off them.
+
+## Proxies (`jw proxy`)
+
+A `jw serve` that jw.org turns away — a bot protection's JavaScript challenge, a
+refusal, a network that fails — can have **proxies** fetch for it: copies of the
+same `jw` binary on machines in networks jw.org lets through, a home server or a
+Raspberry Pi. Each proxy belongs to one server.
+
+- **Only when needed, on every site.** The server always asks jw.org itself
+  first — www.jw.org, wol.jw.org and the CDN's APIs alike. Only what it could
+  not get — HTTP 202/403/405/429/502/503/504, a connection that fails, a 200
+  that is a bot protection's challenge page (AWS WAF's, Akamai's, or any small
+  page that only asks for JavaScript), a web page in place of the JSON asked
+  for, or a page its reader rejects — goes to a proxy. A host that turned the server away is then asked through the
+  proxies first for 10 minutes, then directly again.
+- **Out only.** A proxy connects out to its server (a long poll over HTTPS) and
+  takes no connections, so it works behind a home router. A job goes to
+  whichever free proxy asks first; with several proxies the work spreads over
+  them.
+- **jw.org only.** Server and proxy both hold to the same rule: GET or HEAD,
+  over https, to jw.org's and jw-cdn.org's sites — a redirect off them is
+  refused too. Cookies and credentials never travel with a job — jw.org's
+  search wants an anonymous token, which the proxy gets for itself — and
+  answers are capped at 32 MB. An answer comes back as a direct one would:
+  where its redirects led, its length, its validators, so the cache
+  revalidates through a proxy as it does directly. A proxy follows no
+  redirect of its server.
+- **Revoked at once.** Disabling or deleting a proxy ends its open polls and
+  fails the requests it holds, which then go to another proxy or upstream.
+- **Health per proxy and site.** A proxy that a site turns away (a refusal, a
+  challenge page, a connection that fails, no answer) is not counted on for
+  that site for 10 minutes;
+  its jobs for it go to the others, and the request it failed is tried once
+  more on another. Only when every proxy fails at a site does the server hold
+  off asking through them. A proxy that comes online, or is enabled again,
+  starts with a clean record.
+
+### Setting one up
+
+An admin opens **Account → Proxies** on the server, names the new proxy and
+gets a one-time token (valid for an hour, stored hashed) with the command to
+run on the proxy's machine:
+
+```sh
+jw proxy setup https://jw.example.org jwpe_…
+```
+
+That is all the machine needs besides the binary. It installs a locked-down
+service for the whole machine — run by another user, it first says what it
+will do and runs itself again with `sudo` (which asks for the password; the
+token goes to it on standard input, never on a command line), and without
+`sudo` it stops before the token is used, to be run as root. The service: the
+binary at `/usr/local/bin/jw`,
+the credential at `/etc/jw/proxy.json` (root only), and
+`/etc/systemd/system/jw-proxy.service`, which runs as a user systemd makes up for
+it (`DynamicUser`) and gets the credential from systemd (`LoadCredential`), with
+the file system read-only and no privileges. With `--user` it installs a
+service of the user's own instead (`~/.config/systemd/user/jw-proxy.service`);
+`sudo loginctl enable-linger $USER` keeps that running after logging out. Without systemd, or
+with `--no-service`, it registers and writes the credential only; then run
+`jw proxy run` under anything that keeps it running.
+
+```sh
+systemctl status jw-proxy          # is it running (--user for a user service)
+journalctl -u jw-proxy -f          # what it does
+jw proxy status                    # how the server sees it
+jw proxy uninstall                 # stop and remove service and credential
+```
+
+### Watching and managing them
+
+The Proxies page lists each proxy with its state (online, offline, never
+connected, disabled), when it was last seen, from which address, its version,
+how many requests it served and how many failed, the average time, and the
+last failure; and which hosts the server asks through the proxies right now,
+and why. From there an admin **disables** a proxy (it gets no work and asks
+again every minute until enabled), **enables** it again, or **deletes** it:
+its credential stops working, and `jw proxy run` exits with status 3, which
+the service does not restart. The proxies live in `proxies.json` in the
+server's data folder.
+
+### The protocol
+
+Under `/proxy/v1/`, outside the server's sign-in: a proxy's credential
+(`Authorization: JW-Proxy jwp_…`) opens these routes and nothing else, and an
+API key opens none of them. Only the hash of a credential is kept.
+
+| Route | What |
+|---|---|
+| `POST /proxy/v1/register` | `{"token", "name", "version"}` → `201 {"id", "name", "credential"}`; the enrollment is used up. Ten failures in 15 minutes from one address and it waits. |
+| `GET /proxy/v1/poll` | held up to 25 s: `200` a job `{"id", "method", "url", "header"}`, `204` none, `403` disabled, `401` deleted |
+| `POST /proxy/v1/jobs/{id}` | the answer's body as is; status, headers (Content-Type, ETag, Last-Modified, …) or the failure in the `X-JW-Result` header |
+| `GET /proxy/v1/self` | `{"id", "name", "enabled"}` |
 
 ## Remote mode (`jw --server`)
 

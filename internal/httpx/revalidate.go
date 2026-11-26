@@ -15,6 +15,9 @@ type fetched struct {
 	body []byte
 	id   string
 	e    entry
+	// via is the proxy that delivered body (its id), "" for upstream or the
+	// cache: whose content a reader's rejection counts against
+	via string
 	// pending is set for a new body not yet kept; once makes sure the callers
 	// sharing it keep it once
 	pending bool
@@ -27,11 +30,11 @@ type fetched struct {
 func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fetched, error) {
 	key := c.responseKey(rawURL, hdr)
 	if key == "" {
-		body, _, err := c.download(ctx, rawURL, hdr)
+		body, resp, err := c.download(ctx, rawURL, hdr)
 		if err != nil {
 			return nil, err
 		}
-		return &fetched{body: body}, nil
+		return &fetched{body: body, via: viaOf(resp)}, nil
 	}
 	id := entryID(key)
 	if c.later(ctx) {
@@ -41,6 +44,11 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 	flightKey, lookup := id, c.lookup
 	if refreshFirst(ctx, "GET "+id) {
 		flightKey, lookup = id+"\x00refresh", c.lookupAnew
+	}
+	// as does a read that goes to a proxy at once: what the cache or
+	// upstream had was not the page
+	if relayNow(ctx) {
+		flightKey, lookup = id+"\x00relay", c.lookupAnew
 	}
 	// nor does a read something kept stands in for, which weighs upstream's
 	// answers differently
@@ -92,7 +100,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		c.responses.saveEntry(id, e, body)
 	}
 	// a body of an older edition than the newest seen is asked for again
-	if ok && c.behind(e) && !c.backingOff(id, e) && !c.hostDown(hostOf(rawURL)) {
+	if ok && c.behind(e) && (!c.backingOff(id, e) || c.relayUp(rawURL)) && !c.unreachable(rawURL) {
 		return c.renew(ctx, id, rawURL, hdr, e, body)
 	}
 	if ok && e.fresh(c.responses.fresh) {
@@ -118,7 +126,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 	body, resp = c.latest(ctx, rawURL, hdr, body, resp)
 	e = entry{URL: rawURL, Header: keyHeaders(hdr)}
 	e.setValidators(resp, false)
-	return c.pendingBody(id, e, body), nil
+	return c.pendingBody(id, e, body, resp), nil
 }
 
 // lookupAnew answers a read from upstream whatever the cache holds. When
@@ -139,6 +147,11 @@ func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Hea
 			c.responses.removeEntry(id)
 			return nil, err
 		}
+		// a read gone to a proxy because the page kept or given was not
+		// the page: no proxy, no page — never the one kept
+		if relayNow(ctx) {
+			return nil, err
+		}
 		if e, kept, ok := c.responses.loadEntry(id, false); ok {
 			c.verbose("GET %s (cached, upstream unavailable: %v)", rawURL, err)
 			return &fetched{body: kept, id: id, e: e}, nil
@@ -157,15 +170,23 @@ func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Hea
 			return c.confirm(id, old, kept), nil
 		}
 	}
-	return c.pendingBody(id, e, body), nil
+	return c.pendingBody(id, e, body, resp), nil
 }
 
-func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
+// viaOf is the proxy an answer came from, "" for none.
+func viaOf(resp *http.Response) string {
+	if resp == nil {
+		return ""
+	}
+	return resp.Header.Get(ProxyIDHeader)
+}
+
+func (c *Client) pendingBody(id string, e entry, body []byte, resp *http.Response) *fetched {
 	if !e.EdSeen {
 		c.stamp(&e, body)
 	}
 	e.Size, e.Hash, e.Checked = int64(len(body)), bodyHash(body), time.Now().Unix()
-	return &fetched{body: body, id: id, e: e, pending: true}
+	return &fetched{body: body, id: id, e: e, pending: true, via: viaOf(resp)}
 }
 
 // refresh revalidates a stale body: a HEAD request first, whose validators
@@ -174,7 +195,7 @@ func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
 // is one whose host failed lately.
 func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (*fetched, error) {
 	stale := &fetched{body: body, id: id, e: e}
-	if c.backingOff(id, e) || c.hostDown(hostOf(e.URL)) {
+	if (c.backingOff(id, e) && !c.relayUp(e.URL)) || c.unreachable(e.URL) {
 		c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 		return stale, nil
 	}
@@ -244,7 +265,7 @@ func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (
 		return c.confirm(id, e, body), nil
 	}
 	c.verbose("GET %s (changed)", e.URL)
-	return c.pendingBody(id, ne, nbody), nil
+	return c.pendingBody(id, ne, nbody, resp), nil
 }
 
 // confirm records that a kept body is still current and starts a new

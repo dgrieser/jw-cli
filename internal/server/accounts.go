@@ -329,6 +329,10 @@ func (s *Server) accountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/users", s.requireAdmin(s.usersPost))
 	mux.HandleFunc("GET /admin/settings", s.requireAdmin(s.settingsPage))
 	mux.HandleFunc("POST /admin/settings", s.requireAdmin(s.settingsPost))
+	if s.relays != nil {
+		mux.HandleFunc("GET /admin/proxies", s.requireAdmin(s.proxiesPage))
+		mux.HandleFunc("POST /admin/proxies", s.requireAdmin(s.proxiesPost))
+	}
 	mux.HandleFunc("GET /setup", s.setupPage)
 	mux.HandleFunc("POST /setup", s.setupPost)
 }
@@ -438,6 +442,7 @@ func (s *Server) withAccount(r *http.Request, p *basePage) {
 	if u := userOf(r); u != nil {
 		p.User = u.Email
 		p.Admin = u.IsAdmin()
+		p.Proxies = p.Admin && s.relays != nil
 		if p.Admin {
 			p.PendingUsers = s.accounts.Pending()
 		}

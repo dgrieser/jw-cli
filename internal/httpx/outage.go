@@ -44,9 +44,9 @@ var retryDelays = []time.Duration{time.Second, 3 * time.Second}
 // for more is not asked again within the read.
 const maxRetryAfter = 5 * time.Second
 
-// send issues a GET or HEAD of rawURL with hdr — both ask without changing
-// anything, so asking again is safe — and notes how the host did.
-func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
+// sendDirect issues a GET or HEAD of rawURL with hdr — both ask without
+// changing anything, so asking again is safe — and notes how the host did.
+func (c *Client) sendDirect(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
 	host := hostOf(rawURL)
 	kept := hasKept(ctx)
 	if kept && c.hostDown(host) {

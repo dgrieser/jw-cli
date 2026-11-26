@@ -32,9 +32,6 @@ type Service struct {
 	WOL      *wol.Client
 	JWOrg    *jworg.Client
 	Langs    *lang.Resolver
-	// Feeds are the feeds of what is new posted to a server, which stand
-	// in for jw.org's page (feeds.go); nil where none are posted.
-	Feeds *FeedStore
 	// mem is what an expansion read of the library, kept in memory for the
 	// next one: verses by the verses they hold, chapters of the study bible.
 	mem memo
