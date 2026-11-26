@@ -10,12 +10,14 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/api/search"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
@@ -76,8 +78,20 @@ func (c Config) Save(path string) error {
 // apiClient is the client a proxy speaks to its server with. A poll is held
 // for PollWait, so the timeout is well past it.
 func apiClient() *http.Client {
-	return &http.Client{Timeout: PollWait + 30*time.Second}
+	return &http.Client{
+		Timeout: PollWait + 30*time.Second,
+		// the credential and the enrollment token go to the address set up
+		// and nowhere else: not over http after a downgrade, not to another
+		// host, not as a POST re-sent by a 307
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return fmt.Errorf("%w: the server redirected to %s; set the proxy up with the address it answers at", ErrServerRedirect, req.URL.Redacted())
+		},
+	}
 }
+
+// ErrServerRedirect is a server that answered the proxy with a redirect,
+// which a proxy does not follow.
+var ErrServerRedirect = errors.New("redirect refused")
 
 // Register registers a proxy with a server, with the enrollment token an
 // admin made for it there.
@@ -137,6 +151,10 @@ type Agent struct {
 
 	mu       sync.Mutex
 	disabled bool
+	// tokens are the anonymous tokens jw.org's search wants, by site: the
+	// proxy's own, as a browser gets one, never the server's
+	tokenMu sync.Mutex
+	tokens  map[string]*search.TokenSource
 }
 
 // NewAgent is a proxy of cfg's server. logf receives what it does.
@@ -151,6 +169,45 @@ func NewAgent(cfg Config, version string, logf func(format string, args ...any))
 		CheckRedirect: stayOnJW,
 	}
 	return &Agent{cfg: cfg, version: version, logf: logf, api: apiClient(), fetch: httpx.New(httpx.WithHTTPClient(hc))}
+}
+
+// searchTokens are the tokens for a request of jw.org's search API (under
+// /apis/search/), nil for any other request: the anonymous token the site
+// hands every visitor at /tokens/jworg.jwt, which the proxy gets itself.
+func (a *Agent) searchTokens(u *url.URL) *search.TokenSource {
+	if !strings.HasPrefix(u.Path, "/apis/search/") {
+		return nil
+	}
+	site := u.Scheme + "://" + u.Host
+	a.tokenMu.Lock()
+	defer a.tokenMu.Unlock()
+	if a.tokens == nil {
+		a.tokens = map[string]*search.TokenSource{}
+	}
+	if t, ok := a.tokens[site]; ok {
+		return t
+	}
+	t := search.NewTokenSource(func(ctx context.Context) (string, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, site+"/tokens/jworg.jwt", nil)
+		if err != nil {
+			return "", err
+		}
+		resp, err := a.fetch.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		b, err := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
+		if err != nil {
+			return "", err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		}
+		return strings.TrimSpace(string(b)), nil
+	})
+	a.tokens[site] = t
+	return t
 }
 
 // stayOnJW follows a redirect no further than a request could go.
@@ -352,7 +409,27 @@ func (a *Agent) fetchJob(ctx context.Context, j Job) (Result, []byte) {
 		return Result{Error: err.Error()}, nil
 	}
 	req.Header = Header(j.Header, true)
+	tokens := a.searchTokens(req.URL)
+	if tokens != nil {
+		tok, err := tokens.Token(ctx)
+		if err != nil {
+			return Result{Error: "the search's token: " + err.Error()}, nil
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+	}
 	resp, err := a.fetch.Do(req)
+	if err == nil && tokens != nil && resp.StatusCode == http.StatusUnauthorized {
+		// the token ran out early: once more with a new one
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4<<10))
+		resp.Body.Close()
+		tokens.Invalidate()
+		tok, terr := tokens.Token(ctx)
+		if terr != nil {
+			return Result{Error: "the search's token: " + terr.Error()}, nil
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err = a.fetch.Do(req)
+	}
 	if err != nil {
 		return Result{Error: err.Error()}, nil
 	}
@@ -364,5 +441,9 @@ func (a *Agent) fetchJob(ctx context.Context, j Job) (Result, []byte) {
 	if len(body) > MaxBody {
 		return Result{Error: fmt.Sprintf("the answer is larger than %d MB", MaxBody>>20)}, nil
 	}
-	return Result{Status: resp.StatusCode, Header: AnswerHeader(resp.Header)}, body
+	res := Result{Status: resp.StatusCode, Header: AnswerHeader(resp.Header), Length: resp.ContentLength, Uncompressed: resp.Uncompressed}
+	if resp.Request != nil && resp.Request.URL != nil {
+		res.URL = resp.Request.URL.String()
+	}
+	return res, body
 }

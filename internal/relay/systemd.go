@@ -232,16 +232,27 @@ func (in Install) Apply(cfg Config) (copied bool, err error) {
 	return copied, in.systemctl("restart", ServiceName)
 }
 
-// Remove stops the service and removes it and the proxy's file.
+// Remove stops the service and removes it and the proxy's file. A service
+// that cannot be stopped is left as it is, files and all: a proxy still
+// running with its credential is not one to report removed.
 func (in Install) Remove() error {
-	_ = in.systemctl("disable", "--now", ServiceName)
+	installed := exists(in.Unit)
+	if installed {
+		if err := in.systemctl("disable", "--now", ServiceName); err != nil {
+			return fmt.Errorf("the service could not be stopped, nothing was removed: %w", err)
+		}
+	}
 	var errs []error
 	for _, p := range []string{in.Unit, in.Config} {
 		if err := os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
 		}
 	}
-	_ = in.systemctl("daemon-reload")
+	if installed {
+		if err := in.systemctl("daemon-reload"); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 

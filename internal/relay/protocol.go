@@ -79,6 +79,14 @@ type Result struct {
 	Status int               `json:"status,omitempty"`
 	Header map[string]string `json:"header,omitempty"`
 	Error  string            `json:"error,omitempty"`
+	// URL is where the answer came from, after redirects: what tells a
+	// redirect's target (wol's language and library) apart.
+	URL string `json:"url,omitempty"`
+	// Length is the length upstream gave, -1 for none: a HEAD's is the
+	// body's, which the cache revalidates with.
+	Length int64 `json:"length"`
+	// Uncompressed is set when the proxy's transport unpacked the body.
+	Uncompressed bool `json:"uncompressed,omitempty"`
 	// Millis is how long the request took the proxy.
 	Millis int64 `json:"ms,omitempty"`
 }
@@ -109,7 +117,7 @@ type Self struct {
 var requestHeaders = []string{"Accept", "Accept-Language", "If-None-Match", "If-Modified-Since", "Range", "Referer", "X-Requested-With"}
 
 // answerHeaders are the headers of an answer a proxy passes back.
-var answerHeaders = []string{"Content-Type", "Content-Language", "ETag", "Last-Modified", "Cache-Control", "Expires", "Content-Range", "Accept-Ranges"}
+var answerHeaders = []string{"Content-Type", "Content-Language", "Content-Encoding", "ETag", "Last-Modified", "Date", "Cache-Control", "Expires", "Content-Range", "Accept-Ranges"}
 
 // pick copies the headers named in names from h.
 func pick(h http.Header, names []string) map[string]string {

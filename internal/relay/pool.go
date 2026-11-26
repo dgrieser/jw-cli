@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -81,6 +82,9 @@ type record struct {
 // proxy is a proxy and what is known of its health.
 type proxy struct {
 	record
+	// revoked is closed when the proxy is disabled or deleted: its polls
+	// end at once rather than take one more job
+	revoked                        chan struct{}
 	lastSeen, lastJob, lastErrorAt time.Time
 	polls, ok, failed              int
 	version, addr, lastError       string
@@ -136,7 +140,7 @@ func OpenPool(path, version string, logf func(format string, args ...any)) (*Poo
 		return nil, fmt.Errorf("proxies: %s: %w", path, err)
 	}
 	for _, r := range f.Proxies {
-		p.proxies[r.ID] = &proxy{record: r}
+		p.proxies[r.ID] = &proxy{record: r, revoked: make(chan struct{})}
 	}
 	p.enrolls = f.Enrollments
 	return p, nil
@@ -251,8 +255,44 @@ func (p *Pool) SetEnabled(id string, on bool) error {
 		px.Enabled = !on
 		return err
 	}
+	if !on {
+		p.revoke(px, "the proxy was disabled")
+	}
 	p.logf("proxies: %q %s", px.Name, map[bool]string{true: "enabled", false: "disabled"}[on])
 	return nil
+}
+
+// revoke ends a proxy's polls and fails the jobs it holds, so their callers
+// go on at once; the caller holds mu.
+func (p *Pool) revoke(px *proxy, why string) {
+	close(px.revoked)
+	px.revoked = make(chan struct{})
+	for id, j := range p.jobs {
+		if j.proxy == px.ID {
+			delete(p.jobs, id)
+			j.done <- jobResult{err: fmt.Errorf("%w: %s", httpx.ErrNoRelay, why)}
+		}
+	}
+}
+
+// requeue hands a job a revoked proxy's poll took to another proxy, or
+// fails it when none takes it in time.
+func (p *Pool) requeue(j *job) {
+	go func() {
+		t := time.NewTimer(pickupWait)
+		defer t.Stop()
+		select {
+		case p.queue <- j:
+		case <-t.C:
+			p.mu.Lock()
+			_, waiting := p.jobs[j.ID]
+			delete(p.jobs, j.ID)
+			p.mu.Unlock()
+			if waiting {
+				j.done <- jobResult{err: fmt.Errorf("%w: no proxy took it within %s", httpx.ErrNoRelay, pickupWait)}
+			}
+		}
+	}()
 }
 
 // Delete forgets a proxy: its credential opens nothing anymore.
@@ -268,6 +308,7 @@ func (p *Pool) Delete(id string) error {
 		p.proxies[id] = px
 		return err
 	}
+	p.revoke(px, "the proxy was deleted")
 	p.logf("proxies: %q deleted", px.Name)
 	return nil
 }
@@ -492,7 +533,8 @@ func (p *Pool) register(w http.ResponseWriter, r *http.Request) {
 	}
 	e := p.enrolls[i]
 	id, credential, secretHash := newCredential()
-	px := &proxy{record: record{ID: id, Name: e.Name, SecretHash: secretHash, Enabled: true, Created: now.UTC(), CreatedBy: e.CreatedBy}}
+	px := &proxy{record: record{ID: id, Name: e.Name, SecretHash: secretHash, Enabled: true, Created: now.UTC(), CreatedBy: e.CreatedBy},
+		revoked: make(chan struct{})}
 	px.version, px.addr = reg.Version, from
 	p.enrolls = slices.Delete(p.enrolls, i, i+1)
 	p.proxies[id] = px
@@ -560,7 +602,7 @@ func (p *Pool) poll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.mu.Lock()
-	enabled, polls := px.Enabled, px.polls
+	enabled, polls, revoked := px.Enabled, px.polls, px.revoked
 	p.mu.Unlock()
 	if !enabled {
 		p.seen(px, r, 0)
@@ -577,14 +619,40 @@ func (p *Pool) poll(w http.ResponseWriter, r *http.Request) {
 	defer wait.Stop()
 	select {
 	case j := <-p.queue:
+		// still the proxy it was when it asked: taken atomically, or
+		// handed on
 		p.mu.Lock()
-		j.proxy = px.ID
+		current := p.proxies[px.ID] == px && px.Enabled
+		if current {
+			j.proxy = px.ID
+		}
 		p.mu.Unlock()
+		if !current {
+			p.requeue(j)
+			p.refuse(w, px)
+			return
+		}
 		writeJSON(w, http.StatusOK, j.Job)
+	case <-revoked:
+		p.refuse(w, px)
 	case <-wait.C:
 		w.WriteHeader(http.StatusNoContent)
 	case <-r.Context().Done():
 	}
+}
+
+// refuse answers a poll of a proxy disabled (403) or deleted (401) while it
+// waited.
+func (p *Pool) refuse(w http.ResponseWriter, px *proxy) {
+	p.mu.Lock()
+	deleted := p.proxies[px.ID] != px
+	p.mu.Unlock()
+	if deleted {
+		w.Header().Set("WWW-Authenticate", AuthScheme)
+		fail(w, http.StatusUnauthorized, "credential refused: the proxy was deleted")
+		return
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"state": "disabled", "error": "the proxy is disabled on the server"})
 }
 
 // result takes a proxy's answer to a job it took.
@@ -632,17 +700,36 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "unreadable body")
 		return
 	}
+	// where the answer came from after redirects, as a direct answer
+	// says: within the sites a proxy may fetch from
+	final := j.URL
+	if res.URL != "" {
+		if !Allowed(j.Method, res.URL) {
+			j.done <- jobResult{err: fmt.Errorf("proxy %q: redirected off jw.org's sites", px.Name)}
+			p.noted(px.ID, false, res.Millis, "redirected off jw.org's sites: "+res.URL)
+			fail(w, http.StatusBadRequest, "the answer's address is not one a proxy fetches")
+			return
+		}
+		final = res.URL
+	}
+	finalURL, _ := url.Parse(final)
 	hdr := Header(res.Header, false)
 	hdr.Set(ProxyHeader, px.Name)
 	resp := &http.Response{
-		Status:        fmt.Sprintf("%d %s", res.Status, http.StatusText(res.Status)),
-		StatusCode:    res.Status,
-		Proto:         "HTTP/1.1",
-		ProtoMajor:    1,
-		ProtoMinor:    1,
-		Header:        hdr,
-		Body:          io.NopCloser(bytes.NewReader(body)),
-		ContentLength: int64(len(body)),
+		Status:       fmt.Sprintf("%d %s", res.Status, http.StatusText(res.Status)),
+		StatusCode:   res.Status,
+		Proto:        "HTTP/1.1",
+		ProtoMajor:   1,
+		ProtoMinor:   1,
+		Header:       hdr,
+		Body:         io.NopCloser(bytes.NewReader(body)),
+		Uncompressed: res.Uncompressed,
+		Request:      &http.Request{Method: j.Method, URL: finalURL, Host: finalURL.Host, Header: http.Header{}},
+	}
+	// a HEAD's length is the body's upstream; a GET's is what came
+	resp.ContentLength = int64(len(body))
+	if j.Method == http.MethodHead {
+		resp.ContentLength = res.Length
 	}
 	// a refusal or a failure is the proxy's trouble too; a page not found
 	// is an answer

@@ -2,18 +2,22 @@ package relay
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/dgrieser/jw-cli/internal/api/wol"
 	"github.com/dgrieser/jw-cli/internal/httpx"
 )
 
@@ -25,7 +29,11 @@ func (t toServer) RoundTrip(req *http.Request) (*http.Response, error) {
 	u, _ := url.Parse(t.srv.URL)
 	r := req.Clone(req.Context())
 	r.URL.Scheme, r.URL.Host, r.Host = u.Scheme, u.Host, ""
-	return http.DefaultTransport.RoundTrip(r)
+	resp, err := http.DefaultTransport.RoundTrip(r)
+	if resp != nil {
+		resp.Request = req // the address asked for, as a real transport says
+	}
+	return resp, err
 }
 
 // mappedClient is an httpx client whose requests to jw.org's sites reach srv.
@@ -282,7 +290,8 @@ func TestAgentRefuses(t *testing.T) {
 func TestDisableAndDelete(t *testing.T) {
 	old := disabledWait
 	disabledWait = 20 * time.Millisecond
-	defer func() { disabledWait = old }()
+	// restored after the proxies of the test stopped reading it
+	t.Cleanup(func() { disabledWait = old })
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }))
 	defer upstream.Close()
 	p, srv := testPool(t)
@@ -415,5 +424,231 @@ func TestEverySiteFallsBack(t *testing.T) {
 	}
 	if !hosts["wol.jw.org"] || !hosts["b.jw-cdn.org"] {
 		t.Errorf("relayed hosts: %v", hosts)
+	}
+}
+
+// A redirect the proxy followed is told on the server as a direct one is:
+// wol's language and library are read off where the redirect led.
+func TestRedirectTargetThroughProxy(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/de" {
+			http.Redirect(w, r, "/de/wol/h/r10/lp-x", http.StatusFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		// a page whose body names another library: only the redirect is right
+		_, _ = w.Write([]byte(`<html><body><a href="/de/wol/h/r999/lp-wrong">x</a>` + strings.Repeat(" ", 20000) + `</body></html>`))
+	}))
+	defer good.Close()
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
+	defer refusing.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), good)
+	waitOnline(t, p)
+
+	resp, err := p.Fetch(context.Background(), http.MethodGet, "https://wol.jw.org/de", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.Request == nil || resp.Request.URL.String() != "https://wol.jw.org/de/wol/h/r10/lp-x" {
+		t.Fatalf("final address: %+v", resp.Request)
+	}
+
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	cfg, err := wol.New(server, nil).ConfigFor(context.Background(), "de")
+	if err != nil || cfg.Rsconf != "r10" || cfg.Lp != "lp-x" {
+		t.Errorf("wol config through a proxy: %v %+v", err, cfg)
+	}
+}
+
+// What a HEAD says of the body — its length, its date, its validators —
+// comes through a proxy as it was, for the cache to revalidate with.
+func TestHeadMetadataThroughProxy(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("ETag", `"abc"`)
+		w.Header().Set("Content-Length", "12345")
+		if r.Method == http.MethodHead {
+			return
+		}
+		_, _ = w.Write([]byte(strings.Repeat("x", 12345)))
+	}))
+	defer good.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), good)
+	waitOnline(t, p)
+	resp, err := p.Fetch(context.Background(), http.MethodHead, "https://wol.jw.org/de/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.ContentLength != 12345 || resp.Header.Get("ETag") != `"abc"` || resp.Header.Get("Date") == "" {
+		t.Errorf("HEAD through a proxy: length %d, header %v", resp.ContentLength, resp.Header)
+	}
+}
+
+// Disabling one of two proxies while both wait for work ends its polls at
+// once: it takes nothing more, and every request goes to the other.
+func TestRevokeWhilePolling(t *testing.T) {
+	old := disabledWait
+	disabledWait = time.Hour // a disabled proxy stays away for the test
+	// restored after the proxies of the test stopped reading it
+	t.Cleanup(func() { disabledWait = old })
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer good.Close()
+	p, srv := testPool(t)
+	a := enrolled(t, p, srv, "a")
+	b := enrolled(t, p, srv, "b")
+	running(t, a, good)
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		st := p.Proxies(time.Now())
+		if len(st) == 2 && st[0].Polls > 0 && st[1].Polls > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both proxies never polled")
+		}
+	}
+	if err := p.SetEnabled(a.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if st := p.Proxies(time.Now()); st[0].Polls == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the disabled proxy's polls are still open")
+		}
+	}
+	for i := range 20 {
+		resp, err := p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/"+strconv.Itoa(i), nil)
+		if err != nil {
+			t.Fatalf("request %d: %v", i, err)
+		}
+		resp.Body.Close()
+	}
+	st := p.Proxies(time.Now())
+	if st[0].OK != 0 || st[1].OK != 20 {
+		t.Errorf("disabled proxy served %d, the other %d", st[0].OK, st[1].OK)
+	}
+
+	// deleting the other while a job waits on it fails that job at once
+	slow := make(chan struct{})
+	p2, srv2 := testPool(t)
+	c := enrolled(t, p2, srv2, "c")
+	slowUp := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-slow:
+		case <-r.Context().Done():
+		}
+	}))
+	// the handler is let go before the server waits for it to end
+	defer slowUp.Close()
+	defer close(slow)
+	running(t, c, slowUp)
+	waitOnline(t, p2)
+	done := make(chan error, 1)
+	go func() {
+		_, err := p2.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/slow", nil)
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	if err := p2.Delete(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if !errors.Is(err, httpx.ErrNoRelay) {
+			t.Errorf("job of a deleted proxy: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Error("a job of a deleted proxy waits for its answer")
+	}
+}
+
+// jwt is an anonymous token as jw.org hands out, valid for an hour.
+func jwt(name string) string {
+	payload := base64.RawURLEncoding.EncodeToString(fmt.Appendf(nil, `{"exp":%d,"n":%q}`, time.Now().Add(time.Hour).Unix(), name))
+	return "h." + payload + ".s"
+}
+
+// jw.org's search wants an anonymous token: the proxy gets its own, and
+// a new one when upstream refuses it; the server's never travels.
+func TestSearchThroughProxy(t *testing.T) {
+	var valid atomic.Value
+	valid.Store(jwt("first"))
+	var tokensIssued atomic.Int32
+	var sawServerToken atomic.Bool
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/tokens/jworg.jwt":
+			tokensIssued.Add(1)
+			_, _ = w.Write([]byte(valid.Load().(string)))
+		case strings.HasPrefix(r.URL.Path, "/apis/search/"):
+			auth := r.Header.Get("Authorization")
+			if strings.Contains(auth, "server-secret") {
+				sawServerToken.Store(true)
+			}
+			if auth != "Bearer "+valid.Load().(string) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"results":[]}`))
+		}
+	}))
+	defer good.Close()
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), good)
+	waitOnline(t, p)
+	hdr := http.Header{"Authorization": {"Bearer server-secret"}, "Accept": {"application/json"}}
+	for i, rotate := range []bool{false, false, true} {
+		if rotate {
+			valid.Store(jwt("second")) // the proxy's token is refused from now on
+		}
+		resp, err := p.Fetch(context.Background(), http.MethodGet, "https://b.jw-cdn.org/apis/search/results/X/all?q=x", hdr)
+		if err != nil {
+			t.Fatalf("search %d: %v", i, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("search %d: HTTP %d", i, resp.StatusCode)
+		}
+	}
+	if sawServerToken.Load() {
+		t.Error("the server's token reached upstream")
+	}
+	if n := tokensIssued.Load(); n != 2 {
+		t.Errorf("%d tokens fetched, want one, and one more after the refusal", n)
+	}
+}
+
+// A proxy follows no redirect of its server: neither the enrollment token
+// nor the credential reaches where it leads.
+func TestServerRedirectsRefused(t *testing.T) {
+	var leaked atomic.Bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked.Store(true)
+	}))
+	defer elsewhere.Close()
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, elsewhere.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer redirecting.Close()
+	if _, err := Register(context.Background(), redirecting.URL, "jwpe_secret", "v"); !errors.Is(err, ErrServerRedirect) {
+		t.Errorf("register: %v", err)
+	}
+	cfg := Config{Server: redirecting.URL, ID: "ab", Name: "pi", Credential: "jwp_ab_" + strings.Repeat("x", 43)}
+	if _, err := NewAgent(cfg, "v", nil).Self(context.Background()); !errors.Is(err, ErrServerRedirect) {
+		t.Errorf("self: %v", err)
+	}
+	if _, _, err := NewAgent(cfg, "v", nil).poll(context.Background()); !errors.Is(err, ErrServerRedirect) {
+		t.Errorf("poll: %v", err)
+	}
+	if leaked.Load() {
+		t.Error("a redirect was followed")
 	}
 }

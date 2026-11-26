@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,5 +85,34 @@ func TestUserInstallApply(t *testing.T) {
 	}
 	if err := in.Remove(); err != nil || exists(in.Config) || exists(in.Unit) {
 		t.Errorf("remove: %v", err)
+	}
+}
+
+// A service that cannot be stopped is not reported removed, and its files
+// stay; with no service there is nothing for systemctl to do.
+func TestRemoveWhenStopFails(t *testing.T) {
+	dir := t.TempDir()
+	in := Install{Binary: "/usr/bin/jw", Config: filepath.Join(dir, "proxy.json"), Unit: filepath.Join(dir, ServiceName)}
+	_ = os.WriteFile(in.Config, []byte("{}"), 0o600)
+	_ = os.WriteFile(in.Unit, []byte("[Unit]"), 0o644)
+	var calls []string
+	old := Systemctl
+	defer func() { Systemctl = old }()
+	Systemctl = func(args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		return errors.New("Failed to stop jw-proxy.service: Access denied")
+	}
+	if err := in.Remove(); err == nil || !strings.Contains(err.Error(), "could not be stopped") {
+		t.Errorf("remove: %v", err)
+	}
+	if !exists(in.Config) || !exists(in.Unit) {
+		t.Error("files removed though the service still runs")
+	}
+
+	calls = nil
+	_ = os.Remove(in.Unit)
+	Systemctl = func(args ...string) error { calls = append(calls, strings.Join(args, " ")); return nil }
+	if err := in.Remove(); err != nil || len(calls) != 0 || exists(in.Config) {
+		t.Errorf("no service: %v, systemctl %v", err, calls)
 	}
 }

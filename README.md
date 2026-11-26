@@ -1298,8 +1298,14 @@ Raspberry Pi. Each proxy belongs to one server.
   them.
 - **jw.org only.** Server and proxy both hold to the same rule: GET or HEAD,
   over https, to jw.org's and jw-cdn.org's sites — a redirect off them is
-  refused too. Cookies and credentials never travel with a job; answers are
-  capped at 32 MB.
+  refused too. Cookies and credentials never travel with a job — jw.org's
+  search wants an anonymous token, which the proxy gets for itself — and
+  answers are capped at 32 MB. An answer comes back as a direct one would:
+  where its redirects led, its length, its validators, so the cache
+  revalidates through a proxy as it does directly. A proxy follows no
+  redirect of its server.
+- **Revoked at once.** Disabling or deleting a proxy ends its open polls and
+  fails the requests it holds, which then go to another proxy or upstream.
 
 ### Setting one up
 

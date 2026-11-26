@@ -42,6 +42,11 @@ func (c *Client) read(ctx context.Context, rawURL string, hdr http.Header) (*fet
 	if refreshFirst(ctx, "GET "+id) {
 		flightKey, lookup = id+"\x00refresh", c.lookupAnew
 	}
+	// as does a read that goes to a proxy at once: what the cache or
+	// upstream had was not the page
+	if relayNow(ctx) {
+		flightKey, lookup = id+"\x00relay", c.lookupAnew
+	}
 	// nor does a read something kept stands in for, which weighs upstream's
 	// answers differently
 	if hasKept(ctx) {
@@ -92,7 +97,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		c.responses.saveEntry(id, e, body)
 	}
 	// a body of an older edition than the newest seen is asked for again
-	if ok && c.behind(e) && !c.backingOff(id, e) && !c.hostDown(hostOf(rawURL)) {
+	if ok && c.behind(e) && (!c.backingOff(id, e) || c.relayServes(hostOf(rawURL))) && !c.unreachable(hostOf(rawURL)) {
 		return c.renew(ctx, id, rawURL, hdr, e, body)
 	}
 	if ok && e.fresh(c.responses.fresh) {
@@ -174,7 +179,7 @@ func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
 // is one whose host failed lately.
 func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (*fetched, error) {
 	stale := &fetched{body: body, id: id, e: e}
-	if c.backingOff(id, e) || c.hostDown(hostOf(e.URL)) {
+	if host := hostOf(e.URL); (c.backingOff(id, e) && !c.relayServes(host)) || c.unreachable(host) {
 		c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 		return stale, nil
 	}

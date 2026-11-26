@@ -87,6 +87,19 @@ func (c *Client) relayFirst(host string) bool {
 	return ok && time.Now().Before(h.Until)
 }
 
+// unavailable reports a host that cannot be asked now, and with it whether a
+// body kept from it is used as it is: one that failed lately and that no
+// proxy serves. A host the proxies serve is asked through them, whatever
+// asking it directly did.
+func (c *Client) unreachable(host string) bool {
+	return c.hostDown(host) && !c.relayServes(host)
+}
+
+// relayServes reports a host asked through the proxies first now.
+func (c *Client) relayServes(host string) bool {
+	return c.relayer() != nil && c.relayFirst(host)
+}
+
 func (c *Client) markRelayed(host, reason string) {
 	c.relayed.mu.Lock()
 	defer c.relayed.mu.Unlock()
@@ -128,6 +141,11 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		}
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
+		}
+		// what upstream answered a moment ago was not the page: it is not
+		// asked again, and what comes back came from a proxy or not at all
+		if relayNow(ctx) {
+			return nil, err
 		}
 		// no proxy could: upstream after all
 	}
@@ -184,7 +202,10 @@ const challengePeek = 16 << 10
 // by its first bytes; the answer goes on with them unread.
 func blocked(resp *http.Response, err error) (*http.Response, string) {
 	if err != nil {
-		if errors.Is(err, errHostDown) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		// a host backed off has something kept standing in; the caller's
+		// own context is looked at before this, so a timeout here is the
+		// request's own: upstream not answering
+		if errors.Is(err, errHostDown) {
 			return resp, ""
 		}
 		return resp, "unreachable: " + err.Error()
