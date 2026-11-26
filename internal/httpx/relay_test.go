@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,13 +26,27 @@ type fakeRelay struct {
 	away     atomic.Bool
 	failed   atomic.Bool
 	rejected atomic.Int32
+	// id names the proxy on its answers, etag is sent with them, delay
+	// holds each answer back
+	id    string
+	etag  string
+	delay time.Duration
+	mu    sync.Mutex
+	// rejectedIDs are the proxies answers were rejected of
+	rejectedIDs []string
 }
 
 func (f *fakeRelay) Allows(string, string) bool { return true }
 
 func (f *fakeRelay) Available(string) bool { return !f.away.Load() && !f.failed.Load() }
 
-func (f *fakeRelay) Rejected(string, *http.Response) { f.rejected.Add(1); f.failed.Store(true) }
+func (f *fakeRelay) Rejected(_ string, resp *http.Response) {
+	f.rejected.Add(1)
+	f.failed.Store(true)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.rejectedIDs = append(f.rejectedIDs, resp.Header.Get(ProxyIDHeader))
+}
 
 // fresh has another proxy come online, which has failed at nothing.
 func (f *fakeRelay) fresh() { f.failed.Store(false) }
@@ -43,8 +59,19 @@ func (f *fakeRelay) Fetch(ctx context.Context, method, rawURL string, hdr http.H
 		}
 		return nil, ErrNoRelay
 	}
-	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}},
-		Body: io.NopCloser(strings.NewReader(f.page))}, nil
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
+	h := http.Header{"Content-Type": {"text/html"}}
+	if f.id != "" {
+		h.Set(ProxyIDHeader, f.id)
+	}
+	if f.etag != "" {
+		h.Set("ETag", f.etag)
+	}
+	u, _ := url.Parse(rawURL)
+	return &http.Response{StatusCode: 200, Header: h, Body: io.NopCloser(strings.NewReader(f.page)),
+		Request: &http.Request{Method: method, URL: u}}, nil
 }
 
 // The proxies are asked for what upstream refused or answered with a
@@ -440,5 +467,60 @@ func TestHead405NotRelayed(t *testing.T) {
 	}
 	if relay.calls.Load() != 1 {
 		t.Error("a refused GET did not go to a proxy")
+	}
+}
+
+// Who delivered a body travels with the body, not with whoever asked for it
+// first: a reader that joined a lookup whose starter gave up still counts
+// a rejection against the proxy that gave it.
+func TestProvenanceSurvivesSharedLookup(t *testing.T) {
+	cl := New(WithRetryDelays(), WithResponseCache(OpenCacheAt(t.TempDir())))
+	relay := &fakeRelay{page: `<html><body>no page</body></html>`, id: "proxy-a", delay: 200 * time.Millisecond}
+	cl.SetRelay(relay)
+	const u = "https://www.jw.org/shared"
+	cl.markRelayed("www.jw.org", "test") // asked through the proxies first
+	check := func(doc *goquery.Document) error { return errors.New("not the page") }
+	starter, cancel := context.WithCancel(context.Background())
+	go func() { _, _, _ = cl.getHTMLChecked(starter, u, check) }()
+	time.Sleep(50 * time.Millisecond) // the starter's lookup is under way
+	joined := make(chan error, 1)
+	go func() { _, _, err := cl.getHTMLChecked(context.Background(), u, check); joined <- err }()
+	time.Sleep(20 * time.Millisecond)
+	cancel() // the starter gives up; the one who joined waits on
+	if err := <-joined; err == nil {
+		t.Fatal("a page that is not the page passed")
+	}
+	relay.mu.Lock()
+	defer relay.mu.Unlock()
+	if len(relay.rejectedIDs) == 0 || relay.rejectedIDs[0] != "proxy-a" {
+		t.Errorf("rejections counted against %v, want proxy-a", relay.rejectedIDs)
+	}
+}
+
+// A kept body a proxy's HEAD found unchanged comes from the cache: it was
+// delivered by no proxy, and a rejection of it counts against none.
+func TestKeptBodyHasNoProxy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"v1"`)
+		_, _ = w.Write([]byte("kept"))
+	}))
+	defer srv.Close()
+	cl := New(WithRetryDelays(), WithResponseCache(Open(t.TempDir(), CacheOptions{Fresh: -1})))
+	relay := &fakeRelay{page: "", id: "proxy-a", etag: `"v1"`}
+	cl.SetRelay(relay)
+	ctx := context.Background()
+	if got, err := cl.GetText(ctx, srv.URL+"/k", nil); err != nil || got != "kept" {
+		t.Fatalf("first read: %v %q", err, got)
+	}
+	cl.markRelayed(hostOf(srv.URL), "test") // revalidated through the proxy
+	f, err := cl.read(ctx, srv.URL+"/k", http.Header{})
+	if err != nil || string(f.body) != "kept" {
+		t.Fatalf("revalidated: %v %q", err, f.body)
+	}
+	if relay.calls.Load() == 0 {
+		t.Fatal("not revalidated through the proxy")
+	}
+	if f.via != "" {
+		t.Errorf("a kept body counted as the proxy's (%q)", f.via)
 	}
 }

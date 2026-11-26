@@ -302,7 +302,7 @@ func (c *Client) renew(ctx context.Context, id, rawURL string, hdr http.Header, 
 		c.stamp(&ne, nbody)
 		if ne.Scope == e.Scope && ne.Ed > e.Ed {
 			c.verbose("GET %s (a newer edition)", rawURL)
-			return c.pendingBody(id, ne, nbody), nil
+			return c.pendingBody(id, ne, nbody, resp), nil
 		}
 	}
 	c.backOff(id, e, body)

@@ -245,7 +245,9 @@ func (c *Client) Get(ctx context.Context, rawURL string, hdr http.Header) (*http
 	return resp, nil
 }
 
-// GetJSON fetches rawURL and decodes the JSON body into out.
+// GetJSON fetches rawURL and decodes the JSON body into out. A web page in
+// place of the JSON — a bot protection's, which a proxy may get past — is
+// asked of the proxies (retryContent).
 func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, out any) error {
 	if hdr == nil {
 		hdr = http.Header{}
@@ -253,31 +255,63 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 	if hdr.Get("Accept") == "" {
 		hdr.Set("Accept", "application/json")
 	}
-	ctx, via := withVia(ctx)
-	f, err := c.read(ctx, rawURL, hdr)
-	if err != nil {
+	_, page, err := c.getJSON(ctx, rawURL, hdr, out)
+	if err == nil || !page {
 		return err
 	}
+	return c.retryContent(ctx, rawURL, "a page in place of JSON", err, func(ctx context.Context) (string, error) {
+		via, _, err := c.getJSON(ctx, rawURL, hdr, out)
+		return via, err
+	})
+}
+
+// getJSON is one try of GetJSON: who delivered the body, if a proxy did,
+// and whether it was a page in place of JSON.
+func (c *Client) getJSON(ctx context.Context, rawURL string, hdr http.Header, out any) (via string, page bool, err error) {
+	f, err := c.read(ctx, rawURL, hdr)
+	if err != nil {
+		return "", false, err
+	}
 	if err := json.Unmarshal(f.body, out); err != nil {
-		// a page in place of the JSON asked for: a bot protection's, which
-		// a proxy may get past — another than the one that gave it, if one
-		// did
-		if isHTML(f.body) {
-			c.rejectVia(rawURL, via)
+		page := isHTML(f.body)
+		if page {
+			c.rejectVia(rawURL, f.via)
 		}
-		if isHTML(f.body) && !relayNow(ctx) && ctx.Err() == nil {
-			if r := c.relayer(); r != nil && r.Allows(http.MethodGet, rawURL) {
-				if rerr := c.GetJSON(withRelayNow(ctx), rawURL, hdr, out); rerr == nil {
-					c.markRelayed(hostOf(rawURL), "a page in place of JSON")
-					return nil
-				}
-			}
-		}
-		return fmt.Errorf("decode %s: %w", rawURL, err)
+		return f.via, page, fmt.Errorf("decode %s: %w", rawURL, err)
 	}
 	// only a body that decoded is worth keeping
 	c.keep(ctx, f)
-	return nil
+	return f.via, false, nil
+}
+
+// contentTries bounds how many proxies a read whose content is rejected is
+// tried on.
+const contentTries = 3
+
+// retryContent asks the proxies for a read whose content was not what was
+// asked for (first, the error of the try before): once, and again for as
+// long as it was a proxy that delivered the rejected content and another
+// can serve the host — up to contentTries. Content rejected from upstream
+// or the cache, or no proxy left, ends it with first.
+func (c *Client) retryContent(ctx context.Context, rawURL, reason string, first error, try func(context.Context) (string, error)) error {
+	if relayNow(ctx) || ctx.Err() != nil {
+		return first
+	}
+	r := c.relayer()
+	if r == nil || !r.Allows(http.MethodGet, rawURL) {
+		return first
+	}
+	for range contentTries {
+		via, err := try(withRelayNow(ctx))
+		if err == nil {
+			c.markRelayed(hostOf(rawURL), reason)
+			return nil
+		}
+		if via == "" || ctx.Err() != nil || !r.Available(rawURL) {
+			break
+		}
+	}
+	return first
 }
 
 // isHTML reports a body that is a web page.
@@ -330,47 +364,48 @@ func (c *Client) GetHTML(ctx context.Context, rawURL string) (*goquery.Document,
 // would be served for as long as the cache holds it, after the site has
 // long let the reader through again.
 func (c *Client) GetHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
-	doc, err := c.getHTMLChecked(ctx, rawURL, check)
+	doc, _, err := c.getHTMLChecked(ctx, rawURL, check)
 	// not the page asked for, though upstream answered: a challenge too
 	// new to tell, or a page its protection made up; a proxy may get the
 	// real one
-	if err == nil || relayNow(ctx) || ctx.Err() != nil {
-		return doc, err
+	if err == nil {
+		return doc, nil
 	}
 	var se *StatusError
 	if errors.As(err, &se) && se.StatusCode == http.StatusNotFound {
 		return doc, err
 	}
-	r := c.relayer()
-	if r == nil || !r.Allows(http.MethodGet, rawURL) {
+	var rdoc *goquery.Document
+	err = c.retryContent(ctx, rawURL, "not the page asked for", err, func(ctx context.Context) (string, error) {
+		d, via, err := c.getHTMLChecked(ctx, rawURL, check)
+		rdoc = d
+		return via, err
+	})
+	if err != nil {
 		return doc, err
 	}
-	rdoc, rerr := c.getHTMLChecked(withRelayNow(ctx), rawURL, check)
-	if rerr != nil {
-		return doc, err
-	}
-	c.markRelayed(hostOf(rawURL), "not the page asked for")
 	return rdoc, nil
 }
 
-func (c *Client) getHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, error) {
-	ctx, via := withVia(ctx)
+// getHTMLChecked is one try of GetHTMLChecked, and the proxy that delivered
+// what it read, if one did: rejected, it is counted against that proxy.
+func (c *Client) getHTMLChecked(ctx context.Context, rawURL string, check func(*goquery.Document) error) (*goquery.Document, string, error) {
 	f, err := c.read(ctx, rawURL, http.Header{})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(f.body))
 	if err != nil {
-		return nil, fmt.Errorf("parse HTML %s: %w", rawURL, err)
+		return nil, f.via, fmt.Errorf("parse HTML %s: %w", rawURL, err)
 	}
 	if err := check(doc); err != nil {
 		// not the page: the proxy that gave it, if one did, is not asked
 		// for its host again for a while
-		c.rejectVia(rawURL, via)
-		return nil, err
+		c.rejectVia(rawURL, f.via)
+		return nil, f.via, err
 	}
 	c.keep(ctx, f)
-	return doc, nil
+	return doc, f.via, nil
 }
 
 // GetText fetches rawURL and returns the body as a string.

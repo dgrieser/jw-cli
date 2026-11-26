@@ -42,38 +42,9 @@ type Relay interface {
 // a rejection of its answer is counted against.
 const ProxyIDHeader = "X-JW-Proxy-ID"
 
-// A read whose content is checked (GetHTMLChecked, GetJSON) carries a
-// record of the proxy that delivered it, if one did: content it rejects is
-// counted against that proxy before another is asked.
-type viaKey struct{}
-
-type viaRecord struct {
-	mu    sync.Mutex
-	proxy string
-}
-
-func withVia(ctx context.Context) (context.Context, *viaRecord) {
-	rec := &viaRecord{}
-	return context.WithValue(ctx, viaKey{}, rec), rec
-}
-
-// noteVia records the proxy an answer came from on the read it is for.
-func noteVia(ctx context.Context, resp *http.Response) {
-	rec, _ := ctx.Value(viaKey{}).(*viaRecord)
-	if rec == nil || resp == nil {
-		return
-	}
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	rec.proxy = resp.Header.Get(ProxyIDHeader)
-}
-
 // rejectVia counts content a reader rejected against the proxy that
-// delivered it, if one did.
-func (c *Client) rejectVia(rawURL string, rec *viaRecord) {
-	rec.mu.Lock()
-	id := rec.proxy
-	rec.mu.Unlock()
+// delivered it (id, from the fetched body), if one did.
+func (c *Client) rejectVia(rawURL, id string) {
 	r := c.relayer()
 	if id == "" || r == nil {
 		return
@@ -207,7 +178,6 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 	if relayNow(ctx) || (up && (c.relayFirst(host) || c.hostDown(host))) {
 		resp, err := c.viaRelay(ctx, r, method, rawURL, hdr)
 		if err == nil {
-			noteVia(ctx, resp)
 			if !relayNow(ctx) && !c.relayFirst(host) {
 				c.markRelayed(host, "failed lately") // down for the client, served by a proxy
 			}
@@ -242,7 +212,6 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 	if resp != nil {
 		resp.Body.Close()
 	}
-	noteVia(ctx, relayed)
 	return relayed, nil
 }
 

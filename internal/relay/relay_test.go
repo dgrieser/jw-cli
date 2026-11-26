@@ -1185,3 +1185,47 @@ func TestRejectedContentFailsOver(t *testing.T) {
 		}
 	}
 }
+
+// The server gets a page no bot check knows (a 200, not a refusal), and of
+// two proxies one gets the same: the read goes on past the first proxy's
+// rejected page to the other, which has the real one.
+func TestUnknownWallEverywhereButOneProxy(t *testing.T) {
+	wall := `<!DOCTYPE html><html><body>` + strings.Repeat("an unknown wall ", 2000) + `</body></html>`
+	walled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(wall))
+	}))
+	defer walled.Close()
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><main class="content">` + r.URL.Path + `</main></body></html>`))
+	}))
+	defer good.Close()
+	p, srv := testPool(t)
+	a, b := enrolled(t, p, srv, "a"), enrolled(t, p, srv, "b")
+	running(t, a, walled)
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if st := p.Proxies(time.Now()); st[0].Polls > 0 && st[1].Polls > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both proxies never polled")
+		}
+	}
+	server := mappedClient(walled) // the server gets the wall too, as a 200
+	server.SetRelay(p)
+	check := func(doc *goquery.Document) error {
+		if doc.Find("main.content").Length() == 0 {
+			return errors.New("not the page")
+		}
+		return nil
+	}
+	for i := range 10 {
+		path := "/w/" + strconv.Itoa(i)
+		doc, err := server.GetHTMLChecked(context.Background(), "https://www.jw.org"+path, check)
+		if err != nil || doc.Find("main").Text() != path {
+			t.Fatalf("page %d: %v", i, err)
+		}
+	}
+}
