@@ -165,3 +165,53 @@ func TestProxySetupTokenOnStdin(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// stubSystemInstall points the machine's install at dir, with its files
+// there or not.
+func stubSystemInstall(t *testing.T, installed bool) relay.Install {
+	t.Helper()
+	dir := t.TempDir()
+	in := relay.Install{System: true, Binary: filepath.Join(dir, "jw"), Config: filepath.Join(dir, "proxy.json"), Unit: filepath.Join(dir, relay.ServiceName)}
+	if installed {
+		_ = os.WriteFile(in.Unit, []byte("[Unit]"), 0o644)
+		_ = os.WriteFile(in.Config, []byte("{}"), 0o600)
+	}
+	old := systemInstall
+	t.Cleanup(func() { systemInstall = old })
+	systemInstall = func() relay.Install { return in }
+	return in
+}
+
+// The machine's service, which setup installs with sudo, is what uninstall
+// removes — with sudo too, from a user who is not root.
+func TestProxyUninstallSystemWithSudo(t *testing.T) {
+	ran := stubMachine(t, true)
+	stubSystemInstall(t, true)
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("HOME", home)
+	out, err := runJW(t, "", "proxy", "uninstall")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if !strings.Contains(out, "removing it takes root") || !strings.HasSuffix(strings.TrimSuffix(strings.Join(*ran, " "), " stdin="), " proxy uninstall") {
+		t.Errorf("sudo ran %q\n%s", strings.Join(*ran, " "), out)
+	}
+
+	stubMachine(t, false)
+	if _, err := runJW(t, "", "proxy", "uninstall"); err == nil || !strings.Contains(err.Error(), "as root") {
+		t.Errorf("no sudo: %v", err)
+	}
+}
+
+// With nothing installed, uninstall says so rather than that it removed it.
+func TestProxyUninstallNothing(t *testing.T) {
+	stubMachine(t, true)
+	stubSystemInstall(t, false)
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("HOME", home)
+	if out, err := runJW(t, "", "proxy", "uninstall"); err == nil || !strings.Contains(err.Error(), "no proxy is installed here") {
+		t.Errorf("nothing installed: %v\n%s", err, out)
+	}
+}

@@ -104,7 +104,7 @@ token replaces the proxy's registration.`,
 				}
 				in = relay.Install{Config: path}
 			case geteuid() == 0 && !user:
-				in = relay.SystemInstall()
+				in = systemInstall()
 			case !user:
 				// the machine's service takes root: this setup again, with sudo
 				return setupWithSudo(cmd, server, token, workers)
@@ -158,9 +158,10 @@ token replaces the proxy's registration.`,
 
 // The machine's state, as setup asks it; variables for the tests.
 var (
-	hasSystemd = relay.HasSystemd
-	geteuid    = os.Geteuid
-	lookSudo   = func() (string, error) { return exec.LookPath("sudo") }
+	hasSystemd    = relay.HasSystemd
+	geteuid       = os.Geteuid
+	systemInstall = relay.SystemInstall
+	lookSudo      = func() (string, error) { return exec.LookPath("sudo") }
 	// runSudo runs the setup as root: sudo asks on the terminal for the
 	// password, the token goes in on standard input so it is never on a
 	// command line other users can see
@@ -171,12 +172,38 @@ var (
 	}
 )
 
+// uninstallWithSudo removes the machine's service from a user who is not
+// root: it says what root will do and runs the uninstall again with sudo.
+func uninstallWithSudo(cmd *cobra.Command, in relay.Install) error {
+	sudo, err := lookSudo()
+	if err != nil {
+		return errors.New("the proxy's service for the whole machine is removed as root, and sudo is not available here: run this command again as root")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if p, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = p
+	}
+	out := cmd.OutOrStdout()
+	fmt.Fprintf(out, `The proxy is installed as a service for the whole machine; removing it takes root.
+With sudo, the uninstall runs again as root and will stop and disable %s,
+and remove it and %s. sudo may ask for your password.
+
+`, in.Unit, in.Config)
+	if err := runSudo(sudo, []string{"--", exe, "proxy", "uninstall"}, strings.NewReader(""), out, cmd.ErrOrStderr()); err != nil {
+		return fmt.Errorf("the uninstall as root did not finish (%v); see above. Run it as root instead", err)
+	}
+	return nil
+}
+
 // setupWithSudo installs the machine's service from a user who is not root:
 // it says what root will do, and runs this setup again with sudo. Without
 // sudo it stops before the token is used.
 func setupWithSudo(cmd *cobra.Command, server, token string, workers int) error {
 	out := cmd.OutOrStdout()
-	in := relay.SystemInstall()
+	in := systemInstall()
 	sudo, err := lookSudo()
 	if err != nil {
 		return errors.New("the proxy's service for the whole machine is installed as root, and sudo is not available here: " +
@@ -308,17 +335,33 @@ func newProxyUninstallCmd(a *app.App) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall",
 		Short: "Stop and remove the proxy's service and credential",
-		Long: `Stop the proxy's service, and remove it and the credential: the system
-service as root, else (or with --user) the user's. The proxy stays listed on
-the server until an admin deletes it there.`,
+		Long: `Stop the proxy's service, and remove it and the credential: the one
+installed here — the machine's, as setup installs it, removed with sudo
+when not run as root (as setup does), else the user's. --user removes the
+user's. The proxy stays listed on the server until an admin deletes it
+there.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			in := relay.SystemInstall()
-			if os.Geteuid() != 0 || user {
-				var err error
-				if in, err = relay.UserInstall(); err != nil {
-					return err
+			sys := systemInstall()
+			userIn, err := relay.UserInstall()
+			if err != nil && user {
+				return err
+			}
+			var in relay.Install
+			switch {
+			case !user && sys.Installed():
+				if geteuid() != 0 {
+					return uninstallWithSudo(cmd, sys)
 				}
+				in = sys
+			case err == nil && userIn.Installed():
+				in = userIn
+			default:
+				where := userIn.Unit + ", " + userIn.Config
+				if !user {
+					where += ", " + sys.Unit + ", " + sys.Config
+				}
+				return fmt.Errorf("no proxy is installed here: none of %s exists", where)
 			}
 			if err := in.Remove(); err != nil {
 				return err

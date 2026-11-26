@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -650,5 +651,84 @@ func TestServerRedirectsRefused(t *testing.T) {
 	}
 	if leaked.Load() {
 		t.Error("a redirect was followed")
+	}
+}
+
+// A proxy disabled while it sends an answer has the answer refused: the job
+// ended with the revocation, and the caller is not handed what came after.
+func TestRevokeDuringUpload(t *testing.T) {
+	for _, op := range []string{"disable", "delete"} {
+		t.Run(op, func(t *testing.T) {
+			p, srv := testPool(t)
+			cfg := enrolled(t, p, srv, "pi")
+			auth := AuthScheme + " " + cfg.Credential
+			fetched := make(chan error, 1)
+			// the job is waited for by a caller, and taken by the proxy's poll
+			polled := make(chan Job, 1)
+			go func() {
+				req, _ := http.NewRequest(http.MethodGet, srv.URL+PathPrefix+"poll", nil)
+				req.Header.Set("Authorization", auth)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					return
+				}
+				defer resp.Body.Close()
+				var j Job
+				_ = json.NewDecoder(resp.Body).Decode(&j)
+				polled <- j
+			}()
+			waitOnline(t, p)
+			go func() {
+				resp, err := p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/x", nil)
+				if err == nil {
+					resp.Body.Close()
+				}
+				fetched <- err
+			}()
+			j := <-polled
+
+			// the answer starts coming in ...
+			pr, pw := io.Pipe()
+			req, _ := http.NewRequest(http.MethodPost, srv.URL+PathPrefix+"jobs/"+j.ID, pr)
+			req.Header.Set("Authorization", auth)
+			req.Header.Set(ResultHeader, `{"status":200,"length":6}`)
+			answered := make(chan int, 1)
+			go func() {
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					answered <- 0
+					return
+				}
+				resp.Body.Close()
+				answered <- resp.StatusCode
+			}()
+			_, _ = pw.Write([]byte("par"))
+			time.Sleep(100 * time.Millisecond)
+			// ... the proxy is revoked ...
+			var err error
+			if op == "disable" {
+				err = p.SetEnabled(cfg.ID, false)
+			} else {
+				err = p.Delete(cfg.ID)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			select {
+			case err := <-fetched:
+				if !errors.Is(err, httpx.ErrNoRelay) {
+					t.Errorf("caller got %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("the caller waits for a revoked proxy's answer")
+			}
+			// ... and the rest of it is refused
+			_, _ = pw.Write([]byte("tly"))
+			_ = pw.Close()
+			want := map[string]int{"disable": http.StatusForbidden, "delete": http.StatusUnauthorized}[op]
+			if code := <-answered; code != want {
+				t.Errorf("answer after revocation: HTTP %d, want %d", code, want)
+			}
+		})
 	}
 }

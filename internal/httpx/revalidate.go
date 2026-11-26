@@ -97,7 +97,7 @@ func (c *Client) lookup(ctx context.Context, id, rawURL string, hdr http.Header)
 		c.responses.saveEntry(id, e, body)
 	}
 	// a body of an older edition than the newest seen is asked for again
-	if ok && c.behind(e) && (!c.backingOff(id, e) || c.relayServes(hostOf(rawURL))) && !c.unreachable(hostOf(rawURL)) {
+	if ok && c.behind(e) && (!c.backingOff(id, e) || c.relayUp(rawURL)) && !c.unreachable(rawURL) {
 		return c.renew(ctx, id, rawURL, hdr, e, body)
 	}
 	if ok && e.fresh(c.responses.fresh) {
@@ -144,6 +144,11 @@ func (c *Client) lookupAnew(ctx context.Context, id, rawURL string, hdr http.Hea
 			c.responses.removeEntry(id)
 			return nil, err
 		}
+		// a read gone to a proxy because the page kept or given was not
+		// the page: no proxy, no page — never the one kept
+		if relayNow(ctx) {
+			return nil, err
+		}
 		if e, kept, ok := c.responses.loadEntry(id, false); ok {
 			c.verbose("GET %s (cached, upstream unavailable: %v)", rawURL, err)
 			return &fetched{body: kept, id: id, e: e}, nil
@@ -179,7 +184,7 @@ func (c *Client) pendingBody(id string, e entry, body []byte) *fetched {
 // is one whose host failed lately.
 func (c *Client) refresh(ctx context.Context, id string, e entry, body []byte) (*fetched, error) {
 	stale := &fetched{body: body, id: id, e: e}
-	if host := hostOf(e.URL); (c.backingOff(id, e) && !c.relayServes(host)) || c.unreachable(host) {
+	if (c.backingOff(id, e) && !c.relayUp(e.URL)) || c.unreachable(e.URL) {
 		c.verbose("GET %s (cached, upstream unavailable)", e.URL)
 		return stale, nil
 	}

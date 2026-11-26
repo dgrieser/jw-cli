@@ -364,6 +364,10 @@ func (px *proxy) online(now time.Time) bool {
 // Allows reports whether a request may go through a proxy (httpx.Relay).
 func (p *Pool) Allows(method, rawURL string) bool { return Allowed(method, rawURL) }
 
+// Available reports whether a proxy is there to take a request
+// (httpx.Relay).
+func (p *Pool) Available() bool { return p.available(time.Now()) }
+
 // available reports whether a proxy is there to take a job.
 func (p *Pool) available(now time.Time) bool {
 	p.mu.Lock()
@@ -655,7 +659,9 @@ func (p *Pool) refuse(w http.ResponseWriter, px *proxy) {
 	writeJSON(w, http.StatusForbidden, map[string]string{"state": "disabled", "error": "the proxy is disabled on the server"})
 }
 
-// result takes a proxy's answer to a job it took.
+// result takes a proxy's answer to a job it took. The job stays the
+// proxy's while the answer comes in: a proxy disabled or deleted meanwhile
+// has its jobs failed, and its answer is refused (settle).
 func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	px := p.authenticate(w, r)
 	if px == nil {
@@ -665,39 +671,34 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p.mu.Lock()
 	j, ok := p.jobs[id]
-	if ok && j.proxy == px.ID {
-		delete(p.jobs, id) // one answer per job
-	}
-	enabled := px.Enabled
+	ok = ok && j.proxy == px.ID
 	p.mu.Unlock()
-	if !ok || j.proxy != px.ID {
+	if !ok {
 		fail(w, http.StatusNotFound, "no such job, or no longer waited for")
-		return
-	}
-	if !enabled {
-		j.done <- jobResult{err: fmt.Errorf("%w: the proxy was disabled", httpx.ErrNoRelay)}
-		fail(w, http.StatusForbidden, "the proxy is disabled on the server")
 		return
 	}
 	var res Result
 	if raw := r.Header.Get(ResultHeader); len(raw) > 16<<10 || json.Unmarshal([]byte(raw), &res) != nil {
-		j.done <- jobResult{err: fmt.Errorf("proxy %q: unreadable result", px.Name)}
-		p.noted(px.ID, false, 0, "unreadable result")
-		fail(w, http.StatusBadRequest, "unreadable "+ResultHeader)
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: unreadable result", px.Name)}) {
+			p.noted(px.ID, false, 0, "unreadable result")
+			fail(w, http.StatusBadRequest, "unreadable "+ResultHeader)
+		}
 		return
 	}
 	if res.Error != "" || res.Status < 100 || res.Status > 599 {
 		failure := cmpOr(res.Error, "no status")
-		j.done <- jobResult{err: fmt.Errorf("proxy %q: %s", px.Name, failure)}
-		p.noted(px.ID, false, res.Millis, failure)
-		w.WriteHeader(http.StatusNoContent)
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: %s", px.Name, failure)}) {
+			p.noted(px.ID, false, res.Millis, failure)
+			w.WriteHeader(http.StatusNoContent)
+		}
 		return
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
 	if err != nil {
-		j.done <- jobResult{err: fmt.Errorf("proxy %q: the answer's body: %w", px.Name, err)}
-		p.noted(px.ID, false, res.Millis, "the answer's body: "+err.Error())
-		fail(w, http.StatusBadRequest, "unreadable body")
+		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: the answer's body: %w", px.Name, err)}) {
+			p.noted(px.ID, false, res.Millis, "the answer's body: "+err.Error())
+			fail(w, http.StatusBadRequest, "unreadable body")
+		}
 		return
 	}
 	// where the answer came from after redirects, as a direct answer
@@ -705,9 +706,10 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	final := j.URL
 	if res.URL != "" {
 		if !Allowed(j.Method, res.URL) {
-			j.done <- jobResult{err: fmt.Errorf("proxy %q: redirected off jw.org's sites", px.Name)}
-			p.noted(px.ID, false, res.Millis, "redirected off jw.org's sites: "+res.URL)
-			fail(w, http.StatusBadRequest, "the answer's address is not one a proxy fetches")
+			if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: redirected off jw.org's sites", px.Name)}) {
+				p.noted(px.ID, false, res.Millis, "redirected off jw.org's sites: "+res.URL)
+				fail(w, http.StatusBadRequest, "the answer's address is not one a proxy fetches")
+			}
 			return
 		}
 		final = res.URL
@@ -731,12 +733,42 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	if j.Method == http.MethodHead {
 		resp.ContentLength = res.Length
 	}
+	if !p.settle(w, j, px, jobResult{resp: resp}) {
+		return
+	}
 	// a refusal or a failure is the proxy's trouble too; a page not found
 	// is an answer
 	ok = res.Status < 400 || res.Status == http.StatusNotFound
 	p.noted(px.ID, ok, res.Millis, fmt.Sprintf("HTTP %d for %s", res.Status, j.URL))
-	j.done <- jobResult{resp: resp}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// settle ends a job with what its proxy answered — when the job is still
+// waited for and the proxy still enabled and registered, all at once, so
+// that an answer and a revocation never both end it. When it cannot, it
+// answers the proxy why and reports false.
+func (p *Pool) settle(w http.ResponseWriter, j *job, px *proxy, r jobResult) bool {
+	p.mu.Lock()
+	waited := p.jobs[j.ID] == j
+	deleted := p.proxies[px.ID] != px
+	enabled := px.Enabled
+	if waited && !deleted && enabled {
+		delete(p.jobs, j.ID)
+		j.done <- r // the one end of the job: buffered for it
+	}
+	p.mu.Unlock()
+	switch {
+	case deleted:
+		w.Header().Set("WWW-Authenticate", AuthScheme)
+		fail(w, http.StatusUnauthorized, "credential refused: the proxy was deleted")
+	case !enabled:
+		writeJSON(w, http.StatusForbidden, map[string]string{"state": "disabled", "error": "the proxy is disabled on the server"})
+	case !waited:
+		fail(w, http.StatusNotFound, "no such job, or no longer waited for")
+	default:
+		return true
+	}
+	return false
 }
 
 func cmpOr(a, b string) string {

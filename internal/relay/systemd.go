@@ -232,6 +232,10 @@ func (in Install) Apply(cfg Config) (copied bool, err error) {
 	return copied, in.systemctl("restart", ServiceName)
 }
 
+// Installed reports whether anything of the install is there: its service
+// or its file.
+func (in Install) Installed() bool { return exists(in.Unit) || exists(in.Config) }
+
 // Remove stops the service and removes it and the proxy's file. A service
 // that cannot be stopped is left as it is, files and all: a proxy still
 // running with its credential is not one to report removed.

@@ -27,6 +27,8 @@ type Relay interface {
 	Fetch(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error)
 	// Allows reports whether a request may go through a proxy at all.
 	Allows(method, rawURL string) bool
+	// Available reports whether a proxy is there to take a request now.
+	Available() bool
 }
 
 // ErrNoRelay is a request no proxy could take: none is registered, enabled
@@ -87,17 +89,23 @@ func (c *Client) relayFirst(host string) bool {
 	return ok && time.Now().Before(h.Until)
 }
 
-// unavailable reports a host that cannot be asked now, and with it whether a
-// body kept from it is used as it is: one that failed lately and that no
-// proxy serves. A host the proxies serve is asked through them, whatever
-// asking it directly did.
-func (c *Client) unreachable(host string) bool {
-	return c.hostDown(host) && !c.relayServes(host)
+// Three things are kept apart: whether the host failed the client lately
+// (hostDown, and a body's own backoff), whether it turned the client away
+// (relayFirst: ask the proxies first), and whether a proxy is there now
+// (relayUp). A body kept from a host that failed is used as it is only
+// while no proxy is there to ask: a proxy that comes online serves it at
+// once, and one that goes away leaves the backoff as it was.
+
+// unreachable reports whether a body kept from rawURL's host is used as it
+// is: the host failed lately and no proxy is there to ask instead.
+func (c *Client) unreachable(rawURL string) bool {
+	return c.hostDown(hostOf(rawURL)) && !c.relayUp(rawURL)
 }
 
-// relayServes reports a host asked through the proxies first now.
-func (c *Client) relayServes(host string) bool {
-	return c.relayer() != nil && c.relayFirst(host)
+// relayUp reports a proxy there now to take a request of rawURL.
+func (c *Client) relayUp(rawURL string) bool {
+	r := c.relayer()
+	return r != nil && r.Allows(http.MethodGet, rawURL) && r.Available()
 }
 
 func (c *Client) markRelayed(host, reason string) {
@@ -134,9 +142,15 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		return c.sendDirect(ctx, method, rawURL, hdr)
 	}
 	host := hostOf(rawURL)
-	if relayNow(ctx) || c.relayFirst(host) {
+	// a host that failed lately is not asked again directly while a proxy
+	// can be: it would answer at once that it is down
+	up := r.Available()
+	if relayNow(ctx) || (up && (c.relayFirst(host) || c.hostDown(host))) {
 		resp, err := c.viaRelay(ctx, r, method, rawURL, hdr)
 		if err == nil {
+			if !relayNow(ctx) && !c.relayFirst(host) {
+				c.markRelayed(host, "failed lately") // down for the client, served by a proxy
+			}
 			return resp, nil
 		}
 		if ctx.Err() != nil {
@@ -154,7 +168,7 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		return resp, err
 	}
 	resp, reason := blocked(resp, err)
-	if reason == "" {
+	if reason == "" || !r.Available() {
 		return resp, err
 	}
 	relayed, rerr := c.viaRelay(ctx, r, method, rawURL, hdr)

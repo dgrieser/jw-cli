@@ -14,18 +14,22 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-// fakeRelay answers every request with its page, or fails.
+// fakeRelay answers every request with its page, or fails; it is there
+// unless told it is not.
 type fakeRelay struct {
 	calls atomic.Int32
 	fail  bool
 	page  string
+	away  atomic.Bool
 }
 
 func (f *fakeRelay) Allows(string, string) bool { return true }
 
+func (f *fakeRelay) Available() bool { return !f.away.Load() }
+
 func (f *fakeRelay) Fetch(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
 	f.calls.Add(1)
-	if f.fail {
+	if f.fail || f.away.Load() {
 		return nil, ErrNoRelay
 	}
 	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}},
@@ -267,5 +271,87 @@ func TestForcedRelayPastTheCache(t *testing.T) {
 	}
 	if len(cl2.RelayedHosts()) != 0 {
 		t.Error("host marked as served by the proxies, though none answered")
+	}
+}
+
+// A forced read through a proxy that no proxy answers ends in the error,
+// not in the body the cache kept: what upstream gave on the refresh was
+// not the page, and the kept one must not pass for a proxy's.
+func TestForcedRelayFailsWithCachedPage(t *testing.T) {
+	var wall atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		if wall.Load() {
+			_, _ = w.Write([]byte(`<html><body>` + strings.Repeat("a wall ", 3000) + `</body></html>`))
+			return
+		}
+		_, _ = w.Write([]byte(`<html><body><main class="content">old</main></body></html>`))
+	}))
+	defer srv.Close()
+	cl := New(WithRetryDelays(), WithResponseCache(OpenCacheAt(t.TempDir())))
+	relay := &fakeRelay{fail: true}
+	cl.SetRelay(relay)
+	check := func(doc *goquery.Document) error {
+		if doc.Find("main.content").Length() == 0 {
+			return errors.New("not the page")
+		}
+		return nil
+	}
+	ctx := context.Background()
+	if _, err := cl.GetHTMLChecked(ctx, srv.URL+"/p", check); err != nil {
+		t.Fatal(err)
+	}
+	wall.Store(true)
+	if doc, err := cl.GetHTMLChecked(WithRefresh(ctx), srv.URL+"/p", check); err == nil {
+		t.Errorf("the kept page passed for a proxy's: %q", doc.Find("main").Text())
+	}
+	if relay.calls.Load() != 1 {
+		t.Errorf("%d proxy calls", relay.calls.Load())
+	}
+	if len(cl.RelayedHosts()) != 0 {
+		t.Error("host marked as served by the proxies, though none answered")
+	}
+}
+
+// A proxy that comes online while a host is backed off serves its kept
+// bodies at once; with no proxy there, the backoff holds even for a host
+// the proxies served before.
+func TestRelayAvailabilityDecidesRevalidation(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("old"))
+	}))
+	defer srv.Close()
+	tr := &failing{next: http.DefaultTransport}
+	cl := New(WithHTTPClient(&http.Client{Transport: tr}), WithRetryDelays(),
+		WithResponseCache(Open(t.TempDir(), CacheOptions{Fresh: -1})))
+	relay := &fakeRelay{page: "new, through the proxy"}
+	relay.away.Store(true) // no proxy yet
+	cl.SetRelay(relay)
+	ctx := context.Background()
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "old" {
+		t.Fatalf("first read: %v %q", err, got)
+	}
+	tr.fail.Store(true)
+	// upstream fails with no proxy there: the kept body, and the host backed off
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "old" || relay.calls.Load() != 0 {
+		t.Fatalf("no proxy: %v %q, %d proxy calls", err, got, relay.calls.Load())
+	}
+	// a proxy comes online: the kept body is revalidated through it at once
+	relay.away.Store(false)
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "new, through the proxy" {
+		t.Fatalf("proxy online: %v %q", err, got)
+	}
+	if len(cl.RelayedHosts()) == 0 {
+		t.Fatal("the host is not asked through the proxies first")
+	}
+	// the proxy goes away: the host is down, asked through the proxies
+	// first, and yet the kept body stands without asking anybody
+	relay.away.Store(true)
+	calls := relay.calls.Load()
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "new, through the proxy" {
+		t.Fatalf("proxy gone: %v %q", err, got)
+	}
+	if relay.calls.Load() != calls {
+		t.Errorf("a proxy that is not there was asked %d times", relay.calls.Load()-calls)
 	}
 }
