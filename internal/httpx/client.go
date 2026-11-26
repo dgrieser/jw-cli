@@ -258,11 +258,27 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 		return err
 	}
 	if err := json.Unmarshal(f.body, out); err != nil {
+		// a page in place of the JSON asked for: a bot protection's, which
+		// a proxy may get past
+		if isHTML(f.body) && !relayNow(ctx) && ctx.Err() == nil {
+			if r := c.relayer(); r != nil && r.Allows(http.MethodGet, rawURL) {
+				if rerr := c.GetJSON(withRelayNow(ctx), rawURL, hdr, out); rerr == nil {
+					c.markRelayed(hostOf(rawURL), "a page in place of JSON")
+					return nil
+				}
+			}
+		}
 		return fmt.Errorf("decode %s: %w", rawURL, err)
 	}
 	// only a body that decoded is worth keeping
 	c.keep(ctx, f)
 	return nil
+}
+
+// isHTML reports a body that is a web page.
+func isHTML(body []byte) bool {
+	b := bytes.TrimSpace(body)
+	return len(b) > 0 && b[0] == '<'
 }
 
 // responseKey is what a request's body is kept under: the URL and the headers

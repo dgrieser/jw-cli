@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -212,7 +213,28 @@ func blocked(resp *http.Response, err error) (*http.Response, string) {
 			return resp, "a bot protection's challenge"
 		}
 	}
+	if jsWall(head) {
+		return resp, "a page that asks for JavaScript"
+	}
 	return resp, ""
+}
+
+var (
+	tagsRe    = regexp.MustCompile(`(?is)<(script|style|noscript)\b.*?</(script|style|noscript)>|<[^>]*>`)
+	noscripts = regexp.MustCompile(`(?is)<noscript\b.*?</noscript>`)
+)
+
+// jsWall reports a small page that is nothing but a demand to run
+// JavaScript: no text of its own beyond a <noscript> asking for it — the
+// shape of a bot protection's challenge whose name is not known here. A page
+// of jw.org's sites says far more.
+func jsWall(page []byte) bool {
+	ns := noscripts.Find(page)
+	if ns == nil || !bytes.Contains(bytes.ToLower(ns), []byte("javascript")) {
+		return false
+	}
+	text := strings.Join(strings.Fields(string(tagsRe.ReplaceAll(page, []byte(" ")))), " ")
+	return len(text) < 200
 }
 
 // readCloser reads from one reader and closes another: a body with what was

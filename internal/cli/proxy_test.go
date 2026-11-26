@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -66,5 +68,100 @@ func TestProxySetupNoService(t *testing.T) {
 	// a server not over https is refused before anything is sent
 	if _, err := run("proxy", "setup", "http://jw.example.org", token, "--no-service"); err == nil || !strings.Contains(err.Error(), "https") {
 		t.Errorf("http server: %v", err)
+	}
+}
+
+// stubMachine has setup see systemd, a user that is not root, and sudo or
+// none; it returns what sudo was asked to run, with what on stdin.
+func stubMachine(t *testing.T, sudo bool) *[]string {
+	t.Helper()
+	oldS, oldE, oldL, oldR := hasSystemd, geteuid, lookSudo, runSudo
+	t.Cleanup(func() { hasSystemd, geteuid, lookSudo, runSudo = oldS, oldE, oldL, oldR })
+	hasSystemd = func() bool { return true }
+	geteuid = func() int { return 1000 }
+	lookSudo = func() (string, error) {
+		if !sudo {
+			return "", errors.New("not found")
+		}
+		return "/usr/bin/sudo", nil
+	}
+	var ran []string
+	runSudo = func(sudo string, args []string, stdin io.Reader, out, errOut io.Writer) error {
+		in, _ := io.ReadAll(stdin)
+		ran = append(append([]string{sudo}, args...), "stdin="+string(in))
+		return nil
+	}
+	return &ran
+}
+
+func runJW(t *testing.T, stdin string, args ...string) (string, error) {
+	t.Helper()
+	root := NewRootCmd(app.New(app.Flags{}))
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetIn(strings.NewReader(stdin))
+	root.SetArgs(args)
+	err := root.Execute()
+	return out.String(), err
+}
+
+// Not root, with sudo: setup says what root will do and runs itself again
+// with sudo, the token on stdin rather than on the command line; it does
+// not register itself.
+func TestProxySetupWithSudo(t *testing.T) {
+	ran := stubMachine(t, true)
+	out, err := runJW(t, "", "proxy", "setup", "https://jw.example.org", "jwpe_secret-token", "--workers", "3")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{"takes root", "register with https://jw.example.org", "/usr/local/bin/jw", "/etc/jw/proxy.json", "/etc/systemd/system/jw-proxy.service", "sudo may ask for your password"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("plan without %q:\n%s", want, out)
+		}
+	}
+	got := strings.Join(*ran, " ")
+	if !strings.HasPrefix(got, "/usr/bin/sudo -- ") || !strings.Contains(got, " proxy setup https://jw.example.org - --workers 3 stdin=jwpe_secret-token\n") {
+		t.Errorf("sudo ran %q", got)
+	}
+	if strings.Count(got, "jwpe_secret-token") != 1 {
+		t.Errorf("the token is on sudo's command line: %q", got)
+	}
+}
+
+// Not root and no sudo: setup stops before the token is used, and says to
+// run it as root or with --user.
+func TestProxySetupWithoutSudo(t *testing.T) {
+	stubMachine(t, false)
+	pool, err := relay.OpenPool(filepath.Join(t.TempDir(), "proxies.json"), "v", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(pool.Handler())
+	defer srv.Close()
+	token, _, _ := pool.Enroll("pi", "admin@example.org", time.Now())
+	_, err = runJW(t, "", "proxy", "setup", srv.URL, token)
+	if err == nil || !strings.Contains(err.Error(), "as root") || !strings.Contains(err.Error(), "--user") {
+		t.Errorf("want to be told to run as root: %v", err)
+	}
+	if len(pool.Enrollments(time.Now())) != 1 || len(pool.Proxies(time.Now())) != 0 {
+		t.Error("the token was used though nothing was installed")
+	}
+}
+
+// A token of "-" is read from standard input, as sudo's setup gets it.
+func TestProxySetupTokenOnStdin(t *testing.T) {
+	pool, err := relay.OpenPool(filepath.Join(t.TempDir(), "proxies.json"), "v", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(pool.Handler())
+	defer srv.Close()
+	token, _, _ := pool.Enroll("pi", "admin@example.org", time.Now())
+	home := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv("HOME", home)
+	if out, err := runJW(t, token+"\n", "proxy", "setup", srv.URL, "-", "--no-service"); err != nil || !strings.Contains(out, `as "pi"`) {
+		t.Fatalf("%v\n%s", err, out)
 	}
 }

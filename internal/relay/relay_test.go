@@ -369,3 +369,51 @@ func TestClientFallsBackToProxy(t *testing.T) {
 		t.Errorf("second page: %v, asked directly %d times", err, direct.Load())
 	}
 }
+
+// Every site of jw.org's goes through the proxies the same way: the
+// library's pages and its JSON, the CDN's APIs — refused, unreachable, or
+// answered with a page in place of JSON.
+func TestEverySiteFallsBack(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><body><article><h1>` + r.URL.Path + `</h1></article></body></html>`))
+	}))
+	defer good.Close()
+	refusing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/apis/") {
+			// a bot page in place of the JSON
+			w.Header().Set("Content-Type", "text/html")
+			_, _ = w.Write([]byte(`<!DOCTYPE html><html><body>` + strings.Repeat("x", 20000) + `</body></html>`))
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer refusing.Close()
+
+	p, srv := testPool(t)
+	running(t, enrolled(t, p, srv, "pi"), good)
+	waitOnline(t, p)
+	server := mappedClient(refusing)
+	server.SetRelay(p)
+	ctx := context.Background()
+	doc, err := server.GetHTML(ctx, "https://wol.jw.org/de/wol/h/r10/lp-x")
+	if err != nil || doc.Find("h1").Text() != "/de/wol/h/r10/lp-x" {
+		t.Errorf("wol page: %v", err)
+	}
+	var out struct{ OK bool }
+	if err := server.GetJSON(ctx, "https://b.jw-cdn.org/apis/mediator/v1/languages/E/all", nil, &out); err != nil || !out.OK {
+		t.Errorf("CDN API: %v %+v", err, out)
+	}
+	hosts := map[string]bool{}
+	for _, h := range server.RelayedHosts() {
+		hosts[h.Host] = true
+	}
+	if !hosts["wol.jw.org"] || !hosts["b.jw-cdn.org"] {
+		t.Errorf("relayed hosts: %v", hosts)
+	}
+}

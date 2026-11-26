@@ -1285,10 +1285,12 @@ refusal, a network that fails — can have **proxies** fetch for it: copies of t
 same `jw` binary on machines in networks jw.org lets through, a home server or a
 Raspberry Pi. Each proxy belongs to one server.
 
-- **Only when needed.** The server always asks jw.org itself first. Only what it
-  could not get — HTTP 202/403/405/429/502/503/504, a connection that fails, a
-  200 that is a bot protection's challenge page, or a page its reader rejects —
-  goes to a proxy. A host that turned the server away is then asked through the
+- **Only when needed, on every site.** The server always asks jw.org itself
+  first — www.jw.org, wol.jw.org and the CDN's APIs alike. Only what it could
+  not get — HTTP 202/403/405/429/502/503/504, a connection that fails, a 200
+  that is a bot protection's challenge page (AWS WAF's, Akamai's, or any small
+  page that only asks for JavaScript), a web page in place of the JSON asked
+  for, or a page its reader rejects — goes to a proxy. A host that turned the server away is then asked through the
   proxies first for 10 minutes, then directly again.
 - **Out only.** A proxy connects out to its server (a long poll over HTTPS) and
   takes no connections, so it works behind a home router. A job goes to
@@ -1309,14 +1311,18 @@ run on the proxy's machine:
 jw proxy setup https://jw.example.org jwpe_…
 ```
 
-That is all the machine needs besides the binary. As root it installs a
-locked-down service for the whole machine: the binary at `/usr/local/bin/jw`,
+That is all the machine needs besides the binary. It installs a locked-down
+service for the whole machine — run by another user, it first says what it
+will do and runs itself again with `sudo` (which asks for the password; the
+token goes to it on standard input, never on a command line), and without
+`sudo` it stops before the token is used, to be run as root. The service: the
+binary at `/usr/local/bin/jw`,
 the credential at `/etc/jw/proxy.json` (root only), and
 `/etc/systemd/system/jw-proxy.service`, which runs as a user systemd makes up for
 it (`DynamicUser`) and gets the credential from systemd (`LoadCredential`), with
-the file system read-only and no privileges. As another user it installs a user
-service (`~/.config/systemd/user/jw-proxy.service`); `sudo loginctl
-enable-linger $USER` keeps that running after logging out. Without systemd, or
+the file system read-only and no privileges. With `--user` it installs a
+service of the user's own instead (`~/.config/systemd/user/jw-proxy.service`);
+`sudo loginctl enable-linger $USER` keeps that running after logging out. Without systemd, or
 with `--no-service`, it registers and writes the credential only; then run
 `jw proxy run` under anything that keeps it running.
 

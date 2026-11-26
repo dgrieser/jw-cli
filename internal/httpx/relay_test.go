@@ -121,3 +121,41 @@ func TestGetHTMLCheckedAsksProxy(t *testing.T) {
 		t.Fatalf("got %v, %d proxy calls", err, relay.calls.Load())
 	}
 }
+
+// A page in place of the JSON asked for — wol's lookups, the APIs — is asked
+// of a proxy, and not kept.
+func TestGetJSONAsksProxy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body>` + strings.Repeat("an unknown wall ", 2000) + `</body></html>`))
+	}))
+	defer srv.Close()
+	cl := New(WithRetryDelays(), WithResponseCache(OpenCacheAt(t.TempDir())))
+	relay := &fakeRelay{page: `{"items":[1,2]}`}
+	cl.SetRelay(relay)
+	var out struct{ Items []int }
+	if err := cl.GetJSON(context.Background(), srv.URL+"/api", nil, &out); err != nil || len(out.Items) != 2 || relay.calls.Load() != 1 {
+		t.Fatalf("got %v %+v, %d proxy calls", err, out, relay.calls.Load())
+	}
+	// JSON that is simply wrong is no reason to ask a proxy
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"items":`)) }))
+	defer bad.Close()
+	if err := cl.GetJSON(context.Background(), bad.URL+"/api", nil, &out); err == nil || relay.calls.Load() != 1 {
+		t.Errorf("broken JSON: %v, %d proxy calls", err, relay.calls.Load())
+	}
+}
+
+// A small page that is nothing but a demand for JavaScript is a challenge,
+// whoever's; a short page with text of its own is not.
+func TestJSWall(t *testing.T) {
+	for page, want := range map[string]bool{
+		`<html><head><script src="/x.js"></script></head><body><noscript>Please enable JavaScript to continue.</noscript></body></html>`:                                        true,
+		`<html><body><div id="c"></div><noscript><p>JavaScript is required</p></noscript><script>go()</script></body></html>`:                                                   true,
+		`<html><body><noscript>Enable JavaScript for the player.</noscript><h1>Tagestext</h1><p>` + strings.Repeat("Ein Vers und seine Erklärung. ", 12) + `</p></body></html>`: false,
+		`<html><body><p>No script here, and short.</p></body></html>`:                                                                                                           false,
+	} {
+		if got := jsWall([]byte(page)); got != want {
+			t.Errorf("jsWall = %v, want %v: %.80s", got, want, page)
+		}
+	}
+}

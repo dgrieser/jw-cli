@@ -1,12 +1,17 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -34,10 +39,11 @@ Set one up with the command the server's admin page (Proxies) shows:
 
   jw proxy setup https://jw.example.org jwpe_…
 
-As root, that installs a locked-down systemd service for the machine
+That installs a locked-down systemd service for the machine
 (jw-proxy.service, the binary under /usr/local/bin, the credential in
-/etc/jw/proxy.json); as another user, a user service. --no-service only
-registers, for running jw proxy run under something else.`,
+/etc/jw/proxy.json), asking for sudo when not run as root. --user installs a
+service of your own instead; --no-service only registers, for running
+jw proxy run under something else.`,
 	}
 	cmd.AddCommand(newProxySetupCmd(a), newProxyRunCmd(a), newProxyStatusCmd(a), newProxyUninstallCmd(a))
 	// the proxy is this machine's, never a server's (jw --server): a client
@@ -58,19 +64,21 @@ func newProxySetupCmd(a *app.App) *cobra.Command {
 		Short: "Register with a jw serve and install the proxy as a service",
 		Long: `Register this machine as a proxy of a jw serve, with the one-time
 enrollment token an admin made on the server's Proxies page (valid for an
-hour), and install and start it as a systemd service:
+hour), and install and start it as a systemd service for the whole machine:
+/usr/local/bin/jw, /etc/jw/proxy.json (root only),
+/etc/systemd/system/jw-proxy.service, running as a user systemd makes up for
+it. That takes root: run by another user, setup says what it will do and
+runs itself again with sudo, which asks for the password; without sudo it
+stops before the token is used, to be run as root.
 
-  as root    for the whole machine: /usr/local/bin/jw, /etc/jw/proxy.json
-             (root only), /etc/systemd/system/jw-proxy.service, running as
-             a user systemd makes up for it
-  otherwise  for this user: ~/.config/jw/proxy.json and a user service; it
-             runs while the user is logged in, or always after
-             'sudo loginctl enable-linger <user>'
+  --user        a service for this user instead: ~/.config/jw/proxy.json and
+                a user service; it runs while the user is logged in, or
+                always after 'sudo loginctl enable-linger <user>'
+  --no-service  register and write the file only; run 'jw proxy run' then
+                however you like (so does a machine without systemd)
 
-Without systemd, or with --no-service, it registers and writes the file
-only; run 'jw proxy run' then however you like.
-
-Running it again with a new token replaces the proxy's registration.`,
+A token of "-" is read from standard input. Running setup again with a new
+token replaces the proxy's registration.`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -78,7 +86,15 @@ Running it again with a new token replaces the proxy's registration.`,
 			if err != nil {
 				return err
 			}
-			service := !noService && relay.HasSystemd()
+			token := args[1]
+			if token == "-" {
+				line, err := bufio.NewReader(cmd.InOrStdin()).ReadString('\n')
+				if err != nil && line == "" {
+					return fmt.Errorf("no token on standard input: %w", err)
+				}
+				token = strings.TrimSpace(line)
+			}
+			service := !noService && hasSystemd()
 			var in relay.Install
 			switch {
 			case !service:
@@ -87,8 +103,11 @@ Running it again with a new token replaces the proxy's registration.`,
 					return err
 				}
 				in = relay.Install{Config: path}
-			case os.Geteuid() == 0 && !user:
+			case geteuid() == 0 && !user:
 				in = relay.SystemInstall()
+			case !user:
+				// the machine's service takes root: this setup again, with sudo
+				return setupWithSudo(cmd, server, token, workers)
 			default:
 				if in, err = relay.UserInstall(); err != nil {
 					return err
@@ -99,7 +118,7 @@ Running it again with a new token replaces the proxy's registration.`,
 					return fmt.Errorf("%w (run as root for a system service, or with --user)", err)
 				}
 			}
-			cfg, err := relay.Register(cmd.Context(), server, args[1], version.String())
+			cfg, err := relay.Register(cmd.Context(), server, token, version.String())
 			if err != nil {
 				return err
 			}
@@ -135,6 +154,58 @@ Running it again with a new token replaces the proxy's registration.`,
 	fl.BoolVar(&noService, "no-service", false, "only register and write the credential, install no service")
 	fl.IntVar(&workers, "workers", 0, fmt.Sprintf("requests made at once (default %d)", relay.DefaultWorkers))
 	return cmd
+}
+
+// The machine's state, as setup asks it; variables for the tests.
+var (
+	hasSystemd = relay.HasSystemd
+	geteuid    = os.Geteuid
+	lookSudo   = func() (string, error) { return exec.LookPath("sudo") }
+	// runSudo runs the setup as root: sudo asks on the terminal for the
+	// password, the token goes in on standard input so it is never on a
+	// command line other users can see
+	runSudo = func(sudo string, args []string, stdin io.Reader, out, errOut io.Writer) error {
+		c := exec.Command(sudo, args...)
+		c.Stdin, c.Stdout, c.Stderr = stdin, out, errOut
+		return c.Run()
+	}
+)
+
+// setupWithSudo installs the machine's service from a user who is not root:
+// it says what root will do, and runs this setup again with sudo. Without
+// sudo it stops before the token is used.
+func setupWithSudo(cmd *cobra.Command, server, token string, workers int) error {
+	out := cmd.OutOrStdout()
+	in := relay.SystemInstall()
+	sudo, err := lookSudo()
+	if err != nil {
+		return errors.New("the proxy's service for the whole machine is installed as root, and sudo is not available here: " +
+			"run this command again as root, or add --user for a service of your own (the token is not used yet)")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if p, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = p
+	}
+	fmt.Fprintf(out, `Installing the proxy as a service for the whole machine takes root.
+With sudo, this setup runs again as root and will:
+  - register with %s
+  - install %s as %s
+  - write the credential to %s (readable by root alone)
+  - install %s and start it, as a user systemd makes up for it
+sudo may ask for your password.
+
+`, server, exe, in.Binary, in.Config, in.Unit)
+	args := []string{"--", exe, "proxy", "setup", server, "-"}
+	if workers > 0 {
+		args = append(args, "--workers", strconv.Itoa(workers))
+	}
+	if err := runSudo(sudo, args, strings.NewReader(token+"\n"), out, cmd.ErrOrStderr()); err != nil {
+		return fmt.Errorf("the setup as root did not finish (%v); see above. Run it as root instead, or add --user for a service of your own", err)
+	}
+	return nil
 }
 
 func printServiceHelp(out io.Writer, system bool) {
