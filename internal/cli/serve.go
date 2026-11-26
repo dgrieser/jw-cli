@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
@@ -20,7 +19,6 @@ import (
 	"github.com/dgrieser/jw-cli/internal/app"
 	"github.com/dgrieser/jw-cli/internal/remote"
 	"github.com/dgrieser/jw-cli/internal/server"
-	"github.com/dgrieser/jw-cli/internal/service"
 )
 
 func newServeCmd(a *app.App) *cobra.Command {
@@ -120,17 +118,6 @@ Examples:
 			if err != nil {
 				return err
 			}
-			// the feeds of what is new posted to the server, kept beside
-			// the accounts so a restart keeps them and their holds
-			dir, err := serverDataDir(dataDir)
-			if err != nil {
-				return err
-			}
-			feeds, err := service.OpenFeeds(filepath.Join(dir, "feeds"))
-			if err != nil {
-				return err
-			}
-			a.Service().Feeds = feeds
 			defer users.Flush()
 			trusted, err := server.ParseProxies(proxies)
 			if err != nil {
