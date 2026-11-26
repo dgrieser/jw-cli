@@ -732,3 +732,116 @@ func TestRevokeDuringUpload(t *testing.T) {
 		})
 	}
 }
+
+// takeJob has the proxy of cfg poll by hand while a caller waits for a
+// request, and returns the job and the caller's outcome.
+func takeJob(t *testing.T, p *Pool, srv *httptest.Server, cfg Config) (Job, chan error) {
+	t.Helper()
+	polled := make(chan Job, 1)
+	go func() {
+		req, _ := http.NewRequest(http.MethodGet, srv.URL+PathPrefix+"poll", nil)
+		req.Header.Set("Authorization", AuthScheme+" "+cfg.Credential)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		var j Job
+		_ = json.NewDecoder(resp.Body).Decode(&j)
+		polled <- j
+	}()
+	waitOnline(t, p)
+	fetched := make(chan error, 1)
+	go func() {
+		resp, err := p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/x", nil)
+		if err == nil {
+			resp.Body.Close()
+		}
+		fetched <- err
+	}()
+	return <-polled, fetched
+}
+
+// upload starts sending an answer to a job, its body what is written to
+// the returned pipe; the status comes on the channel.
+func upload(srv *httptest.Server, cfg Config, id string) (*io.PipeWriter, chan int) {
+	pr, pw := io.Pipe()
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+PathPrefix+"jobs/"+id, pr)
+	req.Header.Set("Authorization", AuthScheme+" "+cfg.Credential)
+	req.Header.Set(ResultHeader, `{"status":200,"length":6}`)
+	status := make(chan int, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			status <- 0
+			return
+		}
+		resp.Body.Close()
+		status <- resp.StatusCode
+	}()
+	return pw, status
+}
+
+// One answer comes in per job: a second upload of the same job is refused
+// before its body is read, and the first goes on.
+func TestOneUploadPerJob(t *testing.T) {
+	p, srv := testPool(t)
+	cfg := enrolled(t, p, srv, "pi")
+	j, fetched := takeJob(t, p, srv, cfg)
+	first, firstStatus := upload(srv, cfg, j.ID)
+	_, _ = first.Write([]byte("par"))
+	time.Sleep(100 * time.Millisecond)
+	// a second upload, whole: refused at once, the first still coming in
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+PathPrefix+"jobs/"+j.ID, strings.NewReader("other"))
+	req.Header.Set("Authorization", AuthScheme+" "+cfg.Credential)
+	req.Header.Set(ResultHeader, `{"status":200,"length":5}`)
+	secondStatus := make(chan int, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			secondStatus <- 0
+			return
+		}
+		resp.Body.Close()
+		secondStatus <- resp.StatusCode
+	}()
+	select {
+	case code := <-secondStatus:
+		if code != http.StatusConflict {
+			t.Errorf("second upload: HTTP %d, want 409", code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the second upload waits instead of being refused")
+	}
+	_, _ = first.Write([]byte("tly"))
+	_ = first.Close()
+	if code := <-firstStatus; code != http.StatusNoContent {
+		t.Errorf("first upload: HTTP %d", code)
+	}
+	if err := <-fetched; err != nil {
+		t.Errorf("caller: %v", err)
+	}
+}
+
+// An upload that stalls is cut off when its job is revoked: the server does
+// not wait on what will not be taken.
+func TestStalledUploadCutOff(t *testing.T) {
+	p, srv := testPool(t)
+	cfg := enrolled(t, p, srv, "pi")
+	j, fetched := takeJob(t, p, srv, cfg)
+	pw, status := upload(srv, cfg, j.ID)
+	defer func() { _ = pw.Close() }()
+	_, _ = pw.Write([]byte("par")) // and nothing more
+	time.Sleep(100 * time.Millisecond)
+	if err := p.SetEnabled(cfg.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-fetched; !errors.Is(err, httpx.ErrNoRelay) {
+		t.Errorf("caller: %v", err)
+	}
+	select {
+	case <-status:
+	case <-time.After(2 * time.Second):
+		t.Error("the stalled upload of a revoked job goes on")
+	}
+}

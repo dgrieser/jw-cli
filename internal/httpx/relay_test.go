@@ -21,11 +21,14 @@ type fakeRelay struct {
 	fail  bool
 	page  string
 	away  atomic.Bool
+	epoch atomic.Uint64
 }
 
 func (f *fakeRelay) Allows(string, string) bool { return true }
 
 func (f *fakeRelay) Available() bool { return !f.away.Load() }
+
+func (f *fakeRelay) Epoch() uint64 { return f.epoch.Load() }
 
 func (f *fakeRelay) Fetch(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
 	f.calls.Add(1)
@@ -353,5 +356,49 @@ func TestRelayAvailabilityDecidesRevalidation(t *testing.T) {
 	}
 	if relay.calls.Load() != calls {
 		t.Errorf("a proxy that is not there was asked %d times", relay.calls.Load()-calls)
+	}
+}
+
+// Proxies that are there but fail are held off a host for the backoff, as
+// the host itself is: the kept body is used at once rather than every
+// reader waiting on them again — until another proxy comes online.
+func TestFailingProxyRespectsBackoff(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("old"))
+	}))
+	defer srv.Close()
+	tr := &failing{next: http.DefaultTransport}
+	cl := New(WithHTTPClient(&http.Client{Transport: tr}), WithRetryDelays(),
+		WithResponseCache(Open(t.TempDir(), CacheOptions{Fresh: -1})))
+	relay := &fakeRelay{fail: true} // there, and failing
+	cl.SetRelay(relay)
+	ctx := context.Background()
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "old" {
+		t.Fatalf("first read: %v %q", err, got)
+	}
+	tr.fail.Store(true)
+	// upstream and the proxy fail: the kept body, after one try of each
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "old" {
+		t.Fatalf("both failing: %v %q", err, got)
+	}
+	tried := relay.calls.Load()
+	if tried == 0 {
+		t.Fatal("the proxy was not tried")
+	}
+	// the next readers get the kept body without asking either again
+	for range 3 {
+		if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "old" {
+			t.Fatalf("held off: %v %q", err, got)
+		}
+	}
+	if relay.calls.Load() != tried {
+		t.Errorf("a failing proxy was asked %d more times within the backoff", relay.calls.Load()-tried)
+	}
+	// another proxy comes online, and is tried at once
+	relay.fail = false
+	relay.page = "new, through the new proxy"
+	relay.epoch.Add(1)
+	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "new, through the new proxy" {
+		t.Errorf("new proxy: %v %q", err, got)
 	}
 }

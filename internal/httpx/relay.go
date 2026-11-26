@@ -29,6 +29,9 @@ type Relay interface {
 	Allows(method, rawURL string) bool
 	// Available reports whether a proxy is there to take a request now.
 	Available() bool
+	// Epoch changes whenever a proxy comes online: what the proxies failed
+	// at before is worth trying again with it.
+	Epoch() uint64
 }
 
 // ErrNoRelay is a request no proxy could take: none is registered, enabled
@@ -45,6 +48,15 @@ type relayState struct {
 	mu    sync.Mutex
 	relay Relay
 	hosts map[string]RelayedHost
+	// failed are the hosts the proxies failed at lately, and with which
+	// proxies (their Epoch): not asked through them again until the backoff
+	// is over or another proxy came online
+	failed map[string]relayFailure
+}
+
+type relayFailure struct {
+	until time.Time
+	epoch uint64
 }
 
 // RelayedHost is a host asked through the proxies first.
@@ -102,10 +114,33 @@ func (c *Client) unreachable(rawURL string) bool {
 	return c.hostDown(hostOf(rawURL)) && !c.relayUp(rawURL)
 }
 
-// relayUp reports a proxy there now to take a request of rawURL.
+// relayUp reports a proxy there now to take a request of rawURL, and not
+// one that failed at its host lately: those wait out the backoff, as asking
+// the host directly does, unless another proxy came online since.
 func (c *Client) relayUp(rawURL string) bool {
 	r := c.relayer()
-	return r != nil && r.Allows(http.MethodGet, rawURL) && r.Available()
+	if r == nil || !r.Allows(http.MethodGet, rawURL) || !r.Available() {
+		return false
+	}
+	c.relayed.mu.Lock()
+	defer c.relayed.mu.Unlock()
+	f, ok := c.relayed.failed[hostOf(rawURL)]
+	return !ok || time.Now().After(f.until) || f.epoch != r.Epoch()
+}
+
+// relayResult notes how asking the proxies for host went: a failure holds
+// them off it for backOffFor, a success lifts that.
+func (c *Client) relayResult(host string, r Relay, err error) {
+	c.relayed.mu.Lock()
+	defer c.relayed.mu.Unlock()
+	if err == nil {
+		delete(c.relayed.failed, host)
+		return
+	}
+	if c.relayed.failed == nil {
+		c.relayed.failed = map[string]relayFailure{}
+	}
+	c.relayed.failed[host] = relayFailure{until: time.Now().Add(backOffFor), epoch: r.Epoch()}
 }
 
 func (c *Client) markRelayed(host, reason string) {
@@ -144,9 +179,12 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 	host := hostOf(rawURL)
 	// a host that failed lately is not asked again directly while a proxy
 	// can be: it would answer at once that it is down
-	up := r.Available()
+	up := c.relayUp(rawURL)
 	if relayNow(ctx) || (up && (c.relayFirst(host) || c.hostDown(host))) {
 		resp, err := c.viaRelay(ctx, r, method, rawURL, hdr)
+		if ctx.Err() == nil {
+			c.relayResult(host, r, err)
+		}
 		if err == nil {
 			if !relayNow(ctx) && !c.relayFirst(host) {
 				c.markRelayed(host, "failed lately") // down for the client, served by a proxy
@@ -168,10 +206,13 @@ func (c *Client) send(ctx context.Context, method, rawURL string, hdr http.Heade
 		return resp, err
 	}
 	resp, reason := blocked(resp, err)
-	if reason == "" || !r.Available() {
+	if reason == "" || !c.relayUp(rawURL) {
 		return resp, err
 	}
 	relayed, rerr := c.viaRelay(ctx, r, method, rawURL, hdr)
+	if ctx.Err() == nil {
+		c.relayResult(host, r, rerr)
+	}
 	if rerr != nil {
 		if !errors.Is(rerr, ErrNoRelay) {
 			c.verbose("%s %s: through a proxy: %v", method, rawURL, rerr)

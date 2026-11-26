@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -67,6 +68,8 @@ type Pool struct {
 	failures map[string][]time.Time // failed registrations and credentials, by address
 
 	queue chan *job
+	// epoch counts the proxies coming online (httpx.Relay)
+	epoch atomic.Uint64
 }
 
 // record is what is kept of a proxy on disk.
@@ -104,6 +107,19 @@ type job struct {
 	Job
 	proxy string
 	done  chan jobResult
+	// uploading marks a job whose answer is coming in: one upload per job
+	uploading bool
+	// ended is closed when the job ends, however: an upload still coming
+	// in is cut off
+	ended   chan struct{}
+	endOnce sync.Once
+}
+
+// end removes a job from those waited for and cuts off any upload of its
+// answer; the caller holds mu.
+func (p *Pool) end(j *job) {
+	delete(p.jobs, j.ID)
+	j.endOnce.Do(func() { close(j.ended) })
 }
 
 type jobResult struct {
@@ -267,9 +283,9 @@ func (p *Pool) SetEnabled(id string, on bool) error {
 func (p *Pool) revoke(px *proxy, why string) {
 	close(px.revoked)
 	px.revoked = make(chan struct{})
-	for id, j := range p.jobs {
+	for _, j := range p.jobs {
 		if j.proxy == px.ID {
-			delete(p.jobs, id)
+			p.end(j)
 			j.done <- jobResult{err: fmt.Errorf("%w: %s", httpx.ErrNoRelay, why)}
 		}
 	}
@@ -286,7 +302,7 @@ func (p *Pool) requeue(j *job) {
 		case <-t.C:
 			p.mu.Lock()
 			_, waiting := p.jobs[j.ID]
-			delete(p.jobs, j.ID)
+			p.end(j)
 			p.mu.Unlock()
 			if waiting {
 				j.done <- jobResult{err: fmt.Errorf("%w: no proxy took it within %s", httpx.ErrNoRelay, pickupWait)}
@@ -364,6 +380,9 @@ func (px *proxy) online(now time.Time) bool {
 // Allows reports whether a request may go through a proxy (httpx.Relay).
 func (p *Pool) Allows(method, rawURL string) bool { return Allowed(method, rawURL) }
 
+// Epoch changes whenever a proxy comes online (httpx.Relay).
+func (p *Pool) Epoch() uint64 { return p.epoch.Load() }
+
 // Available reports whether a proxy is there to take a request
 // (httpx.Relay).
 func (p *Pool) Available() bool { return p.available(time.Now()) }
@@ -390,13 +409,13 @@ func (p *Pool) Fetch(ctx context.Context, method, rawURL string, hdr http.Header
 	if !p.available(time.Now()) {
 		return nil, httpx.ErrNoRelay
 	}
-	j := &job{Job: Job{ID: secret(12), Method: method, URL: rawURL, Header: RequestHeader(hdr)}, done: make(chan jobResult, 1)}
+	j := &job{Job: Job{ID: secret(12), Method: method, URL: rawURL, Header: RequestHeader(hdr)}, done: make(chan jobResult, 1), ended: make(chan struct{})}
 	p.mu.Lock()
 	p.jobs[j.ID] = j
 	p.mu.Unlock()
 	defer func() {
 		p.mu.Lock()
-		delete(p.jobs, j.ID)
+		p.end(j)
 		p.mu.Unlock()
 	}()
 
@@ -589,6 +608,7 @@ func (p *Pool) seen(px *proxy, r *http.Request, polling int) {
 	defer p.mu.Unlock()
 	now := time.Now()
 	if polling > 0 && !px.online(now) {
+		p.epoch.Add(1)
 		defer p.logf("proxies: %q online from %s", px.Name, p.addr(r))
 	}
 	px.lastSeen = now
@@ -672,9 +692,17 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	p.mu.Lock()
 	j, ok := p.jobs[id]
 	ok = ok && j.proxy == px.ID
+	busy := ok && j.uploading
+	if ok && !busy {
+		j.uploading = true // this upload's, and no other's
+	}
 	p.mu.Unlock()
 	if !ok {
 		fail(w, http.StatusNotFound, "no such job, or no longer waited for")
+		return
+	}
+	if busy {
+		fail(w, http.StatusConflict, "the job's answer is already coming in")
 		return
 	}
 	var res Result
@@ -693,7 +721,18 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	// the job ending while its answer comes in — revoked, given up on —
+	// cuts the upload off rather than read it to the end
+	uploaded := make(chan struct{})
+	go func() {
+		select {
+		case <-j.ended:
+			_ = http.NewResponseController(w).SetReadDeadline(time.Now())
+		case <-uploaded:
+		}
+	}()
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
+	close(uploaded)
 	if err != nil {
 		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: the answer's body: %w", px.Name, err)}) {
 			p.noted(px.ID, false, res.Millis, "the answer's body: "+err.Error())
@@ -753,7 +792,7 @@ func (p *Pool) settle(w http.ResponseWriter, j *job, px *proxy, r jobResult) boo
 	deleted := p.proxies[px.ID] != px
 	enabled := px.Enabled
 	if waited && !deleted && enabled {
-		delete(p.jobs, j.ID)
+		p.end(j)
 		j.done <- r // the one end of the job: buffered for it
 	}
 	p.mu.Unlock()
