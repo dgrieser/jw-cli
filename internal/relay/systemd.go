@@ -266,11 +266,11 @@ func placeBinary(dst string) (bool, error) {
 	}
 	if _, err := io.Copy(out, src); err != nil {
 		out.Close()
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return false, err
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return false, err
 	}
 	return true, os.Rename(tmp, dst)
