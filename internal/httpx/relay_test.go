@@ -524,3 +524,40 @@ func TestKeptBodyHasNoProxy(t *testing.T) {
 		t.Errorf("a kept body counted as the proxy's (%q)", f.via)
 	}
 }
+
+// JSON that is wrong — not a page in its place — goes to no further proxy;
+// and a try that failed part way leaves nothing in out for the next.
+func TestJSONRetryOnlyForPages(t *testing.T) {
+	type doc struct {
+		A string `json:"a"`
+		B int    `json:"b"`
+	}
+	// a decode that fails part way changes nothing
+	out := doc{}
+	if err := decodeInto([]byte(`{"a":"partial","b":"not a number"}`), &out); err == nil || out.A != "" {
+		t.Errorf("a failed decode left %+v", out)
+	}
+	if err := decodeInto([]byte(`{"b":2}`), &out); err != nil || out != (doc{B: 2}) {
+		t.Errorf("then a good one: %v %+v", err, out)
+	}
+
+	// a proxy answering JSON of the wrong shape is asked once, not again
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<!DOCTYPE html><html><body>` + strings.Repeat("wall ", 4000) + `</body></html>`))
+	}))
+	defer srv.Close()
+	cl := New(WithRetryDelays())
+	relay := &fakeRelay{page: `{"a":"partial","b":"not a number"}`, id: "proxy-a"}
+	cl.SetRelay(relay)
+	var got doc
+	if err := cl.GetJSON(context.Background(), srv.URL+"/api", nil, &got); err == nil {
+		t.Fatal("wrong JSON decoded")
+	}
+	if n := relay.calls.Load(); n != 1 {
+		t.Errorf("a proxy giving wrong JSON was asked %d times", n)
+	}
+	if got != (doc{}) {
+		t.Errorf("failed tries left %+v", got)
+	}
+}

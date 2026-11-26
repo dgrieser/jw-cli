@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -260,7 +261,10 @@ func (c *Client) GetJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 		return err
 	}
 	return c.retryContent(ctx, rawURL, "a page in place of JSON", err, func(ctx context.Context) (string, error) {
-		via, _, err := c.getJSON(ctx, rawURL, hdr, out)
+		via, page, err := c.getJSON(ctx, rawURL, hdr, out)
+		if err != nil && !page {
+			via = "" // JSON that is wrong, not a page in its place: no proxy gets past that
+		}
 		return via, err
 	})
 }
@@ -272,7 +276,7 @@ func (c *Client) getJSON(ctx context.Context, rawURL string, hdr http.Header, ou
 	if err != nil {
 		return "", false, err
 	}
-	if err := json.Unmarshal(f.body, out); err != nil {
+	if err := decodeInto(f.body, out); err != nil {
 		page := isHTML(f.body)
 		if page {
 			c.rejectVia(rawURL, f.via)
@@ -312,6 +316,23 @@ func (c *Client) retryContent(ctx context.Context, rawURL, reason string, first 
 		}
 	}
 	return first
+}
+
+// decodeInto decodes body into out all or nothing: into a fresh value of
+// out's type, put in out once it decoded. A body that fails part way leaves
+// out as it was, for the next try to decode into — json.Unmarshal fills in
+// fields as it goes.
+func decodeInto(body []byte, out any) error {
+	v := reflect.ValueOf(out)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return json.Unmarshal(body, out) // its own error
+	}
+	fresh := reflect.New(v.Elem().Type())
+	if err := json.Unmarshal(body, fresh.Interface()); err != nil {
+		return err
+	}
+	v.Elem().Set(fresh.Elem())
+	return nil
 }
 
 // isHTML reports a body that is a web page.
