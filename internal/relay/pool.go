@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -37,8 +36,6 @@ const (
 	// offlineAfter is how long a proxy that stopped asking for work counts
 	// as online: a poll and the work it brings take less.
 	offlineAfter = 75 * time.Second
-	// pickupWait is how long a job waits for a proxy to take it.
-	pickupWait = 8 * time.Second
 	// answerWait is how long a proxy has to answer a job it took.
 	answerWait = 45 * time.Second
 	// maxPolls bounds the polls one proxy may hold open at once.
@@ -68,8 +65,6 @@ type Pool struct {
 	failures map[string][]time.Time // failed registrations and credentials, by address
 
 	queue chan *job
-	// epoch counts the proxies coming online (httpx.Relay)
-	epoch atomic.Uint64
 }
 
 // record is what is kept of a proxy on disk.
@@ -87,7 +82,11 @@ type proxy struct {
 	record
 	// revoked is closed when the proxy is disabled or deleted: its polls
 	// end at once rather than take one more job
-	revoked                        chan struct{}
+	revoked chan struct{}
+	// failing are the hosts the proxy failed at lately, until when: it is
+	// not counted on for them, and their jobs go to another proxy if one
+	// can take them
+	failing                        map[string]time.Time
 	lastSeen, lastJob, lastErrorAt time.Time
 	polls, ok, failed              int
 	version, addr, lastError       string
@@ -271,6 +270,9 @@ func (p *Pool) SetEnabled(id string, on bool) error {
 		px.Enabled = !on
 		return err
 	}
+	if on {
+		px.failing = nil // enabled again: tried again, everywhere
+	}
 	if !on {
 		p.revoke(px, "the proxy was disabled")
 	}
@@ -293,12 +295,20 @@ func (p *Pool) revoke(px *proxy, why string) {
 
 // requeue hands a job a revoked proxy's poll took to another proxy, or
 // fails it when none takes it in time.
-func (p *Pool) requeue(j *job) {
+func (p *Pool) requeue(j *job, pause time.Duration) {
 	go func() {
+		if pause > 0 {
+			select {
+			case <-time.After(pause):
+			case <-j.ended:
+				return
+			}
+		}
 		t := time.NewTimer(pickupWait)
 		defer t.Stop()
 		select {
 		case p.queue <- j:
+		case <-j.ended: // its caller gave up meanwhile
 		case <-t.C:
 			p.mu.Lock()
 			_, waiting := p.jobs[j.ID]
@@ -338,6 +348,9 @@ type Status struct {
 	Polls, OK, Failed                  int
 	AvgMillis                          int64
 	CreatedBy                          string
+	// FailingAt are the hosts the proxy failed at lately and is not counted
+	// on for, sorted
+	FailingAt []string
 }
 
 // State is how the proxy is doing in a word: disabled, online, offline or
@@ -365,6 +378,7 @@ func (p *Pool) Proxies(now time.Time) []Status {
 			Enabled: px.Enabled, Online: px.online(now),
 			Created: px.Created, LastSeen: px.lastSeen, LastJob: px.lastJob, LastErrorAt: px.lastErrorAt,
 			Polls: px.polls, OK: px.ok, Failed: px.failed, AvgMillis: int64(px.avgMillis), CreatedBy: px.CreatedBy,
+			FailingAt: px.failingHosts(now),
 		})
 	}
 	slices.SortFunc(out, func(a, b Status) int { return a.Created.Compare(b.Created) })
@@ -380,12 +394,104 @@ func (px *proxy) online(now time.Time) bool {
 // Allows reports whether a request may go through a proxy (httpx.Relay).
 func (p *Pool) Allows(method, rawURL string) bool { return Allowed(method, rawURL) }
 
-// Epoch changes whenever a proxy comes online (httpx.Relay).
-func (p *Pool) Epoch() uint64 { return p.epoch.Load() }
+// pickupWait is how long a job waits for a proxy to take it; a variable
+// for the tests.
+var pickupWait = 8 * time.Second
 
-// Available reports whether a proxy is there to take a request
-// (httpx.Relay).
-func (p *Pool) Available() bool { return p.available(time.Now()) }
+// passPause is how long a job a proxy hands on waits before it is offered
+// again: the proxies that can serve it take it meanwhile.
+const passPause = 25 * time.Millisecond
+
+// failHold is how long a proxy that failed at a host is not counted on
+// for it: as long as the server itself holds off a host that failed it.
+const failHold = 10 * time.Minute
+
+// refusals are the answers that are a host turning a proxy away, as they
+// are the server (httpx.blocked): a challenge, a refusal, slow down, a
+// gateway that fails.
+var refusals = []int{http.StatusAccepted, http.StatusForbidden, http.StatusMethodNotAllowed, http.StatusTooManyRequests,
+	http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout}
+
+// failingHosts are the hosts the proxy fails at now, sorted; the caller
+// holds mu.
+func (px *proxy) failingHosts(now time.Time) []string {
+	var hosts []string
+	for h := range px.failing {
+		if px.failingAt(h, now) {
+			hosts = append(hosts, h)
+		}
+	}
+	slices.Sort(hosts)
+	return hosts
+}
+
+// failingAt reports a proxy that failed at host lately; the caller holds mu.
+func (px *proxy) failingAt(host string, now time.Time) bool {
+	until, ok := px.failing[host]
+	return ok && now.Before(until)
+}
+
+// hostResult notes how a proxy did at a host: a failure holds it off the
+// host for failHold, a success lifts that.
+func (p *Pool) hostResult(id, host string, ok bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	px, found := p.proxies[id]
+	if !found || host == "" {
+		return
+	}
+	if ok {
+		delete(px.failing, host)
+		return
+	}
+	if px.failing == nil {
+		px.failing = map[string]time.Time{}
+	}
+	px.failing[host] = time.Now().Add(failHold)
+}
+
+func hostOfURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
+}
+
+// Available reports whether a proxy is there that can be asked for rawURL
+// (httpx.Relay): online, and not failing at its host. Only when every
+// proxy failed at a host is it held off it.
+func (p *Pool) Available(rawURL string) bool {
+	host, now := hostOfURL(rawURL), time.Now()
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, px := range p.proxies {
+		if px.online(now) && !px.failingAt(host, now) {
+			return true
+		}
+	}
+	return false
+}
+
+// Rejected counts an answer the server found to be no answer — a bot
+// protection's page — against the proxy that fetched it (httpx.Relay).
+func (p *Pool) Rejected(resp *http.Response) {
+	if resp == nil || resp.Request == nil || resp.Request.URL == nil {
+		return
+	}
+	p.hostResult(resp.Header.Get(ProxyIDHeader), strings.ToLower(resp.Request.URL.Hostname()), false)
+}
+
+// canServe reports a proxy other than px online and not failing at host;
+// the caller holds mu.
+func (p *Pool) canServe(host string, but *proxy, now time.Time) bool {
+	for _, px := range p.proxies {
+		if px != but && px.online(now) && !px.failingAt(host, now) {
+			return true
+		}
+	}
+	return false
+}
 
 // available reports whether a proxy is there to take a job.
 func (p *Pool) available(now time.Time) bool {
@@ -406,7 +512,7 @@ func (p *Pool) Fetch(ctx context.Context, method, rawURL string, hdr http.Header
 	if !Allowed(method, rawURL) {
 		return nil, fmt.Errorf("%w: %s %s is not for a proxy", httpx.ErrNoRelay, method, rawURL)
 	}
-	if !p.available(time.Now()) {
+	if !p.Available(rawURL) {
 		return nil, httpx.ErrNoRelay
 	}
 	j := &job{Job: Job{ID: secret(12), Method: method, URL: rawURL, Header: RequestHeader(hdr)}, done: make(chan jobResult, 1), ended: make(chan struct{})}
@@ -438,6 +544,7 @@ func (p *Pool) Fetch(ctx context.Context, method, rawURL string, hdr http.Header
 		taker := j.proxy
 		p.mu.Unlock()
 		p.noted(taker, false, 0, "no answer within "+answerWait.String())
+		p.hostResult(taker, hostOfURL(rawURL), false)
 		return nil, fmt.Errorf("%w: the proxy did not answer within %s", httpx.ErrNoRelay, answerWait)
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -608,7 +715,6 @@ func (p *Pool) seen(px *proxy, r *http.Request, polling int) {
 	defer p.mu.Unlock()
 	now := time.Now()
 	if polling > 0 && !px.online(now) {
-		p.epoch.Add(1)
 		defer p.logf("proxies: %q online from %s", px.Name, p.addr(r))
 	}
 	px.lastSeen = now
@@ -641,27 +747,40 @@ func (p *Pool) poll(w http.ResponseWriter, r *http.Request) {
 	defer p.seen(px, r, -1)
 	wait := time.NewTimer(PollWait)
 	defer wait.Stop()
-	select {
-	case j := <-p.queue:
-		// still the proxy it was when it asked: taken atomically, or
-		// handed on
-		p.mu.Lock()
-		current := p.proxies[px.ID] == px && px.Enabled
-		if current {
-			j.proxy = px.ID
-		}
-		p.mu.Unlock()
-		if !current {
-			p.requeue(j)
+	for {
+		select {
+		case j := <-p.queue:
+			// still the proxy it was when it asked: taken atomically, or
+			// handed on; and handed on, after a moment, to the proxies that
+			// can serve the job's host when this one failed at it lately
+			now := time.Now()
+			p.mu.Lock()
+			_, waited := p.jobs[j.ID]
+			current := p.proxies[px.ID] == px && px.Enabled
+			pass := current && px.failingAt(hostOfURL(j.URL), now) && p.canServe(hostOfURL(j.URL), px, now)
+			if waited && current && !pass {
+				j.proxy = px.ID
+			}
+			p.mu.Unlock()
+			switch {
+			case !waited:
+				continue // its caller gave up while it was handed on
+			case !current:
+				p.requeue(j, 0)
+				p.refuse(w, px)
+				return
+			case pass:
+				p.requeue(j, passPause)
+				continue
+			}
+			writeJSON(w, http.StatusOK, j.Job)
+		case <-revoked:
 			p.refuse(w, px)
-			return
+		case <-wait.C:
+			w.WriteHeader(http.StatusNoContent)
+		case <-r.Context().Done():
 		}
-		writeJSON(w, http.StatusOK, j.Job)
-	case <-revoked:
-		p.refuse(w, px)
-	case <-wait.C:
-		w.WriteHeader(http.StatusNoContent)
-	case <-r.Context().Done():
+		return
 	}
 }
 
@@ -717,22 +836,32 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 		failure := cmpOr(res.Error, "no status")
 		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: %s", px.Name, failure)}) {
 			p.noted(px.ID, false, res.Millis, failure)
+			p.hostResult(px.ID, hostOfURL(j.URL), false)
 			w.WriteHeader(http.StatusNoContent)
 		}
 		return
 	}
 	// the job ending while its answer comes in — revoked, given up on —
 	// cuts the upload off rather than read it to the end
-	uploaded := make(chan struct{})
+	uploaded, watched := make(chan struct{}), make(chan struct{})
+	cut := false
 	go func() {
+		defer close(watched)
 		select {
 		case <-j.ended:
+			cut = true
 			_ = http.NewResponseController(w).SetReadDeadline(time.Now())
 		case <-uploaded:
 		}
 	}()
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
 	close(uploaded)
+	// the watcher is done before anything else is done with w
+	<-watched
+	if cut {
+		// the connection's reads are over: it is not reused
+		w.Header().Set("Connection", "close")
+	}
 	if err != nil {
 		if p.settle(w, j, px, jobResult{err: fmt.Errorf("proxy %q: the answer's body: %w", px.Name, err)}) {
 			p.noted(px.ID, false, res.Millis, "the answer's body: "+err.Error())
@@ -756,6 +885,7 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	finalURL, _ := url.Parse(final)
 	hdr := Header(res.Header, false)
 	hdr.Set(ProxyHeader, px.Name)
+	hdr.Set(ProxyIDHeader, px.ID)
 	resp := &http.Response{
 		Status:       fmt.Sprintf("%d %s", res.Status, http.StatusText(res.Status)),
 		StatusCode:   res.Status,
@@ -779,6 +909,7 @@ func (p *Pool) result(w http.ResponseWriter, r *http.Request) {
 	// is an answer
 	ok = res.Status < 400 || res.Status == http.StatusNotFound
 	p.noted(px.ID, ok, res.Millis, fmt.Sprintf("HTTP %d for %s", res.Status, j.URL))
+	p.hostResult(px.ID, hostOfURL(j.URL), !slices.Contains(refusals, res.Status))
 	w.WriteHeader(http.StatusNoContent)
 }
 

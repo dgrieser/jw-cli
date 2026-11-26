@@ -50,6 +50,9 @@ const (
 	VersionHeader = "X-JW-Proxy-Version"
 	// ServerVersionHeader names the version of jw the server runs.
 	ServerVersionHeader = "X-JW-Server-Version"
+	// ProxyIDHeader carries, on an answer a proxy fetched, the proxy's id:
+	// what Rejected counts a bot page against.
+	ProxyIDHeader = "X-JW-Proxy-ID"
 	// ProxyHeader names, on an answer a proxy fetched, the proxy.
 	ProxyHeader = "X-JW-Proxy"
 

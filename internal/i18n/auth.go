@@ -66,7 +66,7 @@ type AuthText struct {
 	ProxyRunUser, ProxyRunCheck, ProxyDownload, ProxyPending, ProxyValid   string
 	ProxyRevoke, ProxyOnline, ProxyOffline, ProxyNever, ProxyLastSeen      string
 	ProxyVersion, ProxyAddress, ProxyRequests, ProxyFailed, ProxyAvg       string
-	ProxyLastError, ProxyRelayedNone, ProxyRelayedTitle                    string
+	ProxyLastError, ProxyRelayedNone, ProxyRelayedTitle, ProxyFailingAt    string
 	ProxyEnrollTitle                                                       string // %[1]s the proxy's name
 	ProxyRelayed                                                           string // %[1]s the host, %[2]s why, %[3]s until when
 	ProxyConfirmDelete                                                     string // %[1]s the proxy's name
@@ -190,6 +190,7 @@ var authEN = AuthText{
 	ProxyOnline: "online", ProxyOffline: "offline", ProxyNever: "never connected",
 	ProxyLastSeen: "Last seen", ProxyVersion: "Version", ProxyAddress: "Address", ProxyRequests: "Requests",
 	ProxyFailed: "failed", ProxyAvg: "avg.", ProxyLastError: "Last failure",
+	ProxyFailingAt:    "Turned away at (not asked there for now)",
 	ProxyRelayedTitle: "Right now", ProxyRelayedNone: "The server reads jw.org itself.",
 	ProxyRelayed:       "%[1]s turned this server away (%[2]s): asked through the proxies first until %[3]s.",
 	ProxyConfirmDelete: "Delete the proxy %[1]s? Its credential stops working; setting it up again takes a new token.",
@@ -328,6 +329,7 @@ var authDE = AuthText{
 	ProxyOnline: "online", ProxyOffline: "offline", ProxyNever: "nie verbunden",
 	ProxyLastSeen: "Zuletzt gesehen", ProxyVersion: "Version", ProxyAddress: "Adresse", ProxyRequests: "Anfragen",
 	ProxyFailed: "fehlgeschlagen", ProxyAvg: "Ø", ProxyLastError: "Letzter Fehler",
+	ProxyFailingAt:    "Abgewiesen bei (dort vorerst nicht gefragt)",
 	ProxyRelayedTitle: "Gerade jetzt", ProxyRelayedNone: "Der Server liest jw.org selbst.",
 	ProxyRelayed:       "%[1]s hat diesen Server abgewiesen (%[2]s): bis %[3]s zuerst über die Proxys gefragt.",
 	ProxyConfirmDelete: "Proxy %[1]s löschen? Seine Zugangsdaten gelten dann nicht mehr; neu einrichten braucht ein neues Token.",

@@ -722,12 +722,13 @@ func TestRevokeDuringUpload(t *testing.T) {
 			case <-time.After(2 * time.Second):
 				t.Fatal("the caller waits for a revoked proxy's answer")
 			}
-			// ... and the rest of it is refused
+			// ... and the rest of it is not taken: refused, or the upload
+			// cut off (status 0) when the revocation reached it first
 			_, _ = pw.Write([]byte("tly"))
 			_ = pw.Close()
 			want := map[string]int{"disable": http.StatusForbidden, "delete": http.StatusUnauthorized}[op]
-			if code := <-answered; code != want {
-				t.Errorf("answer after revocation: HTTP %d, want %d", code, want)
+			if code := <-answered; code != want && code != 0 {
+				t.Errorf("answer after revocation: HTTP %d, want %d or the upload cut off", code, want)
 			}
 		})
 	}
@@ -843,5 +844,169 @@ func TestStalledUploadCutOff(t *testing.T) {
 	case <-status:
 	case <-time.After(2 * time.Second):
 		t.Error("the stalled upload of a revoked job goes on")
+	}
+}
+
+// Of two proxies, the one jw.org turns away is not counted on for the host,
+// and the other serves every request: one failing proxy does not hold the
+// others off.
+func TestOneFailingProxyOfTwo(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("the page " + r.URL.Path))
+	}))
+	defer good.Close()
+	turnedAway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer turnedAway.Close()
+	p, srv := testPool(t)
+	a, b := enrolled(t, p, srv, "a"), enrolled(t, p, srv, "b")
+	running(t, a, turnedAway)
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if st := p.Proxies(time.Now()); st[0].Polls > 0 && st[1].Polls > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("both proxies never polled")
+		}
+	}
+	server := mappedClient(turnedAway) // the server is turned away too
+	server.SetRelay(p)
+	ctx := context.Background()
+	for i := range 20 {
+		u := "https://www.jw.org/p/" + strconv.Itoa(i)
+		got, err := server.GetText(ctx, u, nil)
+		if err != nil || got != "the page /p/"+strconv.Itoa(i) {
+			t.Fatalf("read %d: %v %q", i, err, got)
+		}
+		if !p.Available(u) {
+			t.Fatalf("read %d: the host counts as having no proxy, though b serves it", i)
+		}
+	}
+	st := p.Proxies(time.Now())
+	if st[1].OK != 20 || st[0].OK != 0 {
+		t.Errorf("served: a %d, b %d", st[0].OK, st[1].OK)
+	}
+	if st[0].Failed > 2 {
+		t.Errorf("the failing proxy was asked %d times; once it failed, jobs go to the other", st[0].Failed)
+	}
+}
+
+// A job no proxy took in time — every proxy busy — is no failure of a
+// proxy at the host.
+func TestNoTakerIsNoFailure(t *testing.T) {
+	old := pickupWait
+	pickupWait = 100 * time.Millisecond
+	t.Cleanup(func() { pickupWait = old })
+	p, srv := testPool(t)
+	cfg := enrolled(t, p, srv, "pi")
+	if _, err := NewAgent(cfg, "v", nil).Self(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// seen a moment ago, so online, with no poll open now
+	p.mu.Lock()
+	p.proxies[cfg.ID].lastSeen = time.Now()
+	p.mu.Unlock()
+	if _, err := p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/x", nil); !errors.Is(err, httpx.ErrNoRelay) {
+		t.Fatalf("got %v", err)
+	}
+	if !p.Available("https://www.jw.org/y") {
+		t.Error("a job no proxy took counted against the proxy")
+	}
+}
+
+// A proxy that comes online while the others failed at a host is counted on
+// at once, and so is one disabled and enabled again, however soon.
+func TestNewAndReenabledProxiesCountedOn(t *testing.T) {
+	old := disabledWait
+	disabledWait = 20 * time.Millisecond
+	// restored after the proxies of the test stopped reading it
+	t.Cleanup(func() { disabledWait = old })
+	turnedAway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer turnedAway.Close()
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) }))
+	defer good.Close()
+	p, srv := testPool(t)
+	a := enrolled(t, p, srv, "a")
+	running(t, a, turnedAway)
+	waitOnline(t, p)
+	resp, err := p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/x", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if p.Available("https://www.jw.org/y") {
+		t.Fatal("the only proxy failed at the host and is still counted on")
+	}
+	if !p.Available("https://wol.jw.org/y") {
+		t.Fatal("a failure at one host held the proxy off another")
+	}
+
+	// disabled and enabled again, at once: counted on again
+	if err := p.SetEnabled(a.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.SetEnabled(a.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	waitOnline(t, p) // polling again
+	if !p.Available("https://www.jw.org/y") {
+		t.Error("a proxy enabled again is not counted on")
+	}
+
+	// fails again; then another comes online: counted on at once
+	resp, err = p.Fetch(context.Background(), http.MethodGet, "https://www.jw.org/x", nil)
+	if err == nil {
+		resp.Body.Close()
+	}
+	if p.Available("https://www.jw.org/y") {
+		t.Fatal("failed again and still counted on")
+	}
+	b := enrolled(t, p, srv, "b")
+	running(t, b, good)
+	for deadline := time.Now().Add(5 * time.Second); !p.Available("https://www.jw.org/y"); time.Sleep(10 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a proxy that came online is not counted on")
+		}
+	}
+}
+
+// An upload cut off for its job's end closes its connection: its reads are
+// over, and it is not reused for another request.
+func TestCutUploadClosesConnection(t *testing.T) {
+	p, srv := testPool(t)
+	cfg := enrolled(t, p, srv, "pi")
+	j, fetched := takeJob(t, p, srv, cfg)
+	pr, pw := io.Pipe()
+	defer func() { _ = pw.Close() }()
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+PathPrefix+"jobs/"+j.ID, pr)
+	req.Header.Set("Authorization", AuthScheme+" "+cfg.Credential)
+	req.Header.Set(ResultHeader, `{"status":200,"length":6}`)
+	answered := make(chan *http.Response, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			answered <- nil
+			return
+		}
+		resp.Body.Close()
+		answered <- resp
+	}()
+	_, _ = pw.Write([]byte("par"))
+	time.Sleep(100 * time.Millisecond)
+	if err := p.SetEnabled(cfg.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	<-fetched
+	select {
+	case resp := <-answered:
+		if resp != nil && !resp.Close {
+			t.Error("the connection of a cut upload is kept open")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the upload was not cut off")
 	}
 }

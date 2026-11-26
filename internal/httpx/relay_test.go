@@ -15,24 +15,32 @@ import (
 )
 
 // fakeRelay answers every request with its page, or fails; it is there
-// unless told it is not.
+// unless told it is not, and, as the pool does, not counted on once its
+// proxy failed (until fresh is set: another proxy came online).
 type fakeRelay struct {
-	calls atomic.Int32
-	fail  bool
-	page  string
-	away  atomic.Bool
-	epoch atomic.Uint64
+	calls    atomic.Int32
+	fail     bool
+	page     string
+	away     atomic.Bool
+	failed   atomic.Bool
+	rejected atomic.Int32
 }
 
 func (f *fakeRelay) Allows(string, string) bool { return true }
 
-func (f *fakeRelay) Available() bool { return !f.away.Load() }
+func (f *fakeRelay) Available(string) bool { return !f.away.Load() && !f.failed.Load() }
 
-func (f *fakeRelay) Epoch() uint64 { return f.epoch.Load() }
+func (f *fakeRelay) Rejected(*http.Response) { f.rejected.Add(1); f.failed.Store(true) }
+
+// fresh has another proxy come online, which has failed at nothing.
+func (f *fakeRelay) fresh() { f.failed.Store(false) }
 
 func (f *fakeRelay) Fetch(ctx context.Context, method, rawURL string, hdr http.Header) (*http.Response, error) {
 	f.calls.Add(1)
 	if f.fail || f.away.Load() {
+		if f.fail {
+			f.failed.Store(true)
+		}
 		return nil, ErrNoRelay
 	}
 	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/html"}},
@@ -397,7 +405,7 @@ func TestFailingProxyRespectsBackoff(t *testing.T) {
 	// another proxy comes online, and is tried at once
 	relay.fail = false
 	relay.page = "new, through the new proxy"
-	relay.epoch.Add(1)
+	relay.fresh()
 	if got, err := cl.GetText(ctx, srv.URL+"/kept", nil); err != nil || got != "new, through the new proxy" {
 		t.Errorf("new proxy: %v %q", err, got)
 	}

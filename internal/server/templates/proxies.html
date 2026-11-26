@@ -49,6 +49,7 @@
       <div><dt>{{$.A.Created}}</dt><dd>{{$.When .Created}}</dd></div>
     </dl>
     {{- if .LastError}}<p class="hint">{{$.A.ProxyLastError}} ({{$.When .LastErrorAt}}): {{.LastError}}</p>{{end}}
+    {{- if .FailingAt}}<p class="hint">{{$.A.ProxyFailingAt}}: {{range $i, $h := .FailingAt}}{{if $i}}, {{end}}{{$h}}{{end}}</p>{{end}}
     <form method="post" action="/admin/proxies" class="key-actions">
       <input type="hidden" name="id" value="{{.ID}}"><input type="hidden" name="name" value="{{.Name}}">
       {{- if .Enabled}}
